@@ -1,0 +1,208 @@
+dry_run = false
+# IR Pump-Probe Spectroscopy Control Interface Hardware Configuration
+# Updated with actual hardware specifications from vendor documentation
+
+[system]
+# Global system settings
+data_directory = "/path/to/data"
+log_level = "INFO"
+default_units = "microns"  # or "cm1" for wavenumbers
+
+# ============================================================================
+# ARDUINO UNO R4 MINIMA - MUX Controller
+# ============================================================================
+[arduino_mux]
+device_type = "Arduino Uno R4 Minima"
+connection_type = "USB"
+port = "UNKNOWN"  # Windows: COM3, Linux: /dev/ttyUSB0, macOS: /dev/cu.usbmodem*
+baud_rate = 115200
+timeout = 2.0
+description = "MUX controller for sample positioning"
+
+# ============================================================================
+# CONTINUUM ND:YAG LASER (SURELITE) - Pump Source
+# ============================================================================
+[continuum_ndyag]
+device_type = "Continuum Surelite Nd:YAG Laser"
+connection_type = "TTL"  # Controlled via Signal Generator TTL output
+description = "Pump laser controlled via TTL signals from Signal Generator"
+
+# ============================================================================
+# DAYLIGHT MIRCAT LASER - Probe Source
+# ============================================================================
+[daylight_mircat]
+device_type = "Daylight MIRcat QCL"
+connection_type = "USB"
+port = "AUTO"  # Auto-detect USB device
+sdk_path = "C:/Users/Chris/Documents/GitHub/IR_Spectroscope_Control_Interface/backend/src/modules/daylight_mircat/sdk"  # Local path
+description = "Mid-IR tunable probe laser"
+
+[daylight_mircat.communication]
+# SDK communication parameters
+comm_type = "SERIAL"  # MIRcatSDK_COMM_SERIAL
+baud_rate = 115200  # MIRcatSDK_SERIAL_BAUD1
+auto_detect_port = true
+timeout = 5.0
+
+[daylight_mircat.parameters]
+# Laser specifications from datasheet
+wavenumber_min = 1638.81  # cm-1
+wavenumber_max = 2077.27  # cm-1
+wavelength_min = 4.81 # micrometers
+wavelegnth_max = 6.10 # micrometers
+num_qcls = 1  # Number of QCL modules
+
+# laser parameters
+display_units = ["Wavelength", "Wavenumber"] # micrometers for wavelength, cm-1 for wavenumber; global, should be applied everywhere and all inputs and valid ranges updated when changed
+display_unit_default = "Wavenumber" # default display units value. If changed all other input values should automatically switch to correlate to the selected unit type
+select_qcl_options = [1, 2, 3, 4] # QCL selection options; only one QCL is installed in the MIRcat but will be upgraded with 3 more in the future
+select_qcl_default = 1 # default value for QCL selection and only one installed currently
+laser_mode_options = ["Pulsed", "CW", "CW + Modulation"] # laser operational modes: pulsed, continuous wave, or continuous wave with modulation
+laser_mode_default = "Pulsed" # default operation mode  
+pulse_rate_min = 10 # minimum value for pulse rate input in Hz
+pulse_rate_max = 3000000 # maximum value for pulse rate input in Hz
+pulse_rate_default = 2000000 # default value for pulse rate input in Hz
+pulse_width_min = 20 # minimum value forpulse width in nanoseconds
+pulse_width_max = 1000 # maximum value for pulse width in nanoseconds
+duty_cycle_min = 1 # minimum value for duty cycle in %: duty_cyle = pulse_rate * pulse_width * 100; should automatically be calculated when either pulse_rate or pulse_width are changed
+duty_cycle_max = 30 # maximum value for duty cycle in %: duty_cyle = pulse_rate * pulse_width * 100; should automatically be calculated when either pulse_rate or pulse_width are changed
+duty_cycle_default = 30 # default value for duty cycle in %: duty_cyle = pulse_rate * pulse_width * 100; should automatically be calculated when either pulse_rate or pulse_width are changed 
+pulsed_current_min = 100 # minimum value for current in pulsed mode in milliamps
+pulsed_current_max = 1000 # maximum value for current in pulsed mode in milliamps
+pulsed_current_default = 1000 # default value for current in pulsed mode in milliamps
+cw_current_min = 100 # minimum value for continuous wave mode milliamps
+cw_current_max = 775 # macximum value for continuous wave mode in milliamps
+cw_current_default = 775 # default value for continuous wave mode in milliamps
+temperature_min = 17 # minimum value for QCL temperature in degrees C
+temperature_max = 23 # maximum value for QCL temperature in degrees C
+temperature_default = 19 # default value for QCL temperature in degrees C
+
+# operating mode selection
+mode_options = ["Tune", "Sweep", "Step", "Multi_spectral"] # types of operating modes
+default_mode_option = "Tune" # default mode of operation
+
+# tune specific parameters
+tune_wavenumber_min = 1638.81 # minimum tuning value in wavenumbers
+tune_wavenumber_max = 20787.27 # maximum tuning value in wavenumbers
+default_tune_wavenumber = 1850 # default tuning value in wavenumbers
+
+# process trigger specific parameters
+process_trigger_modes = ["Use Internal Step Mode", "Use External Step Mode", "Use Manual Step Mode"] # types of process trigger modes avaialable
+process_trigger_mode_default = "Use Internal Step Mode" # default value for process trigger mode selection
+internal_trig_step_time_min = 0 # minimum value for  internal trigger step time in milliseconds
+internal_trig_step_time_max = 4000000 # maximum value for internal trigger step time in milliseconds
+internal_trig_step_time_default = 1000 # default value for internal trigger step time in milliseconds
+internal_trig_step_delay_min = 0 # minimum value for internal trigger step delay in milliseconds
+internal_trig_step_delay_max = 4000000 # maximum value for internal trigger step delay in milliseconds
+itnernal_trig_step_delay_default = 0 # default value for internalt trigger step delay in milliseconds
+
+# pulse mode specific parameters
+pulse_modes = ["Use Internal Pulse Mode", "Use External Trigger Mode", "Use External Pulse Mode", "Use Wavelength Trigger Pulse Mode"] # pulse modes of operation
+pulse_mode_default = "Use Internal Pulse Mode" # default pulse mode of operation
+
+# internal pulse mode specific parameters
+wl_trig_interval_min = 0.01 # minimum value for wavelength trigger intergval input in wavenumbers
+wl_trig_interval_max = 100 # maximum value for wavelength trigger interval input in wavenumbers
+wl_trig_interval_default = 1 # default value for wavelength trigger interval input
+wl_trig_start_min = 1638.81 # minimum value for wavelength trigger start input in wavenumbers
+wl_trig_start_max = 2077.27 # maximum value for wavelength trigger start iput in wavenumbers
+wl_trig_start_default = 2077.27 # default value for wavelength trigger start input in wavenumbers
+wl_trig_stop_min = 1638.81 # minimum value for wavelength trigger stop input in wavenumbers
+wl_trig_stop_max = 2077.27 # maximum value for wavelength triugger stop input in wavenumbers
+wl_trig_stop_default = 1638.81 # default value for wavelength trigger stop input in wavenumbers
+wl_trig_pulse_width_min = 1 # in microseconds
+wl_trig_pulse_width_max = 500 # in microseconds
+
+# scan mode common parameters
+start_wavenumber_min = 1638.81 # minimum value for scan start input in wavenumbers (cm-1)
+start_wavenumber_max = 2077.27 # maximum value for scan start input in wavenumbers (cm-1)
+stat_wavenumber_default = 2077.27 # default value for scan start input in wavenumbers (cm-1)
+stop_wavenumber_min = 1638.81 # minimum value for scan stop input in wavenumbers (cm-1)
+stop_wavenumber_max = 2077.27 # maximum value for scan stop input in wavenumbers (cm-1)
+stop_wavenumber_default = 1638.81 # default value for scan stop input in wavenumbers (cm-1)
+scan_count_min = 1 # minimum value for number of scans input 
+scan_count_max = 9999 # maximum value for number of scans input 
+scan_count_default = 1 #default value for number of scans input
+scan_count_infinite = ["Yes", "No"] # checkbox style input; if selected yes then number of scans input should be disabled
+scan_count_infinite_default = "No" # checkbox default is unchecked representing finite number of scans determined by number of scans input 
+
+# sweep mode specific input parameters
+bi_directional_option = ["Yes", "No"] # checkbox style input; If yes then scans should be bi-directional
+bi_directional_option_default = "No" # default setting is unchecked represtenting single direction scan
+scan_speed_min = 0.1 # minimum scan speed for sweep mode in wavenumbers per second (cm-1/s)
+scan_speed_max = 30000 # maximum scan speed for sweep mode in wavenumbers per second (cm-1/s)
+scan_speed_default = 1 # default scan speed for sweep mode in wavenumbers per second (cm-1/s) 
+
+# common input parameters for step and measure mode and multi spectral mode
+keep_laser_on = ["Yes", "No"] # checkbox style input; determines if laser should stay on between steps or not
+keep_laser_on_default = ["No"] # checkbox default is unchecked representing laser off between steps
+
+# step and measure mode input parameters
+step_size_min = 0.5 # minimum step value for size for step and measure mode in wavenumbers (cm-1)
+step_size_max = 1000 # maximum step size value for step and measure mode in wavenumbers (cm-1)
+step_size_default = 1 # default step size value for step and measure mode in wavenumbers (cm-1)
+
+#multi spectral mode input parameters
+multi_spec_wavenumber_min = 1638.81 # minimum value for wavenumber for command addition in cm-1
+multi_spec_wavenumber_max = 2077.27 # maximum value for wavenumber for command addition in cm-1
+mutli_spec_wavenumber_default = 1850 # default value for wavenumber for command addition in cm-1
+dwell_time_min = 1 # minimum value for dwell time for command addition in milliseconds
+dwell_time_max = 4000000 # maximum value for dwell time for command addition in milliseconds
+dwell_time_default = 5000 # default value for dwell time for command addition in milliseconds
+off_time_min = 1 # minimum value for off time between steps for command addition in milliseconds
+off_time_max = 4000000 # maximum value for off time between steps for command addition in milliseconds
+off_time_default = 100 # default value for off time between steps for command addition in milliseconds
+
+# Safety parameters from manual
+interlock_required = true
+key_switch_required = true
+temperature_monitoring = true
+max_temperature = 23  # Celsius
+emission_timeout = 3000  # seconds
+temperature_stabilization = true
+auto_arm = false  # Require manual arming for safety
+
+# ============================================================================
+# PICOSCOPE 5244D - Oscilloscope
+# ============================================================================
+[picoscope_5244d]
+device_type = "PicoScope 5244D MSO"
+connection_type = "USB3"
+sdk_path = "C:/Program Files/Pico Technology/SDK"  # Windows default
+description = "4-channel oscilloscope for data acquisition"
+
+[picoscope_5244d.parameters]
+
+# ============================================================================
+# QUANTUM COMPOSERS 9524 - Signal Generator
+# ============================================================================
+[quantum_composers_9524]
+device_type = "Quantum Composers 9524"
+connection_type = "USB"
+port = "COM4"  # Windows: COM4, Linux: /dev/ttyUSB1
+baud_rate = 115200
+timeout = 2.0
+description = "Signal generator for system synchronization"
+
+[quantum_composers_9524.parameters]
+
+[quantum_composers_9524.channels]
+# Channel assignments based on wiring diagram
+channel_a_function = "ndyag_qswitch_trigger"  # TTL to Nd:YAG laser
+channel_b_function = "ndyag_fire_trigger"  # TTL to Nd:YAG laser
+channel_c_function = "mircat_trig_in"  # Waveform to MIRcat laser
+channel_d_function = "zurich_hf2li_di1"  # Waveform to Lock-in Amplifier
+
+# ============================================================================
+# ZURICH HF2LI - Lock-in Amplifier
+# ============================================================================
+[zurich_hf2li]
+device_type = "Zurich Instruments HF2LI"
+connection_type = "USB"
+device_id = "dev####"  # Replace with actual device serial number
+description = "Dual-phase lock-in amplifier for signal processing"
+
+[zurich_hf2li.parameters]
+# Hardware specifications from manual
+frequency_range_min = 0.01  # Hz
+frequency_range_max = 50000000  # 50 MHz
