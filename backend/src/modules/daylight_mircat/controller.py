@@ -25,16 +25,16 @@ class MIRcatController:
         self.current_qcl = 1
         self.laser_mode = "Pulsed"
         self.status = {
-            "interlocks": True,
-            "key_switch": True,
-            "temperature": True,
+            "interlocks": False,  # False when disconnected
+            "key_switch": False,  # False when disconnected
+            "temperature": False,  # False when disconnected
             "connected": False,
             "emission": False,
-            "pointing_correction": True,
-            "system_fault": False,
-            "case_temp_1": 17.09,
-            "case_temp_2": 17.34,
-            "pcb_temperature": 72.84
+            "pointing_correction": False,  # False when disconnected
+            "system_fault": True,  # True when disconnected (fault state)
+            "case_temp_1": 0.0,  # Zero when disconnected
+            "case_temp_2": 0.0,  # Zero when disconnected
+            "pcb_temperature": 0.0  # Zero when disconnected
         }
         
     def _load_config(self) -> Dict[str, Any]:
@@ -54,7 +54,18 @@ class MIRcatController:
             # TODO: Implement actual MIRcat SDK connection
             logger.info("Connecting to MIRcat device...")
             self.connected = True
-            self.status["connected"] = True
+            # Update status to connected state
+            self.status.update({
+                "connected": True,
+                "interlocks": True,
+                "key_switch": True,
+                "temperature": True,
+                "pointing_correction": True,
+                "system_fault": False,
+                "case_temp_1": 17.09,
+                "case_temp_2": 17.34,
+                "pcb_temperature": 72.84
+            })
             await self._broadcast_state_update()
             return True
         except Exception as e:
@@ -67,9 +78,18 @@ class MIRcatController:
             self.connected = False
             self.armed = False
             self.emission_on = False
+            # Reset status to disconnected state
             self.status.update({
                 "connected": False,
-                "emission": False
+                "emission": False,
+                "interlocks": False,
+                "key_switch": False,
+                "temperature": False,
+                "pointing_correction": False,
+                "system_fault": True,
+                "case_temp_1": 0.0,
+                "case_temp_2": 0.0,
+                "pcb_temperature": 0.0
             })
             await self._broadcast_state_update()
             return True

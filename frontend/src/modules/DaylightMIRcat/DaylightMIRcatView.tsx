@@ -29,6 +29,7 @@ import { MIRcatAPI } from './api'
 import StatusIndicator from './components/StatusIndicator'
 import LaserControls from './components/LaserControls'
 import TuningControls from './components/TuningControls'
+import LaserSettingsPanel from './components/LaserSettingsPanel'
 
 interface DeviceStatus {
   connected: boolean
@@ -184,20 +185,30 @@ function DaylightMIRcatView() {
                   <Typography variant="h6" gutterBottom>
                     Scan Mode
                   </Typography>
+                  <Typography color="text.secondary" sx={{ mb: 2 }}>
+                    Select scan type and configure parameters:
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                    <Button variant="outlined" disabled={!deviceStatus?.connected}>
+                      Sweep Scan
+                    </Button>
+                    <Button variant="outlined" disabled={!deviceStatus?.connected}>
+                      Step Scan
+                    </Button>
+                    <Button variant="outlined" disabled={!deviceStatus?.connected}>
+                      Multi-Spectral Scan
+                    </Button>
+                  </Box>
                   <Typography color="text.secondary">
-                    Scan controls coming soon...
+                    {deviceStatus?.connected ? 'Select a scan mode to configure parameters' : 'Connect to device to enable scan modes'}
                   </Typography>
                 </Box>
               )}
               {activeTab === 'settings' && (
-                <Box>
-                  <Typography variant="h6" gutterBottom>
-                    Laser Settings
-                  </Typography>
-                  <Typography color="text.secondary">
-                    Laser settings panel coming soon...
-                  </Typography>
-                </Box>
+                <LaserSettingsPanel 
+                  deviceStatus={deviceStatus}
+                  onStatusUpdate={fetchStatus}
+                />
               )}
             </CardContent>
           </Card>
@@ -247,17 +258,17 @@ function DaylightMIRcatView() {
 
                   <Box sx={{ mb: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Case Temp 1 (C): {deviceStatus.status.case_temp_1}
+                      Case Temp 1 (C): {deviceStatus.connected ? deviceStatus.status.case_temp_1 : 'N/A'}
                     </Typography>
                   </Box>
                   <Box sx={{ mb: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Case Temp 2 (C): {deviceStatus.status.case_temp_2}
+                      Case Temp 2 (C): {deviceStatus.connected ? deviceStatus.status.case_temp_2 : 'N/A'}
                     </Typography>
                   </Box>
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary">
-                      PCB Temperature (C): {deviceStatus.status.pcb_temperature}
+                      PCB Temperature (C): {deviceStatus.connected ? deviceStatus.status.pcb_temperature : 'N/A'}
                     </Typography>
                   </Box>
 
