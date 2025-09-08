@@ -96,12 +96,13 @@ REM Wait a moment for backend to start
 echo Waiting for backend to initialize...
 timeout /t 3 /nobreak >nul
 
-REM Check if Node.js/npm is available
-echo 🎨 Checking Node.js installation...
-npm --version >nul 2>&1
+REM Check if pnpm is available
+echo 🎨 Checking pnpm installation...
+pnpm --version >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: npm/Node.js not found. Please install Node.js and add it to PATH.
-    echo Download from: https://nodejs.org/
+    echo ERROR: pnpm not found. Please install pnpm.
+    echo Install with: npm install -g pnpm
+    echo Or download from: https://pnpm.io/installation
     pause
     goto :cleanup
 )
@@ -110,10 +111,10 @@ REM Check and install Node.js dependencies
 echo 🎨 Checking Node.js dependencies...
 cd /d "%~dp0frontend"
 if not exist "node_modules" (
-    echo Installing Node.js dependencies...
-    npm install
+    echo Installing Node.js dependencies with pnpm...
+    pnpm install
     if errorlevel 1 (
-        echo ERROR: Failed to install Node.js dependencies.
+        echo ERROR: Failed to install Node.js dependencies with pnpm.
         pause
         goto :cleanup
     )
@@ -122,7 +123,7 @@ if not exist "node_modules" (
 )
 
 echo 🎨 Starting React Frontend...
-start "React Frontend" cmd /k "cd /d "%~dp0frontend" && npm run dev -- --host 0.0.0.0 --port 5000"
+start "React Frontend" cmd /k "cd /d "%~dp0frontend" && pnpm run dev -- --host 0.0.0.0 --port 5000"
 cd /d "%~dp0"
 
 echo.
