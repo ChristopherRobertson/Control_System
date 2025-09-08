@@ -303,7 +303,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                   variant="contained"
                   startIcon={<TuneIcon />}
                   onClick={handleTune}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || isTuned || isEmitting}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || isEmitting}
                   color="primary"
                 >
                   {`Tune to ${wavenumber} ${units}`}
@@ -316,7 +316,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                     onStatusUpdate()
                     setSnackbarMessage('Tune cancelled')
                   }}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || !isTuned || isEmitting}
+                  disabled={!canInteract || loading || !isTuned || isEmitting}
                   color="warning"
                 >
                   Cancel Tune
@@ -326,7 +326,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                   variant={deviceStatus?.emission_on ? 'contained' : 'outlined'}
                   startIcon={<EmitIcon />}
                   onClick={handleEmit}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || (!isTuned && !deviceStatus?.emission_on)}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || !isTuned}
                   color={deviceStatus?.emission_on ? 'error' : 'success'}
                 >
                   {deviceStatus?.emission_on ? 'STOP EMISSION' : 'START EMISSION'}
