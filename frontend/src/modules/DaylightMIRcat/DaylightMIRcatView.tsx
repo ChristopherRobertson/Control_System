@@ -227,48 +227,45 @@ function DaylightMIRcatView() {
                   <StatusIndicator
                     label="Interlocks"
                     status={deviceStatus.status.interlocks}
+                    connected={deviceStatus.connected}
                   />
                   <StatusIndicator
-                    label="Key Switch Status"
+                    label="Key Switch"
                     status={deviceStatus.status.key_switch}
+                    connected={deviceStatus.connected}
                   />
                   <StatusIndicator
                     label="Temperature"
                     status={deviceStatus.status.temperature}
-                  />
-                  <StatusIndicator
-                    label="Connected"
-                    status={deviceStatus.status.connected}
-                  />
-                  <StatusIndicator
-                    label="Emission"
-                    status={deviceStatus.status.emission}
+                    connected={deviceStatus.connected}
                   />
                   <StatusIndicator
                     label="Pointing Correction"
                     status={deviceStatus.status.pointing_correction}
+                    connected={deviceStatus.connected}
                   />
                   <StatusIndicator
                     label="System Fault"
-                    status={!deviceStatus.status.system_fault}
-                    invert
+                    status={deviceStatus.status.system_fault}
+                    connected={deviceStatus.connected}
+                    invert={true}
                   />
 
                   <Divider sx={{ my: 2 }} />
 
                   <Box sx={{ mb: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Case Temp 1 (C): {deviceStatus.connected ? deviceStatus.status.case_temp_1 : 'N/A'}
+                      Case Temp 1 (C): {deviceStatus.connected && deviceStatus.status.case_temp_1 !== 0 ? deviceStatus.status.case_temp_1.toFixed(2) : ''}
                     </Typography>
                   </Box>
                   <Box sx={{ mb: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Case Temp 2 (C): {deviceStatus.connected ? deviceStatus.status.case_temp_2 : 'N/A'}
+                      Case Temp 2 (C): {deviceStatus.connected && deviceStatus.status.case_temp_2 !== 0 ? deviceStatus.status.case_temp_2.toFixed(2) : ''}
                     </Typography>
                   </Box>
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary">
-                      PCB Temperature (C): {deviceStatus.connected ? deviceStatus.status.pcb_temperature : 'N/A'}
+                      PCB Temperature (C): {deviceStatus.connected && deviceStatus.status.pcb_temperature !== 0 ? deviceStatus.status.pcb_temperature.toFixed(2) : ''}
                     </Typography>
                   </Box>
 
