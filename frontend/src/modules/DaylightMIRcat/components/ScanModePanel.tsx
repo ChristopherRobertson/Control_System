@@ -51,7 +51,10 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
     stepSize: 1.0,
     dwellTime: 1000,
     scanSpeed: 10,
-    numberOfPoints: 50
+    numberOfScans: 1,
+    infiniteScans: false,
+    bidirectionalScanning: false,
+    manualStepMode: false
   })
   
   // MultiSpectral table data
@@ -65,6 +68,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [scanInProgress, setScanInProgress] = useState(false)
 
   const canInteract = deviceStatus?.connected && deviceStatus?.armed
 
@@ -119,8 +123,24 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
   }
 
   const updateMultiSpectralEntry = (id: number, field: keyof MultiSpectralEntry, value: number) => {
+    let correctedValue = value
+    
+    // Auto-revert to QCL range if invalid
+    if (field === 'wavenumber') {
+      const min = units === 'cm-1' ? 1638.81 : convertToMicrons(2077.27)
+      const max = units === 'cm-1' ? 2077.27 : convertToMicrons(1638.81)
+      
+      if (value < min) correctedValue = min
+      if (value > max) correctedValue = max
+      
+      // Limit decimals for microns
+      if (units === 'μm') {
+        correctedValue = Number(correctedValue.toFixed(2))
+      }
+    }
+    
     setMultiSpectralEntries(prev => prev.map(entry => 
-      entry.id === id ? { ...entry, [field]: value } : entry
+      entry.id === id ? { ...entry, [field]: correctedValue } : entry
     ))
   }
 
@@ -133,6 +153,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
     setError(null)
     try {
       console.log('Starting scan:', selectedScanMode, scanSettings)
+      setScanInProgress(true)
       onStatusUpdate()
     } catch (err) {
       setError('Failed to start scan')
@@ -146,6 +167,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
     setError(null)
     try {
       console.log('Stopping scan')
+      setScanInProgress(false)
       onStatusUpdate()
     } catch (err) {
       setError('Failed to stop scan')
@@ -271,6 +293,18 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                       inputProps={{ min: 100, max: 10000, step: 100 }}
                     />
                   </Grid>
+                  <Grid item xs={12}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={scanSettings.manualStepMode}
+                          onChange={(e) => setScanSettings(prev => ({ ...prev, manualStepMode: e.target.checked }))}
+                          disabled={!canInteract}
+                        />
+                      }
+                      label="Manual Step Mode"
+                    />
+                  </Grid>
                 </>
               )}
 
@@ -287,16 +321,38 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                       inputProps={{ min: 0.1, max: 100, step: 0.1 }}
                     />
                   </Grid>
-                  <Grid item xs={6} md={3}>
-                    <TextField
-                      fullWidth
-                      label="Number of Points"
-                      type="number"
-                      value={scanSettings.numberOfPoints}
-                      onChange={(e) => setScanSettings(prev => ({ ...prev, numberOfPoints: parseInt(e.target.value) }))}
-                      disabled={!canInteract}
-                      inputProps={{ min: 10, max: 1000, step: 10 }}
-                    />
+                  <Grid item xs={12} md={6}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                      <TextField
+                        label="Number of Scans"
+                        type="number"
+                        value={scanSettings.numberOfScans}
+                        onChange={(e) => setScanSettings(prev => ({ ...prev, numberOfScans: parseInt(e.target.value) }))}
+                        disabled={!canInteract || scanSettings.infiniteScans}
+                        inputProps={{ min: 1, max: 999, step: 1 }}
+                        sx={{ width: 140 }}
+                      />
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={scanSettings.infiniteScans}
+                            onChange={(e) => setScanSettings(prev => ({ ...prev, infiniteScans: e.target.checked }))}
+                            disabled={!canInteract}
+                          />
+                        }
+                        label="Infinite"
+                      />
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={scanSettings.bidirectionalScanning}
+                            onChange={(e) => setScanSettings(prev => ({ ...prev, bidirectionalScanning: e.target.checked }))}
+                            disabled={!canInteract}
+                          />
+                        }
+                        label="Bi-directional"
+                      />
+                    </Box>
                   </Grid>
                 </>
               )}
@@ -397,14 +453,6 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
               >
                 Add
               </Button>
-              <Button
-                disabled={!canInteract || multiSpectralEntries.length <= 1}
-                variant="outlined"
-                size="small"
-                color="error"
-              >
-                Remove
-              </Button>
             </Box>
 
             <Box sx={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -470,13 +518,13 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                 variant="contained"
                 startIcon={<StopIcon />}
                 onClick={handleStopScan}
-                disabled={!canInteract || loading}
+                disabled={!canInteract || loading || !scanInProgress}
                 color="error"
               >
                 Stop Scan
               </Button>
 
-              {selectedScanMode === 'step' && (
+              {selectedScanMode === 'step' && scanSettings.manualStepMode && (
                 <Button
                   variant="outlined"
                   onClick={handleManualStep}
@@ -489,7 +537,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
 
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                Scan Progress: {loading ? 'In Progress...' : 'Ready'}
+                Scan Progress: {scanInProgress ? 'In Progress...' : 'Ready'}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Current Position: {deviceStatus?.current_wavenumber?.toFixed(2) || '--'} cm-1

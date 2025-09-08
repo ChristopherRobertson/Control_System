@@ -160,6 +160,11 @@ function DaylightMIRcatView() {
             color={deviceStatus?.connected ? 'success' : 'default'}
             icon={<SecurityIcon />}
           />
+          {deviceStatus?.connected && (
+            <Typography variant="body2" color="success.main">
+              Connected Devices: MIRcat QCL System
+            </Typography>
+          )}
           <Button
             variant="contained"
             onClick={deviceStatus?.connected ? handleDisconnect : handleConnect}

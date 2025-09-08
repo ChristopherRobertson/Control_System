@@ -30,7 +30,6 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
   
   // Laser Parameters State
   const [laserParams, setLaserParams] = useState({
-    displayUnits: 'Wavenumber',
     selectQCL: 1,
     laserMode: 'Pulsed',
     pulseRate: 2000000,
@@ -96,19 +95,6 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>Display Units</Typography>
-              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                <InputLabel>Units</InputLabel>
-                <Select
-                  value={laserParams.displayUnits}
-                  label="Units"
-                  onChange={(e) => setLaserParams(prev => ({ ...prev, displayUnits: e.target.value }))}
-                  disabled={!deviceStatus?.connected}
-                >
-                  <MenuItem value="Wavenumber">Wavenumber</MenuItem>
-                  <MenuItem value="Wavelength">Wavelength</MenuItem>
-                </Select>
-              </FormControl>
 
               <Typography variant="h6" gutterBottom>Notifications</Typography>
               <FormControlLabel
@@ -150,9 +136,6 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
                 }
                 label="Enable Parameter Logging"
               />
-              <Button variant="outlined" size="small" sx={{ ml: 2 }}>
-                Set Fault Log Directory
-              </Button>
             </CardContent>
           </Card>
         </Grid>
