@@ -545,7 +545,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                 variant="contained"
                 startIcon={<PlayIcon />}
                 onClick={handleStartScan}
-                disabled={!canInteract || loading}
+                disabled={!canInteract || loading || scanInProgress}
                 color="success"
               >
                 Start Scan
