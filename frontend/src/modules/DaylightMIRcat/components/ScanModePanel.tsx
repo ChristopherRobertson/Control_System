@@ -76,6 +76,31 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
   const convertToMicrons = (wavenum: number) => (10000 / wavenum)
   const convertToWavenumber = (microns: number) => (10000 / microns)
 
+  // Validate and correct input values to QCL range
+  const validateAndCorrectValue = (value: number, field: 'wavenumber' | 'stepSize' = 'wavenumber') => {
+    let min, max, correctedValue = value
+    
+    if (field === 'wavenumber') {
+      if (units === 'cm-1') {
+        min = 1638.81
+        max = 2077.27
+      } else {
+        min = convertToMicrons(2077.27) // ~4.81 μm
+        max = convertToMicrons(1638.81) // ~6.1 μm
+      }
+      
+      if (value < min) correctedValue = min
+      if (value > max) correctedValue = max
+      
+      // Limit decimals for microns
+      if (units === 'μm') {
+        correctedValue = Number(correctedValue.toFixed(2))
+      }
+    }
+    
+    return correctedValue
+  }
+
   const handleScanModeSelect = (mode: string) => {
     setSelectedScanMode(mode)
   }
@@ -252,7 +277,11 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                   label={`Start (${units})`}
                   type="number"
                   value={scanSettings.startWavenumber}
-                  onChange={(e) => setScanSettings(prev => ({ ...prev, startWavenumber: parseFloat(e.target.value) }))}
+                  onChange={(e) => setScanSettings(prev => ({ ...prev, startWavenumber: parseFloat(e.target.value) || 0 }))}
+                  onBlur={(e) => {
+                    const correctedValue = validateAndCorrectValue(parseFloat(e.target.value) || 0)
+                    setScanSettings(prev => ({ ...prev, startWavenumber: correctedValue }))
+                  }}
                   disabled={!canInteract}
                   inputProps={{ step: units === 'cm-1' ? 0.01 : 0.001 }}
                 />
@@ -263,7 +292,11 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                   label={`End (${units})`}
                   type="number"
                   value={scanSettings.endWavenumber}
-                  onChange={(e) => setScanSettings(prev => ({ ...prev, endWavenumber: parseFloat(e.target.value) }))}
+                  onChange={(e) => setScanSettings(prev => ({ ...prev, endWavenumber: parseFloat(e.target.value) || 0 }))}
+                  onBlur={(e) => {
+                    const correctedValue = validateAndCorrectValue(parseFloat(e.target.value) || 0)
+                    setScanSettings(prev => ({ ...prev, endWavenumber: correctedValue }))
+                  }}
                   disabled={!canInteract}
                   inputProps={{ step: units === 'cm-1' ? 0.01 : 0.001 }}
                 />
@@ -401,8 +434,12 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                       <TableCell>
                         <TextField
                           type="number"
-                          value={entry.wavenumber}
-                          onChange={(e) => updateMultiSpectralEntry(entry.id, 'wavenumber', parseFloat(e.target.value))}
+                          value={entry.wavenumber || ''}
+                          onChange={(e) => updateMultiSpectralEntry(entry.id, 'wavenumber', parseFloat(e.target.value) || 0)}
+                          onBlur={(e) => {
+                            const correctedValue = validateAndCorrectValue(parseFloat(e.target.value) || 0)
+                            updateMultiSpectralEntry(entry.id, 'wavenumber', correctedValue)
+                          }}
                           disabled={!canInteract}
                           size="small"
                           inputProps={{ step: units === 'cm-1' ? 0.1 : 0.001 }}
