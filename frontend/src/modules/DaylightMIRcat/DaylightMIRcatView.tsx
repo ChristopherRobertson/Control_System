@@ -232,6 +232,20 @@ function DaylightMIRcatView() {
               
               {deviceStatus && (
                 <>
+                  {/* Error Reporting Section */}
+                  {deviceStatus.last_error && (
+                    <Box sx={{ mb: 2 }}>
+                      <Alert severity="error" sx={{ mb: 1 }}>
+                        <Typography variant="subtitle2" fontWeight="bold">
+                          MIRcat Error {deviceStatus.last_error_code ? `(Code ${deviceStatus.last_error_code})` : ''}
+                        </Typography>
+                        <Typography variant="body2">
+                          {deviceStatus.last_error}
+                        </Typography>
+                      </Alert>
+                    </Box>
+                  )}
+
                   <StatusIndicator
                     label="Interlocks"
                     status={deviceStatus.status.interlocks}
