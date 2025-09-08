@@ -100,6 +100,40 @@ function DaylightMIRcatView() {
     }
   }
 
+  // Arm laser
+  const handleArm = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      await MIRcatAPI.armLaser()
+      await fetchStatus()
+    } catch (err) {
+      setError('Failed to arm laser')
+      console.error('Arm error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Disarm laser
+  const handleDisarm = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      // If emitting, stop emission first
+      if (deviceStatus?.emission_on) {
+        await MIRcatAPI.turnEmissionOff()
+      }
+      await MIRcatAPI.disarmLaser()
+      await fetchStatus()
+    } catch (err) {
+      setError('Failed to disarm laser')
+      console.error('Disarm error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Initial status fetch
   useEffect(() => {
     fetchStatus()
@@ -166,6 +200,20 @@ function DaylightMIRcatView() {
                     {tab.label}
                   </Button>
                 ))}
+                
+                <Divider sx={{ my: 1 }} />
+                
+                {/* Arm/Disarm Button - Present on all pages */}
+                <Button
+                  variant={deviceStatus?.armed ? 'contained' : 'outlined'}
+                  startIcon={<SecurityIcon />}
+                  onClick={deviceStatus?.armed ? handleDisarm : handleArm}
+                  disabled={!deviceStatus?.connected || loading}
+                  color={deviceStatus?.armed ? 'warning' : 'primary'}
+                  sx={{ justifyContent: 'flex-start' }}
+                >
+                  {deviceStatus?.armed ? 'DISARM LASER' : 'ARM LASER'}
+                </Button>
               </Box>
             </CardContent>
           </Card>

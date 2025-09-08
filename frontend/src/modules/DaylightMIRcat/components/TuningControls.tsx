@@ -87,8 +87,9 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
     }
 
     if (correctedValue !== wavenumber) {
-      setWavenumber(Number(correctedValue.toFixed(2)))
-      setSnackbarMessage(`Value corrected to acceptable range: ${correctedValue.toFixed(2)} ${units}`)
+      const decimals = units === 'cm-1' ? 2 : 2 // Limit microns to 2 decimal places
+      setWavenumber(Number(correctedValue.toFixed(decimals)))
+      setSnackbarMessage(`Value corrected to acceptable range: ${correctedValue.toFixed(decimals)} ${units}`)
     }
   }
 
@@ -142,6 +143,11 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
     setLoading(true)
     setError(null)
     try {
+      // If emitting, stop emission first
+      if (deviceStatus?.emission_on) {
+        await MIRcatAPI.turnEmissionOff()
+        setSnackbarMessage('Emission stopped before disarming')
+      }
       await MIRcatAPI.disarmLaser()
       onStatusUpdate()
       setSnackbarMessage('Laser disarmed successfully')
@@ -199,9 +205,9 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
   }
 
   const handleRedLaser = () => {
-    // Red laser safety logic - cannot be on when armed, tuned, or emitting
-    if (deviceStatus?.armed || deviceStatus?.emission_on || (deviceStatus?.current_wavenumber && deviceStatus.current_wavenumber !== 0)) {
-      setSnackbarMessage('Red laser cannot be enabled while system is armed, tuned, or emitting')
+    // Red laser safety logic - can only be enabled when not armed
+    if (deviceStatus?.armed) {
+      setSnackbarMessage('Red laser cannot be enabled while system is armed')
       return
     }
 
@@ -210,6 +216,8 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
   }
 
   const canInteract = deviceStatus?.connected || false
+  const isTuned = deviceStatus?.current_wavenumber && deviceStatus.current_wavenumber !== 0
+  const isEmitting = deviceStatus?.emission_on
 
   return (
     <Box>
@@ -295,7 +303,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                   variant="contained"
                   startIcon={<TuneIcon />}
                   onClick={handleTune}
-                  disabled={!canInteract || loading || !deviceStatus?.armed}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || isTuned || isEmitting}
                   color="primary"
                 >
                   {`Tune to ${wavenumber} ${units}`}
@@ -308,7 +316,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                     onStatusUpdate()
                     setSnackbarMessage('Tune cancelled')
                   }}
-                  disabled={!canInteract || loading || !deviceStatus?.armed}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || !isTuned || isEmitting}
                   color="warning"
                 >
                   Cancel Tune
@@ -318,7 +326,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                   variant={deviceStatus?.emission_on ? 'contained' : 'outlined'}
                   startIcon={<EmitIcon />}
                   onClick={handleEmit}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || (!deviceStatus?.current_wavenumber || deviceStatus?.current_wavenumber === 0) && !deviceStatus?.emission_on}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || (!isTuned && !deviceStatus?.emission_on)}
                   color={deviceStatus?.emission_on ? 'error' : 'success'}
                 >
                   {deviceStatus?.emission_on ? 'STOP EMISSION' : 'START EMISSION'}
@@ -329,7 +337,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                     <Switch
                       checked={redLaserOn}
                       onChange={handleRedLaser}
-                      disabled={!canInteract || deviceStatus?.armed || deviceStatus?.emission_on || (deviceStatus?.current_wavenumber && deviceStatus.current_wavenumber !== 0)}
+                      disabled={!canInteract || deviceStatus?.armed}
                     />
                   }
                   label="Red Laser"
