@@ -434,11 +434,19 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                       <TableCell>
                         <TextField
                           type="number"
-                          value={entry.wavenumber || ''}
-                          onChange={(e) => updateMultiSpectralEntry(entry.id, 'wavenumber', parseFloat(e.target.value) || 0)}
+                          value={entry.wavenumber !== undefined && entry.wavenumber !== null ? entry.wavenumber : ''}
+                          onChange={(e) => {
+                            const value = e.target.value === '' ? 0 : parseFloat(e.target.value)
+                            if (!isNaN(value)) {
+                              updateMultiSpectralEntry(entry.id, 'wavenumber', value)
+                            }
+                          }}
                           onBlur={(e) => {
-                            const correctedValue = validateAndCorrectValue(parseFloat(e.target.value) || 0)
-                            updateMultiSpectralEntry(entry.id, 'wavenumber', correctedValue)
+                            const value = e.target.value === '' ? 0 : parseFloat(e.target.value)
+                            if (!isNaN(value)) {
+                              const correctedValue = validateAndCorrectValue(value)
+                              updateMultiSpectralEntry(entry.id, 'wavenumber', correctedValue)
+                            }
                           }}
                           disabled={!canInteract}
                           size="small"
