@@ -290,20 +290,10 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
 
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 <Button
-                  variant={deviceStatus?.armed ? 'contained' : 'outlined'}
-                  startIcon={<ArmIcon />}
-                  onClick={deviceStatus?.armed ? handleDisarm : handleArm}
-                  disabled={!canInteract || loading}
-                  color={deviceStatus?.armed ? 'warning' : 'primary'}
-                >
-                  {deviceStatus?.armed ? 'DISARM' : 'ARM LASER'}
-                </Button>
-                
-                <Button
                   variant="contained"
                   startIcon={<TuneIcon />}
                   onClick={handleTune}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || isEmitting}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || isTuned || isEmitting}
                   color="primary"
                 >
                   {`Tune to ${wavenumber} ${units}`}
