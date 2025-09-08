@@ -11,39 +11,120 @@ import {
   Card,
   CardContent,
   Grid,
-  Switch,
-  FormControlLabel,
-  Alert
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  IconButton,
+  Checkbox,
+  FormControlLabel
 } from '@mui/material'
-import { PlayArrow as PlayIcon, Stop as StopIcon } from '@mui/icons-material'
+import { 
+  PlayArrow as PlayIcon, 
+  Stop as StopIcon, 
+  Add as AddIcon,
+  Delete as DeleteIcon 
+} from '@mui/icons-material'
 
 interface ScanModePanelProps {
   deviceStatus: any
   onStatusUpdate: () => void
 }
 
+interface MultiSpectralEntry {
+  id: number
+  wavenumber: number
+  dwellTime: number
+  offTime: number
+}
+
 function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
   const [selectedScanMode, setSelectedScanMode] = useState<string>('')
+  const [units, setUnits] = useState<'cm-1' | 'μm'>('cm-1')
   const [scanSettings, setScanSettings] = useState({
     startWavenumber: 1850.0,
     endWavenumber: 1900.0,
     stepSize: 1.0,
     dwellTime: 1000,
-    sweepRate: 10,
-    numPoints: 50,
-    autoStart: false
+    scanSpeed: 10,
+    numberOfPoints: 50
   })
+  
+  // MultiSpectral table data
+  const [multiSpectralEntries, setMultiSpectralEntries] = useState<MultiSpectralEntry[]>([
+    { id: 1, wavenumber: 1638.8, dwellTime: 3997, offTime: 2000 }
+  ])
+  const [nextId, setNextId] = useState(2)
+  const [numberOfScans, setNumberOfScans] = useState(1)
+  const [keepLaserOnBetweenSteps, setKeepLaserOnBetweenSteps] = useState(false)
+  const [infiniteScans, setInfiniteScans] = useState(false)
+  
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const canInteract = deviceStatus?.connected && deviceStatus?.armed
 
+  // Convert between units
+  const convertToMicrons = (wavenum: number) => (10000 / wavenum)
+  const convertToWavenumber = (microns: number) => (10000 / microns)
+
   const handleScanModeSelect = (mode: string) => {
     setSelectedScanMode(mode)
   }
 
+  const handleUnitChange = (newUnit: 'cm-1' | 'μm') => {
+    if (newUnit !== units) {
+      if (newUnit === 'μm') {
+        setScanSettings(prev => ({
+          ...prev,
+          startWavenumber: convertToMicrons(prev.startWavenumber),
+          endWavenumber: convertToMicrons(prev.endWavenumber)
+        }))
+        setMultiSpectralEntries(prev => prev.map(entry => ({
+          ...entry,
+          wavenumber: convertToMicrons(entry.wavenumber)
+        })))
+      } else {
+        setScanSettings(prev => ({
+          ...prev,
+          startWavenumber: convertToWavenumber(prev.startWavenumber),
+          endWavenumber: convertToWavenumber(prev.endWavenumber)
+        }))
+        setMultiSpectralEntries(prev => prev.map(entry => ({
+          ...entry,
+          wavenumber: convertToWavenumber(entry.wavenumber)
+        })))
+      }
+      setUnits(newUnit)
+    }
+  }
+
+  const addMultiSpectralEntry = () => {
+    const newEntry: MultiSpectralEntry = {
+      id: nextId,
+      wavenumber: units === 'cm-1' ? 1850.0 : convertToMicrons(1850.0),
+      dwellTime: 3997,
+      offTime: 2000
+    }
+    setMultiSpectralEntries(prev => [...prev, newEntry])
+    setNextId(prev => prev + 1)
+  }
+
+  const removeMultiSpectralEntry = (id: number) => {
+    setMultiSpectralEntries(prev => prev.filter(entry => entry.id !== id))
+  }
+
+  const updateMultiSpectralEntry = (id: number, field: keyof MultiSpectralEntry, value: number) => {
+    setMultiSpectralEntries(prev => prev.map(entry => 
+      entry.id === id ? { ...entry, [field]: value } : entry
+    ))
+  }
+
   const handleManualStep = () => {
-    // Implement manual step for step scan
     console.log('Manual step executed')
   }
 
@@ -51,7 +132,6 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
     setLoading(true)
     setError(null)
     try {
-      // TODO: Implement scan start API call
       console.log('Starting scan:', selectedScanMode, scanSettings)
       onStatusUpdate()
     } catch (err) {
@@ -65,7 +145,6 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
     setLoading(true)
     setError(null)
     try {
-      // TODO: Implement scan stop API call
       console.log('Stopping scan')
       onStatusUpdate()
     } catch (err) {
@@ -122,36 +201,49 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
       </Card>
 
       {/* Scan Settings - Dynamic based on selected mode */}
-      {selectedScanMode && (
+      {selectedScanMode && selectedScanMode !== 'multispectral' && (
         <Card sx={{ mb: 2 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
               {selectedScanMode === 'sweep' && 'Sweep Scan Settings'}
               {selectedScanMode === 'step' && 'Step Scan Settings'}
-              {selectedScanMode === 'multispectral' && 'Multi-Spectral Scan Settings'}
             </Typography>
 
-            <Grid container spacing={2}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} md={3}>
+                <FormControl fullWidth disabled={!canInteract}>
+                  <InputLabel>Units</InputLabel>
+                  <Select
+                    value={units}
+                    label="Units"
+                    onChange={(e) => handleUnitChange(e.target.value as 'cm-1' | 'μm')}
+                  >
+                    <MenuItem value="cm-1">cm-1</MenuItem>
+                    <MenuItem value="μm">μm</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
               <Grid item xs={6} md={3}>
                 <TextField
                   fullWidth
-                  label="Start (cm-1)"
+                  label={`Start (${units})`}
                   type="number"
                   value={scanSettings.startWavenumber}
                   onChange={(e) => setScanSettings(prev => ({ ...prev, startWavenumber: parseFloat(e.target.value) }))}
                   disabled={!canInteract}
-                  inputProps={{ min: 1638.81, max: 2077.27, step: 0.01 }}
+                  inputProps={{ step: units === 'cm-1' ? 0.01 : 0.001 }}
                 />
               </Grid>
               <Grid item xs={6} md={3}>
                 <TextField
                   fullWidth
-                  label="End (cm-1)"
+                  label={`End (${units})`}
                   type="number"
                   value={scanSettings.endWavenumber}
                   onChange={(e) => setScanSettings(prev => ({ ...prev, endWavenumber: parseFloat(e.target.value) }))}
                   disabled={!canInteract}
-                  inputProps={{ min: 1638.81, max: 2077.27, step: 0.01 }}
+                  inputProps={{ step: units === 'cm-1' ? 0.01 : 0.001 }}
                 />
               </Grid>
 
@@ -160,7 +252,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                   <Grid item xs={6} md={3}>
                     <TextField
                       fullWidth
-                      label="Step Size (cm-1)"
+                      label={`Step Size (${units})`}
                       type="number"
                       value={scanSettings.stepSize}
                       onChange={(e) => setScanSettings(prev => ({ ...prev, stepSize: parseFloat(e.target.value) }))}
@@ -187,10 +279,10 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                   <Grid item xs={6} md={3}>
                     <TextField
                       fullWidth
-                      label="Sweep Rate (cm-1/s)"
+                      label={`Scan Speed (${units}/s)`}
                       type="number"
-                      value={scanSettings.sweepRate}
-                      onChange={(e) => setScanSettings(prev => ({ ...prev, sweepRate: parseFloat(e.target.value) }))}
+                      value={scanSettings.scanSpeed}
+                      onChange={(e) => setScanSettings(prev => ({ ...prev, scanSpeed: parseFloat(e.target.value) }))}
                       disabled={!canInteract}
                       inputProps={{ min: 0.1, max: 100, step: 0.1 }}
                     />
@@ -200,28 +292,157 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                       fullWidth
                       label="Number of Points"
                       type="number"
-                      value={scanSettings.numPoints}
-                      onChange={(e) => setScanSettings(prev => ({ ...prev, numPoints: parseInt(e.target.value) }))}
+                      value={scanSettings.numberOfPoints}
+                      onChange={(e) => setScanSettings(prev => ({ ...prev, numberOfPoints: parseInt(e.target.value) }))}
                       disabled={!canInteract}
                       inputProps={{ min: 10, max: 1000, step: 10 }}
                     />
                   </Grid>
                 </>
               )}
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
 
-              <Grid item xs={12}>
+      {/* Multi-Spectral Scan Settings */}
+      {selectedScanMode === 'multispectral' && (
+        <Card sx={{ mb: 2 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Multi-Spectral Scan Settings
+            </Typography>
+            
+            <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Typography>Scan Mode:</Typography>
+              <Typography fontWeight="bold">Multi-Spectral Mode</Typography>
+              
+              <Typography sx={{ ml: 4 }}>Multi-Spectral Mode Units:</Typography>
+              <FormControl size="small" disabled={!canInteract}>
+                <Select
+                  value={units}
+                  onChange={(e) => handleUnitChange(e.target.value as 'cm-1' | 'μm')}
+                >
+                  <MenuItem value="cm-1">cm-1</MenuItem>
+                  <MenuItem value="μm">μm</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+
+            <TableContainer component={Paper} sx={{ mb: 2 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell align="center">Wave number</TableCell>
+                    <TableCell align="center">Dwell Time (ms)</TableCell>
+                    <TableCell align="center">Off Time (ms)</TableCell>
+                    <TableCell align="center">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {multiSpectralEntries.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell>
+                        <TextField
+                          type="number"
+                          value={entry.wavenumber}
+                          onChange={(e) => updateMultiSpectralEntry(entry.id, 'wavenumber', parseFloat(e.target.value))}
+                          disabled={!canInteract}
+                          size="small"
+                          inputProps={{ step: units === 'cm-1' ? 0.1 : 0.001 }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <TextField
+                          type="number"
+                          value={entry.dwellTime}
+                          onChange={(e) => updateMultiSpectralEntry(entry.id, 'dwellTime', parseInt(e.target.value))}
+                          disabled={!canInteract}
+                          size="small"
+                          inputProps={{ min: 100, step: 1 }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <TextField
+                          type="number"
+                          value={entry.offTime}
+                          onChange={(e) => updateMultiSpectralEntry(entry.id, 'offTime', parseInt(e.target.value))}
+                          disabled={!canInteract}
+                          size="small"
+                          inputProps={{ min: 100, step: 1 }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <IconButton 
+                          onClick={() => removeMultiSpectralEntry(entry.id)}
+                          disabled={!canInteract || multiSpectralEntries.length <= 1}
+                          size="small"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+              <Button
+                startIcon={<AddIcon />}
+                onClick={addMultiSpectralEntry}
+                disabled={!canInteract}
+                variant="outlined"
+                size="small"
+              >
+                Add
+              </Button>
+              <Button
+                disabled={!canInteract || multiSpectralEntries.length <= 1}
+                variant="outlined"
+                size="small"
+                color="error"
+              >
+                Remove
+              </Button>
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={keepLaserOnBetweenSteps}
+                    onChange={(e) => setKeepLaserOnBetweenSteps(e.target.checked)}
+                    disabled={!canInteract}
+                  />
+                }
+                label="Keep Laser On Between Steps"
+              />
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography>Number of Scans:</Typography>
+                <TextField
+                  type="number"
+                  value={numberOfScans}
+                  onChange={(e) => setNumberOfScans(parseInt(e.target.value))}
+                  disabled={!canInteract || infiniteScans}
+                  size="small"
+                  sx={{ width: 80 }}
+                  inputProps={{ min: 1, max: 999 }}
+                />
+                <Typography>- Or -</Typography>
                 <FormControlLabel
                   control={
-                    <Switch
-                      checked={scanSettings.autoStart}
-                      onChange={(e) => setScanSettings(prev => ({ ...prev, autoStart: e.target.checked }))}
+                    <Checkbox
+                      checked={infiniteScans}
+                      onChange={(e) => setInfiniteScans(e.target.checked)}
                       disabled={!canInteract}
                     />
                   }
-                  label="Auto Start on Parameter Change"
+                  label="Infinite"
                 />
-              </Grid>
-            </Grid>
+              </Box>
+            </Box>
           </CardContent>
         </Card>
       )}
