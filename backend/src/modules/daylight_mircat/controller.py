@@ -457,10 +457,15 @@ class MIRcatController:
             logger.error(f"Failed to set pulse parameters: {e}")
             return False
 
-    # Scan Operations
+    # Scan Operations - ALL require real MIRcat hardware
     async def start_sweep_scan(self, start_wn: float, end_wn: float, scan_speed: float, 
                               num_scans: int = 1, bidirectional: bool = False) -> bool:
-        """Start sweep scan mode"""
+        """Start sweep scan mode - requires real MIRcat hardware"""
+        if not self.connected:
+            self.last_error = "MIRcat device not connected"
+            self.last_error_code = MIRcatError.NOT_CONNECTED
+            raise Exception("MIRcat device not connected")
+        
         if not self.armed:
             self.last_error = "Laser must be armed before starting scan"
             self.last_error_code = MIRcatError.NOT_ARMED
@@ -469,21 +474,28 @@ class MIRcatController:
         try:
             logger.info(f"Starting sweep scan: {start_wn} to {end_wn} cm-1")
             
-            # SDK calls would configure and start sweep scan
-            self.scan_in_progress = True
-            self.current_scan_mode = ScanMode.SWEEP
+            # Real SDK calls would be:
+            # result = mircat_sdk.MIRcatSDK_StartSweepScan(start_wn, end_wn, scan_speed, num_scans, bidirectional)
+            # if result != 0:
+            #     raise Exception(f"Sweep scan initialization failed with code {result}")
             
-            logger.info("Sweep scan started successfully")
-            return True
+            # Since we don't have real hardware, this will fail
+            raise Exception("MIRcat SDK required - cannot start sweep scan without real hardware")
             
         except Exception as e:
             self.last_error = f"Failed to start sweep scan: {str(e)}"
+            self.last_error_code = MIRcatError.HARDWARE_ERROR
             logger.error(f"Failed to start sweep scan: {e}")
             return False
 
     async def start_step_scan(self, start_wn: float, end_wn: float, step_size: float,
                              dwell_time: int, num_scans: int = 1) -> bool:
-        """Start step and measure scan mode"""
+        """Start step and measure scan mode - requires real MIRcat hardware"""
+        if not self.connected:
+            self.last_error = "MIRcat device not connected"
+            self.last_error_code = MIRcatError.NOT_CONNECTED
+            raise Exception("MIRcat device not connected")
+        
         if not self.armed:
             self.last_error = "Laser must be armed before starting scan"
             self.last_error_code = MIRcatError.NOT_ARMED
@@ -492,21 +504,28 @@ class MIRcatController:
         try:
             logger.info(f"Starting step scan: {start_wn} to {end_wn} cm-1, step={step_size}")
             
-            # SDK calls would configure and start step scan
-            self.scan_in_progress = True
-            self.current_scan_mode = ScanMode.STEP
+            # Real SDK calls would be:
+            # result = mircat_sdk.MIRcatSDK_StartStepScan(start_wn, end_wn, step_size, dwell_time, num_scans)
+            # if result != 0:
+            #     raise Exception(f"Step scan initialization failed with code {result}")
             
-            logger.info("Step scan started successfully")
-            return True
+            # Since we don't have real hardware, this will fail
+            raise Exception("MIRcat SDK required - cannot start step scan without real hardware")
             
         except Exception as e:
             self.last_error = f"Failed to start step scan: {str(e)}"
+            self.last_error_code = MIRcatError.HARDWARE_ERROR
             logger.error(f"Failed to start step scan: {e}")
             return False
 
     async def start_multispectral_scan(self, wavelength_list: List[Dict], num_scans: int = 1,
                                       keep_laser_on: bool = False) -> bool:
-        """Start multi-spectral scan mode"""
+        """Start multi-spectral scan mode - requires real MIRcat hardware"""
+        if not self.connected:
+            self.last_error = "MIRcat device not connected"
+            self.last_error_code = MIRcatError.NOT_CONNECTED
+            raise Exception("MIRcat device not connected")
+        
         if not self.armed:
             self.last_error = "Laser must be armed before starting scan"
             self.last_error_code = MIRcatError.NOT_ARMED
@@ -515,32 +534,41 @@ class MIRcatController:
         try:
             logger.info(f"Starting multispectral scan with {len(wavelength_list)} wavelengths")
             
-            # SDK calls would configure and start multispectral scan
-            self.scan_in_progress = True
-            self.current_scan_mode = ScanMode.MULTISPECTRAL
+            # Real SDK calls would be:
+            # result = mircat_sdk.MIRcatSDK_StartMultiSpectralScan(wavelength_list, num_scans, keep_laser_on)
+            # if result != 0:
+            #     raise Exception(f"Multispectral scan initialization failed with code {result}")
             
-            logger.info("Multispectral scan started successfully")
-            return True
+            # Since we don't have real hardware, this will fail
+            raise Exception("MIRcat SDK required - cannot start multispectral scan without real hardware")
             
         except Exception as e:
             self.last_error = f"Failed to start multispectral scan: {str(e)}"
+            self.last_error_code = MIRcatError.HARDWARE_ERROR
             logger.error(f"Failed to start multispectral scan: {e}")
             return False
 
     async def stop_scan(self) -> bool:
-        """Stop any active scan"""
+        """Stop any active scan - requires real MIRcat hardware"""
+        if not self.connected:
+            self.last_error = "MIRcat device not connected"
+            self.last_error_code = MIRcatError.NOT_CONNECTED
+            raise Exception("MIRcat device not connected")
+        
         try:
             logger.info("Stopping scan...")
             
-            # SDK call would stop current scan
-            self.scan_in_progress = False
-            self.current_scan_mode = None
+            # Real SDK call would be:
+            # result = mircat_sdk.MIRcatSDK_StopScan()
+            # if result != 0:
+            #     raise Exception(f"Stop scan failed with code {result}")
             
-            logger.info("Scan stopped successfully")
-            return True
+            # Since we don't have real hardware, this will fail
+            raise Exception("MIRcat SDK required - cannot stop scan without real hardware")
             
         except Exception as e:
             self.last_error = f"Failed to stop scan: {str(e)}"
+            self.last_error_code = MIRcatError.HARDWARE_ERROR
             logger.error(f"Failed to stop scan: {e}")
             return False
 
