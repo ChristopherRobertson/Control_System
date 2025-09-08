@@ -302,10 +302,23 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                 </Button>
 
                 <Button
+                  variant="outlined"
+                  onClick={() => {
+                    // Cancel tune - reset to disconnected state
+                    onStatusUpdate()
+                    setSnackbarMessage('Tune cancelled')
+                  }}
+                  disabled={!canInteract || loading || !deviceStatus?.armed}
+                  color="warning"
+                >
+                  Cancel Tune
+                </Button>
+
+                <Button
                   variant={deviceStatus?.emission_on ? 'contained' : 'outlined'}
                   startIcon={<EmitIcon />}
                   onClick={handleEmit}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || (!deviceStatus?.current_wavenumber && !deviceStatus?.emission_on)}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || (!deviceStatus?.current_wavenumber || deviceStatus?.current_wavenumber === 0) && !deviceStatus?.emission_on}
                   color={deviceStatus?.emission_on ? 'error' : 'success'}
                 >
                   {deviceStatus?.emission_on ? 'STOP EMISSION' : 'START EMISSION'}

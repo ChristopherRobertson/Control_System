@@ -146,9 +146,10 @@ function DaylightMIRcatView() {
       )}
 
       <Grid container spacing={3} sx={{ flexGrow: 1 }}>
-        {/* Left Navigation Panel */}
+        {/* Left Column - Navigation + Status */}
         <Grid item xs={12} md={3}>
-          <Card sx={{ height: 'fit-content' }}>
+          {/* Navigation Panel */}
+          <Card sx={{ height: 'fit-content', mb: 2 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 Navigation
@@ -168,42 +169,8 @@ function DaylightMIRcatView() {
               </Box>
             </CardContent>
           </Card>
-        </Grid>
 
-        {/* Main Control Area */}
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: 'fit-content' }}>
-            <CardContent>
-              {activeTab === 'tune' && (
-                <TuningControls 
-                  deviceStatus={deviceStatus}
-                  onStatusUpdate={fetchStatus}
-                />
-              )}
-              {activeTab === 'scan' && (
-                <Box>
-                  <Typography variant="h6" gutterBottom>
-                    Scan Mode
-                  </Typography>
-                  
-                  <ScanModePanel 
-                    deviceStatus={deviceStatus}
-                    onStatusUpdate={fetchStatus}
-                  />
-                </Box>
-              )}
-              {activeTab === 'settings' && (
-                <LaserSettingsPanel 
-                  deviceStatus={deviceStatus}
-                  onStatusUpdate={fetchStatus}
-                />
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Right Status Panel */}
-        <Grid item xs={12} md={3}>
+          {/* Status Panel - Below Navigation */}
           <Card sx={{ height: 'fit-content' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -262,6 +229,39 @@ function DaylightMIRcatView() {
             </CardContent>
           </Card>
         </Grid>
+
+        {/* Main Control Area - Right Side */}
+        <Grid item xs={12} md={9}>
+          <Card sx={{ height: 'fit-content' }}>
+            <CardContent>
+              {activeTab === 'tune' && (
+                <TuningControls 
+                  deviceStatus={deviceStatus}
+                  onStatusUpdate={fetchStatus}
+                />
+              )}
+              {activeTab === 'scan' && (
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    Scan Mode
+                  </Typography>
+                  
+                  <ScanModePanel 
+                    deviceStatus={deviceStatus}
+                    onStatusUpdate={fetchStatus}
+                  />
+                </Box>
+              )}
+              {activeTab === 'settings' && (
+                <LaserSettingsPanel 
+                  deviceStatus={deviceStatus}
+                  onStatusUpdate={fetchStatus}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
       </Grid>
     </Box>
   )
