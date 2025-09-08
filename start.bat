@@ -16,24 +16,66 @@ REM Check if this is the monitor process
 if "%1"=="monitor" goto :monitor
 
 :main
+REM Check if Python is available
+echo 🔧 Checking Python installation...
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Python not found. Please install Python 3.8+ and add it to PATH.
+    echo Download from: https://www.python.org/downloads/
+    pause
+    goto :cleanup
+)
+
+cd /d "%~dp0backend"
+
 REM Check and install Python dependencies
 echo 🔧 Checking Python dependencies...
-cd /d "%~dp0backend"
 if not exist "venv" (
     echo Creating Python virtual environment...
     python -m venv venv
     if errorlevel 1 (
-        echo ERROR: Python not found. Please install Python 3.8+ and add it to PATH.
+        echo ERROR: Failed to create virtual environment.
+        echo Trying global pip install instead...
+        pip install -r requirements.txt
+        if errorlevel 1 (
+            echo ERROR: Failed to install Python dependencies globally.
+            pause
+            goto :cleanup
+        )
+        goto :start_backend_global
+    )
+)
+
+REM Check if activation script exists
+if not exist "venv\Scripts\activate.bat" (
+    echo ERROR: Virtual environment creation failed.
+    echo Trying global pip install instead...
+    pip install -r requirements.txt
+    if errorlevel 1 (
+        echo ERROR: Failed to install Python dependencies globally.
         pause
         goto :cleanup
     )
+    goto :start_backend_global
 )
 
 echo Activating virtual environment and installing dependencies...
 call venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo ERROR: Failed to activate virtual environment.
+    echo Trying global installation...
+    pip install -r requirements.txt
+    if errorlevel 1 (
+        echo ERROR: Failed to install Python dependencies globally.
+        pause
+        goto :cleanup
+    )
+    goto :start_backend_global
+)
+
 pip install -r requirements.txt
 if errorlevel 1 (
-    echo ERROR: Failed to install Python dependencies.
+    echo ERROR: Failed to install Python dependencies in virtual environment.
     pause
     goto :cleanup
 )
@@ -41,10 +83,28 @@ if errorlevel 1 (
 echo 🔧 Starting FastAPI Backend...
 start "FastAPI Backend" cmd /k "cd /d "%~dp0backend" && call venv\Scripts\activate.bat && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
 cd /d "%~dp0"
+goto :start_frontend
+
+:start_backend_global
+echo 🔧 Starting FastAPI Backend (global Python)...
+start "FastAPI Backend" cmd /k "cd /d "%~dp0backend" && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
+cd /d "%~dp0"
+
+:start_frontend
 
 REM Wait a moment for backend to start
 echo Waiting for backend to initialize...
 timeout /t 3 /nobreak >nul
+
+REM Check if Node.js/npm is available
+echo 🎨 Checking Node.js installation...
+npm --version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: npm/Node.js not found. Please install Node.js and add it to PATH.
+    echo Download from: https://nodejs.org/
+    pause
+    goto :cleanup
+)
 
 REM Check and install Node.js dependencies
 echo 🎨 Checking Node.js dependencies...
@@ -53,7 +113,7 @@ if not exist "node_modules" (
     echo Installing Node.js dependencies...
     npm install
     if errorlevel 1 (
-        echo ERROR: npm not found. Please install Node.js and add it to PATH.
+        echo ERROR: Failed to install Node.js dependencies.
         pause
         goto :cleanup
     )
