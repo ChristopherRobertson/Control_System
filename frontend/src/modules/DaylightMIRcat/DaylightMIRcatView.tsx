@@ -27,9 +27,9 @@ import {
 } from '@mui/icons-material'
 import { MIRcatAPI } from './api'
 import StatusIndicator from './components/StatusIndicator'
-import LaserControls from './components/LaserControls'
 import TuningControls from './components/TuningControls'
 import LaserSettingsPanel from './components/LaserSettingsPanel'
+import ScanModePanel from './components/ScanModePanel'
 
 interface DeviceStatus {
   connected: boolean
@@ -185,23 +185,11 @@ function DaylightMIRcatView() {
                   <Typography variant="h6" gutterBottom>
                     Scan Mode
                   </Typography>
-                  <Typography color="text.secondary" sx={{ mb: 2 }}>
-                    Select scan type and configure parameters:
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                    <Button variant="outlined" disabled={!deviceStatus?.connected}>
-                      Sweep Scan
-                    </Button>
-                    <Button variant="outlined" disabled={!deviceStatus?.connected}>
-                      Step Scan
-                    </Button>
-                    <Button variant="outlined" disabled={!deviceStatus?.connected}>
-                      Multi-Spectral Scan
-                    </Button>
-                  </Box>
-                  <Typography color="text.secondary">
-                    {deviceStatus?.connected ? 'Select a scan mode to configure parameters' : 'Connect to device to enable scan modes'}
-                  </Typography>
+                  
+                  <ScanModePanel 
+                    deviceStatus={deviceStatus}
+                    onStatusUpdate={fetchStatus}
+                  />
                 </Box>
               )}
               {activeTab === 'settings' && (
@@ -269,12 +257,6 @@ function DaylightMIRcatView() {
                     </Typography>
                   </Box>
 
-                  <Divider sx={{ my: 2 }} />
-                  
-                  <LaserControls
-                    deviceStatus={deviceStatus}
-                    onStatusUpdate={fetchStatus}
-                  />
                 </>
               )}
             </CardContent>

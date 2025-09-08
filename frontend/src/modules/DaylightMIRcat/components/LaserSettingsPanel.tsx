@@ -60,20 +60,10 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
 
   // Global Options
   const [globalOptions, setGlobalOptions] = useState({
-    alwaysUseCrossover: false,
     enableParameterLogging: false,
     disableAudioNotification: false,
-    flashLEDWhenFires: true,
-    disableChannel: false
+    flashLEDWhenFires: true
   })
-
-  // Crossover Points
-  const [crossoverPoints, setCrossoverPoints] = useState([
-    { channel: 1, wavelength: 0.000 },
-    { channel: 2, wavelength: 0.000 },
-    { channel: 3, wavelength: 0.000 },
-    { channel: 4, wavelength: 0.000 }
-  ])
 
   const handleSaveSettings = async () => {
     setLoading(true)
@@ -150,16 +140,6 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>Global Options</Typography>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={globalOptions.alwaysUseCrossover}
-                    onChange={(e) => setGlobalOptions(prev => ({ ...prev, alwaysUseCrossover: e.target.checked }))}
-                    disabled={!deviceStatus?.connected}
-                  />
-                }
-                label="Always Use Crossover in Single Tune"
-              />
               <FormControlLabel
                 control={
                   <Switch
@@ -241,17 +221,6 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
                     inputProps={{ step: 0.1, min: 17, max: 23 }}
                   />
                   <Typography variant="caption">°C</Typography>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={globalOptions.disableChannel}
-                        onChange={(e) => setGlobalOptions(prev => ({ ...prev, disableChannel: e.target.checked }))}
-                        disabled={!deviceStatus?.connected}
-                      />
-                    }
-                    label="Disable Channel"
-                    sx={{ ml: 1 }}
-                  />
                 </Grid>
 
                 <Grid item xs={6} md={3}>
@@ -458,41 +427,6 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
           </Card>
         </Grid>
 
-        {/* Crossover Points */}
-        <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>Crossover Points</Typography>
-              
-              <Grid container spacing={2}>
-                {crossoverPoints.map((point, index) => (
-                  <Grid item xs={6} md={3} key={index}>
-                    <Typography variant="body2" gutterBottom>Channel {point.channel}:</Typography>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      type="number"
-                      value={point.wavelength}
-                      onChange={(e) => {
-                        const newPoints = [...crossoverPoints]
-                        newPoints[index].wavelength = parseFloat(e.target.value)
-                        setCrossoverPoints(newPoints)
-                      }}
-                      disabled={!deviceStatus?.connected}
-                      inputProps={{ step: 0.001, min: 0 }}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-              
-              <Box sx={{ mt: 2 }}>
-                <Button variant="outlined" size="small">
-                  Restore to Factory
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
 
         {/* Save Settings */}
         <Grid item xs={12}>
