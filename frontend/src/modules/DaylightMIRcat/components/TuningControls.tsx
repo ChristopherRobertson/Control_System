@@ -216,15 +216,41 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
   }
 
   const canInteract = deviceStatus?.connected || false
-  // More explicit tuning status - only consider tuned if we've successfully completed a tune operation
-  // For now, let's use a different approach to determine if tuned
-  const isTuned = deviceStatus?.laser_mode === 'tuned' || (deviceStatus?.current_wavenumber && deviceStatus?.current_wavenumber > 0 && deviceStatus?.armed)
   const isEmitting = deviceStatus?.emission_on
   
-  // For testing purposes, let's be very explicit about when laser is considered "tuned"
-  // A laser is tuned when: connected + armed + has completed a tune operation
-  // Since we don't have explicit tune status, let's assume not tuned initially after arming
-  const isActuallyTuned = deviceStatus?.connected && deviceStatus?.armed && deviceStatus?.current_wavenumber && deviceStatus?.current_wavenumber > 1600 // within QCL range
+  // Simple logic: laser is tuned ONLY if we have a specific tune status or explicit indicator
+  // For now, assume laser is NOT tuned when just armed (false by default)
+  const [isTuned, setIsTuned] = useState(false)
+  
+  // Override the tune handler to set tuned state
+  const handleTuneWithState = async () => {
+    const validation = validateWorkflow('TUNE')
+    if (validation) {
+      setSnackbarMessage(validation)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      const targetWavenumber = units === 'μm' ? convertToWavenumber(wavenumber) : wavenumber
+      await MIRcatAPI.tuneToWavenumber(targetWavenumber)
+      onStatusUpdate()
+      setIsTuned(true) // Set tuned state after successful tune
+      setSnackbarMessage(`Tuned to ${wavenumber} ${units}`)
+    } catch (err) {
+      setError('Failed to tune laser')
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  // Reset tuned state when disconnected or disarmed
+  useEffect(() => {
+    if (!deviceStatus?.connected || !deviceStatus?.armed) {
+      setIsTuned(false)
+    }
+  }, [deviceStatus?.connected, deviceStatus?.armed])
 
   return (
     <Box>
@@ -299,8 +325,8 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                 <Button
                   variant="contained"
                   startIcon={<TuneIcon />}
-                  onClick={handleTune}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || isActuallyTuned || isEmitting}
+                  onClick={handleTuneWithState}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || isTuned || isEmitting}
                   color="primary"
                 >
                   {`Tune to ${wavenumber} ${units}`}
@@ -309,11 +335,11 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                 <Button
                   variant="outlined"
                   onClick={() => {
-                    // Cancel tune - reset to disconnected state
+                    setIsTuned(false)
                     onStatusUpdate()
                     setSnackbarMessage('Tune cancelled')
                   }}
-                  disabled={!canInteract || loading || !isActuallyTuned || isEmitting}
+                  disabled={!canInteract || loading || !isTuned || isEmitting}
                   color="warning"
                 >
                   Cancel Tune
@@ -323,7 +349,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                   variant={deviceStatus?.emission_on ? 'contained' : 'outlined'}
                   startIcon={<EmitIcon />}
                   onClick={handleEmit}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || !isActuallyTuned}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || !isTuned}
                   color={deviceStatus?.emission_on ? 'error' : 'success'}
                 >
                   {deviceStatus?.emission_on ? 'STOP EMISSION' : 'START EMISSION'}
