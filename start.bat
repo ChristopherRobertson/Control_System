@@ -16,18 +16,53 @@ REM Check if this is the monitor process
 if "%1"=="monitor" goto :monitor
 
 :main
-echo 🔧 Starting FastAPI Backend...
+REM Check and install Python dependencies
+echo 🔧 Checking Python dependencies...
 cd /d "%~dp0backend"
-start "FastAPI Backend" cmd /k "uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
+if not exist "venv" (
+    echo Creating Python virtual environment...
+    python -m venv venv
+    if errorlevel 1 (
+        echo ERROR: Python not found. Please install Python 3.8+ and add it to PATH.
+        pause
+        goto :cleanup
+    )
+)
+
+echo Activating virtual environment and installing dependencies...
+call venv\Scripts\activate.bat
+pip install -r requirements.txt
+if errorlevel 1 (
+    echo ERROR: Failed to install Python dependencies.
+    pause
+    goto :cleanup
+)
+
+echo 🔧 Starting FastAPI Backend...
+start "FastAPI Backend" cmd /k "cd /d "%~dp0backend" && call venv\Scripts\activate.bat && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
 cd /d "%~dp0"
 
 REM Wait a moment for backend to start
 echo Waiting for backend to initialize...
 timeout /t 3 /nobreak >nul
 
-echo 🎨 Starting React Frontend...
+REM Check and install Node.js dependencies
+echo 🎨 Checking Node.js dependencies...
 cd /d "%~dp0frontend"
-start "React Frontend" cmd /k "npm run dev -- --host 0.0.0.0 --port 5000"
+if not exist "node_modules" (
+    echo Installing Node.js dependencies...
+    npm install
+    if errorlevel 1 (
+        echo ERROR: npm not found. Please install Node.js and add it to PATH.
+        pause
+        goto :cleanup
+    )
+) else (
+    echo Node.js dependencies already installed.
+)
+
+echo 🎨 Starting React Frontend...
+start "React Frontend" cmd /k "cd /d "%~dp0frontend" && npm run dev -- --host 0.0.0.0 --port 5000"
 cd /d "%~dp0"
 
 echo.
