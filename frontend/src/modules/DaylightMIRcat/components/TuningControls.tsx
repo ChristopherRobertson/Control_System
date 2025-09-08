@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Box,
   Typography,
@@ -11,9 +11,17 @@ import {
   Alert,
   Card,
   CardContent,
-  Grid
+  Grid,
+  Switch,
+  FormControlLabel,
+  Snackbar
 } from '@mui/material'
-import { Tune as TuneIcon } from '@mui/icons-material'
+import { 
+  Tune as TuneIcon, 
+  Security as ArmIcon,
+  Lightbulb as RedLaserIcon,
+  FlashOn as EmitIcon
+} from '@mui/icons-material'
 import { MIRcatAPI } from '../api'
 
 interface TuningControlsProps {
@@ -23,27 +31,185 @@ interface TuningControlsProps {
 
 function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
   const [wavenumber, setWavenumber] = useState(1850.0)
+  const [units, setUnits] = useState<'cm-1' | 'μm'>('cm-1')
+  const [selectedQCL, setSelectedQCL] = useState(1)
+  const [redLaserOn, setRedLaserOn] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null)
 
-  const handleTune = async () => {
+  // QCL information data
+  const qclData = {
+    1: { 
+      range: '2077.3 to 1638.8 cm-1', 
+      temp: deviceStatus?.status?.case_temp_1 || '--',
+      active: deviceStatus?.connected ? 'Y' : '--',
+      tecMA: deviceStatus?.connected ? '9' : '--',
+      tecV: deviceStatus?.connected ? '-0.19' : '--'
+    },
+    2: { range: 'Not Installed', temp: '--', active: '--', tecMA: '--', tecV: '--' },
+    3: { range: 'Not Installed', temp: '--', active: '--', tecMA: '--', tecV: '--' },
+    4: { range: 'Not Installed', temp: '--', active: '--', tecMA: '--', tecV: '--' }
+  }
+
+  // Convert between units
+  const convertToMicrons = (wavenum: number) => (10000 / wavenum)
+  const convertToWavenumber = (microns: number) => (10000 / microns)
+
+  // Handle unit conversion
+  const handleUnitChange = (newUnit: 'cm-1' | 'μm') => {
+    if (newUnit !== units) {
+      if (newUnit === 'μm') {
+        setWavenumber(convertToMicrons(wavenumber))
+      } else {
+        setWavenumber(convertToWavenumber(wavenumber))
+      }
+      setUnits(newUnit)
+    }
+  }
+
+  // Parameter validation on blur
+  const handleWavenumberBlur = () => {
+    let min, max, correctedValue = wavenumber
+
+    if (units === 'cm-1') {
+      min = 1638.81
+      max = 2077.27
+    } else {
+      min = convertToMicrons(2077.27) // ~4.81 μm
+      max = convertToMicrons(1638.81) // ~6.1 μm
+    }
+
+    if (wavenumber < min) {
+      correctedValue = min
+    } else if (wavenumber > max) {
+      correctedValue = max
+    }
+
+    if (correctedValue !== wavenumber) {
+      setWavenumber(Number(correctedValue.toFixed(2)))
+      setSnackbarMessage(`Value corrected to acceptable range: ${correctedValue.toFixed(2)} ${units}`)
+    }
+  }
+
+  // Workflow validation
+  const validateWorkflow = (action: string): string | null => {
+    if (!deviceStatus?.connected) {
+      return `Please connect to the device before ${action.toLowerCase()}.`
+    }
+
+    switch (action) {
+      case 'ARM':
+        if (!deviceStatus.connected) return 'Please connect to the device before arming.'
+        break
+      case 'TUNE':
+        if (!deviceStatus.connected) return 'Please connect to the device before tuning.'
+        if (!deviceStatus.armed) return 'Please arm the laser before tuning.'
+        break
+      case 'EMIT':
+        if (!deviceStatus.connected) return 'Please connect to the device before emission.'
+        if (!deviceStatus.armed) return 'Please arm the laser before emission.'
+        // Check if tuned (assuming current_wavenumber indicates tuning status)
+        if (!deviceStatus.current_wavenumber || deviceStatus.current_wavenumber === 0) {
+          return 'Please tune the laser before enabling emission.'
+        }
+        break
+    }
+    return null
+  }
+
+  const handleArm = async () => {
+    const validation = validateWorkflow('ARM')
+    if (validation) {
+      setSnackbarMessage(validation)
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
-      await MIRcatAPI.tuneToWavenumber(wavenumber)
+      await MIRcatAPI.armLaser()
       onStatusUpdate()
+      setSnackbarMessage('Laser armed successfully')
     } catch (err) {
-      setError('Failed to tune laser')
-      console.error('Tune error:', err)
+      setError('Failed to arm laser')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleManualTune = () => {
-    // Manual tune mode
-    handleTune()
+  const handleDisarm = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      await MIRcatAPI.disarmLaser()
+      onStatusUpdate()
+      setSnackbarMessage('Laser disarmed successfully')
+    } catch (err) {
+      setError('Failed to disarm laser')
+    } finally {
+      setLoading(false)
+    }
   }
+
+  const handleTune = async () => {
+    const validation = validateWorkflow('TUNE')
+    if (validation) {
+      setSnackbarMessage(validation)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      const targetWavenumber = units === 'μm' ? convertToWavenumber(wavenumber) : wavenumber
+      await MIRcatAPI.tuneToWavenumber(targetWavenumber)
+      onStatusUpdate()
+      setSnackbarMessage(`Tuned to ${wavenumber} ${units}`)
+    } catch (err) {
+      setError('Failed to tune laser')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEmit = async () => {
+    const validation = validateWorkflow('EMIT')
+    if (validation) {
+      setSnackbarMessage(validation)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      if (deviceStatus.emission_on) {
+        await MIRcatAPI.turnEmissionOff()
+        setSnackbarMessage('Emission turned off')
+      } else {
+        await MIRcatAPI.turnEmissionOn()
+        setSnackbarMessage('Emission turned on')
+      }
+      onStatusUpdate()
+    } catch (err) {
+      setError('Failed to control emission')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRedLaser = () => {
+    // Red laser safety logic - cannot be on when armed, tuned, or emitting
+    if (deviceStatus?.armed || deviceStatus?.emission_on || (deviceStatus?.current_wavenumber && deviceStatus.current_wavenumber !== 0)) {
+      setSnackbarMessage('Red laser cannot be enabled while system is armed, tuned, or emitting')
+      return
+    }
+
+    setRedLaserOn(!redLaserOn)
+    setSnackbarMessage(`Red laser ${!redLaserOn ? 'enabled' : 'disabled'}`)
+  }
+
+  const canInteract = deviceStatus?.connected || false
 
   return (
     <Box>
@@ -58,29 +224,55 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
       )}
 
       <Grid container spacing={2}>
+        {/* QCL Range Selection */}
         <Grid item xs={12}>
           <Card variant="outlined">
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                QCL Range
+              </Typography>
+              <FormControl fullWidth disabled={!canInteract}>
+                <InputLabel>Select QCL</InputLabel>
+                <Select
+                  value={selectedQCL}
+                  label="Select QCL"
+                  onChange={(e) => setSelectedQCL(e.target.value as number)}
+                >
+                  <MenuItem value={1}>QCL 1 - 2077.3 to 1638.8 cm-1</MenuItem>
+                  <MenuItem value={2} disabled>QCL 2 - Not Installed</MenuItem>
+                  <MenuItem value={3} disabled>QCL 3 - Not Installed</MenuItem>
+                  <MenuItem value={4} disabled>QCL 4 - Not Installed</MenuItem>
+                </Select>
+              </FormControl>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Tuning Controls */}
+        <Grid item xs={12}>
+          <Card variant="outlined">
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
                 <Typography variant="body1">
-                  Wavenumber:
+                  Target:
                 </Typography>
                 <TextField
                   type="number"
                   value={wavenumber}
-                  onChange={(e) => setWavenumber(parseFloat(e.target.value))}
+                  onChange={(e) => setWavenumber(parseFloat(e.target.value) || 0)}
+                  onBlur={handleWavenumberBlur}
+                  disabled={!canInteract}
                   inputProps={{
-                    min: 1638.81,
-                    max: 2077.27,
-                    step: 0.01
+                    step: units === 'cm-1' ? 0.01 : 0.001
                   }}
-                  sx={{ width: 120 }}
+                  sx={{ width: 140 }}
                 />
-                <FormControl sx={{ minWidth: 80 }}>
+                <FormControl sx={{ minWidth: 80 }} disabled={!canInteract}>
                   <InputLabel>Units</InputLabel>
                   <Select
-                    value="cm-1"
+                    value={units}
                     label="Units"
+                    onChange={(e) => handleUnitChange(e.target.value as 'cm-1' | 'μm')}
                   >
                     <MenuItem value="cm-1">cm-1</MenuItem>
                     <MenuItem value="μm">μm</MenuItem>
@@ -88,79 +280,58 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                 </FormControl>
               </Box>
 
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button
+                  variant={deviceStatus?.armed ? 'contained' : 'outlined'}
+                  startIcon={<ArmIcon />}
+                  onClick={deviceStatus?.armed ? handleDisarm : handleArm}
+                  disabled={!canInteract || loading}
+                  color={deviceStatus?.armed ? 'warning' : 'primary'}
+                >
+                  {deviceStatus?.armed ? 'DISARM' : 'ARM LASER'}
+                </Button>
+                
                 <Button
                   variant="contained"
                   startIcon={<TuneIcon />}
                   onClick={handleTune}
-                  disabled={!deviceStatus?.connected || loading}
+                  disabled={!canInteract || loading || !deviceStatus?.armed}
                   color="primary"
                 >
-                  Tune to {wavenumber} cm-1
+                  {`Tune to ${wavenumber} ${units}`}
                 </Button>
+
                 <Button
-                  variant="outlined"
-                  onClick={() => setWavenumber(1850)}
-                  disabled={loading}
+                  variant={deviceStatus?.emission_on ? 'contained' : 'outlined'}
+                  startIcon={<EmitIcon />}
+                  onClick={handleEmit}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || (!deviceStatus?.current_wavenumber && !deviceStatus?.emission_on)}
+                  color={deviceStatus?.emission_on ? 'error' : 'success'}
                 >
-                  Cancel
+                  {deviceStatus?.emission_on ? 'STOP EMISSION' : 'START EMISSION'}
                 </Button>
-                <Button
-                  variant="outlined"
-                  onClick={handleManualTune}
-                  disabled={!deviceStatus?.connected || loading}
-                >
-                  Manual Tune
-                </Button>
-                <Button
-                  variant="outlined"
-                  disabled={loading}
-                >
-                  Extended Info
-                </Button>
+
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={redLaserOn}
+                      onChange={handleRedLaser}
+                      disabled={!canInteract || deviceStatus?.armed || deviceStatus?.emission_on || (deviceStatus?.current_wavenumber && deviceStatus.current_wavenumber !== 0)}
+                    />
+                  }
+                  label="Red Laser"
+                />
               </Box>
             </CardContent>
           </Card>
         </Grid>
 
+        {/* QCL Information */}
         <Grid item xs={12}>
           <Card variant="outlined">
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 QCL Information
-              </Typography>
-              <Box sx={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                gap: 2,
-                mt: 1
-              }}>
-                <Box sx={{ textAlign: 'center', p: 2, border: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="body2" color="text.secondary">QCL 1</Typography>
-                  <Typography variant="body1">2077.3 to 1638.8 cm-1</Typography>
-                </Box>
-                <Box sx={{ textAlign: 'center', p: 2, border: '1px solid', borderColor: 'divider', opacity: 0.5 }}>
-                  <Typography variant="body2" color="text.secondary">QCL 2</Typography>
-                  <Typography variant="body1">Future</Typography>
-                </Box>
-                <Box sx={{ textAlign: 'center', p: 2, border: '1px solid', borderColor: 'divider', opacity: 0.5 }}>
-                  <Typography variant="body2" color="text.secondary">QCL 3</Typography>
-                  <Typography variant="body1">Future</Typography>
-                </Box>
-                <Box sx={{ textAlign: 'center', p: 2, border: '1px solid', borderColor: 'divider', opacity: 0.5 }}>
-                  <Typography variant="body2" color="text.secondary">QCL 4</Typography>
-                  <Typography variant="body1">Future</Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12}>
-          <Card variant="outlined">
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                QCL Information Table
               </Typography>
               <Box sx={{ 
                 display: 'grid', 
@@ -174,46 +345,46 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                   borderColor: 'divider'
                 }
               }}>
-                <Typography variant="body2" fontWeight="bold">TEMP (C)</Typography>
+                <Typography variant="body2" fontWeight="bold">QCL</Typography>
+                <Typography variant="body2" fontWeight="bold">TEMP (°C)</Typography>
                 <Typography variant="body2" fontWeight="bold">ACTIVE</Typography>
                 <Typography variant="body2" fontWeight="bold">TEC mA</Typography>
                 <Typography variant="body2" fontWeight="bold">TEC V</Typography>
-                <Typography variant="body2" fontWeight="bold"></Typography>
                 
-                <Typography variant="body2">{deviceStatus?.status.case_temp_1 || '19.160'}</Typography>
-                <Typography variant="body2">N</Typography>
-                <Typography variant="body2">9</Typography>
-                <Typography variant="body2">-0.19</Typography>
-                <Typography variant="body2">1</Typography>
-                
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2">2</Typography>
-                
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2">3</Typography>
-                
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2" color="text.disabled">--</Typography>
-                <Typography variant="body2">4</Typography>
+                <Typography variant="body2" fontWeight="bold">{selectedQCL}</Typography>
+                <Typography variant="body2">
+                  {qclData[selectedQCL].temp !== '--' ? 
+                    (typeof qclData[selectedQCL].temp === 'number' ? qclData[selectedQCL].temp.toFixed(2) : qclData[selectedQCL].temp) : 
+                    '--'
+                  }
+                </Typography>
+                <Typography variant="body2">{qclData[selectedQCL].active}</Typography>
+                <Typography variant="body2">{qclData[selectedQCL].tecMA}</Typography>
+                <Typography variant="body2">{qclData[selectedQCL].tecV}</Typography>
+              </Box>
+              
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Range: {qclData[selectedQCL].range}
+                </Typography>
               </Box>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {!deviceStatus?.connected && (
+      {!canInteract && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           Connect to device to enable tuning controls
         </Typography>
       )}
+
+      <Snackbar
+        open={!!snackbarMessage}
+        autoHideDuration={4000}
+        onClose={() => setSnackbarMessage(null)}
+        message={snackbarMessage}
+      />
     </Box>
   )
 }
