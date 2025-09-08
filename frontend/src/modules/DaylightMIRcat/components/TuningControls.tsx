@@ -216,8 +216,15 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
   }
 
   const canInteract = deviceStatus?.connected || false
-  const isTuned = deviceStatus?.current_wavenumber && deviceStatus.current_wavenumber !== 0
+  // More explicit tuning status - only consider tuned if we've successfully completed a tune operation
+  // For now, let's use a different approach to determine if tuned
+  const isTuned = deviceStatus?.laser_mode === 'tuned' || (deviceStatus?.current_wavenumber && deviceStatus?.current_wavenumber > 0 && deviceStatus?.armed)
   const isEmitting = deviceStatus?.emission_on
+  
+  // For testing purposes, let's be very explicit about when laser is considered "tuned"
+  // A laser is tuned when: connected + armed + has completed a tune operation
+  // Since we don't have explicit tune status, let's assume not tuned initially after arming
+  const isActuallyTuned = deviceStatus?.connected && deviceStatus?.armed && deviceStatus?.current_wavenumber && deviceStatus?.current_wavenumber > 1600 // within QCL range
 
   return (
     <Box>
@@ -293,7 +300,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                   variant="contained"
                   startIcon={<TuneIcon />}
                   onClick={handleTune}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || isTuned || isEmitting}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || isActuallyTuned || isEmitting}
                   color="primary"
                 >
                   {`Tune to ${wavenumber} ${units}`}
@@ -306,7 +313,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                     onStatusUpdate()
                     setSnackbarMessage('Tune cancelled')
                   }}
-                  disabled={!canInteract || loading || !isTuned || isEmitting}
+                  disabled={!canInteract || loading || !isActuallyTuned || isEmitting}
                   color="warning"
                 >
                   Cancel Tune
@@ -316,7 +323,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
                   variant={deviceStatus?.emission_on ? 'contained' : 'outlined'}
                   startIcon={<EmitIcon />}
                   onClick={handleEmit}
-                  disabled={!canInteract || loading || !deviceStatus?.armed || !isTuned}
+                  disabled={!canInteract || loading || !deviceStatus?.armed || !isActuallyTuned}
                   color={deviceStatus?.emission_on ? 'error' : 'success'}
                 >
                   {deviceStatus?.emission_on ? 'STOP EMISSION' : 'START EMISSION'}
