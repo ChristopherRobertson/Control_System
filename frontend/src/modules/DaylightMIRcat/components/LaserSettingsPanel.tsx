@@ -37,8 +37,7 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
     dutyCycle: 30,
     pulsedCurrent: 1000,
     cwCurrent: 775,
-    temperature: 19,
-    reInitTuning: 2.36
+    temperature: 19
   })
 
   // Process Trigger Parameters
@@ -178,19 +177,6 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
                   </FormControl>
                 </Grid>
 
-                <Grid item xs={6} md={3}>
-                  <Typography variant="body2" gutterBottom>Re-Init Tuning:</Typography>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    type="number"
-                    value={laserParams.reInitTuning}
-                    onChange={(e) => setLaserParams(prev => ({ ...prev, reInitTuning: parseFloat(e.target.value) }))}
-                    disabled={!deviceStatus?.connected}
-                    inputProps={{ step: 0.01, min: 0, max: 100 }}
-                  />
-                  <Typography variant="caption">WL: %</Typography>
-                </Grid>
 
                 <Grid item xs={6} md={3}>
                   <Typography variant="body2" gutterBottom>Temperature:</Typography>
