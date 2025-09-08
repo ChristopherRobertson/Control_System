@@ -13,6 +13,12 @@ export interface DeviceStatus {
   current_wavenumber: number
   current_qcl: number
   laser_mode: string
+  tuned: boolean
+  temperature_stable: boolean
+  scan_in_progress: boolean
+  current_scan_mode: string | null
+  last_error: string | null
+  last_error_code: number | null
   status: {
     interlocks: boolean
     key_switch: boolean
@@ -24,6 +30,8 @@ export interface DeviceStatus {
     case_temp_1: number
     case_temp_2: number
     pcb_temperature: number
+    tuned: boolean
+    armed: boolean
   }
 }
 
@@ -38,6 +46,34 @@ export interface LaserModeRequest {
 export interface PulseParametersRequest {
   pulse_rate: number
   pulse_width: number
+}
+
+export interface SweepScanRequest {
+  start_wavenumber: number
+  end_wavenumber: number
+  scan_speed: number
+  number_of_scans: number
+  bidirectional_scanning: boolean
+}
+
+export interface StepScanRequest {
+  start_wavenumber: number
+  end_wavenumber: number
+  step_size: number
+  dwell_time: number
+  number_of_scans: number
+}
+
+export interface MultispectralEntry {
+  wavenumber: number
+  dwell_time: number
+  off_time: number
+}
+
+export interface MultispectralScanRequest {
+  wavelength_list: MultispectralEntry[]
+  number_of_scans: number
+  keep_laser_on_between_steps: boolean
 }
 
 export class MIRcatAPI {
@@ -126,6 +162,38 @@ export class MIRcatAPI {
    */
   static async getConfig(): Promise<any> {
     const response = await axios.get(`${API_BASE}/config`)
+    return response.data
+  }
+
+  /**
+   * Start sweep scan
+   */
+  static async startSweepScan(params: SweepScanRequest): Promise<{ message: string; scan_mode: string; parameters: any }> {
+    const response = await axios.post(`${API_BASE}/scan/sweep/start`, params)
+    return response.data
+  }
+
+  /**
+   * Start step scan
+   */
+  static async startStepScan(params: StepScanRequest): Promise<{ message: string; scan_mode: string; parameters: any }> {
+    const response = await axios.post(`${API_BASE}/scan/step/start`, params)
+    return response.data
+  }
+
+  /**
+   * Start multispectral scan
+   */
+  static async startMultispectralScan(params: MultispectralScanRequest): Promise<{ message: string; scan_mode: string; parameters: any }> {
+    const response = await axios.post(`${API_BASE}/scan/multispectral/start`, params)
+    return response.data
+  }
+
+  /**
+   * Stop any active scan
+   */
+  static async stopScan(): Promise<{ message: string; scan_in_progress: boolean }> {
+    const response = await axios.post(`${API_BASE}/scan/stop`)
     return response.data
   }
 }

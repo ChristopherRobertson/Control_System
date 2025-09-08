@@ -29,6 +29,7 @@ import {
   Add as AddIcon,
   Delete as DeleteIcon 
 } from '@mui/icons-material'
+import { MIRcatAPI } from '../api'
 
 interface ScanModePanelProps {
   deviceStatus: any
@@ -68,7 +69,8 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [scanInProgress, setScanInProgress] = useState(false)
+  // Get scan status from backend instead of local state
+  const scanInProgress = deviceStatus?.scan_in_progress || false
 
   const canInteract = deviceStatus?.connected && deviceStatus?.armed
 
@@ -177,11 +179,44 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
     setLoading(true)
     setError(null)
     try {
-      console.log('Starting scan:', selectedScanMode, scanSettings)
-      setScanInProgress(true)
-      onStatusUpdate()
-    } catch (err) {
-      setError('Failed to start scan')
+      let result
+      
+      if (selectedScanMode === 'sweep') {
+        result = await MIRcatAPI.startSweepScan({
+          start_wavenumber: scanSettings.startWavenumber,
+          end_wavenumber: scanSettings.endWavenumber,
+          scan_speed: scanSettings.scanSpeed,
+          number_of_scans: scanSettings.numberOfScans,
+          bidirectional_scanning: scanSettings.bidirectionalScanning
+        })
+      } else if (selectedScanMode === 'step') {
+        result = await MIRcatAPI.startStepScan({
+          start_wavenumber: scanSettings.startWavenumber,
+          end_wavenumber: scanSettings.endWavenumber,
+          step_size: scanSettings.stepSize,
+          dwell_time: scanSettings.dwellTime,
+          number_of_scans: scanSettings.numberOfScans
+        })
+      } else if (selectedScanMode === 'multispectral') {
+        result = await MIRcatAPI.startMultispectralScan({
+          wavelength_list: multiSpectralEntries.map(entry => ({
+            wavenumber: entry.wavenumber,
+            dwell_time: entry.dwellTime,
+            off_time: entry.offTime
+          })),
+          number_of_scans: numberOfScans,
+          keep_laser_on_between_steps: keepLaserOnBetweenSteps
+        })
+      }
+      
+      console.log('Scan started successfully:', result?.message)
+      
+      // Update status from backend instead of setting local state
+      await onStatusUpdate()
+      
+    } catch (err: any) {
+      console.error('Start scan error:', err)
+      setError(err.response?.data?.detail || err.message || 'Failed to start scan')
     } finally {
       setLoading(false)
     }
@@ -191,11 +226,15 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
     setLoading(true)
     setError(null)
     try {
-      console.log('Stopping scan')
-      setScanInProgress(false)
-      onStatusUpdate()
-    } catch (err) {
-      setError('Failed to stop scan')
+      const result = await MIRcatAPI.stopScan()
+      console.log('Scan stopped successfully:', result.message)
+      
+      // Update status from backend instead of setting local state
+      await onStatusUpdate()
+      
+    } catch (err: any) {
+      console.error('Stop scan error:', err)
+      setError(err.response?.data?.detail || err.message || 'Failed to stop scan')
     } finally {
       setLoading(false)
     }
