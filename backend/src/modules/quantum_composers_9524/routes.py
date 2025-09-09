@@ -38,9 +38,13 @@ class CommandRequest(BaseModel):
 async def connect():
     """Connect to Quantum Composers device"""
     try:
+        if qc_controller.connected:
+            status = await qc_controller.get_status()
+            return {"message": "Already connected", **status}
         success = await qc_controller.connect()
         if success:
-            return {"message": "Connected to Quantum Composers successfully", "connected": True}
+            status = await qc_controller.get_status()
+            return {"message": "Connected to Quantum Composers successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to connect to device")
     except Exception as e:
@@ -51,9 +55,13 @@ async def connect():
 async def disconnect():
     """Disconnect from Quantum Composers device"""
     try:
+        if not qc_controller.connected:
+            status = await qc_controller.get_status()
+            return {"message": "Already disconnected", **status}
         success = await qc_controller.disconnect()
         if success:
-            return {"message": "Disconnected from Quantum Composers successfully", "connected": False}
+            status = await qc_controller.get_status()
+            return {"message": "Disconnected from Quantum Composers successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to disconnect from device")
     except Exception as e:
@@ -65,9 +73,13 @@ async def disconnect():
 async def start_output():
     """Start signal generation"""
     try:
+        if qc_controller.running:
+            status = await qc_controller.get_status()
+            return {"message": "Already running", **status}
         success = await qc_controller.start_output()
         if success:
-            return {"message": "Output started successfully"}
+            status = await qc_controller.get_status()
+            return {"message": "Output started successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to start output")
     except Exception as e:
@@ -78,9 +90,13 @@ async def start_output():
 async def stop_output():
     """Stop signal generation"""
     try:
+        if not qc_controller.running:
+            status = await qc_controller.get_status()
+            return {"message": "Already stopped", **status}
         success = await qc_controller.stop_output()
         if success:
-            return {"message": "Output stopped successfully"}
+            status = await qc_controller.get_status()
+            return {"message": "Output stopped successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to stop output")
     except Exception as e:
@@ -94,7 +110,8 @@ async def set_system_config(request: SystemConfigRequest):
     try:
         success = await qc_controller.set_system_config(request.config)
         if success:
-            return {"message": "System configured successfully"}
+            status = await qc_controller.get_status()
+            return {"message": "System configured successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to configure system")
     except Exception as e:
@@ -107,7 +124,8 @@ async def set_channel_config(request: ChannelConfigRequest):
     try:
         success = await qc_controller.set_channel_config(request.channel, request.config)
         if success:
-            return {"message": f"Channel {request.channel} configured successfully"}
+            status = await qc_controller.get_status()
+            return {"message": f"Channel {request.channel} configured successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to configure channel")
     except Exception as e:
@@ -120,7 +138,8 @@ async def set_external_trigger_config(request: TriggerConfigRequest):
     try:
         success = await qc_controller.set_external_trigger_config(request.config)
         if success:
-            return {"message": "External trigger configured successfully"}
+            status = await qc_controller.get_status()
+            return {"message": "External trigger configured successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to configure external trigger")
     except Exception as e:

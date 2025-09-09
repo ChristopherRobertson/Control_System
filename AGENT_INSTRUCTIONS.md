@@ -206,6 +206,12 @@ Deliverables
 - Updated views to consume shared state.
 - Vite config with sensible vendor chunking and lazy-loaded routes or tabs.
 
+Agent Integration
+- Action selection: Agents MUST determine actions from canonical state via `GET /status` and invoke explicit verbs (`POST /connect`, `POST /disconnect`, `POST /arm`, `POST /disarm`, `POST /emission/on|off`). Do not infer from button labels or toggle text.
+- Idempotency: Treat repeated verb calls as safe no-ops when the device is already in the requested state; return 200 with a clarifying message.
+- Snapshot responses: Mutation endpoints SHOULD return the updated status snapshot payload alongside a message. Example: `{ message, ...status }`.
+- Error semantics: Reserve non-2xx responses for real faults; return success for “already in target state”. Include `last_error` and `last_error_code` when applicable.
+
 ---
 
 ## Project Root Structure

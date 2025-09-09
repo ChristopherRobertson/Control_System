@@ -35,9 +35,13 @@ class TriggerConfigRequest(BaseModel):
 async def connect():
     """Connect to PicoScope device"""
     try:
+        if picoscope_controller.connected:
+            status = await picoscope_controller.get_status()
+            return {"message": "Already connected", **status}
         success = await picoscope_controller.connect()
         if success:
-            return {"message": "Connected to PicoScope successfully", "connected": True}
+            status = await picoscope_controller.get_status()
+            return {"message": "Connected to PicoScope successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to connect to device")
     except Exception as e:
@@ -48,9 +52,13 @@ async def connect():
 async def disconnect():
     """Disconnect from PicoScope device"""
     try:
+        if not picoscope_controller.connected:
+            status = await picoscope_controller.get_status()
+            return {"message": "Already disconnected", **status}
         success = await picoscope_controller.disconnect()
         if success:
-            return {"message": "Disconnected from PicoScope successfully", "connected": False}
+            status = await picoscope_controller.get_status()
+            return {"message": "Disconnected from PicoScope successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to disconnect from device")
     except Exception as e:
@@ -62,9 +70,13 @@ async def disconnect():
 async def start_acquisition():
     """Start data acquisition"""
     try:
+        if picoscope_controller.acquiring:
+            status = await picoscope_controller.get_status()
+            return {"message": "Already acquiring", **status}
         success = await picoscope_controller.start_acquisition()
         if success:
-            return {"message": "Acquisition started successfully"}
+            status = await picoscope_controller.get_status()
+            return {"message": "Acquisition started successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to start acquisition")
     except Exception as e:
@@ -75,9 +87,13 @@ async def start_acquisition():
 async def stop_acquisition():
     """Stop data acquisition"""
     try:
+        if not picoscope_controller.acquiring:
+            status = await picoscope_controller.get_status()
+            return {"message": "Already stopped", **status}
         success = await picoscope_controller.stop_acquisition()
         if success:
-            return {"message": "Acquisition stopped successfully"}
+            status = await picoscope_controller.get_status()
+            return {"message": "Acquisition stopped successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to stop acquisition")
     except Exception as e:
@@ -90,7 +106,8 @@ async def auto_setup():
     try:
         success = await picoscope_controller.auto_setup()
         if success:
-            return {"message": "Auto setup completed successfully"}
+            status = await picoscope_controller.get_status()
+            return {"message": "Auto setup completed successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to perform auto setup")
     except Exception as e:
@@ -104,7 +121,8 @@ async def set_channel_config(request: ChannelConfigRequest):
     try:
         success = await picoscope_controller.set_channel_config(request.channel, request.config)
         if success:
-            return {"message": f"Channel {request.channel} configured successfully"}
+            status = await picoscope_controller.get_status()
+            return {"message": f"Channel {request.channel} configured successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to configure channel")
     except Exception as e:
@@ -117,7 +135,8 @@ async def set_timebase_config(request: TimebaseConfigRequest):
     try:
         success = await picoscope_controller.set_timebase_config(request.config)
         if success:
-            return {"message": "Timebase configured successfully"}
+            status = await picoscope_controller.get_status()
+            return {"message": "Timebase configured successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to configure timebase")
     except Exception as e:
@@ -130,7 +149,8 @@ async def set_trigger_config(request: TriggerConfigRequest):
     try:
         success = await picoscope_controller.set_trigger_config(request.config)
         if success:
-            return {"message": "Trigger configured successfully"}
+            status = await picoscope_controller.get_status()
+            return {"message": "Trigger configured successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to configure trigger")
     except Exception as e:

@@ -59,9 +59,14 @@ class MultispectralScanRequest(BaseModel):
 async def connect():
     """Connect to MIRcat device"""
     try:
+        # Idempotent: if already connected, treat as success
+        if mircat_controller.connected:
+            status = await mircat_controller.get_status()
+            return {"message": "Already connected", **status}
         success = await mircat_controller.connect()
         if success:
-            return {"message": "Connected to MIRcat successfully", "connected": True}
+            status = await mircat_controller.get_status()
+            return {"message": "Connected to MIRcat successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to connect to device")
     except Exception as e:
@@ -72,9 +77,14 @@ async def connect():
 async def disconnect():
     """Disconnect from MIRcat device"""
     try:
+        # Idempotent: if already disconnected, treat as success
+        if not mircat_controller.connected:
+            status = await mircat_controller.get_status()
+            return {"message": "Already disconnected", **status}
         success = await mircat_controller.disconnect()
         if success:
-            return {"message": "Disconnected from MIRcat successfully", "connected": False}
+            status = await mircat_controller.get_status()
+            return {"message": "Disconnected from MIRcat successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to disconnect from device")
     except Exception as e:
@@ -86,9 +96,13 @@ async def disconnect():
 async def arm_laser():
     """Arm the laser for operation"""
     try:
+        if mircat_controller.armed:
+            status = await mircat_controller.get_status()
+            return {"message": "Already armed", **status}
         success = await mircat_controller.arm_laser()
         if success:
-            return {"message": "Laser armed successfully", "armed": True}
+            status = await mircat_controller.get_status()
+            return {"message": "Laser armed successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to arm laser")
     except Exception as e:
@@ -99,9 +113,13 @@ async def arm_laser():
 async def disarm_laser():
     """Disarm the laser"""
     try:
+        if not mircat_controller.armed:
+            status = await mircat_controller.get_status()
+            return {"message": "Already disarmed", **status}
         success = await mircat_controller.disarm_laser()
         if success:
-            return {"message": "Laser disarmed successfully", "armed": False}
+            status = await mircat_controller.get_status()
+            return {"message": "Laser disarmed successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to disarm laser")
     except Exception as e:
@@ -112,9 +130,13 @@ async def disarm_laser():
 async def turn_emission_on():
     """Turn laser emission on"""
     try:
+        if mircat_controller.emission_on:
+            status = await mircat_controller.get_status()
+            return {"message": "Emission already on", **status}
         success = await mircat_controller.turn_emission_on()
         if success:
-            return {"message": "Emission turned on successfully", "emission_on": True}
+            status = await mircat_controller.get_status()
+            return {"message": "Emission turned on successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to turn emission on")
     except Exception as e:
@@ -125,9 +147,13 @@ async def turn_emission_on():
 async def turn_emission_off():
     """Turn laser emission off"""
     try:
+        if not mircat_controller.emission_on:
+            status = await mircat_controller.get_status()
+            return {"message": "Emission already off", **status}
         success = await mircat_controller.turn_emission_off()
         if success:
-            return {"message": "Emission turned off successfully", "emission_on": False}
+            status = await mircat_controller.get_status()
+            return {"message": "Emission turned off successfully", **status}
         else:
             raise HTTPException(status_code=500, detail="Failed to turn emission off")
     except Exception as e:
