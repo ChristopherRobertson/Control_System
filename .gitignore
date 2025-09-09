@@ -1,0 +1,62 @@
+# Node / frontend
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+dist/
+frontend/dist/
+.vite/
+frontend/.vite/
+.eslintcache
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+frontend/.env
+backend/.env
+
+# Python / backend
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+env/
+
+# Build artifacts
+build/
+backend/build/
+frontend/build/
+
+# IDE/editor
+.idea/
+.vscode/
+*.code-workspace
+
+# Misc
+coverage/
+tmp/
+temp/
+.cache/
+*.swp
+*.swo
