@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional, List, Union
 import logging
 from enum import Enum
 from ctypes import CDLL, c_uint16, c_uint8, c_uint32, c_float, c_bool, byref
+from ctypes.util import find_library
 
 logger = logging.getLogger(__name__)
 
@@ -114,22 +115,7 @@ class MIRcatController:
         if cfg_dir:
             candidates.append(Path(cfg_dir))
         # 3) Repo docs SDK bundle (for convenience)
-        # 3) Repo docs SDK bundle (for convenience) — locate repo root by finding hardware_configuration.toml
-        probe = Path(__file__).resolve()
-        repo_root = None
-        for p in [probe] + list(probe.parents):
-            if (p / 'hardware_configuration.toml').exists():
-                repo_root = p
-                break
-        if repo_root is not None:
-            # Preferred structure
-            candidates.append(repo_root / 'docs' / 'sdks' / 'daylight_mircat')
-            # Backward-compatible fallback (older layout)
-            candidates.append(repo_root / 'docs' / 'docs' / 'sdks' / 'daylight_mircat')
-        # 4) Common Windows install paths
-        if os.name == 'nt':
-            candidates.append(Path('C:/Program Files/Daylight Solutions/MIRcatSDK'))
-            candidates.append(Path('C:/Program Files (x86)/Daylight Solutions/MIRcatSDK'))
+        # Avoid hardcoded repo/system paths in code. Prefer explicit env or config.
 
         dll_name = 'MIRcatSDK.dll' if os.name == 'nt' else 'libMIRcatSDK.so'
         load_error: Optional[Exception] = None
@@ -149,9 +135,21 @@ class MIRcatController:
                 load_error = e
                 continue
         if self._sdk is None:
-            msg = f"MIRcat SDK DLL not found. Checked: {[str(p) for p in candidates]}"
+            # Try OS search path (PATH/LD_LIBRARY_PATH)
+            try:
+                self._sdk = CDLL(dll_name)
+            except Exception:
+                # Try ctypes util
+                lib_path = find_library('MIRcatSDK')
+                if lib_path:
+                    self._sdk = CDLL(lib_path)
+        if self._sdk is None:
+            msg = (
+                "MIRcat SDK DLL not found. Set MIRCAT_SDK_DIR or 'daylight_mircat.sdk_path', "
+                f"or place {dll_name} on system PATH."
+            )
             if load_error:
-                msg += f"; last error: {load_error}"
+                msg += f" Last error: {load_error}"
             self.last_error = msg
             self.last_error_code = MIRcatError.SDK_ERROR
             raise Exception(msg)

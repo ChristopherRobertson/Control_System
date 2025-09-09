@@ -26,6 +26,14 @@ if errorlevel 1 (
     goto :cleanup
 )
 
+REM Configure MIRcat SDK directory dynamically to avoid hardcoded paths in code
+set "_SDK_DIR=%~dp0docs\sdks\daylight_mircat"
+if exist "%_SDK_DIR%\MIRcatSDK.dll" (
+    set "MIRCAT_SDK_DIR=%_SDK_DIR%"
+    set "PATH=%MIRCAT_SDK_DIR%;%PATH%"
+    echo Using MIRcat SDK at: %MIRCAT_SDK_DIR%
+)
+
 cd /d "%~dp0backend"
 
 REM Check and install Python dependencies

@@ -6,6 +6,7 @@ import os
 import importlib
 import importlib.util
 import pkgutil
+import sys
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,22 +31,23 @@ app.add_middleware(
 # Auto-discover and register device modules
 modules_path = Path(__file__).parent / "modules"
 if modules_path.exists():
+    # Ensure 'modules' can be imported as a package for relative imports in submodules
+    if str(Path(__file__).parent) not in sys.path:
+        sys.path.insert(0, str(Path(__file__).parent))
+    if 'modules' not in sys.modules:
+        spec = importlib.util.spec_from_file_location('modules', modules_path / '__init__.py')
+        if spec and spec.loader:
+            pkg = importlib.util.module_from_spec(spec)
+            sys.modules['modules'] = pkg
+            spec.loader.exec_module(pkg)
     for module_info in pkgutil.iter_modules([str(modules_path)]):
         module_name = module_info.name
         try:
-            # Import the module
-            spec = importlib.util.spec_from_file_location(
-                f"modules.{module_name}.routes",
-                modules_path / module_name / "routes.py"
-            )
-            if spec and spec.loader:
-                routes_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(routes_module)
-                
-                # Register routes if the module has a register function
-                if hasattr(routes_module, 'register'):
-                    routes_module.register(app)
-                    print(f"Registered routes for module: {module_name}")
+            # Import routes as a proper package module to support relative imports
+            routes_module = importlib.import_module(f"modules.{module_name}.routes")
+            if hasattr(routes_module, 'register'):
+                routes_module.register(app)
+                print(f"Registered routes for module: {module_name}")
         except Exception as e:
             print(f"Failed to load module {module_name}: {e}")
 
