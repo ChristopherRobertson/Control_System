@@ -25,37 +25,17 @@ import {
   RadioButtonChecked as LaserIcon,
   Tune as TuneIcon
 } from '@mui/icons-material'
-import { MIRcatAPI } from './api'
+import { MIRcatAPI, type DeviceStatus as APIDeviceStatus } from './api'
 import StatusIndicator from './components/StatusIndicator'
 import TuningControls from './components/TuningControls'
 import LaserSettingsPanel from './components/LaserSettingsPanel'
 import ScanModePanel from './components/ScanModePanel'
 
-interface DeviceStatus {
-  connected: boolean
-  armed: boolean
-  emission_on: boolean
-  current_wavenumber: number
-  current_qcl: number
-  laser_mode: string
-  last_error?: string            
-  last_error_code?: number       
-  status: {
-    interlocks: boolean
-    key_switch: boolean
-    temperature: boolean
-    connected: boolean
-    emission: boolean
-    pointing_correction: boolean
-    system_fault: boolean
-    case_temp_1: number
-    case_temp_2: number
-    pcb_temperature: number
-  }
-}
+// Mirror API DeviceStatus but allow optional last_error fields to reconcile types
+// Note: Using `APIDeviceStatus` directly for state; keep local aliasing minimal.
 
 function DaylightMIRcatView() {
-  const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null)
+  const [deviceStatus, setDeviceStatus] = useState<APIDeviceStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('tune')

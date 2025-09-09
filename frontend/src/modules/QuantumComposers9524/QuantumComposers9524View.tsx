@@ -39,8 +39,12 @@ function QuantumComposers9524View() {
     autoStart: false
   })
 
-  const [selectedChannel, setSelectedChannel] = useState('A')
-  const [channelSettings, setChannelSettings] = useState({
+  type ChannelKey = 'A' | 'B' | 'C' | 'D'
+  type ChannelState = { enabled: boolean; delay: string; width: string }
+  type Channels = Record<ChannelKey, ChannelState>
+
+  const [selectedChannel, setSelectedChannel] = useState<ChannelKey>('A')
+  const [channelSettings, setChannelSettings] = useState<Channels>({
     A: { enabled: true, delay: '0.000,000,000,00', width: '0.000,001,000,00' },
     B: { enabled: false, delay: '0.000,000,000,00', width: '0.000,001,000,00' },
     C: { enabled: false, delay: '0.000,000,000,00', width: '0.000,001,000,00' },
@@ -290,7 +294,7 @@ function QuantumComposers9524View() {
                     <Button
                       key={channel}
                       variant={selectedChannel === channel ? 'contained' : 'outlined'}
-                      onClick={() => setSelectedChannel(channel)}
+                      onClick={() => setSelectedChannel(channel as ChannelKey)}
                       size="small"
                       disabled={!connected}
                     >
