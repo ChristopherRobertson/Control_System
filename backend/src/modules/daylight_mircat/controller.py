@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Union
 import logging
 from enum import Enum
+from ctypes import CDLL, c_uint16, c_uint8, c_uint32, c_float, c_bool, byref
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ class MIRcatController:
     
     def __init__(self):
         self.sdk_initialized = False
+        self._sdk = None
+        self._sdk_dir: Optional[Path] = None
         self.connected = False
         self.armed = False
         self.emission_on = False
@@ -78,6 +81,12 @@ class MIRcatController:
         
         self.last_error = None
         self.last_error_code = None
+
+        # Constants (mirroring SDK header values used here)
+        self._UNITS_MICRONS = 1
+        self._UNITS_CM1 = 2
+        self._COMM_SERIAL = 1
+        self._SERIAL_PORT_AUTO = 0
         
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from hardware_configuration.toml"""
@@ -90,87 +99,193 @@ class MIRcatController:
             logger.error(f"Failed to load config: {e}")
             return {}
     
-    def _mircat_sdk_call(self, command: str, value: Any = None) -> Union[bool, int, float, str]:
-        """
-        Real MIRcat SDK call - requires actual MIRcat hardware and SDK installation
-        
-        This function interfaces directly with the MIRcat SDK library.
-        ALL calls will fail if no real MIRcat hardware is connected.
-        NO SIMULATION - only real hardware responses allowed.
-        """
-        try:
-            # Attempt to import real MIRcat SDK - will fail if not installed
+    def _ensure_sdk(self) -> None:
+        """Load MIRcatSDK DLL and prepare function prototypes."""
+        if self._sdk is not None:
+            return
+        # Determine candidate directories
+        candidates: List[Path] = []
+        # 1) Env override
+        env_dir = os.environ.get('MIRCAT_SDK_DIR')
+        if env_dir:
+            candidates.append(Path(env_dir))
+        # 2) Config value
+        cfg_dir = self.config.get('sdk_path')
+        if cfg_dir:
+            candidates.append(Path(cfg_dir))
+        # 3) Repo docs SDK bundle (for convenience)
+        repo_root = Path(__file__).resolve().parents[5]
+        candidates.append(repo_root / 'docs' / 'docs' / 'sdks' / 'daylight_mircat')
+        # 4) Common Windows install paths
+        if os.name == 'nt':
+            candidates.append(Path('C:/Program Files/Daylight Solutions/MIRcatSDK'))
+            candidates.append(Path('C:/Program Files (x86)/Daylight Solutions/MIRcatSDK'))
+
+        dll_name = 'MIRcatSDK.dll' if os.name == 'nt' else 'libMIRcatSDK.so'
+        load_error: Optional[Exception] = None
+        for d in candidates:
             try:
-                # In real implementation, this would be the actual MIRcat SDK import:
-                # import MIRcatSDK as mircat_sdk
-                # For now, we raise an exception since SDK is not available in this environment
-                raise ImportError("MIRcat SDK not available")
-            except ImportError:
-                self.last_error = "MIRcat SDK not installed or hardware not available"
-                self.last_error_code = MIRcatError.COMMUNICATION_ERROR
-                raise Exception("MIRcat SDK not installed - install Daylight Solutions MIRcat SDK and connect hardware")
-            
-            # The following would be real SDK calls if hardware was available:
-            # Note: All these calls are commented out because they require real hardware
-            
-            # if command == "init":
-            #     result = mircat_sdk.MIRcatSDK_Initialize()
-            #     if result != 0:
-            #         raise Exception(f"SDK initialization failed with code {result}")
-            #     self.sdk_initialized = True
-            #     return True
-            
-            # elif command == "isconnected":
-            #     connected = mircat_sdk.MIRcatSDK_IsConnectedToLaser()
-            #     return connected
-            
-            # elif command == "isarmed":
-            #     armed = mircat_sdk.MIRcatSDK_IsArmed()
-            #     return armed
-            
-            # elif command == "istuned":
-            #     tuned = mircat_sdk.MIRcatSDK_IsTuned()
-            #     return tuned
-            
-            # elif command == "temperaturestable":
-            #     temp_stable = mircat_sdk.MIRcatSDK_IsTemperatureStable()
-            #     return temp_stable
-            
-            # elif command == "isinterlocked":
-            #     interlocked = mircat_sdk.MIRcatSDK_IsInterlocked()
-            #     return interlocked
-            
-            # elif command == "emission" and value is not None:
-            #     result = mircat_sdk.MIRcatSDK_TurnEmissionOnOff(bool(value))
-            #     if result != 0:
-            #         raise Exception(f"Emission control failed with code {result}")
-            #     return True
-            
-            # elif command == "arm":
-            #     result = mircat_sdk.MIRcatSDK_ArmDisarmLaser(True)
-            #     if result != 0:
-            #         raise Exception(f"Laser arming failed with code {result}")
-            #     return True
-            
-            # elif command == "wavenumber" and value is not None:
-            #     result = mircat_sdk.MIRcatSDK_TuneToWavenumber(float(value), 1)  # units: 1 = cm-1
-            #     if result != 0:
-            #         raise Exception(f"Tuning to wavenumber failed with code {result}")
-            #     return True
-            
-            # elif command == "poweroff":
-            #     result = mircat_sdk.MIRcatSDK_ArmDisarmLaser(False)
-            #     if result != 0:
-            #         raise Exception(f"Laser disarming failed with code {result}")
-            #     return True
-            
-            # elif command == "temperature":
-            #     temp = mircat_sdk.MIRcatSDK_GetTuningTemperature()
-            #     return temp
-            
-            # If we reach here, the command was not recognized
-            raise Exception(f"Unknown MIRcat SDK command: {command}")
-                
+                if not d:
+                    continue
+                dll_path = d / dll_name
+                if dll_path.exists():
+                    # Ensure dependent DLLs can be found (Windows 3.8+)
+                    if os.name == 'nt' and hasattr(os, 'add_dll_directory'):
+                        os.add_dll_directory(str(d))
+                    self._sdk_dir = d
+                    self._sdk = CDLL(str(dll_path))
+                    break
+            except Exception as e:
+                load_error = e
+                continue
+        if self._sdk is None:
+            msg = f"MIRcat SDK DLL not found. Checked: {[str(p) for p in candidates]}"
+            if load_error:
+                msg += f"; last error: {load_error}"
+            self.last_error = msg
+            self.last_error_code = MIRcatError.SDK_ERROR
+            raise Exception(msg)
+
+        # Restypes for calls we use
+        self._sdk.MIRcatSDK_Initialize.restype = c_uint32
+        self._sdk.MIRcatSDK_DeInitialize.restype = c_uint32
+        self._sdk.MIRcatSDK_SetCommType.restype = c_uint32
+        self._sdk.MIRcatSDK_SetSerialParams.restype = c_uint32
+        self._sdk.MIRcatSDK_GetAPIVersion.restype = c_uint32
+        self._sdk.MIRcatSDK_GetNumInstalledQcls.restype = c_uint32
+        self._sdk.MIRcatSDK_IsLaserArmed.restype = c_uint32
+        self._sdk.MIRcatSDK_DisarmLaser.restype = c_uint32
+        self._sdk.MIRcatSDK_ArmDisarmLaser.restype = c_uint32
+        self._sdk.MIRcatSDK_IsEmissionOn.restype = c_uint32
+        self._sdk.MIRcatSDK_TurnEmissionOn.restype = c_uint32
+        self._sdk.MIRcatSDK_TurnEmissionOff.restype = c_uint32
+        self._sdk.MIRcatSDK_IsTuned.restype = c_uint32
+        self._sdk.MIRcatSDK_GetActualWW.restype = c_uint32
+        self._sdk.MIRcatSDK_GetTuneWW.restype = c_uint32
+        self._sdk.MIRcatSDK_TuneToWW.restype = c_uint32
+        self._sdk.MIRcatSDK_AreTECsAtSetTemperature.restype = c_uint32
+        self._sdk.MIRcatSDK_IsInterlockedStatusSet.restype = c_uint32
+        self._sdk.MIRcatSDK_IsKeySwitchStatusSet.restype = c_uint32
+        self._sdk.MIRcatSDK_GetQCLTemperature.restype = c_uint32
+        self._sdk.MIRcatSDK_GetTecCurrent.restype = c_uint32
+
+    def _sdk_ok(self, ret: int) -> bool:
+        return int(ret) == 0
+
+    def _mircat_sdk_call(self, command: str, value: Any = None) -> Union[bool, int, float, str]:
+        """Interface to selected MIRcat SDK operations using ctypes bindings."""
+        self._ensure_sdk()
+        try:
+            if command == 'init':
+                # Optional: configure comms before initialize
+                comm = self.config.get('communication', {}).get('comm_type', 'SERIAL')
+                if str(comm).upper() in ('SERIAL', 'DEFAULT'):
+                    self._sdk.MIRcatSDK_SetCommType(c_uint8(self._COMM_SERIAL))
+                    baud = int(self.config.get('communication', {}).get('baud_rate') or 115200)
+                    self._sdk.MIRcatSDK_SetSerialParams(c_uint16(self._SERIAL_PORT_AUTO), c_uint32(baud))
+                ret = self._sdk.MIRcatSDK_Initialize()
+                if not self._sdk_ok(ret):
+                    raise Exception(f"Initialize failed (code {int(ret)})")
+                self.sdk_initialized = True
+                return True
+
+            elif command == 'isconnected':
+                # No direct API; rely on controller connection flag
+                return bool(self.connected and self.sdk_initialized)
+
+            elif command == 'isarmed':
+                is_armed = c_bool(False)
+                ret = self._sdk.MIRcatSDK_IsLaserArmed(byref(is_armed))
+                if not self._sdk_ok(ret):
+                    raise Exception(f"IsLaserArmed failed ({int(ret)})")
+                return bool(is_armed.value)
+
+            elif command == 'istuned':
+                is_tuned = c_bool(False)
+                ret = self._sdk.MIRcatSDK_IsTuned(byref(is_tuned))
+                if not self._sdk_ok(ret):
+                    raise Exception(f"IsTuned failed ({int(ret)})")
+                return bool(is_tuned.value)
+
+            elif command == 'temperaturestable':
+                at_temp = c_bool(False)
+                ret = self._sdk.MIRcatSDK_AreTECsAtSetTemperature(byref(at_temp))
+                if not self._sdk_ok(ret):
+                    raise Exception(f"AreTECsAtSetTemperature failed ({int(ret)})")
+                return bool(at_temp.value)
+
+            elif command == 'isinterlocked':
+                interlock = c_bool(False)
+                ret = self._sdk.MIRcatSDK_IsInterlockedStatusSet(byref(interlock))
+                if not self._sdk_ok(ret):
+                    raise Exception(f"IsInterlockedStatusSet failed ({int(ret)})")
+                return bool(interlock.value)
+
+            elif command == 'iskeyswitch':
+                ks = c_bool(False)
+                ret = self._sdk.MIRcatSDK_IsKeySwitchStatusSet(byref(ks))
+                if not self._sdk_ok(ret):
+                    raise Exception(f"IsKeySwitchStatusSet failed ({int(ret)})")
+                return bool(ks.value)
+
+            elif command == 'emission':
+                if value:
+                    ret = self._sdk.MIRcatSDK_TurnEmissionOn()
+                    if not self._sdk_ok(ret):
+                        raise Exception(f"TurnEmissionOn failed ({int(ret)})")
+                else:
+                    ret = self._sdk.MIRcatSDK_TurnEmissionOff()
+                    if not self._sdk_ok(ret):
+                        raise Exception(f"TurnEmissionOff failed ({int(ret)})")
+                return True
+
+            elif command == 'isemitting':
+                is_on = c_bool(False)
+                ret = self._sdk.MIRcatSDK_IsEmissionOn(byref(is_on))
+                if not self._sdk_ok(ret):
+                    raise Exception(f"IsEmissionOn failed ({int(ret)})")
+                return bool(is_on.value)
+
+            elif command == 'arm':
+                # Ensure armed state
+                if not self._mircat_sdk_call('isarmed'):
+                    ret = self._sdk.MIRcatSDK_ArmDisarmLaser()
+                    if not self._sdk_ok(ret):
+                        raise Exception(f"ArmDisarmLaser failed ({int(ret)})")
+                return True
+
+            elif command == 'poweroff':
+                # Disarm and power off system
+                ret = self._sdk.MIRcatSDK_DisarmLaser()
+                if not self._sdk_ok(ret):
+                    raise Exception(f"DisarmLaser failed ({int(ret)})")
+                if hasattr(self._sdk, 'MIRcatSDK_PowerOffSystem'):
+                    self._sdk.MIRcatSDK_PowerOffSystem.restype = c_uint32
+                    self._sdk.MIRcatSDK_PowerOffSystem()
+                return True
+
+            elif command == 'wavenumber':
+                # Tune to wavenumber in cm^-1 on given QCL (default 1)
+                qcl = int(self.current_qcl or 1)
+                ret = self._sdk.MIRcatSDK_TuneToWW(c_float(float(value)), c_uint8(self._UNITS_CM1), c_uint8(qcl))
+                if not self._sdk_ok(ret):
+                    raise Exception(f"TuneToWW failed ({int(ret)}) for {value} cm^-1 on QCL {qcl}")
+                # Update internal setpoint
+                self.current_wavenumber = float(value)
+                return True
+
+            elif command == 'temperature':
+                # Return current QCL temperature (float)
+                qcl = int(self.current_qcl or 1)
+                temp = c_float(0)
+                ret = self._sdk.MIRcatSDK_GetQCLTemperature(c_uint8(qcl), byref(temp))
+                if not self._sdk_ok(ret):
+                    raise Exception(f"GetQCLTemperature failed ({int(ret)}) for QCL {qcl}")
+                return float(temp.value)
+
+            else:
+                raise Exception(f"Unknown MIRcat SDK command: {command}")
+
         except Exception as e:
             self.last_error = str(e)
             self.last_error_code = MIRcatError.COMMUNICATION_ERROR
@@ -182,17 +297,8 @@ class MIRcatController:
         try:
             logger.info("Attempting to connect to real MIRcat hardware...")
             
-            # Initialize real MIRcat SDK
+            # Initialize real MIRcat SDK and mark connected
             self._mircat_sdk_call("init")
-            
-            # Check if real MIRcat device is connected via USB
-            connected = self._mircat_sdk_call("isconnected")
-            
-            if not connected:
-                self.last_error = "No MIRcat device detected - check USB connection and power"
-                self.last_error_code = MIRcatError.COMMUNICATION_ERROR
-                raise Exception("No MIRcat device detected")
-            
             self.connected = True
             
             # Get real hardware status
@@ -219,6 +325,14 @@ class MIRcatController:
             
             if self.armed:
                 self._mircat_sdk_call("poweroff")
+            # De-initialize SDK connection if loaded
+            try:
+                if self._sdk is not None and self.sdk_initialized:
+                    ret = self._sdk.MIRcatSDK_DeInitialize()
+                    if int(ret) != 0:
+                        logger.warning(f"MIRcatSDK_DeInitialize returned code {int(ret)}")
+            except Exception as e:
+                logger.warning(f"DeInitialize error ignored: {e}")
             
             self.connected = False
             self.armed = False
@@ -580,15 +694,15 @@ class MIRcatController:
                 self.status.update({
                     "connected": self._mircat_sdk_call("isconnected"),
                     "interlocks": self._mircat_sdk_call("isinterlocked"),
-                    "key_switch": True,  # Hardware dependent - would read from device
+                    "key_switch": self._mircat_sdk_call("iskeyswitch"),
                     "temperature": self._mircat_sdk_call("temperaturestable"),
-                    "pointing_correction": True,  # Hardware dependent
-                    "system_fault": False,  # Would read from device status
+                    "pointing_correction": True,  # Not exposed in SDK; leave True when connected
+                    "system_fault": False,  # Could be derived from specific error reads if available
                     "tuned": self._mircat_sdk_call("istuned"),
                     "armed": self._mircat_sdk_call("isarmed"),
-                    "emission": self.emission_on,
+                    "emission": self._mircat_sdk_call("isemitting"),
                     "case_temp_1": self._mircat_sdk_call("temperature"),
-                    "case_temp_2": self._mircat_sdk_call("temperature"), 
+                    "case_temp_2": self._mircat_sdk_call("temperature"),
                     "pcb_temperature": self._mircat_sdk_call("temperature")
                 })
                 
@@ -596,6 +710,7 @@ class MIRcatController:
                 self.armed = self.status["armed"]
                 self.tuned = self.status["tuned"]
                 self.temperature_stable = self.status["temperature"]
+                self.emission_on = self.status["emission"]
             else:
                 # Reset all status when disconnected
                 self.status.update({
