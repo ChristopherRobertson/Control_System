@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import {
   Box,
   Typography,
@@ -17,8 +18,6 @@ import {
 } from '@mui/material'
 import { 
   Tune as TuneIcon, 
-  Security as ArmIcon,
-  Lightbulb as RedLaserIcon,
   FlashOn as EmitIcon
 } from '@mui/icons-material'
 import { MIRcatAPI } from '../api'
@@ -126,65 +125,7 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
     return null
   }
 
-  const handleArm = async () => {
-    const validation = validateWorkflow('ARM')
-    if (validation) {
-      setSnackbarMessage(validation)
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-    try {
-      await MIRcatAPI.armLaser()
-      onStatusUpdate()
-      setSnackbarMessage('Laser armed successfully')
-    } catch (err) {
-      setError('Failed to arm laser')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDisarm = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      // If emitting, stop emission first
-      if (deviceStatus?.emission_on) {
-        await MIRcatAPI.turnEmissionOff()
-        setSnackbarMessage('Emission stopped before disarming')
-      }
-      await MIRcatAPI.disarmLaser()
-      onStatusUpdate()
-      setSnackbarMessage('Laser disarmed successfully')
-    } catch (err) {
-      setError('Failed to disarm laser')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleTune = async () => {
-    const validation = validateWorkflow('TUNE')
-    if (validation) {
-      setSnackbarMessage(validation)
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-    try {
-      const targetWavenumber = units === 'μm' ? convertToWavenumber(wavenumber) : wavenumber
-      await MIRcatAPI.tuneToWavenumber(targetWavenumber)
-      onStatusUpdate()
-      setSnackbarMessage(`Tuned to ${wavenumber} ${units}`)
-    } catch (err) {
-      setError('Failed to tune laser')
-    } finally {
-      setLoading(false)
-    }
-  }
+  
 
   const handleEmit = async () => {
     const validation = validateWorkflow('EMIT')

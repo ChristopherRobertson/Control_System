@@ -1,9 +1,10 @@
+import { useState } from 'react'
 import {
   Box,
   Typography,
   TextField,
   FormControl,
-  InputLabel,
+  // InputLabel,
   Select,
   MenuItem,
   Switch,
@@ -12,11 +13,10 @@ import {
   Card,
   CardContent,
   Button,
-  Divider,
+  // Divider,
   Alert
 } from '@mui/material'
 import { Save as SaveIcon } from '@mui/icons-material'
-import { MIRcatAPI } from '../api'
 
 interface LaserSettingsPanelProps {
   deviceStatus: any
