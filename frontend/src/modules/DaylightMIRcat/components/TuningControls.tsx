@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react'
 import {
   Box,
   Typography,
@@ -38,8 +37,16 @@ function TuningControls({ deviceStatus, onStatusUpdate }: TuningControlsProps) {
   const [error, setError] = useState<string | null>(null)
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null)
 
+    // QCL data type
+  type QCLDataEntry = {
+    range: string
+    temp: number | string
+    active: string
+    tecMA: string
+    tecV: string
+}
   // QCL information data
-  const qclData = {
+  const qclData: Record<number, QCLDataEntry> = {
     1: { 
       range: '2077.3 to 1638.8 cm-1', 
       temp: deviceStatus?.status?.case_temp_1 || '--',

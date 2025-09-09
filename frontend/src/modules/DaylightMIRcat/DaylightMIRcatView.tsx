@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react'
 import {
   Box,
   Grid,
@@ -38,6 +37,8 @@ interface DeviceStatus {
   current_wavenumber: number
   current_qcl: number
   laser_mode: string
+  last_error?: string            
+  last_error_code?: number       
   status: {
     interlocks: boolean
     key_switch: boolean
