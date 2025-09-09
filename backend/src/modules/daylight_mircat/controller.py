@@ -114,8 +114,18 @@ class MIRcatController:
         if cfg_dir:
             candidates.append(Path(cfg_dir))
         # 3) Repo docs SDK bundle (for convenience)
-        repo_root = Path(__file__).resolve().parents[5]
-        candidates.append(repo_root / 'docs' / 'docs' / 'sdks' / 'daylight_mircat')
+        # 3) Repo docs SDK bundle (for convenience) — locate repo root by finding hardware_configuration.toml
+        probe = Path(__file__).resolve()
+        repo_root = None
+        for p in [probe] + list(probe.parents):
+            if (p / 'hardware_configuration.toml').exists():
+                repo_root = p
+                break
+        if repo_root is not None:
+            # Preferred structure
+            candidates.append(repo_root / 'docs' / 'sdks' / 'daylight_mircat')
+            # Backward-compatible fallback (older layout)
+            candidates.append(repo_root / 'docs' / 'docs' / 'sdks' / 'daylight_mircat')
         # 4) Common Windows install paths
         if os.name == 'nt':
             candidates.append(Path('C:/Program Files/Daylight Solutions/MIRcatSDK'))
