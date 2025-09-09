@@ -4,6 +4,7 @@ import { styled } from '@mui/material/styles'
 
 const NavButton = styled(Button)(({ theme }) => ({
   color: 'white',
+  textTransform: 'none',
   '&.active': {
     backgroundColor: theme.palette.primary.main,
     color: theme.palette.primary.contrastText,
@@ -29,14 +30,14 @@ function Navbar() {
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           {deviceLinks.map((link) => (
-            <NavButton
+            <NavLink
               key={link.path}
-              component={NavLink}
               to={link.path}
-              className={({ isActive }) => isActive ? 'active' : ''}
+              className={({ isActive }) => (isActive ? 'active' : '')}
+              style={{ textDecoration: 'none' }} // prevent underline
             >
-              {link.label}
-            </NavButton>
+              <NavButton>{link.label}</NavButton>
+            </NavLink>
           ))}
         </Box>
       </Toolbar>
