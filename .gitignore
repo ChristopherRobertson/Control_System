@@ -50,6 +50,7 @@ frontend/build/
 
 # IDE/editor
 .idea/
+.vscode
 .vscode/
 *.code-workspace
 
