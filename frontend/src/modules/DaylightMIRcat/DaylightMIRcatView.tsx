@@ -116,12 +116,13 @@ function DaylightMIRcatView() {
     }
   }
 
-  // Initial status fetch
+  // Initial status fetch with dynamic polling interval
   useEffect(() => {
     fetchStatus()
-    const interval = setInterval(fetchStatus, 2000) // Poll every 2 seconds
+    const intervalMs = deviceStatus?.connected ? 500 : 3000
+    const interval = setInterval(fetchStatus, intervalMs)
     return () => clearInterval(interval)
-  }, [])
+  }, [deviceStatus?.connected])
 
   const navigationTabs = [
     { id: 'tune', label: 'Tune', icon: <TuneIcon /> },

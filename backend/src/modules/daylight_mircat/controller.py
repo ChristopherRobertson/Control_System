@@ -185,16 +185,17 @@ class MIRcatController:
         self._ensure_sdk()
         try:
             if command == 'init':
-                # Optional: configure comms before initialize
-                comm = self.config.get('communication', {}).get('comm_type', 'SERIAL')
-                if str(comm).upper() in ('SERIAL', 'DEFAULT'):
-                    self._sdk.MIRcatSDK_SetCommType(c_uint8(self._COMM_SERIAL))
-                    baud = int(self.config.get('communication', {}).get('baud_rate') or 115200)
-                    self._sdk.MIRcatSDK_SetSerialParams(c_uint16(self._SERIAL_PORT_AUTO), c_uint32(baud))
+                # Initialize controller first (per SDK docs)
                 ret = self._sdk.MIRcatSDK_Initialize()
                 if not self._sdk_ok(ret):
                     raise Exception(f"Initialize failed (code {int(ret)})")
                 self.sdk_initialized = True
+                # Configure comms after initialization (avoid NOT_INITIALIZED errors)
+                comm = self.config.get('communication', {}).get('comm_type', 'SERIAL')
+                if str(comm).upper() in ('SERIAL', 'DEFAULT'):
+                    _ = self._sdk.MIRcatSDK_SetCommType(c_uint8(self._COMM_SERIAL))
+                    baud = int(self.config.get('communication', {}).get('baud_rate') or 115200)
+                    _ = self._sdk.MIRcatSDK_SetSerialParams(c_uint16(self._SERIAL_PORT_AUTO), c_uint32(baud))
                 return True
 
             elif command == 'isconnected':
@@ -262,14 +263,11 @@ class MIRcatController:
                         raise Exception(f"ArmDisarmLaser failed ({int(ret)})")
                 return True
 
-            elif command == 'poweroff':
-                # Disarm and power off system
+            elif command == 'disarm':
+                # Explicitly disarm laser
                 ret = self._sdk.MIRcatSDK_DisarmLaser()
                 if not self._sdk_ok(ret):
                     raise Exception(f"DisarmLaser failed ({int(ret)})")
-                if hasattr(self._sdk, 'MIRcatSDK_PowerOffSystem'):
-                    self._sdk.MIRcatSDK_PowerOffSystem.restype = c_uint32
-                    self._sdk.MIRcatSDK_PowerOffSystem()
                 return True
 
             elif command == 'wavenumber':
@@ -400,15 +398,19 @@ class MIRcatController:
             # Arm the laser
             self._mircat_sdk_call("arm")
             
-            # Wait for arming sequence (5 seconds + beep)
-            await asyncio.sleep(0.5)
-            
-            # Verify arming
-            armed = self._mircat_sdk_call("isarmed")
-            if not armed:
+            # Poll for arming up to 15s
+            for _ in range(60):
+                if self._mircat_sdk_call("isarmed"):
+                    break
+                await asyncio.sleep(0.25)
+            else:
                 self.last_error = "Arming sequence failed"
                 self.last_error_code = MIRcatError.HARDWARE_ERROR
                 raise Exception("Arming failed")
+            
+            # Clear last error on success
+            self.last_error = None
+            self.last_error_code = None
             
             await self._update_hardware_status()
             logger.info("MIRcat laser armed successfully")
@@ -427,8 +429,18 @@ class MIRcatController:
             if self.emission_on:
                 await self.turn_emission_off()
             
-            # Power off laser
-            self._mircat_sdk_call("poweroff")
+            # Disarm laser
+            self._mircat_sdk_call("disarm")
+            
+            # Wait until laser is reported disarmed (max 10s)
+            for _ in range(40):
+                if not self._mircat_sdk_call("isarmed"):
+                    break
+                await asyncio.sleep(0.25)
+            else:
+                self.last_error = "Disarm timeout"
+                self.last_error_code = MIRcatError.HARDWARE_ERROR
+                raise Exception("Disarm timeout")
             
             await self._update_hardware_status()
             logger.info("MIRcat laser disarmed successfully")
@@ -460,6 +472,16 @@ class MIRcatController:
             logger.info("Turning MIRcat emission on...")
             self._mircat_sdk_call("emission", 1)
             
+            # Wait until emission is on (max 5s)
+            for _ in range(20):
+                if self._mircat_sdk_call("isemitting"):
+                    break
+                await asyncio.sleep(0.25)
+            else:
+                self.last_error = "Emission on timeout"
+                self.last_error_code = MIRcatError.EMISSION_TIMEOUT
+                raise Exception("Emission on timeout")
+            
             await self._update_hardware_status()
             logger.info("MIRcat emission turned on successfully")
             return True
@@ -473,6 +495,16 @@ class MIRcatController:
         try:
             logger.info("Turning MIRcat emission off...")
             self._mircat_sdk_call("emission", 0)
+            
+            # Wait until emission is off (max 5s)
+            for _ in range(20):
+                if not self._mircat_sdk_call("isemitting"):
+                    break
+                await asyncio.sleep(0.25)
+            else:
+                self.last_error = "Emission off timeout"
+                self.last_error_code = MIRcatError.EMISSION_TIMEOUT
+                raise Exception("Emission off timeout")
             
             await self._update_hardware_status()
             logger.info("MIRcat emission turned off successfully")
