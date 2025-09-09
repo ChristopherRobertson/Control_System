@@ -1,4 +1,5 @@
-import { Box, Typography, Chip } from '@mui/material'
+// import { useState, useEffect } from 'react'
+import { Box, Typography } from '@mui/material'
 import { CheckCircle, Error, RadioButtonUnchecked } from '@mui/icons-material'
 
 interface StatusIndicatorProps {

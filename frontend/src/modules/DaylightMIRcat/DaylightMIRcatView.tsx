@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import {
   Box,
   Grid,
@@ -5,22 +6,22 @@ import {
   CardContent,
   Typography,
   Button,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Switch,
-  FormControlLabel,
+  // TextField,
+  // FormControl,
+  // InputLabel,
+  // Select,
+  // MenuItem,
+  // Switch,
+  // FormControlLabel,
   Chip,
   Divider,
   Alert,
   LinearProgress
 } from '@mui/material'
 import {
-  PowerSettingsNew as PowerIcon,
+  // PowerSettingsNew as PowerIcon,
   Security as SecurityIcon,
-  Thermostat as ThermostatIcon,
+  // Thermostat as ThermostatIcon,
   RadioButtonChecked as LaserIcon,
   Tune as TuneIcon
 } from '@mui/icons-material'

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Box,
   Grid,
@@ -6,7 +7,7 @@ import {
   Typography,
   Button,
   FormControl,
-  InputLabel,
+  // InputLabel,
   Select,
   MenuItem,
   TextField,
@@ -16,12 +17,11 @@ import {
   Alert,
   Tabs,
   Tab,
-  Divider
+  // Divider
 } from '@mui/material'
 import {
   PlayArrow as StartIcon,
   Stop as StopIcon,
-  Settings as SettingsIcon,
   Timeline as SignalIcon
 } from '@mui/icons-material'
 
@@ -133,7 +133,7 @@ function QuantumComposers9524View() {
 
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)}>
+        <Tabs value={activeTab} onChange={(_e, newValue) => setActiveTab(newValue)}>
           <Tab label="System Options" />
           <Tab label="Additional Options" />
         </Tabs>

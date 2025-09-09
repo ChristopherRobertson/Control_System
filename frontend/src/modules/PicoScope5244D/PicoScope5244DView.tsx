@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Box,
   Grid,
@@ -21,13 +22,21 @@ import {
   Memory as ScopeIcon
 } from '@mui/icons-material'
 
+type ChannelConfig = {
+  enabled: boolean
+  range: string
+  coupling: string
+}
+
+type ChannelsState = Record<'A' | 'B' | 'C' | 'D', ChannelConfig>
+
 function PicoScope5244DView() {
   const [connected, setConnected] = useState(false)
   const [acquiring, setAcquiring] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
-  const [channels, setChannels] = useState({
+  const [channels, setChannels] = useState<ChannelsState>({
     A: { enabled: true, range: '±2V', coupling: 'DC' },
     B: { enabled: true, range: '±2V', coupling: 'DC' },
     C: { enabled: false, range: '±2V', coupling: 'DC' },
@@ -132,7 +141,7 @@ function PicoScope5244DView() {
               <Typography variant="h6" gutterBottom>
                 Channel Configuration
               </Typography>
-              {Object.entries(channels).map(([channel, config]) => (
+              {Object.entries(channels).map(([channel, config]: [keyof ChannelsState, ChannelConfig]) => (
                 <Box key={channel} sx={{ mb: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="subtitle1">Channel {channel}</Typography>
