@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box, Typography, Chip } from '@mui/material'
 import { CheckCircle, Error, RadioButtonUnchecked } from '@mui/icons-material'
 
