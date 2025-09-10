@@ -260,11 +260,8 @@ async def start_sweep_scan(request: SweepScanRequest):
             request.bidirectional_scanning
         )
         if success:
-            return {
-                "message": "Sweep scan started successfully",
-                "scan_mode": "sweep",
-                "parameters": request.dict()
-            }
+            status = await mircat_controller.get_status()
+            return {"message": "Sweep scan started successfully", **status, "parameters": request.dict()}
         else:
             raise HTTPException(status_code=500, detail="Failed to start sweep scan")
     except Exception as e:
@@ -283,11 +280,8 @@ async def start_step_scan(request: StepScanRequest):
             request.number_of_scans
         )
         if success:
-            return {
-                "message": "Step scan started successfully",
-                "scan_mode": "step",
-                "parameters": request.dict()
-            }
+            status = await mircat_controller.get_status()
+            return {"message": "Step scan started successfully", **status, "parameters": request.dict()}
         else:
             raise HTTPException(status_code=500, detail="Failed to start step scan")
     except Exception as e:
@@ -307,11 +301,8 @@ async def start_multispectral_scan(request: MultispectralScanRequest):
             request.keep_laser_on_between_steps
         )
         if success:
-            return {
-                "message": "Multispectral scan started successfully",
-                "scan_mode": "multispectral",
-                "parameters": request.dict()
-            }
+            status = await mircat_controller.get_status()
+            return {"message": "Multispectral scan started successfully", **status, "parameters": request.dict()}
         else:
             raise HTTPException(status_code=500, detail="Failed to start multispectral scan")
     except Exception as e:

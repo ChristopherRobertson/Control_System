@@ -784,6 +784,23 @@ class MIRcatController:
         
         try:
             logger.info(f"Starting multispectral scan with {len(wavelength_list)} wavelengths")
+            # Ensure TECs are at set temperature (avoid SDK error 95)
+            try:
+                stable = self._mircat_sdk_call("temperaturestable")
+                if not stable:
+                    logger.info("TECs not at set temperature; waiting up to 60s before starting multispectral scan...")
+                    for _ in range(120):  # 0.5s * 120 = 60s
+                        if self._mircat_sdk_call("temperaturestable"):
+                            stable = True
+                            break
+                        await asyncio.sleep(0.5)
+                if not stable:
+                    raise Exception("TECs not at set temperature (code 95)")
+            except Exception as e:
+                self.last_error = f"TECs not at set temperature: {e}"
+                self.last_error_code = MIRcatError.TEMPERATURE_UNSTABLE
+                logger.error(self.last_error)
+                return False
             # Program the table (clamp to valid wn range)
             count = max(0, len(wavelength_list))
             ret = self._sdk.MIRcatSDK_SetNumMultiSpectralElements(c_uint8(count))
