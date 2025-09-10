@@ -9,6 +9,8 @@ import pkgutil
 import sys
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import json
+import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -63,13 +65,30 @@ async def health_check():
 @app.websocket("/ws/{device_id}")
 async def websocket_endpoint(websocket: WebSocket, device_id: str):
     await websocket.accept()
-    try:
-        while True:
-            # Echo for now - will be replaced with actual device status
-            data = await websocket.receive_text()
-            await websocket.send_text(f"Echo from {device_id}: {data}")
-    except WebSocketDisconnect:
-        print(f"WebSocket disconnected for device: {device_id}")
+    # Stream live status for known devices; fall back to echo otherwise
+    if device_id == 'daylight_mircat':
+        try:
+            # Lazy import to avoid circulars
+            from modules.daylight_mircat.routes import mircat_controller
+            while True:
+                status = await mircat_controller.get_status()
+                await websocket.send_text(json.dumps({
+                    'device': device_id,
+                    'type': 'status',
+                    'payload': status
+                }))
+                await asyncio.sleep(0.5)
+        except WebSocketDisconnect:
+            print(f"WebSocket disconnected for device: {device_id}")
+        except Exception as e:
+            print(f"WebSocket error for {device_id}: {e}")
+    else:
+        try:
+            while True:
+                data = await websocket.receive_text()
+                await websocket.send_text(f"Echo from {device_id}: {data}")
+        except WebSocketDisconnect:
+            print(f"WebSocket disconnected for device: {device_id}")
 
 if __name__ == "__main__":
     uvicorn.run(

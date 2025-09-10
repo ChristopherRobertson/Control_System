@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Box,
   Typography,
@@ -69,6 +69,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [manualStepEnabled, setManualStepEnabled] = useState(false)
   // Get scan status from backend instead of local state
   const scanInProgress = deviceStatus?.scan_in_progress || false
 
@@ -171,8 +172,27 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
     ))
   }
 
-  const handleManualStep = () => {
-    console.log('Manual step executed')
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await MIRcatAPI.getUserSettings()
+        const mode = data?.processTriggerMode
+        setManualStepEnabled(mode === 'manual' || mode === 'Use Manual Step Mode')
+      } catch {}
+    })()
+  }, [])
+
+  const handleManualStep = async () => {
+    setLoading(true)
+    try {
+      await MIRcatAPI.manualStep()
+      await onStatusUpdate()
+    } catch (err: any) {
+      console.error('Manual step error:', err)
+      setError(err.response?.data?.detail || err.message || 'Manual step failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleStartScan = async () => {
@@ -354,29 +374,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                       inputProps={{ min: 0.01, max: 10, step: 0.01 }}
                     />
                   </Grid>
-                  <Grid item xs={6} md={3}>
-                    <TextField
-                      fullWidth
-                      label="Dwell Time (ms)"
-                      type="number"
-                      value={scanSettings.dwellTime}
-                      onChange={(e) => setScanSettings(prev => ({ ...prev, dwellTime: parseInt(e.target.value) }))}
-                      disabled={!canInteract}
-                      inputProps={{ min: 100, max: 10000, step: 100 }}
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={scanSettings.manualStepMode}
-                          onChange={(e) => setScanSettings(prev => ({ ...prev, manualStepMode: e.target.checked }))}
-                          disabled={!canInteract}
-                        />
-                      }
-                      label="Manual Step Mode"
-                    />
-                  </Grid>
+                  {/* Dwell time controlled by Laser Settings (Internal Trigger Step Time) */}
                 </>
               )}
 
@@ -601,7 +599,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                 Stop Scan
               </Button>
 
-              {selectedScanMode === 'step' && scanSettings.manualStepMode && (
+              {selectedScanMode === 'step' && manualStepEnabled && (
                 <Button
                   variant="outlined"
                   onClick={handleManualStep}
@@ -614,7 +612,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
 
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                Scan Progress: {scanInProgress ? 'In Progress...' : 'Ready'}
+                Scan Progress: {scanInProgress ? `${deviceStatus?.current_scan_percent ?? 0}%` : 'Ready'} {scanInProgress && deviceStatus?.current_scan_number != null ? `(Scan ${deviceStatus.current_scan_number})` : ''}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Current Position: {deviceStatus?.current_wavenumber?.toFixed(2) || '--'} cm-1

@@ -13,9 +13,13 @@ export interface DeviceStatus {
   current_wavenumber: number
   current_qcl: number
   laser_mode: string
+  pulse_rate?: number | null
+  pulse_width?: number | null
   tuned: boolean
   temperature_stable: boolean
   scan_in_progress: boolean
+  current_scan_number?: number | null
+  current_scan_percent?: number | null
   current_scan_mode: string | null
   last_error: string | null
   last_error_code: number | null
@@ -146,6 +150,26 @@ export class MIRcatAPI {
    */
   static async setPulseParameters(pulse_rate: number, pulse_width: number): Promise<{ message: string; pulse_rate: number; pulse_width: number }> {
     const response = await axios.post(`${API_BASE}/pulse-parameters`, { pulse_rate, pulse_width })
+    return response.data
+  }
+
+  static async clearError(): Promise<any> {
+    const response = await axios.post(`${API_BASE}/clear-error`)
+    return response.data
+  }
+
+  static async manualStep(): Promise<any> {
+    const response = await axios.post(`${API_BASE}/scan/step/manual`)
+    return response.data
+  }
+
+  static async getUserSettings(): Promise<any> {
+    const response = await axios.get(`${API_BASE}/settings`)
+    return response.data
+  }
+
+  static async saveUserSettings(payload: any): Promise<any> {
+    const response = await axios.post(`${API_BASE}/settings`, payload)
     return response.data
   }
 

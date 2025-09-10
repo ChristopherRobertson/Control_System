@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Box,
   Grid,
@@ -39,6 +39,8 @@ function DaylightMIRcatView() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('tune')
+  const [wsConnected, setWsConnected] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
 
   // Fetch device status
   const fetchStatus = async () => {
@@ -116,13 +118,42 @@ function DaylightMIRcatView() {
     }
   }
 
-  // Initial status fetch with dynamic polling interval
+  // WebSocket live updates
   useEffect(() => {
+    try {
+      const isSecure = window.location.protocol === 'https:'
+      const host = window.location.hostname
+      const port = window.location.port === '5000' ? '8000' : window.location.port || (isSecure ? '443' : '80')
+      const wsUrl = `${isSecure ? 'wss' : 'ws'}://${host}:${port}/ws/daylight_mircat`
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
+      ws.onopen = () => setWsConnected(true)
+      ws.onclose = () => setWsConnected(false)
+      ws.onerror = () => setWsConnected(false)
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data)
+          if (msg?.type === 'status' && msg?.payload) {
+            setDeviceStatus(msg.payload)
+          }
+        } catch {}
+      }
+      return () => {
+        try { ws.close() } catch {}
+      }
+    } catch {
+      setWsConnected(false)
+    }
+  }, [])
+
+  // Fallback polling when WS not connected
+  useEffect(() => {
+    if (wsConnected) return
     fetchStatus()
     const intervalMs = deviceStatus?.connected ? 500 : 3000
     const interval = setInterval(fetchStatus, intervalMs)
     return () => clearInterval(interval)
-  }, [deviceStatus?.connected])
+  }, [deviceStatus?.connected, wsConnected])
 
   const navigationTabs = [
     { id: 'tune', label: 'Tune', icon: <TuneIcon /> },
@@ -218,7 +249,21 @@ function DaylightMIRcatView() {
                   {/* Error Reporting Section */}
                   {deviceStatus.last_error && (
                     <Box sx={{ mb: 2 }}>
-                      <Alert severity="error" sx={{ mb: 1 }}>
+                      <Alert
+                        severity="error"
+                        sx={{ mb: 1 }}
+                        action={
+                          <Button color="inherit" size="small" onClick={async () => {
+                            try {
+                              const { MIRcatAPI } = await import('./api')
+                              await MIRcatAPI.clearError()
+                              await fetchStatus()
+                            } catch {}
+                          }}>
+                            Clear
+                          </Button>
+                        }
+                      >
                         <Typography variant="subtitle2" fontWeight="bold">
                           MIRcat Error {deviceStatus.last_error_code ? `(Code ${deviceStatus.last_error_code})` : ''}
                         </Typography>
@@ -239,11 +284,7 @@ function DaylightMIRcatView() {
                     status={deviceStatus.status.key_switch}
                     connected={deviceStatus.connected}
                   />
-                  <StatusIndicator
-                    label="Temperature"
-                    status={deviceStatus.status.temperature}
-                    connected={deviceStatus.connected}
-                  />
+                  {/* Replaced temperature indicators with mode and pulse details */}
                   <StatusIndicator
                     label="Pointing Correction"
                     status={deviceStatus.status.pointing_correction}
@@ -255,24 +296,44 @@ function DaylightMIRcatView() {
                     connected={deviceStatus.connected}
                     invert={true}
                   />
+                  <StatusIndicator
+                    label="Emission"
+                    status={deviceStatus.status.emission}
+                    connected={deviceStatus.connected}
+                    neutralFalse={true}
+                  />
 
                   <Divider sx={{ my: 2 }} />
 
                   <Box sx={{ mb: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Case Temp 1 (C): {deviceStatus.connected && deviceStatus.status.case_temp_1 !== 0 ? deviceStatus.status.case_temp_1.toFixed(2) : ''}
+                      Laser Mode: {deviceStatus.connected ? (deviceStatus.laser_mode || '-') : '-'}
                     </Typography>
                   </Box>
                   <Box sx={{ mb: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Case Temp 2 (C): {deviceStatus.connected && deviceStatus.status.case_temp_2 !== 0 ? deviceStatus.status.case_temp_2.toFixed(2) : ''}
+                      Wavenumber (cm-1): {deviceStatus.connected && deviceStatus.current_wavenumber ? deviceStatus.current_wavenumber.toFixed(2) : '-'}
                     </Typography>
                   </Box>
-                  <Box sx={{ mb: 2 }}>
+                  <Box sx={{ mb: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      PCB Temperature (C): {deviceStatus.connected && deviceStatus.status.pcb_temperature !== 0 ? deviceStatus.status.pcb_temperature.toFixed(2) : ''}
+                      Wavelength (µm): {deviceStatus.connected && deviceStatus.current_wavenumber ? (10000 / deviceStatus.current_wavenumber).toFixed(4) : '-'}
                     </Typography>
                   </Box>
+                  {deviceStatus?.laser_mode === 'Pulsed' && (
+                    <>
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Pulse Rate (Hz): {deviceStatus.connected && deviceStatus.pulse_rate ? deviceStatus.pulse_rate.toFixed(0) : '-'}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Pulse Width (ns): {deviceStatus.connected && deviceStatus.pulse_width ? deviceStatus.pulse_width.toFixed(0) : '-'}
+                        </Typography>
+                      </Box>
+                    </>
+                  )}
 
                 </>
               )}

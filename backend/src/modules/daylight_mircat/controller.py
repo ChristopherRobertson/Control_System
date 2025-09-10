@@ -58,11 +58,15 @@ class MIRcatController:
         self.temperature_stable = False
         self.scan_in_progress = False
         self.current_scan_mode = None
+        self.current_scan_number: Optional[int] = None
+        self.current_scan_percent: Optional[int] = None
         
         self.config = self._load_config()
         self.current_wavenumber = 0.0
         self.current_qcl = 0
         self.laser_mode = "Pulsed"
+        self.pulse_rate: Optional[float] = None
+        self.pulse_width: Optional[float] = None
         
         # Hardware status - only updated from SDK responses
         self.status = {
@@ -176,6 +180,22 @@ class MIRcatController:
         self._sdk.MIRcatSDK_IsKeySwitchStatusSet.restype = c_uint32
         self._sdk.MIRcatSDK_GetQCLTemperature.restype = c_uint32
         self._sdk.MIRcatSDK_GetTecCurrent.restype = c_uint32
+        self._sdk.MIRcatSDK_GetQCLCurrent.restype = c_uint32
+        self._sdk.MIRcatSDK_GetQCLPulseRate.restype = c_uint32
+        self._sdk.MIRcatSDK_GetQCLPulseWidth.restype = c_uint32
+        self._sdk.MIRcatSDK_SetQCLParams.restype = c_uint32
+        self._sdk.MIRcatSDK_SetAllQclParams.restype = c_uint32
+        self._sdk.MIRcatSDK_StartSweepScan.restype = c_uint32
+        self._sdk.MIRcatSDK_StartStepMeasureModeScan.restype = c_uint32
+        self._sdk.MIRcatSDK_SetNumMultiSpectralElements.restype = c_uint32
+        self._sdk.MIRcatSDK_AddMultiSpectralElement.restype = c_uint32
+        self._sdk.MIRcatSDK_StartMultiSpectralModeScan.restype = c_uint32
+        self._sdk.MIRcatSDK_GetScanStatus.restype = c_uint32
+        self._sdk.MIRcatSDK_StopScanInProgress.restype = c_uint32
+        self._sdk.MIRcatSDK_SetWlTrigParams.restype = c_uint32
+        # Optional manual step API
+        if hasattr(self._sdk, 'MIRcatSDK_ManualStepScanInProgress'):
+            self._sdk.MIRcatSDK_ManualStepScanInProgress.restype = c_uint32
 
     def _sdk_ok(self, ret: int) -> bool:
         return int(ret) == 0
@@ -330,7 +350,11 @@ class MIRcatController:
                 await self.turn_emission_off()
             
             if self.armed:
-                self._mircat_sdk_call("poweroff")
+                # Only disarm; do not power off the system
+                try:
+                    self._mircat_sdk_call("disarm")
+                except Exception as e:
+                    logger.warning(f"Disarm during disconnect reported error: {e}")
             # De-initialize SDK connection if loaded
             try:
                 if self._sdk is not None and self.sdk_initialized:
@@ -388,17 +412,10 @@ class MIRcatController:
                 self.last_error_code = MIRcatError.INTERLOCK_FAULT
                 raise Exception("Interlocks not enabled")
             
-            # Check temperature stability
-            temp_stable = self._mircat_sdk_call("temperaturestable")
-            if not temp_stable:
-                self.last_error = "Temperature not stable - wait for thermal equilibrium"
-                self.last_error_code = MIRcatError.TEMPERATURE_UNSTABLE
-                raise Exception("Temperature not stable")
-            
             # Arm the laser
             self._mircat_sdk_call("arm")
             
-            # Poll for arming up to 15s
+            # Poll for armed state up to 15s
             for _ in range(60):
                 if self._mircat_sdk_call("isarmed"):
                     break
@@ -407,6 +424,16 @@ class MIRcatController:
                 self.last_error = "Arming sequence failed"
                 self.last_error_code = MIRcatError.HARDWARE_ERROR
                 raise Exception("Arming failed")
+            
+            # After arming, wait for TECs at set temperature (SDK sample flow)
+            for _ in range(240):  # up to 60s (0.25s * 240)
+                if self._mircat_sdk_call("temperaturestable"):
+                    break
+                await asyncio.sleep(0.25)
+            else:
+                self.last_error = "Temperature not stable after arming"
+                self.last_error_code = MIRcatError.TEMPERATURE_UNSTABLE
+                raise Exception("Temperature not stable after arming")
             
             # Clear last error on success
             self.last_error = None
@@ -575,8 +602,8 @@ class MIRcatController:
             logger.error(f"Failed to set laser mode to {mode}: {e}")
             return False
     
-    async def set_pulse_parameters(self, pulse_rate: int, pulse_width: int) -> bool:
-        """Set pulse rate and width for pulsed mode"""
+    async def set_pulse_parameters(self, pulse_rate: int, pulse_width: int, current_mA: Optional[float] = None) -> bool:
+        """Set pulse rate and width for pulsed mode. Optionally include current (mA)."""
         if self.laser_mode != "Pulsed":
             self.last_error = "Pulse parameters only valid in Pulsed mode"
             self.last_error_code = MIRcatError.INVALID_PARAMETER
@@ -601,11 +628,36 @@ class MIRcatController:
         
         try:
             logger.info(f"Setting pulse parameters: rate={pulse_rate}, width={pulse_width}")
-            # SDK call would be implemented here
-            
+            qcl = int(self.current_qcl or 1)
+            # Determine current to use
+            if current_mA is None:
+                cur = c_float(0)
+                try:
+                    if self._sdk_ok(self._sdk.MIRcatSDK_GetQCLCurrent(c_uint8(qcl), byref(cur))):
+                        current_mA = float(cur.value)
+                except Exception:
+                    current_mA = None
+            if current_mA is None:
+                current_mA = float(self.config.get('parameters', {}).get('pulsed_current_default', 500))
+            # Apply to current QCL with current
+            ret = self._sdk.MIRcatSDK_SetQCLParams(
+                c_uint8(qcl), c_float(float(pulse_rate)), c_float(float(pulse_width)), c_float(float(current_mA))
+            )
+            if not self._sdk_ok(ret):
+                raise Exception(f"SetQCLParams failed ({int(ret)})")
+            # Read back
+            pr = c_float(0)
+            pw = c_float(0)
+            ret1 = self._sdk.MIRcatSDK_GetQCLPulseRate(c_uint8(qcl), byref(pr))
+            ret2 = self._sdk.MIRcatSDK_GetQCLPulseWidth(c_uint8(qcl), byref(pw))
+            if not (self._sdk_ok(ret1) and self._sdk_ok(ret2)):
+                logger.warning("Readback of pulse parameters failed after setting")
+            else:
+                self.pulse_rate = float(pr.value)
+                self.pulse_width = float(pw.value)
             logger.info("Pulse parameters set successfully")
             return True
-            
+        
         except Exception as e:
             self.last_error = f"Failed to set pulse parameters: {str(e)}"
             logger.error(f"Failed to set pulse parameters: {e}")
@@ -614,7 +666,7 @@ class MIRcatController:
     # Scan Operations - ALL require real MIRcat hardware
     async def start_sweep_scan(self, start_wn: float, end_wn: float, scan_speed: float, 
                               num_scans: int = 1, bidirectional: bool = False) -> bool:
-        """Start sweep scan mode - requires real MIRcat hardware"""
+        """Start sweep scan mode"""
         if not self.connected:
             self.last_error = "MIRcat device not connected"
             self.last_error_code = MIRcatError.NOT_CONNECTED
@@ -627,15 +679,16 @@ class MIRcatController:
         
         try:
             logger.info(f"Starting sweep scan: {start_wn} to {end_wn} cm-1")
-            
-            # Real SDK calls would be:
-            # result = mircat_sdk.MIRcatSDK_StartSweepScan(start_wn, end_wn, scan_speed, num_scans, bidirectional)
-            # if result != 0:
-            #     raise Exception(f"Sweep scan initialization failed with code {result}")
-            
-            # Since we don't have real hardware, this will fail
-            raise Exception("MIRcat SDK required - cannot start sweep scan without real hardware")
-            
+            qcl = int(self.current_qcl or 1)
+            ret = self._sdk.MIRcatSDK_StartSweepScan(
+                c_float(float(start_wn)), c_float(float(end_wn)), c_float(float(scan_speed)),
+                c_uint8(self._UNITS_CM1), c_uint16(int(num_scans)), c_bool(bool(bidirectional)), c_uint8(qcl)
+            )
+            if not self._sdk_ok(ret):
+                raise Exception(f"StartSweepScan failed ({int(ret)})")
+            self.scan_in_progress = True
+            self.current_scan_mode = ScanMode.SWEEP
+            return True
         except Exception as e:
             self.last_error = f"Failed to start sweep scan: {str(e)}"
             self.last_error_code = MIRcatError.HARDWARE_ERROR
@@ -644,7 +697,7 @@ class MIRcatController:
 
     async def start_step_scan(self, start_wn: float, end_wn: float, step_size: float,
                              dwell_time: int, num_scans: int = 1) -> bool:
-        """Start step and measure scan mode - requires real MIRcat hardware"""
+        """Start step and measure scan mode"""
         if not self.connected:
             self.last_error = "MIRcat device not connected"
             self.last_error_code = MIRcatError.NOT_CONNECTED
@@ -656,16 +709,60 @@ class MIRcatController:
             raise Exception("Laser must be armed before starting scan")
         
         try:
-            logger.info(f"Starting step scan: {start_wn} to {end_wn} cm-1, step={step_size}")
-            
-            # Real SDK calls would be:
-            # result = mircat_sdk.MIRcatSDK_StartStepScan(start_wn, end_wn, step_size, dwell_time, num_scans)
-            # if result != 0:
-            #     raise Exception(f"Step scan initialization failed with code {result}")
-            
-            # Since we don't have real hardware, this will fail
-            raise Exception("MIRcat SDK required - cannot start step scan without real hardware")
-            
+            # Load settings for trigger mode and dwell
+            proc_mode = 1  # internal default
+            pulse_mode = 1
+            step_time_ms = dwell_time
+            step_delay_ms = 0
+            try:
+                settings_path = Path(__file__).parent / 'user_settings.json'
+                if settings_path.exists():
+                    import json as _json
+                    with open(settings_path, 'r') as f:
+                        data = _json.load(f)
+                    mode_map = {
+                        'Use Internal Step Mode': 1, 'internal': 1,
+                        'Use External Step Mode': 2, 'external': 2,
+                        'Use Manual Step Mode': 3, 'manual': 3,
+                    }
+                    pulse_map = {
+                        'Use Internal Pulse Mode': 1, 'internal': 1,
+                        'Use External Trigger Mode': 2, 'external_trigger': 2,
+                        'Use External Pulse Mode': 3, 'external_pulse': 3,
+                        'Use Wavelength Trigger Pulse Mode': 4, 'wavelength_trigger': 4,
+                    }
+                    proc_mode = mode_map.get(data.get('processTriggerMode'), proc_mode)
+                    pulse_mode = pulse_map.get(data.get('pulseMode'), pulse_mode)
+                    if data.get('internalStepTime') is not None:
+                        step_time_ms = int(data.get('internalStepTime'))
+                    if data.get('internalStepDelay') is not None:
+                        step_delay_ms = int(data.get('internalStepDelay'))
+            except Exception as e:
+                logger.warning(f"Reading user settings failed: {e}")
+
+            logger.info(f"Starting step scan: {start_wn} to {end_wn} cm-1, step={step_size}, dwell={step_time_ms}ms, proc_mode={proc_mode}")
+            # Configure dwell/trigger params
+            try:
+                dwell_us = int(max(0, step_time_ms) * 1000)
+                delay_us = int(max(0, step_delay_ms) * 1000)
+                retp = self._sdk.MIRcatSDK_SetWlTrigParams(
+                    c_uint8(pulse_mode), c_uint8(proc_mode),
+                    c_float(float(start_wn)), c_float(float(end_wn)), c_float(float(step_size)),
+                    c_uint8(self._UNITS_CM1), c_uint32(dwell_us), c_uint32(delay_us)
+                )
+                if not self._sdk_ok(retp):
+                    logger.warning(f"SetWlTrigParams returned code {int(retp)}")
+            except Exception as e:
+                logger.warning(f"SetWlTrigParams failed (continuing): {e}")
+            ret = self._sdk.MIRcatSDK_StartStepMeasureModeScan(
+                c_float(float(start_wn)), c_float(float(end_wn)), c_float(float(step_size)),
+                c_uint8(self._UNITS_CM1), c_uint16(int(num_scans))
+            )
+            if not self._sdk_ok(ret):
+                raise Exception(f"StartStepMeasureModeScan failed ({int(ret)})")
+            self.scan_in_progress = True
+            self.current_scan_mode = ScanMode.STEP
+            return True
         except Exception as e:
             self.last_error = f"Failed to start step scan: {str(e)}"
             self.last_error_code = MIRcatError.HARDWARE_ERROR
@@ -674,7 +771,7 @@ class MIRcatController:
 
     async def start_multispectral_scan(self, wavelength_list: List[Dict], num_scans: int = 1,
                                       keep_laser_on: bool = False) -> bool:
-        """Start multi-spectral scan mode - requires real MIRcat hardware"""
+        """Start multi-spectral scan mode"""
         if not self.connected:
             self.last_error = "MIRcat device not connected"
             self.last_error_code = MIRcatError.NOT_CONNECTED
@@ -687,15 +784,34 @@ class MIRcatController:
         
         try:
             logger.info(f"Starting multispectral scan with {len(wavelength_list)} wavelengths")
-            
-            # Real SDK calls would be:
-            # result = mircat_sdk.MIRcatSDK_StartMultiSpectralScan(wavelength_list, num_scans, keep_laser_on)
-            # if result != 0:
-            #     raise Exception(f"Multispectral scan initialization failed with code {result}")
-            
-            # Since we don't have real hardware, this will fail
-            raise Exception("MIRcat SDK required - cannot start multispectral scan without real hardware")
-            
+            # Program the table (clamp to valid wn range)
+            count = max(0, len(wavelength_list))
+            ret = self._sdk.MIRcatSDK_SetNumMultiSpectralElements(c_uint8(count))
+            if not self._sdk_ok(ret):
+                raise Exception(f"SetNumMultiSpectralElements failed ({int(ret)})")
+            for entry in wavelength_list:
+                wn = float(entry.get('wavenumber'))
+                try:
+                    params = self.config.get('parameters', {})
+                    wn_min = float(params.get('wavenumber_min', 1638.81))
+                    wn_max = float(params.get('wavenumber_max', 2077.27))
+                    if wn < wn_min: wn = wn_min
+                    if wn > wn_max: wn = wn_max
+                except Exception:
+                    pass
+                dwell = int(entry.get('dwell_time'))
+                off = int(entry.get('off_time'))
+                ret = self._sdk.MIRcatSDK_AddMultiSpectralElement(
+                    c_float(wn), c_uint8(self._UNITS_CM1), c_uint32(dwell), c_uint32(off)
+                )
+                if not self._sdk_ok(ret):
+                    raise Exception(f"AddMultiSpectralElement failed ({int(ret)}) for {wn}")
+            ret = self._sdk.MIRcatSDK_StartMultiSpectralModeScan(c_uint16(int(num_scans)))
+            if not self._sdk_ok(ret):
+                raise Exception(f"StartMultiSpectralModeScan failed ({int(ret)})")
+            self.scan_in_progress = True
+            self.current_scan_mode = ScanMode.MULTISPECTRAL
+            return True
         except Exception as e:
             self.last_error = f"Failed to start multispectral scan: {str(e)}"
             self.last_error_code = MIRcatError.HARDWARE_ERROR
@@ -703,7 +819,7 @@ class MIRcatController:
             return False
 
     async def stop_scan(self) -> bool:
-        """Stop any active scan - requires real MIRcat hardware"""
+        """Stop any active scan"""
         if not self.connected:
             self.last_error = "MIRcat device not connected"
             self.last_error_code = MIRcatError.NOT_CONNECTED
@@ -711,19 +827,86 @@ class MIRcatController:
         
         try:
             logger.info("Stopping scan...")
-            
-            # Real SDK call would be:
-            # result = mircat_sdk.MIRcatSDK_StopScan()
-            # if result != 0:
-            #     raise Exception(f"Stop scan failed with code {result}")
-            
-            # Since we don't have real hardware, this will fail
-            raise Exception("MIRcat SDK required - cannot stop scan without real hardware")
-            
+            ret = self._sdk.MIRcatSDK_StopScanInProgress()
+            if not self._sdk_ok(ret):
+                raise Exception(f"StopScanInProgress failed ({int(ret)})")
+            self.scan_in_progress = False
+            self.current_scan_mode = None
+            await self._update_hardware_status()
+            return True
         except Exception as e:
             self.last_error = f"Failed to stop scan: {str(e)}"
             self.last_error_code = MIRcatError.HARDWARE_ERROR
             logger.error(f"Failed to stop scan: {e}")
+            return False
+
+    async def manual_step(self) -> bool:
+        """Manually advance a Step & Measure scan by one step (manual mode)."""
+        if not self.connected:
+            self.last_error = "MIRcat device not connected"
+            self.last_error_code = MIRcatError.NOT_CONNECTED
+            raise Exception("MIRcat device not connected")
+        try:
+            if not hasattr(self._sdk, 'MIRcatSDK_ManualStepScanInProgress'):
+                raise Exception("ManualStepScanInProgress not supported in SDK")
+            ret = self._sdk.MIRcatSDK_ManualStepScanInProgress()
+            if not self._sdk_ok(ret):
+                raise Exception(f"ManualStepScanInProgress failed ({int(ret)})")
+            return True
+        except Exception as e:
+            self.last_error = f"Manual step failed: {str(e)}"
+            self.last_error_code = MIRcatError.HARDWARE_ERROR
+            logger.error(f"Manual step failed: {e}")
+            return False
+
+    async def clear_error(self) -> bool:
+        """Clear last error info in controller."""
+        self.last_error = None
+        self.last_error_code = None
+        return True
+
+    async def apply_trigger_settings(self, data: Dict[str, Any]) -> bool:
+        """Apply pulse and process trigger modes + wavelength trigger params from persisted settings."""
+        try:
+            pulse_mode_map = {
+                'Use Internal Pulse Mode': 1,
+                'Use External Trigger Mode': 2,
+                'Use External Pulse Mode': 3,
+                'Use Wavelength Trigger Pulse Mode': 4,
+                'internal': 1,
+                'external_trigger': 2,
+                'external_pulse': 3,
+                'wavelength_trigger': 4,
+            }
+            proc_mode_map = {
+                'Use Internal Step Mode': 1,
+                'Use External Step Mode': 2,
+                'Use Manual Step Mode': 3,
+                'internal': 1,
+                'external': 2,
+                'manual': 3,
+            }
+            pulseMode = data.get('pulseMode')
+            processTriggerMode = data.get('processTriggerMode')
+            wlTrigStart = float(data.get('wlTrigStart') or 0)
+            wlTrigStop = float(data.get('wlTrigStop') or 0)
+            wlTrigInterval = float(data.get('wlTrigInterval') or 0)
+            internalStepTime = int(data.get('internalStepTime') or 0)
+            internalStepDelay = int(data.get('internalStepDelay') or 0)
+            pbPulseMode = pulse_mode_map.get(pulseMode or 'internal', 1)
+            pbProcTrigMode = proc_mode_map.get(processTriggerMode or 'internal', 1)
+            # Call combined parameter setter if available
+            if hasattr(self._sdk, 'MIRcatSDK_SetWlTrigParams'):
+                ret = self._sdk.MIRcatSDK_SetWlTrigParams(
+                    c_uint8(pbPulseMode), c_uint8(pbProcTrigMode),
+                    c_float(wlTrigStart), c_float(wlTrigStop), c_float(wlTrigInterval),
+                    c_uint8(self._UNITS_CM1), c_uint32(internalStepTime * 1000), c_uint32(internalStepDelay * 1000)
+                )
+                if not self._sdk_ok(ret):
+                    logger.warning(f"SetWlTrigParams returned {int(ret)}")
+            return True
+        except Exception as e:
+            logger.warning(f"apply_trigger_settings failed: {e}")
             return False
 
     async def _update_hardware_status(self) -> None:
@@ -751,6 +934,36 @@ class MIRcatController:
                 self.tuned = self.status["tuned"]
                 self.temperature_stable = self.status["temperature"]
                 self.emission_on = self.status["emission"]
+                # Read pulse parameters (ignore failures silently)
+                try:
+                    qcl = int(self.current_qcl or 1)
+                    pr = c_float(0); pw = c_float(0)
+                    if self._sdk_ok(self._sdk.MIRcatSDK_GetQCLPulseRate(c_uint8(qcl), byref(pr))):
+                        self.pulse_rate = float(pr.value)
+                    if self._sdk_ok(self._sdk.MIRcatSDK_GetQCLPulseWidth(c_uint8(qcl), byref(pw))):
+                        self.pulse_width = float(pw.value)
+                except Exception:
+                    pass
+                # Read scan status
+                try:
+                    in_prog = c_bool(False); active=c_bool(False); paused=c_bool(False)
+                    cur_scan = c_uint16(0); cur_pct=c_uint16(0); cur_ww=c_float(0)
+                    units=c_uint8(0); tec=c_bool(False); motion=c_bool(False)
+                    if self._sdk_ok(self._sdk.MIRcatSDK_GetScanStatus(byref(in_prog), byref(active), byref(paused),
+                                              byref(cur_scan), byref(cur_pct), byref(cur_ww), byref(units), byref(tec), byref(motion))):
+                        self.scan_in_progress = bool(in_prog.value)
+                        self.current_scan_number = int(cur_scan.value)
+                        self.current_scan_percent = int(cur_pct.value)
+                        if cur_ww.value > 0:
+                            if int(units.value) == int(self._UNITS_CM1):
+                                self.current_wavenumber = float(cur_ww.value)
+                            else:
+                                try:
+                                    self.current_wavenumber = 10000.0 / float(cur_ww.value)
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
             else:
                 # Reset all status when disconnected
                 self.status.update({
@@ -788,9 +1001,13 @@ class MIRcatController:
             "current_wavenumber": self.current_wavenumber,
             "current_qcl": self.current_qcl,
             "laser_mode": self.laser_mode,
+            "pulse_rate": self.pulse_rate,
+            "pulse_width": self.pulse_width,
             "tuned": self.tuned,
             "temperature_stable": self.temperature_stable,
             "scan_in_progress": self.scan_in_progress,
+            "current_scan_number": self.current_scan_number,
+            "current_scan_percent": self.current_scan_percent,
             "current_scan_mode": self.current_scan_mode.value if self.current_scan_mode else None,
             "status": self.status,
             "last_error": self.last_error,

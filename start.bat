@@ -46,21 +46,34 @@ if exist "%_SDK_DIR%\MIRcatSDK.dll" (
     )
 )
 
-cd /d "%~dp0backend"
+set "BACKEND_DIR=%~dp0backend"
+pushd "%BACKEND_DIR%"
 
 REM Check and install Python dependencies
 echo 🔧 Checking Python dependencies...
-if not exist "venv" (
+set "VENV_DIR=%BACKEND_DIR%\venv"
+set "ACT=%VENV_DIR%\Scripts\activate.bat"
+
+REM If venv folder missing OR activation missing, (re)create venv
+if not exist "%ACT%" (
+    if exist "%VENV_DIR%" (
+        echo Found incomplete virtual environment. Removing and recreating...
+        rmdir /s /q "%VENV_DIR%" >nul 2>&1
+    )
     echo Creating Python virtual environment...
-    python -m venv venv
+    python -m venv "%VENV_DIR%"
     if errorlevel 1 (
-        echo ERROR: Failed to create virtual environment.
+        echo First attempt to create venv failed. Trying with Python launcher...
+        py -3 -m venv "%VENV_DIR%"
+    )
+    if not exist "%ACT%" (
+        echo ERROR: Failed to create virtual environment at "%VENV_DIR%".
         echo Trying global pip install instead...
         rem First try user-level install to avoid permission issues
-        python -m pip install --user -r requirements.txt
+        python -m pip install --user -r "%BACKEND_DIR%\requirements.txt"
         if errorlevel 1 (
             echo Global user-level install failed. Attempting system-wide pip install...
-            python -m pip install -r requirements.txt
+            python -m pip install -r "%BACKEND_DIR%\requirements.txt"
             if errorlevel 1 (
                 echo ERROR: Failed to install Python dependencies globally.
                 echo Tip: Try running PowerShell as Administrator, or ensure internet access for pip.
@@ -72,14 +85,16 @@ if not exist "venv" (
     )
 )
 
-REM Check if activation script exists
-if not exist "venv\Scripts\activate.bat" (
-    echo ERROR: Virtual environment creation failed.
+REM Check if activation script exists (diagnose path issues explicitly)
+if exist "%ACT%" (
+    echo Found virtual environment: "%ACT%"
+) else (
+    echo ERROR: Virtual environment activation script missing: "%ACT%"
     echo Trying global pip install instead...
-    python -m pip install --user -r requirements.txt
+    python -m pip install --user -r "%BACKEND_DIR%\requirements.txt"
     if errorlevel 1 (
         echo Global user-level install failed. Attempting system-wide pip install...
-        python -m pip install -r requirements.txt
+        python -m pip install -r "%BACKEND_DIR%\requirements.txt"
         if errorlevel 1 (
             echo ERROR: Failed to install Python dependencies globally.
             echo Tip: Try running PowerShell as Administrator, or ensure internet access for pip.
@@ -95,7 +110,7 @@ call venv\Scripts\activate.bat
 if errorlevel 1 (
     echo ERROR: Failed to activate virtual environment.
     echo Trying global installation...
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
     if errorlevel 1 (
         echo ERROR: Failed to install Python dependencies globally.
         pause
@@ -104,7 +119,7 @@ if errorlevel 1 (
     goto :start_backend_global
 )
 
-python -m pip install -r requirements.txt
+python -m pip install -r "%BACKEND_DIR%\requirements.txt"
 if errorlevel 1 (
     echo ERROR: Failed to install Python dependencies in virtual environment.
     pause
@@ -112,14 +127,14 @@ if errorlevel 1 (
 )
 
 echo 🔧 Starting FastAPI Backend...
-start "FastAPI Backend" cmd /k "cd /d "%~dp0backend" && call venv\Scripts\activate.bat && python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
+start "FastAPI Backend" cmd /k "cd /d "%BACKEND_DIR%" && call "%ACT%" && python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
 cd /d "%~dp0"
 goto :start_frontend
 
 :start_backend_global
 echo 🔧 Starting FastAPI Backend (global Python)...
-start "FastAPI Backend" cmd /k "cd /d "%~dp0backend" && python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
-cd /d "%~dp0"
+start "FastAPI Backend" cmd /k "cd /d "%BACKEND_DIR%" && python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
+popd
 
 :start_frontend
 
@@ -156,6 +171,11 @@ if not exist "node_modules" (
 echo 🎨 Starting React Frontend...
 start "React Frontend" cmd /k "cd /d "%~dp0frontend" && pnpm run dev -- --host 0.0.0.0 --port 5000"
 cd /d "%~dp0"
+
+REM Open default browser to the UI after a short wait
+echo Opening browser to UI at http://localhost:5000 ...
+timeout /t 2 /nobreak >nul
+start "" http://localhost:5000
 
 echo.
 echo ✅ Services started successfully!
