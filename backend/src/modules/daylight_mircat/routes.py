@@ -252,6 +252,7 @@ async def get_config():
 async def start_sweep_scan(request: SweepScanRequest):
     """Start sweep scan mode"""
     try:
+        logger.info(f"Sweep request params: {request.dict()}")
         success = await mircat_controller.start_sweep_scan(
             request.start_wavenumber,
             request.end_wavenumber,

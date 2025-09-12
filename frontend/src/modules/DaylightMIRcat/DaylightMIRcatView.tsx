@@ -285,11 +285,16 @@ function DaylightMIRcatView() {
                     connected={deviceStatus.connected}
                   />
                   {/* Replaced temperature indicators with mode and pulse details */}
-                  <StatusIndicator
+                  {/**
+                   * TODO: Pointing Correction indicator disabled pending accurate SDK wiring.
+                   * The current DLL/status path does not reliably expose pointing compensation state.
+                   * Re-enable this row when backend reports a definitive supported/enabled status.
+                   */}
+                  {/* <StatusIndicator
                     label="Pointing Correction"
-                    status={deviceStatus.status.pointing_correction}
-                    connected={deviceStatus.connected}
-                  />
+                    status={!!deviceStatus.status.pointing_correction}
+                    connected={deviceStatus.connected && (deviceStatus.status.pointing_supported !== false)}
+                  /> */}
                   <StatusIndicator
                     label="System Fault"
                     status={deviceStatus.status.system_fault}

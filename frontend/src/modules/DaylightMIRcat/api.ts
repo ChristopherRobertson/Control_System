@@ -30,12 +30,16 @@ export interface DeviceStatus {
     connected: boolean
     emission: boolean
     pointing_correction: boolean
+    pointing_supported?: boolean | null
+    pointing_x_enabled?: boolean | null
+    pointing_y_enabled?: boolean | null
     system_fault: boolean
     case_temp_1: number
     case_temp_2: number
     pcb_temperature: number
     tuned: boolean
     armed: boolean
+    sweep_bidirectional?: boolean | null
   }
 }
 

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Union
 import logging
 from enum import Enum
-from ctypes import CDLL, c_uint16, c_uint8, c_uint32, c_float, c_bool, byref
+from ctypes import CDLL, c_uint16, c_uint8, c_uint32, c_float, c_bool, byref, POINTER
 from ctypes.util import find_library
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,9 @@ class MIRcatController:
             "connected": False,
             "emission": False,
             "pointing_correction": False,
+            "pointing_supported": None,
+            "pointing_x_enabled": None,
+            "pointing_y_enabled": None,
             "system_fault": True,
             "case_temp_1": 0.0,
             "case_temp_2": 0.0,
@@ -86,6 +89,15 @@ class MIRcatController:
         
         self.last_error = None
         self.last_error_code = None
+        # Track last-reported pointing state to reduce log spam
+        self._last_pointing_supported: Optional[bool] = None
+        self._last_pointing_enabled: Optional[bool] = None
+        self._pointing_logged_once: bool = False
+
+        # Internal ping-pong management for forced bidirectional sweep
+        self._pingpong_task: Optional[asyncio.Task] = None
+        self._pingpong_cancel: bool = False
+        self._pingpong_active: bool = False
 
         # Constants (mirroring SDK header values used here)
         self._UNITS_MICRONS = 1
@@ -165,6 +177,11 @@ class MIRcatController:
         self._sdk.MIRcatSDK_SetSerialParams.restype = c_uint32
         self._sdk.MIRcatSDK_GetAPIVersion.restype = c_uint32
         self._sdk.MIRcatSDK_GetNumInstalledQcls.restype = c_uint32
+        try:
+            from ctypes import POINTER as _PTR
+            self._sdk.MIRcatSDK_GetNumInstalledQcls.argtypes = [_PTR(c_uint8)]
+        except Exception:
+            pass
         self._sdk.MIRcatSDK_IsLaserArmed.restype = c_uint32
         self._sdk.MIRcatSDK_DisarmLaser.restype = c_uint32
         self._sdk.MIRcatSDK_ArmDisarmLaser.restype = c_uint32
@@ -186,7 +203,33 @@ class MIRcatController:
         self._sdk.MIRcatSDK_SetQCLParams.restype = c_uint32
         self._sdk.MIRcatSDK_SetAllQclParams.restype = c_uint32
         self._sdk.MIRcatSDK_StartSweepScan.restype = c_uint32
+        # Ensure correct parameter marshaling for sweep scan start
+        try:
+            self._sdk.MIRcatSDK_StartSweepScan.argtypes = [
+                c_float,  # fStartWW
+                c_float,  # fStopWW
+                c_float,  # fScanSpeed
+                c_uint8,  # bUnits
+                c_uint16, # wNumScans
+                c_bool,   # bIsBiDirectional (C bool)
+                c_uint8   # u8PreferredQcl
+            ]
+        except Exception:
+            pass
         self._sdk.MIRcatSDK_StartStepMeasureModeScan.restype = c_uint32
+        self._sdk.MIRcatSDK_IsSweepBidirectional.restype = c_uint32
+        try:
+            self._sdk.MIRcatSDK_IsSweepBidirectional.argtypes = [POINTER(c_bool)]
+        except Exception:
+            pass
+        # Optional helpers to introspect sweep params
+        try:
+            if hasattr(self._sdk, 'MIRcatSDK_GetSweepNumScans'):
+                self._sdk.MIRcatSDK_GetSweepNumScans.restype = c_uint32
+                from ctypes import POINTER as _PTR  # avoid top-level name collision
+                self._sdk.MIRcatSDK_GetSweepNumScans.argtypes = [_PTR(c_uint16)]
+        except Exception:
+            pass
         self._sdk.MIRcatSDK_SetNumMultiSpectralElements.restype = c_uint32
         self._sdk.MIRcatSDK_AddMultiSpectralElement.restype = c_uint32
         self._sdk.MIRcatSDK_StartMultiSpectralModeScan.restype = c_uint32
@@ -196,6 +239,60 @@ class MIRcatController:
         # Optional manual step API
         if hasattr(self._sdk, 'MIRcatSDK_ManualStepScanInProgress'):
             self._sdk.MIRcatSDK_ManualStepScanInProgress.restype = c_uint32
+
+        # Optional Advanced Sweep APIs (guarded by config; some SDKs expose these)
+        try:
+            if hasattr(self._sdk, 'MIRcatSDK_SetAdvancedSweepParams'):
+                self._sdk.MIRcatSDK_SetAdvancedSweepParams.restype = c_uint32
+                # uint8 units, float start, float stop, float speed, uint16 numScans, bool bidir
+                self._sdk.MIRcatSDK_SetAdvancedSweepParams.argtypes = [
+                    c_uint8, c_float, c_float, c_float, c_uint16, c_bool
+                ]
+            if hasattr(self._sdk, 'MIRcatSDK_SetAdvancedSweepChanParams'):
+                self._sdk.MIRcatSDK_SetAdvancedSweepChanParams.restype = c_uint32
+                # uint8 qcl, float chStart, float chStop, bool useChannel
+                self._sdk.MIRcatSDK_SetAdvancedSweepChanParams.argtypes = [
+                    c_uint8, c_float, c_float, c_bool
+                ]
+            if hasattr(self._sdk, 'MIRcatSDK_StartSweepAdvancedScan'):
+                self._sdk.MIRcatSDK_StartSweepAdvancedScan.restype = c_uint32
+                self._sdk.MIRcatSDK_StartSweepAdvancedScan.argtypes = []
+            if hasattr(self._sdk, 'MIRcatSDK_ReadWriteAdvancedSweepParams'):
+                self._sdk.MIRcatSDK_ReadWriteAdvancedSweepParams.restype = c_uint32
+                self._sdk.MIRcatSDK_ReadWriteAdvancedSweepParams.argtypes = [c_bool]
+        except Exception:
+            pass
+        # Optional getters for sweep configuration to aid debugging
+        try:
+            if hasattr(self._sdk, 'MIRcatSDK_GetSweepStartWW'):
+                self._sdk.MIRcatSDK_GetSweepStartWW.restype = c_uint32
+                self._sdk.MIRcatSDK_GetSweepStartWW.argtypes = [POINTER(c_float), POINTER(c_uint8)]
+            if hasattr(self._sdk, 'MIRcatSDK_GetSweepStopWW'):
+                self._sdk.MIRcatSDK_GetSweepStopWW.restype = c_uint32
+                self._sdk.MIRcatSDK_GetSweepStopWW.argtypes = [POINTER(c_float), POINTER(c_uint8)]
+            if hasattr(self._sdk, 'MIRcatSDK_GetSweepScanSpeed'):
+                self._sdk.MIRcatSDK_GetSweepScanSpeed.restype = c_uint32
+                self._sdk.MIRcatSDK_GetSweepScanSpeed.argtypes = [POINTER(c_float), POINTER(c_uint8)]
+            if hasattr(self._sdk, 'MIRcatSDK_GetSweepNumScans'):
+                self._sdk.MIRcatSDK_GetSweepNumScans.restype = c_uint32
+                self._sdk.MIRcatSDK_GetSweepNumScans.argtypes = [POINTER(c_uint16)]
+            if hasattr(self._sdk, 'MIRcatSDK_GetActiveQcl'):
+                self._sdk.MIRcatSDK_GetActiveQcl.restype = c_uint32
+                self._sdk.MIRcatSDK_GetActiveQcl.argtypes = [POINTER(c_uint8)]
+        except Exception:
+            pass
+        # Pointing compensation SDK hooks (read-only; do not modify device state)
+        try:
+            if hasattr(self._sdk, 'MIRcatSDK_PointingControlsSupported'):
+                self._sdk.MIRcatSDK_PointingControlsSupported.restype = c_uint32
+                self._sdk.MIRcatSDK_PointingControlsSupported.argtypes = [POINTER(c_bool)]
+            if hasattr(self._sdk, 'MIRcatSDK_PointingGetCompensationEnabled'):
+                self._sdk.MIRcatSDK_PointingGetCompensationEnabled.restype = c_uint32
+                self._sdk.MIRcatSDK_PointingGetCompensationEnabled.argtypes = [POINTER(c_bool), POINTER(c_bool)]
+        except Exception:
+            pass
+
+    # (removed) _log_sdk_info helper
 
     def _sdk_ok(self, ret: int) -> bool:
         return int(ret) == 0
@@ -667,6 +764,10 @@ class MIRcatController:
     async def start_sweep_scan(self, start_wn: float, end_wn: float, scan_speed: float, 
                               num_scans: int = 1, bidirectional: bool = False) -> bool:
         """Start sweep scan mode"""
+        # TODO: Investigate MIRcat SDK retrace behavior. Bidirectional flag is accepted
+        # by standard/advanced APIs, but some firmware performs tune-retrace instead of
+        # scan-retrace, causing a jump at endpoints. Confirm if an additional retrace
+        # option exists in target SDK/firmware and wire it here.
         if not self.connected:
             self.last_error = "MIRcat device not connected"
             self.last_error_code = MIRcatError.NOT_CONNECTED
@@ -678,22 +779,226 @@ class MIRcatController:
             raise Exception("Laser must be armed before starting scan")
         
         try:
-            logger.info(f"Starting sweep scan: {start_wn} to {end_wn} cm-1")
             qcl = int(self.current_qcl or 1)
-            ret = self._sdk.MIRcatSDK_StartSweepScan(
-                c_float(float(start_wn)), c_float(float(end_wn)), c_float(float(scan_speed)),
-                c_uint8(self._UNITS_CM1), c_uint16(int(num_scans)), c_bool(bool(bidirectional)), c_uint8(qcl)
+            # Map 0/negative (UI infinite) to a large finite value for compatibility
+            ns = int(num_scans)
+            if ns <= 0:
+                ns = 65535
+            logger.info(f"Starting sweep scan: {start_wn} to {end_wn} cm-1, speed={scan_speed}, scans={ns}, bidirectional={bool(bidirectional)}")
+
+            # Cancel any manual tune mode per SDK guidance
+            try:
+                if hasattr(self._sdk, 'MIRcatSDK_CancelManualTuneMode'):
+                    _ = self._sdk.MIRcatSDK_CancelManualTuneMode()
+            except Exception:
+                pass
+
+            # Do not touch pointing compensation from here (SDK-only behavior per user request)
+
+            # Use Advanced sweep only when explicitly enabled in config
+            used_advanced = False
+            use_adv_cfg = bool(self.config.get('parameters', {}).get('use_advanced_sweep', False))
+            can_advanced = all(
+                hasattr(self._sdk, name) for name in (
+                    'MIRcatSDK_SetAdvancedSweepParams',
+                    'MIRcatSDK_StartSweepAdvancedScan'
+                )
             )
-            if not self._sdk_ok(ret):
-                raise Exception(f"StartSweepScan failed ({int(ret)})")
+            if bidirectional and use_adv_cfg and can_advanced:
+                try:
+                    retp = self._sdk.MIRcatSDK_SetAdvancedSweepParams(
+                        c_uint8(self._UNITS_CM1), c_float(float(start_wn)), c_float(float(end_wn)), c_float(float(scan_speed)),
+                        c_uint16(ns), c_bool(True)
+                    )
+                    if not self._sdk_ok(retp):
+                        raise Exception(f"SetAdvancedSweepParams failed ({int(retp)})")
+                    # Configure channel usage: enable current QCL only; disable others
+                    try:
+                        n = c_uint8(0)
+                        if self._sdk_ok(self._sdk.MIRcatSDK_GetNumInstalledQcls(byref(n))):
+                            total = int(n.value) or 1
+                        else:
+                            total = 1
+                    except Exception:
+                        total = 1
+                    if hasattr(self._sdk, 'MIRcatSDK_SetAdvancedSweepChanParams'):
+                        for ch in range(1, max(1, total) + 1):
+                            use = (ch == qcl)
+                            retc = self._sdk.MIRcatSDK_SetAdvancedSweepChanParams(
+                                c_uint8(ch), c_float(float(start_wn)), c_float(float(end_wn)), c_bool(use)
+                            )
+                            if not self._sdk_ok(retc):
+                                logger.warning(f"SetAdvancedSweepChanParams returned {int(retc)} for QCL {ch}")
+                    if hasattr(self._sdk, 'MIRcatSDK_ReadWriteAdvancedSweepParams'):
+                        _ = self._sdk.MIRcatSDK_ReadWriteAdvancedSweepParams(c_bool(True))
+                    reta = self._sdk.MIRcatSDK_StartSweepAdvancedScan()
+                    if not self._sdk_ok(reta):
+                        raise Exception(f"StartSweepAdvancedScan failed ({int(reta)})")
+                    used_advanced = True
+                except Exception as adv_e:
+                    logger.warning(f"Advanced sweep start failed ({adv_e}); falling back to standard sweep API")
+
+            if not used_advanced:
+                # Prefer the currently selected QCL (1..4); firmware may require explicit channel for bidirectional sweeps
+                ret = self._sdk.MIRcatSDK_StartSweepScan(
+                    c_float(float(start_wn)), c_float(float(end_wn)), c_float(float(scan_speed)),
+                    c_uint8(self._UNITS_CM1), c_uint16(ns), c_bool(True if bidirectional else False), c_uint8(qcl)
+                )
+                if not self._sdk_ok(ret):
+                    raise Exception(f"StartSweepScan failed ({int(ret)})")
+
             self.scan_in_progress = True
             self.current_scan_mode = ScanMode.SWEEP
+            # Final confirmation log and optional software fallback
+            try:
+                f_bidir = c_bool(False)
+                if self._sdk_ok(self._sdk.MIRcatSDK_IsSweepBidirectional(byref(f_bidir))):
+                    self.status["sweep_bidirectional"] = bool(f_bidir.value)
+                # Readback of configured sweep parameters for diagnosis
+                try:
+                    sv = c_float(0); st = c_float(0); sp = c_float(0)
+                    u1 = c_uint8(0); u2 = c_uint8(0); u3 = c_uint8(0)
+                    ns_read = c_uint16(0)
+                    act_qcl = c_uint8(0)
+                    if hasattr(self._sdk, 'MIRcatSDK_GetSweepStartWW'):
+                        _ = self._sdk.MIRcatSDK_GetSweepStartWW(byref(st), byref(u1))
+                    if hasattr(self._sdk, 'MIRcatSDK_GetSweepStopWW'):
+                        _ = self._sdk.MIRcatSDK_GetSweepStopWW(byref(sp), byref(u2))
+                    if hasattr(self._sdk, 'MIRcatSDK_GetSweepScanSpeed'):
+                        _ = self._sdk.MIRcatSDK_GetSweepScanSpeed(byref(sv), byref(u3))
+                    if hasattr(self._sdk, 'MIRcatSDK_GetSweepNumScans'):
+                        _ = self._sdk.MIRcatSDK_GetSweepNumScans(byref(ns_read))
+                    if hasattr(self._sdk, 'MIRcatSDK_GetActiveQcl'):
+                        _ = self._sdk.MIRcatSDK_GetActiveQcl(byref(act_qcl))
+                    # Also try advanced readback when available
+                    adv_bidir = None
+                    try:
+                        if hasattr(self._sdk, 'MIRcatSDK_GetAdvancedSweepParams'):
+                            au = c_uint8(0); astart = c_float(0); astop=c_float(0); aspeed=c_float(0); ans=c_uint16(0); abidir=c_bool(False)
+                            if self._sdk_ok(self._sdk.MIRcatSDK_GetAdvancedSweepParams(byref(au), byref(astart), byref(astop), byref(aspeed), byref(ans), byref(abidir))):
+                                adv_bidir = bool(abidir.value)
+                    except Exception:
+                        pass
+                    logger.info(
+                        f"Sweep config readback: bidir={self.status.get('sweep_bidirectional')}, adv_bidir={adv_bidir}, "
+                        f"start={float(st.value) if st.value else None}, stop={float(sp.value) if sp.value else None}, "
+                        f"speed={float(sv.value) if sv.value else None}, ns={int(ns_read.value)}, act_qcl={int(act_qcl.value)}"
+                    )
+                except Exception:
+                    pass
+                logger.info(f"Sweep bidirectional set: {bool(self.status.get('sweep_bidirectional'))} (advanced={used_advanced})")
+                # Optional software fallback is disabled by default unless explicitly enabled in config
+                enable_sw_pp = bool(self.config.get('parameters', {}).get('enable_software_pingpong', False))
+                if bidirectional and not bool(self.status.get('sweep_bidirectional')) and enable_sw_pp:
+                    try:
+                        _ = self._sdk.MIRcatSDK_StopScanInProgress()
+                    except Exception:
+                        pass
+                    logger.info("Switching to controller-managed ping-pong sweep fallback (forward/reverse segments)")
+                    await self._start_pingpong_manager(start_wn, end_wn, scan_speed, num_scans)
+                    return True
+            except Exception:
+                pass
             return True
         except Exception as e:
             self.last_error = f"Failed to start sweep scan: {str(e)}"
             self.last_error_code = MIRcatError.HARDWARE_ERROR
             logger.error(f"Failed to start sweep scan: {e}")
             return False
+
+    async def _start_pingpong_manager(self, start_wn: float, end_wn: float, scan_speed: float, num_scans: int) -> None:
+        # Cancel any existing ping-pong manager
+        try:
+            if self._pingpong_task and not self._pingpong_task.done():
+                self._pingpong_cancel = True
+                try:
+                    await asyncio.wait_for(self._pingpong_task, timeout=2.0)
+                except Exception:
+                    pass
+        finally:
+            self._pingpong_task = None
+            self._pingpong_cancel = False
+            self._pingpong_active = True
+        self.status["sweep_bidirectional"] = True
+        # Spawn background task
+        self._pingpong_task = asyncio.create_task(self._pingpong_loop(start_wn, end_wn, scan_speed, num_scans))
+
+    async def _pingpong_loop(self, start_wn: float, end_wn: float, scan_speed: float, num_scans: int) -> None:
+        try:
+            # Each loop is forward then reverse; infinite when num_scans <= 0
+            loops_remaining = None if (num_scans is None or int(num_scans) <= 0) else int(num_scans)
+            qcl = int(self.current_qcl or 1)
+            # Helper: start a single-direction sweep with ns=1
+            async def _start_segment(a: float, b: float) -> None:
+                try:
+                    if hasattr(self._sdk, 'MIRcatSDK_CancelManualTuneMode'):
+                        _ = self._sdk.MIRcatSDK_CancelManualTuneMode()
+                except Exception:
+                    pass
+                ret = self._sdk.MIRcatSDK_StartSweepScan(
+                    c_float(float(a)), c_float(float(b)), c_float(float(scan_speed)),
+                    c_uint8(self._UNITS_CM1), c_uint16(1), c_bool(False), c_uint8(qcl)
+                )
+                if not self._sdk_ok(ret):
+                    raise Exception(f"StartSweepScan segment failed ({int(ret)}) {a}->{b}")
+
+            # Helper: wait until scan finishes (with timeout safety)
+            async def _wait_complete(max_seconds: float) -> None:
+                t0 = time.time()
+                while True:
+                    if self._pingpong_cancel:
+                        break
+                    try:
+                        in_prog = c_bool(False); active=c_bool(False); paused=c_bool(False)
+                        cur_scan = c_uint16(0); cur_pct=c_uint16(0); cur_ww=c_float(0)
+                        units=c_uint8(0); tec=c_bool(False); motion=c_bool(False)
+                        if self._sdk_ok(self._sdk.MIRcatSDK_GetScanStatus(byref(in_prog), byref(active), byref(paused),
+                                                  byref(cur_scan), byref(cur_pct), byref(cur_ww), byref(units), byref(tec), byref(motion))):
+                            if not bool(in_prog.value):
+                                break
+                    except Exception:
+                        # Fall back to small delay if status call fails
+                        pass
+                    await asyncio.sleep(0.2)
+                    if (time.time() - t0) > max_seconds * 2.0 + 5.0:
+                        # Safety stop to avoid runaway
+                        try:
+                            _ = self._sdk.MIRcatSDK_StopScanInProgress()
+                        except Exception:
+                            pass
+                        break
+
+            while True:
+                if self._pingpong_cancel:
+                    break
+                # Forward
+                await _start_segment(start_wn, end_wn)
+                est_time = abs(float(end_wn) - float(start_wn)) / max(0.001, float(scan_speed))
+                await _wait_complete(est_time)
+                if self._pingpong_cancel:
+                    break
+                # Reverse
+                await _start_segment(end_wn, start_wn)
+                est_time = abs(float(end_wn) - float(start_wn)) / max(0.001, float(scan_speed))
+                await _wait_complete(est_time)
+
+                if loops_remaining is not None:
+                    loops_remaining -= 1
+                    if loops_remaining <= 0:
+                        break
+            # Ensure stop at end
+            try:
+                _ = self._sdk.MIRcatSDK_StopScanInProgress()
+            except Exception:
+                pass
+        except Exception as e:
+            logger.error(f"Ping-pong sweep manager error: {e}")
+            self.last_error = f"Ping-pong manager: {e}"
+            self.last_error_code = MIRcatError.HARDWARE_ERROR
+        finally:
+            self._pingpong_active = False
+            self._pingpong_cancel = False
+            # status will reflect hardware scan status on next update
 
     async def start_step_scan(self, start_wn: float, end_wn: float, step_size: float,
                              dwell_time: int, num_scans: int = 1) -> bool:
@@ -816,14 +1121,25 @@ class MIRcatController:
                     if wn > wn_max: wn = wn_max
                 except Exception:
                     pass
-                dwell = int(entry.get('dwell_time'))
-                off = int(entry.get('off_time'))
+                # SDK uses microseconds for internal timing parameters in step-type scans.
+                # Convert ms from UI to µs for Multi-Spectral elements.
+                dwell_ms = int(entry.get('dwell_time'))
+                off_ms = int(entry.get('off_time'))
+                dwell_us = max(0, dwell_ms) * 1000
+                off_us = 0 if keep_laser_on else max(0, off_ms) * 1000
+                # Clamp to uint32 range to avoid overflow
+                dwell_us = min(dwell_us, 0xFFFFFFFF)
+                off_us = min(off_us, 0xFFFFFFFF)
                 ret = self._sdk.MIRcatSDK_AddMultiSpectralElement(
-                    c_float(wn), c_uint8(self._UNITS_CM1), c_uint32(dwell), c_uint32(off)
+                    c_float(wn), c_uint8(self._UNITS_CM1), c_uint32(dwell_us), c_uint32(off_us)
                 )
                 if not self._sdk_ok(ret):
                     raise Exception(f"AddMultiSpectralElement failed ({int(ret)}) for {wn}")
-            ret = self._sdk.MIRcatSDK_StartMultiSpectralModeScan(c_uint16(int(num_scans)))
+            # Support infinite scans by mapping 0/negative to max uint16
+            ns = int(num_scans)
+            if ns <= 0:
+                ns = 65535
+            ret = self._sdk.MIRcatSDK_StartMultiSpectralModeScan(c_uint16(ns))
             if not self._sdk_ok(ret):
                 raise Exception(f"StartMultiSpectralModeScan failed ({int(ret)})")
             self.scan_in_progress = True
@@ -844,6 +1160,13 @@ class MIRcatController:
         
         try:
             logger.info("Stopping scan...")
+            # Cancel controller-managed ping-pong if active
+            if self._pingpong_task and not self._pingpong_task.done():
+                self._pingpong_cancel = True
+                try:
+                    await asyncio.wait_for(self._pingpong_task, timeout=2.0)
+                except Exception:
+                    pass
             ret = self._sdk.MIRcatSDK_StopScanInProgress()
             if not self._sdk_ok(ret):
                 raise Exception(f"StopScanInProgress failed ({int(ret)})")
@@ -936,7 +1259,10 @@ class MIRcatController:
                     "interlocks": self._mircat_sdk_call("isinterlocked"),
                     "key_switch": self._mircat_sdk_call("iskeyswitch"),
                     "temperature": self._mircat_sdk_call("temperaturestable"),
-                    "pointing_correction": True,  # Not exposed in SDK; leave True when connected
+                    "pointing_correction": False,
+                    "pointing_supported": None,
+                    "pointing_x_enabled": None,
+                    "pointing_y_enabled": None,
                     "system_fault": False,  # Could be derived from specific error reads if available
                     "tuned": self._mircat_sdk_call("istuned"),
                     "armed": self._mircat_sdk_call("isarmed"),
@@ -945,6 +1271,31 @@ class MIRcatController:
                     "case_temp_2": self._mircat_sdk_call("temperature"),
                     "pcb_temperature": self._mircat_sdk_call("temperature")
                 })
+                # Read-only pointing compensation state when supported
+                try:
+                    if hasattr(self._sdk, 'MIRcatSDK_PointingControlsSupported') and hasattr(self._sdk, 'MIRcatSDK_PointingGetCompensationEnabled'):
+                        supp = c_bool(False)
+                        if self._sdk_ok(self._sdk.MIRcatSDK_PointingControlsSupported(byref(supp))):
+                            self.status["pointing_supported"] = bool(supp.value)
+                            if bool(supp.value):
+                                xe = c_bool(False); ye = c_bool(False)
+                                if self._sdk_ok(self._sdk.MIRcatSDK_PointingGetCompensationEnabled(byref(xe), byref(ye))):
+                                    self.status["pointing_x_enabled"] = bool(xe.value)
+                                    self.status["pointing_y_enabled"] = bool(ye.value)
+                                    self.status["pointing_correction"] = bool(xe.value) or bool(ye.value)
+                                    # Log on change
+                                    cur_enabled = self.status["pointing_correction"]
+                                    if self._last_pointing_supported != self.status["pointing_supported"] or self._last_pointing_enabled != cur_enabled:
+                                        logger.info(f"Pointing status: supported={self.status['pointing_supported']}, x_enabled={self.status['pointing_x_enabled']}, y_enabled={self.status['pointing_y_enabled']}")
+                                        self._last_pointing_supported = self.status["pointing_supported"]
+                                        self._last_pointing_enabled = cur_enabled
+                        else:
+                            self.status["pointing_supported"] = None
+                except Exception:
+                    # On failure, do not overwrite previous values (avoid masking real issues)
+                    pass
+
+                # (diagnostic logging removed by request)
                 
                 # Update internal state from real hardware
                 self.armed = self.status["armed"]
@@ -979,6 +1330,13 @@ class MIRcatController:
                                     self.current_wavenumber = 10000.0 / float(cur_ww.value)
                                 except Exception:
                                     pass
+                except Exception:
+                    pass
+                # Read sweep bidirectional flag when available
+                try:
+                    bidir = c_bool(False)
+                    if self._sdk_ok(self._sdk.MIRcatSDK_IsSweepBidirectional(byref(bidir))):
+                        self.status["sweep_bidirectional"] = bool(bidir.value)
                 except Exception:
                     pass
             else:

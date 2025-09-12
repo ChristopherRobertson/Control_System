@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Box,
   Typography,
@@ -58,14 +58,17 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
     manualStepMode: false
   })
   
-  // MultiSpectral table data
-  const [multiSpectralEntries, setMultiSpectralEntries] = useState<MultiSpectralEntry[]>([
-    { id: 1, wavenumber: 1638.8, dwellTime: 3997, offTime: 2000 }
-  ])
-  const [nextId, setNextId] = useState(2)
+  // MultiSpectral table data - start with NO entries; add via form below
+  const [multiSpectralEntries, setMultiSpectralEntries] = useState<MultiSpectralEntry[]>([])
+  const [nextId, setNextId] = useState(1)
   const [numberOfScans, setNumberOfScans] = useState(1)
   const [keepLaserOnBetweenSteps, setKeepLaserOnBetweenSteps] = useState(false)
   const [infiniteScans, setInfiniteScans] = useState(false)
+
+  // New-entry draft fields (use strings to avoid numeric input UX quirks)
+  const [draftWn, setDraftWn] = useState<string>('')
+  const [draftDwell, setDraftDwell] = useState<string>('')
+  const [draftOff, setDraftOff] = useState<string>('')
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +77,65 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
   const scanInProgress = deviceStatus?.scan_in_progress || false
 
   const canInteract = deviceStatus?.connected && deviceStatus?.armed
+
+  // Derived scan loop counter based on percent resets (SDK cur_scan may be misleading)
+  const [loopCount, setLoopCount] = useState<number>(0)
+  const prevPercentRef = useRef<number | null>(null)
+  const prevInProgressRef = useRef<boolean>(false)
+  const msBaselineScanNumRef = useRef<number | null>(null)
+  const msElementsRef = useRef<number>(0)
+  const prevModeRef = useRef<string | null>(null)
+  useEffect(() => {
+    const curInProgress = !!scanInProgress
+    const curPercent = typeof deviceStatus?.current_scan_percent === 'number' ? (deviceStatus.current_scan_percent as number) : null
+    const curScanNum = typeof deviceStatus?.current_scan_number === 'number' ? (deviceStatus.current_scan_number as number) : null
+    const activeMode = deviceStatus?.current_scan_mode || null
+
+    // Reset loop count on scan stop or mode change
+    if (!curInProgress || (prevModeRef.current && activeMode && prevModeRef.current !== activeMode)) {
+      setLoopCount(0)
+      prevPercentRef.current = null
+      msBaselineScanNumRef.current = null
+    }
+
+    if (curInProgress) {
+      // On scan start
+      if (!prevInProgressRef.current) {
+        setLoopCount(1)
+        // Capture multispectral baseline if applicable
+        if (activeMode === 'multispectral') {
+          msBaselineScanNumRef.current = curScanNum ?? 0
+          msElementsRef.current = multiSpectralEntries.length || 1
+        }
+      } else {
+        // Heuristic 1: Detect percent wrap-around with relaxed thresholds
+        if (prevPercentRef.current != null && curPercent != null) {
+          const prevP = prevPercentRef.current
+          const drop = prevP - curPercent
+          if ((prevP > 80 && curPercent < 30) || drop > 50) {
+            setLoopCount(v => v + 1)
+          }
+        }
+
+        // Heuristic 2: For multispectral, derive loops from scan number delta vs elements
+        if (activeMode === 'multispectral' && curScanNum != null) {
+          const base = msBaselineScanNumRef.current ?? curScanNum
+          const elems = Math.max(1, msElementsRef.current || multiSpectralEntries.length || 1)
+          if (msBaselineScanNumRef.current == null) {
+            msBaselineScanNumRef.current = base
+          }
+          if (curScanNum >= base) {
+            const loopsByIdx = Math.floor((curScanNum - base) / elems) + 1
+            if (loopsByIdx > loopCount) setLoopCount(loopsByIdx)
+          }
+        }
+      }
+    }
+
+    prevInProgressRef.current = curInProgress
+    if (curPercent != null) prevPercentRef.current = curPercent
+    prevModeRef.current = activeMode
+  }, [scanInProgress, deviceStatus?.current_scan_percent, deviceStatus?.current_scan_number, deviceStatus?.current_scan_mode, multiSpectralEntries.length])
 
   // Convert between units
   const convertToMicrons = (wavenum: number) => (10000 / wavenum)
@@ -132,18 +194,37 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
         })))
       }
       setUnits(newUnit)
+      // Reset draft inputs when changing units to avoid confusion
+      setDraftWn('')
+      setDraftDwell('')
+      setDraftOff('')
     }
   }
 
   const addMultiSpectralEntry = () => {
+    // Validate inputs and add to list
+    const wnVal = parseFloat(draftWn)
+    const dwellVal = parseInt(draftDwell)
+    const offVal = parseInt(draftOff)
+    if (!isFinite(wnVal)) return
+    if (!isFinite(dwellVal as any) || dwellVal <= 0) return
+    if (!isFinite(offVal as any) || offVal <= 0) return
+
+    // Clamp to valid wn range in current units then add
+    const correctedWn = validateAndCorrectValue(wnVal, 'wavenumber')
+
     const newEntry: MultiSpectralEntry = {
       id: nextId,
-      wavenumber: units === 'cm-1' ? 1850.0 : convertToMicrons(1850.0),
-      dwellTime: 3997,
-      offTime: 2000
+      wavenumber: correctedWn,
+      dwellTime: dwellVal,
+      offTime: offVal
     }
     setMultiSpectralEntries(prev => [...prev, newEntry])
     setNextId(prev => prev + 1)
+    // Clear drafts
+    setDraftWn('')
+    setDraftDwell('')
+    setDraftOff('')
   }
 
   const removeMultiSpectralEntry = (id: number) => {
@@ -206,7 +287,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
           start_wavenumber: scanSettings.startWavenumber,
           end_wavenumber: scanSettings.endWavenumber,
           scan_speed: scanSettings.scanSpeed,
-          number_of_scans: scanSettings.numberOfScans,
+          number_of_scans: scanSettings.infiniteScans ? 0 : scanSettings.numberOfScans,
           bidirectional_scanning: scanSettings.bidirectionalScanning
         })
       } else if (selectedScanMode === 'step') {
@@ -218,13 +299,23 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
           number_of_scans: scanSettings.numberOfScans
         })
       } else if (selectedScanMode === 'multispectral') {
+        // Ensure any focused input commits onBlur before reading state
+        try { (document.activeElement as HTMLElement | null)?.blur() } catch {}
+
+        // Require at least two elements as per UI rule
+        if (multiSpectralEntries.length < 2) {
+          throw new Error('Add at least two entries before starting a multispectral scan')
+        }
+
+        const wavelengthList = multiSpectralEntries.map(entry => ({
+          wavenumber: units === 'μm' ? convertToWavenumber(entry.wavenumber) : entry.wavenumber,
+          dwell_time: entry.dwellTime,
+          off_time: entry.offTime
+        }))
+        const scans = infiniteScans ? 0 : (Number.isFinite(numberOfScans) && numberOfScans > 0 ? numberOfScans : 1)
         result = await MIRcatAPI.startMultispectralScan({
-          wavelength_list: multiSpectralEntries.map(entry => ({
-            wavenumber: entry.wavenumber,
-            dwell_time: entry.dwellTime,
-            off_time: entry.offTime
-          })),
-          number_of_scans: numberOfScans,
+          wavelength_list: wavelengthList,
+          number_of_scans: scans,
           keep_laser_on_between_steps: keepLaserOnBetweenSteps
         })
       }
@@ -455,11 +546,59 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
               </FormControl>
             </Box>
 
+            {/* Add-entry form */}
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+              <TextField
+                label={units === 'cm-1' ? 'Wavenumber (cm-1)' : 'Wavelength (μm)'}
+                placeholder={units === 'cm-1' ? 'e.g. 1850.0' : 'e.g. 5.405'}
+                value={draftWn}
+                onChange={(e) => setDraftWn(e.target.value)}
+                onBlur={() => {
+                  const v = parseFloat(draftWn)
+                  if (isFinite(v)) setDraftWn(validateAndCorrectValue(v).toString())
+                }}
+                inputMode="decimal"
+                disabled={!canInteract}
+                size="small"
+                sx={{ minWidth: 180 }}
+              />
+              <TextField
+                label="Dwell Time (ms)"
+                placeholder="e.g. 5000"
+                value={draftDwell}
+                onChange={(e) => setDraftDwell(e.target.value.replace(/[^0-9]/g, ''))}
+                inputMode="numeric"
+                disabled={!canInteract}
+                size="small"
+                sx={{ width: 140 }}
+              />
+              <TextField
+                label="Off Time (ms)"
+                placeholder="e.g. 100"
+                value={draftOff}
+                onChange={(e) => setDraftOff(e.target.value.replace(/[^0-9]/g, ''))}
+                inputMode="numeric"
+                disabled={!canInteract}
+                size="small"
+                sx={{ width: 140 }}
+              />
+              <Button
+                startIcon={<AddIcon />}
+                onClick={addMultiSpectralEntry}
+                disabled={!canInteract || !draftWn || !draftDwell || !draftOff}
+                variant="outlined"
+                size="small"
+              >
+                Add Entry
+              </Button>
+            </Box>
+
+            {/* Entries table */}
             <TableContainer component={Paper} sx={{ mb: 2 }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell align="center">Wave number</TableCell>
+                    <TableCell align="center">{units === 'cm-1' ? 'Wavenumber (cm-1)' : 'Wavelength (μm)'}</TableCell>
                     <TableCell align="center">Dwell Time (ms)</TableCell>
                     <TableCell align="center">Off Time (ms)</TableCell>
                     <TableCell align="center">Actions</TableCell>
@@ -470,17 +609,18 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                     <TableRow key={entry.id}>
                       <TableCell>
                         <TextField
-                          type="number"
+                          type="text"
                           defaultValue={entry.wavenumber}
                           onBlur={(e) => {
-                            const value = parseFloat(e.target.value) || 0
-                            const correctedValue = validateAndCorrectValue(value)
+                            const v = parseFloat(e.target.value)
+                            const correctedValue = isFinite(v) ? validateAndCorrectValue(v) : (units === 'cm-1' ? 1850.0 : convertToMicrons(1850.0))
                             updateMultiSpectralEntry(entry.id, 'wavenumber', correctedValue)
-                            e.target.value = correctedValue.toString()
+                            // Normalize displayed value
+                            e.currentTarget.value = String(correctedValue)
                           }}
+                          inputMode="decimal"
                           disabled={!canInteract}
                           size="small"
-                          inputProps={{ step: units === 'cm-1' ? 0.1 : 0.001 }}
                         />
                       </TableCell>
                       <TableCell>
@@ -518,17 +658,8 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
               </Table>
             </TableContainer>
 
-            <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
-              <Button
-                startIcon={<AddIcon />}
-                onClick={addMultiSpectralEntry}
-                disabled={!canInteract}
-                variant="outlined"
-                size="small"
-              >
-                Add
-              </Button>
-            </Box>
+            {/* Removed old Add button (replaced by add-entry form above) */}
+            <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}></Box>
 
             <Box sx={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
               <FormControlLabel
@@ -583,7 +714,7 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
                 variant="contained"
                 startIcon={<PlayIcon />}
                 onClick={handleStartScan}
-                disabled={!canInteract || loading || scanInProgress}
+                disabled={!canInteract || loading || scanInProgress || multiSpectralEntries.length < (selectedScanMode === 'multispectral' ? 2 : 0)}
                 color="success"
               >
                 Start Scan
@@ -612,7 +743,11 @@ function ScanModePanel({ deviceStatus, onStatusUpdate }: ScanModePanelProps) {
 
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                Scan Progress: {scanInProgress ? `${deviceStatus?.current_scan_percent ?? 0}%` : 'Ready'} {scanInProgress && deviceStatus?.current_scan_number != null ? `(Scan ${deviceStatus.current_scan_number})` : ''}
+                Scan Progress: {scanInProgress ? `${deviceStatus?.current_scan_percent ?? 0}%` : 'Ready'} {scanInProgress && loopCount > 0 ? (
+                  selectedScanMode === 'multispectral'
+                    ? `(Scan ${loopCount}${infiniteScans ? ' of ∞' : ` of ${numberOfScans || 1}`})`
+                    : `(Scan ${loopCount})`
+                ) : ''}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Current Position: {deviceStatus?.current_wavenumber?.toFixed(2) || '--'} cm-1
