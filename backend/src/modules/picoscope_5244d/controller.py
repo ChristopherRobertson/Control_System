@@ -17,6 +17,7 @@ class PicoScope5244DController:
     
     def __init__(self):
         self.connected = False
+        self.acquiring = False
         self.config = self._load_config()
         self.channels = {
             'A': {'enabled': True, 'range': '±2V', 'coupling': 'DC', 'offset': 0.0},
@@ -53,6 +54,7 @@ class PicoScope5244DController:
             # TODO: Implement actual PicoScope SDK connection
             logger.info("Connecting to PicoScope 5244D...")
             self.connected = True
+            self.acquiring = False
             await self._broadcast_state_update()
             return True
         except Exception as e:
@@ -63,6 +65,7 @@ class PicoScope5244DController:
         """Disconnect from PicoScope device"""
         try:
             self.connected = False
+            self.acquiring = False
             await self._broadcast_state_update()
             return True
         except Exception as e:
@@ -73,9 +76,10 @@ class PicoScope5244DController:
         """Start data acquisition"""
         if not self.connected:
             raise Exception("Device not connected")
-        
+
         try:
             # TODO: Implement actual data acquisition via PicoSDK
+            self.acquiring = True
             await self._broadcast_state_update()
             return True
         except Exception as e:
@@ -86,6 +90,7 @@ class PicoScope5244DController:
         """Stop data acquisition"""
         try:
             # TODO: Implement actual acquisition stop via PicoSDK
+            self.acquiring = False
             await self._broadcast_state_update()
             return True
         except Exception as e:
@@ -142,6 +147,7 @@ class PicoScope5244DController:
         """Get current device status"""
         return {
             "connected": self.connected,
+            "acquiring": self.acquiring,
             "channels": self.channels,
             "timebase": self.timebase,
             "trigger": self.trigger

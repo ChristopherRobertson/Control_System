@@ -21,12 +21,7 @@ import {
   SettingsApplications as AutoSetupIcon,
   Memory as ScopeIcon
 } from '@mui/icons-material'
-
-type ChannelConfig = {
-  enabled: boolean
-  range: string
-  coupling: string
-}
+import PicoScopeAPI, { ChannelConfig } from './api'
 
 type ChannelsState = Record<'A' | 'B' | 'C' | 'D', ChannelConfig>
 
@@ -46,8 +41,9 @@ function PicoScope5244DView() {
   const handleConnect = async () => {
     setLoading(true)
     try {
-      // TODO: Implement API call
-      setConnected(true)
+      const status = await PicoScopeAPI.connect()
+      setConnected(status.connected)
+      setAcquiring(status.acquiring)
       setError(null)
     } catch (err) {
       setError('Failed to connect to PicoScope')
@@ -56,10 +52,24 @@ function PicoScope5244DView() {
     }
   }
 
+  const handleDisconnect = async () => {
+    setLoading(true)
+    try {
+      const status = await PicoScopeAPI.disconnect()
+      setConnected(status.connected)
+      setAcquiring(status.acquiring)
+      setError(null)
+    } catch (err) {
+      setError('Failed to disconnect from PicoScope')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleAutoSetup = async () => {
     setLoading(true)
     try {
-      // TODO: Implement API call
+      await PicoScopeAPI.autoSetup()
       setError(null)
     } catch (err) {
       setError('Auto setup failed')
@@ -71,8 +81,8 @@ function PicoScope5244DView() {
   const handleStartAcquisition = async () => {
     setLoading(true)
     try {
-      // TODO: Implement API call
-      setAcquiring(true)
+      const status = await PicoScopeAPI.startAcquisition()
+      setAcquiring(status.acquiring)
       setError(null)
     } catch (err) {
       setError('Failed to start acquisition')
@@ -84,8 +94,8 @@ function PicoScope5244DView() {
   const handleStopAcquisition = async () => {
     setLoading(true)
     try {
-      // TODO: Implement API call
-      setAcquiring(false)
+      const status = await PicoScopeAPI.stopAcquisition()
+      setAcquiring(status.acquiring)
       setError(null)
     } catch (err) {
       setError('Failed to stop acquisition')
@@ -109,7 +119,7 @@ function PicoScope5244DView() {
           />
           <Button
             variant="contained"
-            onClick={connected ? () => setConnected(false) : handleConnect}
+            onClick={connected ? handleDisconnect : handleConnect}
             disabled={loading}
             color={connected ? 'secondary' : 'primary'}
           >
