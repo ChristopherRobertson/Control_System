@@ -25,11 +25,11 @@ Develop a robust, user‑friendly application to control and synchronize all ele
 
 ---
 
-# Agent Instruction Guide & Development Phases
+# AI Agent Instruction Guide & Development Phases
 
 The application is a **modular monolith**: one backend server and one frontend app, composed of highly independent, self‑contained **mini‑apps** (“modules”)—one per device—plus an **Experiment** module for higher‑level orchestration.
 
-> **Replit testing reality (hardware):** Replit cannot access physical hardware. Therefore, testing focuses on the **frontend→backend→controller dispatch path**. For each UI control (button/change), verify the corresponding backend endpoint is called with the correct payload and that the controller stub executes. Physical I/O calls are implemented but cannot be exercised from Replit. The user will test the provided code on the system physically connected to the devices and give feedback based on their experience. 
+> **AI Agent testing reality (hardware):** AI Agent cannot access physical hardware. Therefore, testing focuses on the **frontend→backend→controller dispatch path**. For each UI control (button/change), verify the corresponding backend endpoint is called with the correct payload and that the controller stub executes. Physical I/O calls are implemented but cannot be exercised from AI Agent. The user will test the provided code on the system physically connected to the devices and give feedback based on their experience. 
 
 ---
 
@@ -158,6 +158,60 @@ def register(app: FastAPI) -> None:
    - In `ACTION_REQUIRED.md`, add **Live Hardware Test Plan for <Device>**.  
    - **Commit:** `feat(<Device>): implement full control panel for live testing`
 
+### Part E: Device State Model, Persistence, and Code-Splitting (Generalized for All Devices)
+
+Objective: Make every device module consistent, resilient, and sharable across pages (e.g., Experiment) without coupling to a single view. Code-splitting must not affect state retention.
+
+Principles
+- Single source of truth: Keep live device/session state in a top-level store (React Context or Zustand). Pages consume via hooks (e.g., `useDevice(<id>)`).
+- Backend persistence: Store durable configuration and experiment definitions server-side; hydrate the client store on load and after mutations.
+- Idempotent APIs: Commands like connect, arm, set-params should be safe to retry. Status polling or WebSocket updates reconcile view with reality.
+- Toggle actions (single button UI): The UI SHOULD present a single toggle button for actions like Connect/Disconnect and Arm/Disarm. The backend MUST expose explicit, separate verbs (`POST /connect`, `POST /disconnect`, `POST /arm`, `POST /disarm`). Both UI and agents MUST choose which verb to call based on canonical state from `GET /status`, not on button label.
+- UI guardrail (required): Disable the toggle button while a request is in flight to prevent rapid double toggles. Re-enable only after a response is received.
+- Ownership boundaries:
+  - Local UI: transient UI only (dialogs, local inputs).
+  - Global store: live device state (connected, status, setpoints, last error). Survives navigation/lazy loading.
+  - Backend DB/config: canonical configs and experiment recipes.
+- Centralized polling/subscription: The provider handles polling or WS; pages never start their own redundant loops.
+
+Frontend Contract (per device)
+- `DeviceProvider` at app root: `<DeviceProvider>{children}</DeviceProvider>` for each device, or a generic `DevicesProvider` that registers all.
+- Hook API: `useDevice(deviceId)` returns `{ state, actions }` with:
+  - `state`: connected, status, current params, loading, error, timestamps.
+  - `actions`: connect, disconnect, refreshStatus, setParams, start/stop ops.
+- Lazy pages: Pages can be lazily loaded. Because state lives in providers, unmounting views will not drop device state.
+
+Backend Contract (per device)
+- Endpoints: `/api/<device>/{connect,disconnect,status,config,...}`.
+- Status model: explicit booleans for connection/armed/emission, plus last_error/code.
+- Persistence: `GET/POST /config` saves/loads durable settings. Server is authoritative across sessions.
+- Broadcast: Optional WebSocket topic `<device>/state` pushes updates after mutations.
+
+Implementation Steps (repeat for any device)
+1) Store scaffolding: Create `frontend/src/state/<device>/context.tsx` with provider + reducer (or Zustand store). Export `use<Device>()` hook.
+2) API wrapper: Define `frontend/src/modules/<Device>/api.ts` with typed models and calls.
+3) Wire provider at root: Wrap `<App />` in `<DevicesProvider>` (or add per-device providers) in `frontend/src/main.tsx`.
+4) Migrate view: Replace component-local state with the shared hook; remove per-page polling.
+5) Persistence: On provider mount, load `GET /config` and `GET /status`; on mutations, `POST` then refresh status. Optionally mirror key fields to `localStorage` for UX continuity.
+6) Code-splitting: Use `React.lazy` for heavy views; ensure providers are not lazy so state persists across navigation. Configure Vite `manualChunks` to split vendor bundles.
+7) Validation: Build and navigate between modules to confirm state continuity and that Experiment page can read device state without MIRcat page mounted.
+
+Notes
+- Never keep the only copy of live state inside a page component.
+- Favor typed API models; avoid redefining parallel interfaces in views.
+- Prefer small, composable stores per device over a single large monolith; aggregate under `DevicesProvider` when convenient.
+
+Deliverables
+- Provider + hook per device.
+- Updated views to consume shared state.
+- Vite config with sensible vendor chunking and lazy-loaded routes or tabs.
+
+Agent Integration
+- Action selection: Agents MUST determine actions from canonical state via `GET /status` and invoke explicit verbs (`POST /connect`, `POST /disconnect`, `POST /arm`, `POST /disarm`, `POST /emission/on|off`). Do not infer from button labels or toggle text.
+- Idempotency: Treat repeated verb calls as safe no-ops when the device is already in the requested state; return 200 with a clarifying message.
+- Snapshot responses: Mutation endpoints SHOULD return the updated status snapshot payload alongside a message. Example: `{ message, ...status }`.
+- Error semantics: Reserve non-2xx responses for real faults; return success for “already in target state”. Include `last_error` and `last_error_code` when applicable.
+
 ---
 
 ## Project Root Structure
@@ -232,7 +286,7 @@ Also include a **Next Immediate Steps** section for the current phase/target dev
 
 ---
 
-## Phase Triggers (verbatim commands for Replit)
+## Phase Triggers (verbatim commands for AI Agent)
 - **“Complete Phase 0”**  
 - **“Complete Phase 1 – Part B”**  
 - **“Prepare the MIRcat module for development”** *(or any device)*  
@@ -253,6 +307,6 @@ Also include a **Next Immediate Steps** section for the current phase/target dev
 
 ---
 
-## Notes for Local (non‑Replit) Testing
+## Notes for Local (non‑AI Agent) Testing
 - Production hardware I/O requires correct drivers/SDKs and a compatible OS (e.g., Windows for some vendor DLLs).  
-- While Replit validates **frontend↔backend** correctness, final verification with instruments must be performed on a host connected to the hardware with drivers installed.
+- While the AI Agent validates **frontend↔backend** correctness, final verification with instruments must be performed on a host connected to the hardware with drivers installed.

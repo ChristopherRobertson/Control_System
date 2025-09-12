@@ -7,9 +7,10 @@ interface StatusIndicatorProps {
   status: boolean
   connected?: boolean
   invert?: boolean // For cases where false means good (like "System Fault")
+  neutralFalse?: boolean // When false isn't an error (e.g., Emission Off)
 }
 
-function StatusIndicator({ label, status, connected = true, invert = false }: StatusIndicatorProps) {
+function StatusIndicator({ label, status, connected = true, invert = false, neutralFalse = false }: StatusIndicatorProps) {
   // Show grey when disconnected, except for System Fault which only shows red when there's an actual fault
   if (!connected) {
     if (label === 'System Fault') {
@@ -46,6 +47,21 @@ function StatusIndicator({ label, status, connected = true, invert = false }: St
   }
 
   const isGood = invert ? !status : status
+  if (!isGood && neutralFalse && connected) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" color="text.secondary">
+          {label}:
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <RadioButtonUnchecked sx={{ color: 'grey.500', fontSize: 16 }} />
+          <Typography variant="body2" color="grey.500">
+            OFF
+          </Typography>
+        </Box>
+      </Box>
+    )
+  }
   
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>

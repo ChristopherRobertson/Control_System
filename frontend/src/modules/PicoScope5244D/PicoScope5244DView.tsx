@@ -141,7 +141,7 @@ function PicoScope5244DView() {
               <Typography variant="h6" gutterBottom>
                 Channel Configuration
               </Typography>
-              {Object.entries(channels).map(([channel, config]: [keyof ChannelsState, ChannelConfig]) => (
+              {Object.entries(channels).map(([channel, config]) => (
                 <Box key={channel} sx={{ mb: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="subtitle1">Channel {channel}</Typography>
@@ -149,9 +149,9 @@ function PicoScope5244DView() {
                       control={
                         <Switch
                           checked={config.enabled}
-                          onChange={(e) => setChannels(prev => ({
+                          onChange={(e) => setChannels((prev: ChannelsState) => ({
                             ...prev,
-                            [channel]: { ...prev[channel], enabled: e.target.checked }
+                            [channel as keyof ChannelsState]: { ...prev[channel as keyof ChannelsState], enabled: e.target.checked }
                           }))}
                           disabled={!connected}
                         />

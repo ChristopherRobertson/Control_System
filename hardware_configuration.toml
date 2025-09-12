@@ -34,7 +34,7 @@ description = "Pump laser controlled via TTL signals from Signal Generator"
 device_type = "Daylight MIRcat QCL"
 connection_type = "USB"
 port = "AUTO"  # Auto-detect USB device
-sdk_path = "C:/Users/Chris/Documents/GitHub/IR_Spectroscope_Control_Interface/backend/src/modules/daylight_mircat/sdk"  # Local path
+sdk_path = "C:/Users/Chris/Documents/GitHub/Control_System/docs/sdks/daylight_mircat"  # Local path
 description = "Mid-IR tunable probe laser"
 
 [daylight_mircat.communication]
@@ -153,7 +153,7 @@ off_time_min = 1 # minimum value for off time between steps for command addition
 off_time_max = 4000000 # maximum value for off time between steps for command addition in milliseconds
 off_time_default = 100 # default value for off time between steps for command addition in milliseconds
 
-# Safety parameters from manual
+#Safety parameters from manual
 interlock_required = true
 key_switch_required = true
 temperature_monitoring = true
@@ -161,6 +161,9 @@ max_temperature = 23  # Celsius
 emission_timeout = 3000  # seconds
 temperature_stabilization = true
 auto_arm = false  # Require manual arming for safety
+
+# configuration specific (no front-end control)
+use_advanced_sweep = true # use advanced sweep settings
 
 # ============================================================================
 # PICOSCOPE 5244D - Oscilloscope

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Box,
   Typography,
@@ -14,9 +14,11 @@ import {
   CardContent,
   Button,
   // Divider,
-  Alert
+  Alert,
+  Snackbar
 } from '@mui/material'
 import { Save as SaveIcon } from '@mui/icons-material'
+import { MIRcatAPI } from '../api'
 
 interface LaserSettingsPanelProps {
   deviceStatus: any
@@ -26,6 +28,8 @@ interface LaserSettingsPanelProps {
 function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanelProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [snackOpen, setSnackOpen] = useState(false)
   
   // Laser Parameters State
   const [laserParams, setLaserParams] = useState({
@@ -157,15 +161,83 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
     flashLEDWhenFires: true
   })
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await MIRcatAPI.getUserSettings()
+        if (data) {
+          setLaserParams(prev => ({
+            ...prev,
+            selectQCL: data.selectQCL ?? prev.selectQCL,
+            laserMode: data.laserMode ?? prev.laserMode,
+            pulseRate: data.pulseRate ?? prev.pulseRate,
+            pulseWidth: data.pulseWidth ?? prev.pulseWidth,
+            pulsedCurrent: data.pulsedCurrent ?? prev.pulsedCurrent,
+            cwCurrent: data.cwCurrent ?? prev.cwCurrent,
+            temperature: data.temperature ?? prev.temperature,
+          }))
+          setGlobalOptions(prev => ({
+            ...prev,
+            enableParameterLogging: data.enableParameterLogging ?? prev.enableParameterLogging,
+            disableAudioNotification: data.disableAudioNotification ?? prev.disableAudioNotification,
+            flashLEDWhenFires: data.flashLEDWhenFires ?? prev.flashLEDWhenFires,
+          }))
+          setProcessTrigger(prev => ({
+            ...prev,
+            mode: data.processTriggerMode ?? prev.mode,
+            internalStepTime: data.internalStepTime ?? prev.internalStepTime,
+            internalStepDelay: data.internalStepDelay ?? prev.internalStepDelay,
+          }))
+          setPulseMode(prev => ({
+            ...prev,
+            mode: data.pulseMode ?? prev.mode,
+            wlTrigInterval: data.wlTrigInterval ?? prev.wlTrigInterval,
+            wlTrigStart: data.wlTrigStart ?? prev.wlTrigStart,
+            wlTrigStop: data.wlTrigStop ?? prev.wlTrigStop,
+          }))
+        }
+      } catch (e) {
+        // ignore load failures silently
+      }
+    })()
+  }, [])
+
   const handleSaveSettings = async () => {
     setLoading(true)
     setError(null)
+    setSuccess(null)
     try {
-      // TODO: Implement actual settings save via API
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
-      onStatusUpdate()
+      // Apply laser mode
+      await MIRcatAPI.setLaserMode(laserParams.laserMode)
+      // Apply pulse parameters when in pulsed mode
+      if (laserParams.laserMode === 'Pulsed') {
+        await MIRcatAPI.setPulseParameters(laserParams.pulseRate, laserParams.pulseWidth)
+      }
+      const resp = await MIRcatAPI.saveUserSettings({
+        selectQCL: laserParams.selectQCL,
+        laserMode: laserParams.laserMode,
+        pulseRate: laserParams.pulseRate,
+        pulseWidth: laserParams.pulseWidth,
+        pulsedCurrent: laserParams.pulsedCurrent,
+        cwCurrent: laserParams.cwCurrent,
+        temperature: laserParams.temperature,
+        enableParameterLogging: globalOptions.enableParameterLogging,
+        disableAudioNotification: globalOptions.disableAudioNotification,
+        flashLEDWhenFires: globalOptions.flashLEDWhenFires,
+        processTriggerMode: processTrigger.mode,
+        internalStepTime: processTrigger.internalStepTime,
+        internalStepDelay: processTrigger.internalStepDelay,
+        pulseMode: pulseMode.mode,
+        wlTrigInterval: pulseMode.wlTrigInterval,
+        wlTrigStart: pulseMode.wlTrigStart,
+        wlTrigStop: pulseMode.wlTrigStop,
+      })
+      setSuccess('Settings saved successfully')
+      setSnackOpen(true)
+      await onStatusUpdate()
     } catch (err) {
       setError('Failed to save laser settings')
+      setSnackOpen(true)
     } finally {
       setLoading(false)
     }
@@ -177,11 +249,22 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
         Laser Settings
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+      <Snackbar
+        open={snackOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        {error ? (
+          <Alert onClose={() => { setError(null); setSnackOpen(false) }} severity="error" sx={{ width: '100%' }}>
+            {error}
+          </Alert>
+        ) : success ? (
+          <Alert onClose={() => { setSuccess(null); setSnackOpen(false) }} severity="success" sx={{ width: '100%' }}>
+            {success}
+          </Alert>
+        ) : null}
+      </Snackbar>
 
       <Grid container spacing={3}>
         {/* Display Units & Notifications */}
