@@ -188,6 +188,31 @@ timeout = 2.0
 description = "Signal generator for system synchronization"
 
 [quantum_composers_9524.parameters]
+## System timing parameters
+rate_min_hz = 0.0002
+rate_max_hz = 20000000
+period_min_s = 0.00000005
+period_max_s = 5000.0
+burst_count_min = 1
+burst_count_max = 9999999
+duty_cycle_on_min = "USER INPUT REQUIRED"
+duty_cycle_on_max = "USER INPUT REQUIRED"
+duty_cycle_off_min = "USER INPUT REQUIRED"
+duty_cycle_off_max = "USER INPUT REQUIRED"
+
+## Channel timing parameters
+delay_min_s = -999.99999999975
+delay_max_s = 999.99999999975
+delay_resolution_s = 0.00000000025
+width_min_s = 0.00000001
+width_max_s = 999.99999999975
+width_resolution_s = 0.00000000025
+amplitude_min_v = 2.0
+amplitude_max_v = 20.0
+trigger_threshold_min_v = 0.2
+trigger_threshold_max_v = 15.0
+gate_threshold_min_v = 0.2
+gate_threshold_max_v = 15.0
 
 [quantum_composers_9524.channels]
 # Channel assignments based on wiring diagram
