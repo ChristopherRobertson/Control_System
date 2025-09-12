@@ -213,7 +213,7 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
       if (laserParams.laserMode === 'Pulsed') {
         await MIRcatAPI.setPulseParameters(laserParams.pulseRate, laserParams.pulseWidth)
       }
-      const resp = await MIRcatAPI.saveUserSettings({
+      await MIRcatAPI.saveUserSettings({
         selectQCL: laserParams.selectQCL,
         laserMode: laserParams.laserMode,
         pulseRate: laserParams.pulseRate,
@@ -263,7 +263,7 @@ function LaserSettingsPanel({ deviceStatus, onStatusUpdate }: LaserSettingsPanel
           <Alert onClose={() => { setSuccess(null); setSnackOpen(false) }} severity="success" sx={{ width: '100%' }}>
             {success}
           </Alert>
-        ) : null}
+        ) : undefined}
       </Snackbar>
 
       <Grid container spacing={3}>
