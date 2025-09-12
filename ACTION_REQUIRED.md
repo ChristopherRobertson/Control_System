@@ -50,10 +50,13 @@ The following parameters in hardware_configuration.toml need verification:
 - Verify maximum sampling rates
 - Confirm trigger capabilities
 
-#### Zurich HF2LI Parameters  
+#### Zurich HF2LI Parameters
 - Verify frequency range limits for your specific unit
 - Confirm input/output configuration
 - Validate time constant ranges
+
+#### Quantum Composers 9524 Parameters
+- Provide valid ranges for `duty_cycle_on` and `duty_cycle_off` counts used in system duty cycle mode
 
 ## Next Immediate Steps
 

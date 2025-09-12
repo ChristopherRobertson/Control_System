@@ -17,6 +17,7 @@ class QuantumComposers9524Controller:
     
     def __init__(self):
         self.connected = False
+        self.running = False
         self.config = self._load_config()
         self.system_settings = {
             'pulse_mode': 'Continuous',
@@ -138,9 +139,10 @@ class QuantumComposers9524Controller:
         """Start signal generation"""
         if not self.connected:
             raise Exception("Device not connected")
-        
+
         try:
             # TODO: Implement actual start command via serial
+            self.running = True
             await self._broadcast_state_update()
             return True
         except Exception as e:
@@ -151,6 +153,7 @@ class QuantumComposers9524Controller:
         """Stop signal generation"""
         try:
             # TODO: Implement actual stop command via serial
+            self.running = False
             await self._broadcast_state_update()
             return True
         except Exception as e:
@@ -210,6 +213,7 @@ class QuantumComposers9524Controller:
         """Get current device status"""
         return {
             "connected": self.connected,
+            "running": self.running,
             "system_settings": self.system_settings,
             "channels": self.channels,
             "external_trigger": self.external_trigger,
