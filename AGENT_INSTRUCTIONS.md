@@ -212,6 +212,59 @@ Agent Integration
 - Snapshot responses: Mutation endpoints SHOULD return the updated status snapshot payload alongside a message. Example: `{ message, ...status }`.
 - Error semantics: Reserve non-2xx responses for real faults; return success for “already in target state”. Include `last_error` and `last_error_code` when applicable.
 
+### Part F: Implement Real SDKs (No Stubs) — Generic Procedure
+
+Use this checklisted procedure for any device module to replace placeholders with real hardware SDK calls. Apply the same pattern to oscilloscopes, lasers, signal generators, lock‑ins, and microcontrollers.
+
+1) Prerequisites
+- **Drivers/SDK installed:** Verify vendor driver + SDK installation and bitness (64‑bit Python ↔ 64‑bit SDK). Record location in `hardware_configuration.toml` (e.g., `sdk_path`).
+- **Connectivity details:** Confirm resource (USB/serial/VISA/TCP/IP), permissions, and any prerequisites (e.g., WinUSB driver, NI‑VISA runtime).
+- **Config contract:** Ensure the device section exists in `hardware_configuration.toml` with concrete values (no placeholders). Include `connection_type`, transport‑specific fields (e.g., `port`, `visa_resource`, `ip`, `baud_rate`), and `timeout`.
+
+2) Backend — Replace Stubs With Real Calls
+- **No unconditional success:** Remove code that sets state flags (e.g., `self.connected = True`) without an SDK call. Delete or rewrite any `# TODO` stubs that return success.
+- **SDK loading:** Load the vendor SDK via official Python package or `ctypes`/`cffi` using the configured `sdk_path`. Fail fast with a clear error if the DLL/.so cannot be loaded.
+- **Connect:** Call the vendor open/initialize function. On success, immediately query and store immutable info: `model`, `serial`, `firmware/driver_version`, `transport_details`. Only set `connected = True` when the SDK returns success and a valid handle.
+- **Disconnect:** Call the vendor close/shutdown function and clear the handle/state. Always handle idempotently (double close is OK).
+- **Status payload:** `get_status()` must return at minimum: `{ connected, acquiring, model, serial, driver_version, transport, last_error, last_error_code }`.
+- **Operations:** Implement each controller method to map 1:1 to SDK functions (e.g., channel config, trigger, timebase, emission on/off). Validate inputs against `hardware_configuration.toml` ranges and translate enums to SDK constants.
+- **Errors:** Check every SDK return code. On error, set `last_error`/`last_error_code`, log details, and raise an HTTP 4xx/5xx from the route with a concise message.
+- **Threading/locks (if needed):** Serialize SDK access if the vendor requires single‑threaded calls; avoid GUI‑blocking waits by using async wrappers where appropriate.
+- **No simulation pathway:** Remove or disable any `dry_run`, `simulate`, or mock branches in production code for this device. Tests may mock the SDK via dependency injection, but the shipped controller executes only real calls.
+
+3) Routes — Truthful API Semantics
+- **Idempotency:** `POST /connect` returns 200 with status when already connected; it must not flip state without verifying the device handle.
+- **Snapshot responses:** Mutation endpoints return `{ message, ...status }` with the real, current status from the controller.
+- **Meaningful failures:** Propagate SDK/open/permission errors via HTTP exceptions with clear text and (when available) vendor error codes.
+
+4) Frontend — Reflect Real Hardware State
+- **Trust but verify:** Treat the device as connected only if `connected === true` AND `serial` is present in the status.
+- **Display device info:** Show `model`, `serial`, and `driver_version` in the header/statusbar.
+- **Do not simulate UI state:** Remove any local toggles that imply success without waiting for the API response.
+- **Error UX:** Surface backend messages for connection failures and configuration errors.
+
+5) Configuration — Single Source of Truth
+- Read all connection parameters from `hardware_configuration.toml`. Do not hardcode ports, VISA strings, or IPs in code.
+- Keep per‑device enums/ranges in the TOML; validate user inputs against these on the backend before calling the SDK.
+
+6) Validation Checklist (Device‑Agnostic)
+- Connect:
+  - SDK/DLL loads from `sdk_path`.
+  - Open call returns success; a non‑null/valid handle is stored.
+  - `get_status()` shows real `serial` and `model`.
+- Operations:
+  - Each endpoint triggers exactly one SDK call (or documented sequence) and checks the return code.
+  - No `TODO`, `pass`, or unconditional `return True` remain in the controller.
+  - Errors are surfaced with vendor code/message.
+- Disconnect closes the handle and returns to a clean state.
+
+7) Definition of Done (No Stubs Left)
+- All placeholder/simulated code paths removed for the device.
+- Controller methods contain only real SDK logic and input validation.
+- API routes return truthful status derived from the SDK handle/state.
+- Frontend reflects real connection by verifying presence of `serial` and shows device details.
+- Documentation updated: required drivers, SDK version, and configuration fields listed in `ACTION_REQUIRED.md`/module README.
+
 ---
 
 ## Project Root Structure

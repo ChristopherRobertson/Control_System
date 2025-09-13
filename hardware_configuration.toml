@@ -227,7 +227,7 @@ channel_d_function = "zurich_hf2li_di1"  # Waveform to Lock-in Amplifier
 [zurich_hf2li]
 device_type = "Zurich Instruments HF2LI"
 connection_type = "USB"
-device_id = "dev####"  # Replace with actual device serial number
+device_id = "18500"  # Replace with actual device serial number
 description = "Dual-phase lock-in amplifier for signal processing"
 
 [zurich_hf2li.parameters]
