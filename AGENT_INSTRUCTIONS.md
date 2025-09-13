@@ -145,9 +145,21 @@ def register(app: FastAPI) -> None:
 
 ### Part D: Module Implementation & Finalization (Live Code Edition)
 1) **Backend implementation (`controller.py`):**
-   - Implement `connect()` / `disconnect()` using `hardware_configuration.toml` and appropriate libraries.  
-   - Implement getters/setters with exact command strings/APIs; parse responses; robust error handling.  
-   - Implement `_broadcast_state_update()` to push fresh state; call after any successful mutation.
+    - Implement `connect()` / `disconnect()` using `hardware_configuration.toml` and appropriate libraries.  
+    - Implement getters/setters with exact command strings/APIs; parse responses; robust error handling.  
+    - Implement `_broadcast_state_update()` to push fresh state; call after any successful mutation.
+
+    SDK Path Resolution (All Devices)
+    - Determine SDK scenario and implement accordingly:
+      - Pre-installed SDK (e.g., PicoSDK): use vendor installer under Program Files/Applications and load runtime DLLs without repo bundling.
+      - Bundled-at-runtime SDK (e.g., MIRcat in `docs/sdks/<device>`): ship the minimal redistributables in-repo and load from a project-relative path.
+    - Apply this path resolution order in the controller before importing/using the SDK:
+      1. Environment variable `"<DEVICE>_SDK_PATH"` (e.g., `PICO_SDK_PATH`, `MIRCAT_SDK_PATH`).
+      2. `sdk_path` from `hardware_configuration.toml` (supports relative paths like `./docs/sdks/<device>` or absolute paths).
+      3. Sensible OS default(s), for example on Windows: `%ProgramFiles%/Pico Technology/SDK`.
+    - Windows-specific: use `os.add_dll_directory(path)` for each candidate (root and `lib/`) before importing the SDK so dependent DLLs resolve.
+    - On failure: raise a clear error that lists the attempted paths and suggests setting the env var or updating `sdk_path`.
+    - Never hardcode user-profile paths (e.g., `C:\Users\<name>`). Prefer env vars + relative paths for multi-user labs.
 2) **Frontend wiring (`*View.tsx` / `api.ts`):**
    - Implement API calls; wire `onClick/onChange`; show loaders/toasts; enforce validation rules.  
    - Implement WebSocket listener per spec to keep UI in sync.
