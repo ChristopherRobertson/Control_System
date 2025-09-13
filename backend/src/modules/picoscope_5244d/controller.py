@@ -5,6 +5,7 @@ Implements control functions for the PicoScope 5244D MSO oscilloscope
 using PicoSDK. Connection succeeds only if the SDK opens a device.
 """
 
+import os
 import toml
 import logging
 from pathlib import Path
@@ -61,10 +62,40 @@ class PicoScope5244DController:
             logger.error(f"Failed to load config: {e}")
             return {}
 
+    def _prepare_dll_search_paths(self) -> None:
+        """Ensure Windows DLL search path includes PicoSDK lib directory.
+
+        Order of resolution:
+        - Env var `PICO_SDK_PATH`
+        - Config `sdk_path` from hardware_configuration.toml
+        - Program Files default: C:\\Program Files\\Pico Technology\\SDK
+        """
+        if os.name != 'nt':
+            return
+        candidates = []
+        env_path = os.environ.get('PICO_SDK_PATH')
+        if env_path:
+            candidates.append(env_path)
+        cfg_path = self.config.get('sdk_path')
+        if cfg_path:
+            candidates.append(cfg_path)
+        prog_files = os.environ.get('ProgramFiles', r"C:\\Program Files")
+        candidates.append(os.path.join(prog_files, 'Pico Technology', 'SDK'))
+
+        # Add their lib subfolder if present; add root too for good measure
+        for base in candidates:
+            for path in (base, os.path.join(base, 'lib')):
+                if os.path.isdir(path):
+                    try:
+                        os.add_dll_directory(path)  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+
     def _require_sdk(self):
         if self._ps is not None:
             return
         try:
+            self._prepare_dll_search_paths()
             from picosdk.ps5000a import ps5000a as ps  # type: ignore
             self._ps = ps
         except Exception as e:
@@ -188,4 +219,3 @@ class PicoScope5244DController:
         logger.info("PicoScope state updated")
         # The global /ws/{device} endpoint in main.py polls controller status.
         return None
-

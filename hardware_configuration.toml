@@ -34,7 +34,7 @@ description = "Pump laser controlled via TTL signals from Signal Generator"
 device_type = "Daylight MIRcat QCL"
 connection_type = "USB"
 port = "AUTO"  # Auto-detect USB device
-sdk_path = "C:/Users/Chris/Documents/GitHub/Control_System/docs/sdks/daylight_mircat"  # Local path
+sdk_path = "./docs/sdks/daylight_mircat"  # Relative to project root (multi-user safe)
 description = "Mid-IR tunable probe laser"
 
 [daylight_mircat.communication]
