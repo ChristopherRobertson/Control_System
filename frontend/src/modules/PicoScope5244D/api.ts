@@ -19,6 +19,9 @@ export interface DeviceStatus {
   channels: Record<string, ChannelConfig>
   timebase: Record<string, any>
   trigger: Record<string, any>
+  model?: string
+  serial?: string
+  driver_version?: string
 }
 
 export class PicoScopeAPI {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Box,
   Grid,
@@ -30,13 +30,15 @@ function PicoScope5244DView() {
   const [acquiring, setAcquiring] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
   const [channels, setChannels] = useState<ChannelsState>({
     A: { enabled: true, range: '±2V', coupling: 'DC' },
     B: { enabled: true, range: '±2V', coupling: 'DC' },
     C: { enabled: false, range: '±2V', coupling: 'DC' },
     D: { enabled: false, range: '±2V', coupling: 'DC' }
   })
+  const wsRef = useRef<WebSocket | null>(null)
+  const [deviceInfo, setDeviceInfo] = useState<{ model?: string; serial?: string; driver_version?: string } | null>(null)
 
   const handleConnect = async () => {
     setLoading(true)
@@ -44,6 +46,7 @@ function PicoScope5244DView() {
       const status = await PicoScopeAPI.connect()
       setConnected(status.connected)
       setAcquiring(status.acquiring)
+      setDeviceInfo({ model: status.model, serial: status.serial, driver_version: status.driver_version })
       setError(null)
     } catch (err) {
       setError('Failed to connect to PicoScope')
@@ -58,6 +61,7 @@ function PicoScope5244DView() {
       const status = await PicoScopeAPI.disconnect()
       setConnected(status.connected)
       setAcquiring(status.acquiring)
+      setDeviceInfo(null)
       setError(null)
     } catch (err) {
       setError('Failed to disconnect from PicoScope')
@@ -104,6 +108,79 @@ function PicoScope5244DView() {
     }
   }
 
+  // Helpers to call backend on UI changes
+  const updateChannel = async (ch: 'A'|'B'|'C'|'D', cfg: Partial<ChannelConfig>) => {
+    if (!connected) return
+    setLoading(true)
+    try {
+      const status = await PicoScopeAPI.setChannelConfig(ch, cfg)
+      setChannels(prev => ({ ...prev, [ch]: { ...prev[ch], ...cfg } }))
+      setConnected(status.connected)
+      setAcquiring(status.acquiring)
+      setDeviceInfo({ model: status.model, serial: status.serial, driver_version: status.driver_version })
+    } catch (e) {
+      setError(`Failed to configure channel ${ch}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const setTimebase = async (cfg: Record<string, any>) => {
+    if (!connected) return
+    setLoading(true)
+    try {
+      const status = await PicoScopeAPI.setTimebaseConfig(cfg)
+      setConnected(status.connected)
+      setAcquiring(status.acquiring)
+      setDeviceInfo({ model: status.model, serial: status.serial, driver_version: status.driver_version })
+    } catch (e) {
+      setError('Failed to set timebase')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const setTrigger = async (cfg: Record<string, any>) => {
+    if (!connected) return
+    setLoading(true)
+    try {
+      const status = await PicoScopeAPI.setTriggerConfig(cfg)
+      setConnected(status.connected)
+      setAcquiring(status.acquiring)
+      setDeviceInfo({ model: status.model, serial: status.serial, driver_version: status.driver_version })
+    } catch (e) {
+      setError('Failed to set trigger')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // WebSocket subscription for live status
+  useEffect(() => {
+    if (!connected) {
+      if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
+      return
+    }
+    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const host = window.location.host
+    const ws = new WebSocket(`${scheme}://${host}/ws/picoscope_5244d`)
+    wsRef.current = ws
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data)
+        if (msg?.type === 'status' && msg?.payload) {
+          const st = msg.payload
+          setConnected(!!st.connected)
+          setAcquiring(!!st.acquiring)
+          setDeviceInfo({ model: st.model, serial: st.serial, driver_version: st.driver_version })
+          if (st.channels) setChannels(st.channels)
+        }
+      } catch {}
+    }
+    ws.onerror = () => { /* errors surfaced via HTTP paths */ }
+    return () => { try { ws.close() } catch {} }
+  }, [connected])
+
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
@@ -113,7 +190,7 @@ function PicoScope5244DView() {
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Chip 
-            label={connected ? 'Connected' : 'Disconnected'} 
+            label={connected ? (deviceInfo?.serial ? `Connected (${deviceInfo.serial})` : 'Connected') : 'Disconnected'} 
             color={connected ? 'success' : 'default'}
             icon={<ScopeIcon />}
           />
@@ -159,10 +236,7 @@ function PicoScope5244DView() {
                       control={
                         <Switch
                           checked={config.enabled}
-                          onChange={(e) => setChannels((prev: ChannelsState) => ({
-                            ...prev,
-                            [channel as keyof ChannelsState]: { ...prev[channel as keyof ChannelsState], enabled: e.target.checked }
-                          }))}
+                          onChange={(e) => updateChannel(channel as 'A'|'B'|'C'|'D', { enabled: e.target.checked })}
                           disabled={!connected}
                         />
                       }
@@ -172,7 +246,7 @@ function PicoScope5244DView() {
                   <Box sx={{ display: 'flex', gap: 2 }}>
                     <FormControl size="small" disabled={!connected || !config.enabled}>
                       <InputLabel>Range</InputLabel>
-                      <Select value={config.range} label="Range">
+                      <Select value={config.range} label="Range" onChange={(e) => updateChannel(channel as 'A'|'B'|'C'|'D', { range: e.target.value as string })}>
                         <MenuItem value="±10V">±10V</MenuItem>
                         <MenuItem value="±5V">±5V</MenuItem>
                         <MenuItem value="±2V">±2V</MenuItem>
@@ -182,7 +256,7 @@ function PicoScope5244DView() {
                     </FormControl>
                     <FormControl size="small" disabled={!connected || !config.enabled}>
                       <InputLabel>Coupling</InputLabel>
-                      <Select value={config.coupling} label="Coupling">
+                      <Select value={config.coupling} label="Coupling" onChange={(e) => updateChannel(channel as 'A'|'B'|'C'|'D', { coupling: e.target.value as string })}>
                         <MenuItem value="DC">DC</MenuItem>
                         <MenuItem value="AC">AC</MenuItem>
                       </Select>
@@ -233,12 +307,12 @@ function PicoScope5244DView() {
               </Typography>
               <FormControl fullWidth size="small" disabled={!connected}>
                 <InputLabel>Time/Division</InputLabel>
-                <Select defaultValue="1ms/div" label="Time/Division">
+                <Select defaultValue="1ms/div" label="Time/Division" onChange={(e) => setTimebase({ scale: e.target.value })}>
                   <MenuItem value="10ns/div">10ns/div</MenuItem>
                   <MenuItem value="100ns/div">100ns/div</MenuItem>
-                  <MenuItem value="1μs/div">1μs/div</MenuItem>
-                  <MenuItem value="10μs/div">10μs/div</MenuItem>
-                  <MenuItem value="100μs/div">100μs/div</MenuItem>
+                  <MenuItem value="1µs/div">1µs/div</MenuItem>
+                  <MenuItem value="10µs/div">10µs/div</MenuItem>
+                  <MenuItem value="100µs/div">100µs/div</MenuItem>
                   <MenuItem value="1ms/div">1ms/div</MenuItem>
                   <MenuItem value="10ms/div">10ms/div</MenuItem>
                   <MenuItem value="100ms/div">100ms/div</MenuItem>
@@ -252,7 +326,7 @@ function PicoScope5244DView() {
               <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                 <FormControl size="small" disabled={!connected}>
                   <InputLabel>Source</InputLabel>
-                  <Select defaultValue="Channel A" label="Source">
+                  <Select defaultValue="Channel A" label="Source" onChange={(e) => setTrigger({ source: e.target.value })}>
                     <MenuItem value="Channel A">Channel A</MenuItem>
                     <MenuItem value="Channel B">Channel B</MenuItem>
                     <MenuItem value="Channel C">Channel C</MenuItem>
@@ -262,7 +336,7 @@ function PicoScope5244DView() {
                 </FormControl>
                 <FormControl size="small" disabled={!connected}>
                   <InputLabel>Edge</InputLabel>
-                  <Select defaultValue="Rising" label="Edge">
+                  <Select defaultValue="Rising" label="Edge" onChange={(e) => setTrigger({ direction: e.target.value })}>
                     <MenuItem value="Rising">Rising</MenuItem>
                     <MenuItem value="Falling">Falling</MenuItem>
                   </Select>
@@ -303,3 +377,4 @@ function PicoScope5244DView() {
 }
 
 export default PicoScope5244DView
+

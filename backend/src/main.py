@@ -89,6 +89,21 @@ async def websocket_endpoint(websocket: WebSocket, device_id: str):
             print(f"WebSocket disconnected for device: {device_id}")
         except Exception as e:
             print(f"WebSocket error for {device_id}: {e}")
+    elif device_id == 'picoscope_5244d':
+        try:
+            from modules.picoscope_5244d.routes import picoscope_controller
+            while True:
+                status = await picoscope_controller.get_status()
+                await websocket.send_text(json.dumps({
+                    'device': device_id,
+                    'type': 'status',
+                    'payload': status
+                }))
+                await asyncio.sleep(0.5)
+        except WebSocketDisconnect:
+            print(f"WebSocket disconnected for device: {device_id}")
+        except Exception as e:
+            print(f"WebSocket error for {device_id}: {e}")
     else:
         try:
             while True:
