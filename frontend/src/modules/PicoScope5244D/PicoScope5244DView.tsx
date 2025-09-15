@@ -39,6 +39,16 @@ function parseRangeToVolts(rangeLabel?: string): number {
   return val // this is the ± full-scale for one polarity
 }
 
+function countsMaxForBits(bits?: number): number {
+  switch (bits) {
+    case 8: return 127
+    case 12: return 2047
+    case 14: return 8191
+    case 15: return 16383
+    default: return 32767 // fallback if device reports full 16-bit codes
+  }
+}
+
 function parseTimePerDiv(label?: string): number {
   if (!label) return 0.001 // default 1ms/div
   const m = label.match(/^(\d+(?:\.\d+)?)([munp]?s)\/div$/i)
@@ -125,9 +135,10 @@ function WaveformCanvas({ dataA, dataB, status, showGrid=true, timeIntervalNs, s
       ctx.lineWidth = 1.5
       ctx.beginPath()
       const n = data.length
+      const cmax = countsMaxForBits(status?.resolution_bits)
       for (let i=0;i<n;i++) {
         const x = (i/(n-1))*w
-        const y = h/2 - (data[i]/32767)*(h/2)
+        const y = h/2 - (data[i]/cmax)*(h/2)
         if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y)
       }
       ctx.stroke()
