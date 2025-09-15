@@ -47,5 +47,10 @@ Contributing
 - Update ACTION_REQUIRED.md with any missing lab inputs (user tasks only).
 
 License/Distribution
+@@
+Quantum Composers 9524 (Signal Generator)
+- Phase 1 UI rebuilt from scratch. The new panel lives at `frontend/src/modules/QuantumComposers9524/` and is organized into three tabs: System, Triggers, and Channels. It mirrors the manufacturer's functionality from the screenshots while streamlining layout.
+- Backend endpoints are provided under `/api/quantum_composers_9524` and maintain a validated, in-memory state (no hardware I/O in Phase 1). See `backend/src/modules/quantum_composers_9524/controller.py` and `routes.py`.
+- Configure COM port and ranges in `hardware_configuration.toml` under `[quantum_composers_9524]`.
+- Next: Implement real serial protocol in the controller (Phase 1 Part D) and wire WebSocket broadcasting if desired.
 - Internal lab use only. If bundling vendor SDK files, ensure compliance with vendor terms.
-

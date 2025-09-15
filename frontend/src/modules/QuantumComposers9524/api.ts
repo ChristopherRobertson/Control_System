@@ -1,60 +1,85 @@
 import axios from 'axios'
 
-const API_BASE = '/api/quantum_composers_9524'
+export const API_BASE = '/api/quantum_composers_9524'
 
-export interface DeviceStatus {
+export type QCChannelKey = 'A' | 'B' | 'C' | 'D'
+
+export interface QCSystemSettings {
+  pulse_mode: 'Continuous' | 'Burst' | 'Single'
+  period_s: number
+  burst_count: number
+  auto_start: boolean
+  duty_cycle_on_counts: number
+  duty_cycle_off_counts: number
+}
+
+export interface QCChannelSettings {
+  enabled: boolean
+  delay_s: number
+  width_s: number
+  channel_mode: 'Normal' | 'Invert'
+  sync_source: string
+  duty_on: number
+  duty_off: number
+  burst_count: number
+  polarity: 'Normal' | 'Invert'
+  output_mode: string
+  amplitude_v: number
+  wait_count: number
+  multiplexer: Record<QCChannelKey, boolean>
+  gate_mode: 'Disabled' | 'Enabled'
+}
+
+export interface QCExternalTrigger {
+  trigger_mode: 'Disabled' | 'Enabled'
+  trigger_edge: 'Rising' | 'Falling'
+  trigger_threshold_v: number
+  gate_mode: 'Disabled' | 'Enabled'
+  gate_logic: 'High' | 'Low'
+  gate_threshold_v: number
+}
+
+export interface QCStatus {
   connected: boolean
   running: boolean
-  system_settings: Record<string, any>
-  channels: Record<string, any>
-  external_trigger: Record<string, any>
+  system_settings: QCSystemSettings
+  channels: Record<QCChannelKey, QCChannelSettings>
+  external_trigger: QCExternalTrigger
   device_info: Record<string, any>
+  ranges?: Record<string, number>
+  last_error?: string | null
 }
 
 export class QuantumComposersAPI {
   static async connect() {
-    const response = await axios.post(`${API_BASE}/connect`)
-    return response.data
+    return (await axios.post(`${API_BASE}/connect`)).data as any
   }
-
   static async disconnect() {
-    const response = await axios.post(`${API_BASE}/disconnect`)
-    return response.data
+    return (await axios.post(`${API_BASE}/disconnect`)).data as any
   }
-
   static async start() {
-    const response = await axios.post(`${API_BASE}/start`)
-    return response.data
+    return (await axios.post(`${API_BASE}/start`)).data as any
   }
-
   static async stop() {
-    const response = await axios.post(`${API_BASE}/stop`)
-    return response.data
+    return (await axios.post(`${API_BASE}/stop`)).data as any
   }
-
-  static async setSystemConfig(config: Record<string, any>) {
-    const response = await axios.post(`${API_BASE}/system`, { config })
-    return response.data
+  static async setSystem(config: Partial<QCSystemSettings>) {
+    return (await axios.post(`${API_BASE}/system`, { config })).data as any
   }
-
-  static async setChannelConfig(channel: string, config: Record<string, any>) {
-    const response = await axios.post(`${API_BASE}/channel`, { channel, config })
-    return response.data
+  static async setChannel(channel: QCChannelKey, config: Partial<QCChannelSettings>) {
+    return (await axios.post(`${API_BASE}/channel`, { channel, config })).data as any
   }
-
-  static async setExternalTriggerConfig(config: Record<string, any>) {
-    const response = await axios.post(`${API_BASE}/external-trigger`, { config })
-    return response.data
+  static async setExternal(config: Partial<QCExternalTrigger>) {
+    return (await axios.post(`${API_BASE}/external-trigger`, { config })).data as any
   }
-
   static async sendCommand(command: string) {
-    const response = await axios.post(`${API_BASE}/command`, { command })
-    return response.data
+    return (await axios.post(`${API_BASE}/command`, { command })).data as any
   }
-
-  static async getStatus(): Promise<DeviceStatus> {
-    const response = await axios.get(`${API_BASE}/status`)
-    return response.data
+  static async getStatus(): Promise<QCStatus> {
+    return (await axios.get(`${API_BASE}/status`)).data as QCStatus
+  }
+  static async getConfig() {
+    return (await axios.get(`${API_BASE}/config`)).data as any
   }
 }
 

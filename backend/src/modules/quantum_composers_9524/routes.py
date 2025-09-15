@@ -1,7 +1,9 @@
 """
-Quantum Composers 9524 API Routes
+Quantum Composers 9524 API Routes (Phase 1)
 
-REST API endpoints for controlling the Quantum Composers 9524 signal generator
+Clean, minimal endpoints to support the reorganized UI. These routes
+mutate in-memory state in the controller and return a fresh status
+snapshot with each call.
 """
 
 from fastapi import APIRouter, HTTPException, FastAPI
@@ -13,160 +15,125 @@ from .controller import QuantumComposers9524Controller
 
 logger = logging.getLogger(__name__)
 
-# Create router with prefix for this device
 router = APIRouter(prefix="/api/quantum_composers_9524", tags=["quantum_composers_9524"])
-
-# Global controller instance
 qc_controller = QuantumComposers9524Controller()
 
-# Request/Response Models
-class SystemConfigRequest(BaseModel):
+
+class DictPayload(BaseModel):
     config: Dict[str, Any]
 
-class ChannelConfigRequest(BaseModel):
+
+class ChannelPayload(BaseModel):
     channel: str
     config: Dict[str, Any]
 
-class TriggerConfigRequest(BaseModel):
-    config: Dict[str, Any]
 
-class CommandRequest(BaseModel):
+class CommandPayload(BaseModel):
     command: str
 
-# Connection endpoints
+
 @router.post("/connect")
 async def connect():
-    """Connect to Quantum Composers device"""
     try:
         if qc_controller.connected:
-            status = await qc_controller.get_status()
-            return {"message": "Already connected", **status}
-        success = await qc_controller.connect()
-        if success:
-            status = await qc_controller.get_status()
-            return {"message": "Connected to Quantum Composers successfully", **status}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to connect to device")
+            return {"message": "Already connected", **(await qc_controller.get_status())}
+        ok = await qc_controller.connect()
+        if not ok:
+            raise HTTPException(status_code=500, detail=qc_controller.last_error or "Connect failed")
+        return {"message": "Connected", **(await qc_controller.get_status())}
     except Exception as e:
-        logger.error(f"Connect error: {e}")
+        logger.exception("QC connect error")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/disconnect")
 async def disconnect():
-    """Disconnect from Quantum Composers device"""
     try:
-        if not qc_controller.connected:
-            status = await qc_controller.get_status()
-            return {"message": "Already disconnected", **status}
-        success = await qc_controller.disconnect()
-        if success:
-            status = await qc_controller.get_status()
-            return {"message": "Disconnected from Quantum Composers successfully", **status}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to disconnect from device")
+        await qc_controller.disconnect()
+        return {"message": "Disconnected", **(await qc_controller.get_status())}
     except Exception as e:
-        logger.error(f"Disconnect error: {e}")
+        logger.exception("QC disconnect error")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Output control endpoints
+
 @router.post("/start")
-async def start_output():
-    """Start signal generation"""
+async def start():
     try:
-        if qc_controller.running:
-            status = await qc_controller.get_status()
-            return {"message": "Already running", **status}
-        success = await qc_controller.start_output()
-        if success:
-            status = await qc_controller.get_status()
-            return {"message": "Output started successfully", **status}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to start output")
+        await qc_controller.start_output()
+        return {"message": "Output started", **(await qc_controller.get_status())}
     except Exception as e:
-        logger.error(f"Start output error: {e}")
+        logger.exception("QC start error")
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @router.post("/stop")
-async def stop_output():
-    """Stop signal generation"""
+async def stop():
     try:
-        if not qc_controller.running:
-            status = await qc_controller.get_status()
-            return {"message": "Already stopped", **status}
-        success = await qc_controller.stop_output()
-        if success:
-            status = await qc_controller.get_status()
-            return {"message": "Output stopped successfully", **status}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to stop output")
+        await qc_controller.stop_output()
+        return {"message": "Output stopped", **(await qc_controller.get_status())}
     except Exception as e:
-        logger.error(f"Stop output error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Configuration endpoints
-@router.post("/system")
-async def set_system_config(request: SystemConfigRequest):
-    """Configure system settings"""
-    try:
-        success = await qc_controller.set_system_config(request.config)
-        if success:
-            status = await qc_controller.get_status()
-            return {"message": "System configured successfully", **status}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to configure system")
-    except Exception as e:
-        logger.error(f"System config error: {e}")
+        logger.exception("QC stop error")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/system")
+async def set_system(payload: DictPayload):
+    try:
+        await qc_controller.set_system_config(payload.config)
+        return {"message": "System updated", **(await qc_controller.get_status())}
+    except Exception as e:
+        logger.exception("QC system config error")
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @router.post("/channel")
-async def set_channel_config(request: ChannelConfigRequest):
-    """Configure signal generator channel"""
+async def set_channel(payload: ChannelPayload):
     try:
-        success = await qc_controller.set_channel_config(request.channel, request.config)
-        if success:
-            status = await qc_controller.get_status()
-            return {"message": f"Channel {request.channel} configured successfully", **status}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to configure channel")
+        await qc_controller.set_channel_config(payload.channel, payload.config)
+        return {"message": f"Channel {payload.channel} updated", **(await qc_controller.get_status())}
     except Exception as e:
-        logger.error(f"Channel config error: {e}")
+        logger.exception("QC channel config error")
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @router.post("/external-trigger")
-async def set_external_trigger_config(request: TriggerConfigRequest):
-    """Configure external trigger settings"""
+async def set_external_trigger(payload: DictPayload):
     try:
-        success = await qc_controller.set_external_trigger_config(request.config)
-        if success:
-            status = await qc_controller.get_status()
-            return {"message": "External trigger configured successfully", **status}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to configure external trigger")
+        await qc_controller.set_external_trigger_config(payload.config)
+        return {"message": "External trigger updated", **(await qc_controller.get_status())}
     except Exception as e:
-        logger.error(f"External trigger config error: {e}")
+        logger.exception("QC external trigger config error")
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @router.post("/command")
-async def send_command(request: CommandRequest):
-    """Send command via command terminal"""
+async def command(payload: CommandPayload):
     try:
-        response = await qc_controller.send_command(request.command)
-        return {"message": "Command sent successfully", "response": response}
+        resp = await qc_controller.send_command(payload.command)
+        return {"message": "Command sent", "response": resp}
     except Exception as e:
-        logger.error(f"Send command error: {e}")
+        logger.exception("QC command error")
         raise HTTPException(status_code=400, detail=str(e))
 
-# Status endpoints
+
 @router.get("/status")
-async def get_status():
-    """Get current device status"""
+async def status():
     try:
-        status = await qc_controller.get_status()
-        return status
+        return await qc_controller.get_status()
     except Exception as e:
-        logger.error(f"Get status error: {e}")
+        logger.exception("QC status error")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/config")
+async def config():
+    try:
+        st = await qc_controller.get_status()
+        return {"ranges": st.get("ranges", {}), "device_info": st.get("device_info", {})}
+    except Exception as e:
+        logger.exception("QC config error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def register(app: FastAPI) -> None:
-    """Register Quantum Composers routes with FastAPI app"""
     app.include_router(router)

@@ -71,7 +71,7 @@ pulsed_current_min = 100 # minimum value for current in pulsed mode in milliamps
 pulsed_current_max = 1000 # maximum value for current in pulsed mode in milliamps
 pulsed_current_default = 1000 # default value for current in pulsed mode in milliamps
 cw_current_min = 100 # minimum value for continuous wave mode milliamps
-cw_current_max = 775 # macximum value for continuous wave mode in milliamps
+cw_current_max = 775 # maximum value for continuous wave mode in milliamps
 cw_current_default = 775 # default value for continuous wave mode in milliamps
 temperature_min = 17 # minimum value for QCL temperature in degrees C
 temperature_max = 23 # maximum value for QCL temperature in degrees C
@@ -169,12 +169,74 @@ use_advanced_sweep = true # use advanced sweep settings
 # PICOSCOPE 5244D - Oscilloscope
 # ============================================================================
 [picoscope_5244d]
-device_type = "PicoScope 5244D MSO"
+device_type = "PicoScope 5244D"
 connection_type = "USB3"
 sdk_path = "C:/Program Files/Pico Technology/SDK"  # Windows default
-description = "4-channel oscilloscope for data acquisition"
+description = "2-channel oscilloscope for data acquisition"
 
 [picoscope_5244d.parameters]
+# UI validation ranges for Phase 1 (complete from screenshots)
+# Input ranges cover the PicoScope standard 1-2-5 steps up to ±20 V.
+input_ranges = [
+  "±10mV","±20mV","±50mV",
+  "±100mV","±200mV","±500mV",
+  "±1V","±2V","±5V","±10V","±20V"
+]
+coupling_options = ["DC","AC"]
+
+# Complete 1-2-5 time/div ladder from ns to s.
+time_per_div_options = [
+  "1ns/div","2ns/div","5ns/div",
+  "10ns/div","20ns/div","50ns/div",
+  "100ns/div","200ns/div","500ns/div",
+  "1µs/div","2µs/div","5µs/div",
+  "10µs/div","20µs/div","50µs/div",
+  "100µs/div","200µs/div","500µs/div",
+  "1ms/div","2ms/div","5ms/div",
+  "10ms/div","20ms/div","50ms/div",
+  "100ms/div","200ms/div","500ms/div",
+  "1s/div","2s/div","5s/div","10s/div","20s/div","50s/div",
+  "100s/div","200s/div","500s/div",
+  "1000s/div","2000s/div","5000s/div"
+]
+
+resolution_bits_options = [8, 12, 14, 15]
+sample_rate_min_hz = 625.0093751406271
+sample_rate_max_hz = 500000000.0
+samples_min = 1
+samples_max = 268435392
+awg_frequency_min_hz = 0.030
+awg_frequency_max_hz = 20000000.0
+awg_amplitude_min_vpp = 0.002
+awg_amplitude_max_vpp = 2.0
+
+# Numeric equivalents for SDK mapping (optional)
+input_ranges_v = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0]  # +/- volts
+time_per_div_options_s = [
+  1e-9, 2e-9, 5e-9,
+  1e-8, 2e-8, 5e-8,
+  1e-7, 2e-7, 5e-7,
+  1e-6, 2e-6, 5e-6,
+  1e-5, 2e-5, 5e-5,
+  1e-4, 2e-4, 5e-4,
+  1e-3, 2e-3, 5e-3,
+  1e-2, 2e-2, 5e-2,
+  1e-1, 2e-1, 5e-1,
+  1.0, 2.0, 5.0, 10.0, 20.0, 50.0,
+  100.0, 200.0, 500.0,
+  1000.0, 2000.0, 5000.0
+]
+
+[picoscope_5244d.parameters.timebase_index_map]
+"10ns/div" = 1
+"100ns/div" = 5
+"1µs/div" = 8
+"10µs/div" = 11
+"100µs/div" = 14
+"1ms/div" = 17
+"10ms/div" = 20
+"100ms/div" = 23
+"1s/div" = 26
 
 # ============================================================================
 # QUANTUM COMPOSERS 9524 - Signal Generator

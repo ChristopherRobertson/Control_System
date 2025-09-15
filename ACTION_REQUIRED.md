@@ -38,3 +38,12 @@ Provide the following information or perform the listed actions. This file track
 ## Test Expectations
 - Specify which PC(s) are used for live tests and connected instruments.
 - Provide a time window to perform a short live connection test per device.
+
+## Next Immediate Steps
+- Proceed to Phase 1 – Part D for PicoScope 5244D: install PicoSDK, confirm SDK path, and replace Phase 1 scaffolding with real SDK calls in `backend/src/modules/picoscope_5244d/controller.py`. Provide exact input range list and any lab‑preferred defaults (timebase, resolution, trigger).
+
+- Quantum Composers 9524 (Signal Generator):
+  - Confirm the COM port and baud rate used on each PC (update `hardware_configuration.toml` at `[quantum_composers_9524]`).
+  - Validate min/max ranges for thresholds and amplitudes already captured in `hardware_configuration.toml`; add missing items if any.
+  - Identify final channel mapping to devices (A/B/C/D to Nd:YAG Q-switch / fire, MIRcat trig in, HF2LI DI1) and note any required default delays/widths.
+  - For Part D: provide command set or serial protocol details so backend can replace Phase 1 in-memory updates with real device I/O.
