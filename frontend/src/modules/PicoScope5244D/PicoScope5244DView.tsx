@@ -4,7 +4,7 @@ import {
   Box, Grid, Card, CardContent, Typography, Button, Chip, Divider, TextField,
   FormControlLabel, Switch, MenuItem, Select, FormControl, InputLabel, Alert, IconButton
 } from '@mui/material'
-import { PlayArrow, Stop, Refresh, Clear as ClearIcon } from '@mui/icons-material'
+import { PlayArrow, Stop, Refresh } from '@mui/icons-material'
 import { Popover, RadioGroup, FormLabel, Radio, ButtonGroup } from '@mui/material'
 
 const ranges = [
@@ -142,6 +142,8 @@ function WaveformCanvas({ dataA, dataB, status, showGrid=true }: { dataA?: numbe
 
 function ChannelCard({ name, status, onUpdate }: { name: ChannelName, status: PicoScopeStatus, onUpdate: (cfg: any) => void }) {
   const cfg = status.channels[name]
+  const [offsetStr, setOffsetStr] = useState<string>(String(cfg.offset ?? 0))
+  useEffect(() => { setOffsetStr(String(cfg.offset ?? 0)) }, [cfg.offset])
   return (
     <Card>
       <CardContent>
@@ -170,8 +172,15 @@ function ChannelCard({ name, status, onUpdate }: { name: ChannelName, status: Pi
             </FormControl>
           </Grid>
           <Grid item xs={12}>
-            <TextField label="Offset (V)" type="number" size="small" fullWidth value={cfg.offset}
-              onChange={(e)=> onUpdate({ offset: parseFloat(e.target.value) })} disabled={!status.connected} />
+            <TextField label="Offset (V)" type="number" size="small" fullWidth value={offsetStr}
+              onChange={(e)=> setOffsetStr(e.target.value)}
+              onBlur={()=> {
+                const v = parseFloat(offsetStr)
+                if (!Number.isFinite(v)) { setOffsetStr(String(cfg.offset ?? 0)); return }
+                onUpdate({ offset: v })
+              }}
+              onKeyDown={(e)=> { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur() }}
+              disabled={!status.connected} />
           </Grid>
         </Grid>
       </CardContent>
@@ -250,7 +259,6 @@ export default function PicoScope5244DView() {
       <Box sx={{ display:'flex', alignItems:'center', gap:2, mb:2 }}>
         <Typography variant="h4">PicoScope 5244D</Typography>
         <Chip label={s?.connected ? 'Connected' : 'Disconnected'} color={s?.connected ? 'success' : 'default'} />
-        <Chip label={s?.acquiring ? 'Running' : 'Stopped'} color={s?.acquiring ? 'success' : 'default'} />
         {s && (
           <>
             <Chip label={`Samples: ${s.timebase?.n_samples ?? '-'}`} />
@@ -274,7 +282,7 @@ export default function PicoScope5244DView() {
           <Button onClick={(e)=> setAnchor({key:'trigger', el: e.currentTarget})} disabled={!s?.connected}>Trigger</Button>
           <Button onClick={(e)=> setAnchor({key:'res', el: e.currentTarget})} disabled={!s?.connected}>Hardware resolution</Button>
           <Button onClick={async ()=> setStatus(await api.autosetup())} disabled={!s?.connected}>Auto setup</Button>
-          <IconButton onClick={()=> { setPreviewA(undefined); setPreviewB(undefined) }} title='Clear' disabled={!previewA && !previewB}><ClearIcon/></IconButton>
+          <Button onClick={()=> { setPreviewA(undefined); setPreviewB(undefined) }} disabled={!previewA && !previewB}>Clear</Button>
         </ButtonGroup>
       </Box>
 
