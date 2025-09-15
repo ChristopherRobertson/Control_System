@@ -16,6 +16,7 @@ import logging
 import math
 import os
 from ctypes import byref, c_int16, c_int32, c_float, create_string_buffer
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -533,9 +534,30 @@ class PicoScope5244DController:
             raise RuntimeError(f"RunBlock failed: {st}")
         self.state.acquiring = True
 
+        # Wait for ready, but fall back to immediate capture if trigger never occurs
         ready = c_int16(0)
+        start = time.perf_counter()
+        timeout_s = 0.20  # 200 ms to keep UI responsive
         while ready.value == 0:
             ps.ps5000aIsReady(handle, byref(ready))
+            if ready.value == 0 and (time.perf_counter() - start) > timeout_s:
+                # Stop, disable trigger (immediate), and re-run block
+                try:
+                    ps.ps5000aStop(handle)
+                except Exception:
+                    pass
+                # disable simple trigger for immediate capture
+                try:
+                    ps.ps5000aSetSimpleTrigger(handle, 0, self._ch_enum('A'), 0, ps.PS5000A_THRESHOLD_DIRECTION['PS5000A_RISING'], 0, 0)
+                except Exception:
+                    pass
+                st = ps.ps5000aRunBlock(handle, 0, n_samples, timebase_index, None, 0, None, None)
+                if st != 0:
+                    raise RuntimeError(f"RunBlock (immediate) failed: {st}")
+                start = time.perf_counter()
+            else:
+                # light wait to avoid busy-spin
+                time.sleep(0.001)
 
         samples_out = c_int32(n_samples.value)
         overflow = c_int16()

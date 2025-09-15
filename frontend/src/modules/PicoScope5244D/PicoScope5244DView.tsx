@@ -50,7 +50,7 @@ function parseTimePerDiv(label?: string): number {
   return val * (mult[unit] ?? 1e-3)
 }
 
-function WaveformCanvas({ dataA, dataB, status, showGrid=true }: { dataA?: number[], dataB?: number[], status?: PicoScopeStatus | null, showGrid?: boolean }) {
+function WaveformCanvas({ dataA, dataB, status, showGrid=true, timeIntervalNs, sampleCount }: { dataA?: number[], dataB?: number[], status?: PicoScopeStatus | null, showGrid?: boolean, timeIntervalNs?: number, sampleCount?: number }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -84,8 +84,9 @@ function WaveformCanvas({ dataA, dataB, status, showGrid=true }: { dataA?: numbe
       ctx.beginPath(); ctx.moveTo(w/2,0); ctx.lineTo(w/2,h); ctx.stroke()
     }
     // Axis labels (time and voltage)
-    // Use configured time/div from status for stable labeling
-    const tPerDiv = parseTimePerDiv(status?.timebase?.time_per_div)
+    // Prefer actual total capture time when available; fallback to configured
+    const actualTotal = (timeIntervalNs && sampleCount) ? (timeIntervalNs * 1e-9 * sampleCount) : undefined
+    const tPerDiv = actualTotal ? (actualTotal / 10) : parseTimePerDiv(status?.timebase?.time_per_div)
     const fmtTime = (s: number) => {
       const abs = Math.abs(s)
       if (abs >= 1) return `${s.toFixed(2)} s`
@@ -135,9 +136,12 @@ function WaveformCanvas({ dataA, dataB, status, showGrid=true }: { dataA?: numbe
       }
       ctx.stroke()
     }
+    // Draw channel A always when data present
     drawTrace(dataA, '#00bcd4')
-    drawTrace(dataB, '#ff9800')
-  }, [dataA, dataB, status, showGrid])
+    // Draw channel B only if enabled to avoid a flat orange line
+    const chBEnabled = Boolean(status?.channels?.B?.enabled)
+    if (chBEnabled) drawTrace(dataB, '#ff9800')
+  }, [dataA, dataB, status, showGrid, timeIntervalNs, sampleCount])
   return <canvas ref={canvasRef} style={{ width: '100%', height: 420, background: '#0c0c0c', borderRadius: 6 }} />
 }
 
@@ -198,6 +202,8 @@ export default function PicoScope5244DView() {
   const [anchor, setAnchor] = useState<{key: string, el: HTMLElement|null}>({key:'', el: null})
   const runLoopRef = useRef<number | null>(null)
   const previewBusyRef = useRef(false)
+  const [lastTimeIntervalNs, setLastTimeIntervalNs] = useState<number|undefined>(undefined)
+  const [lastSamples, setLastSamples] = useState<number|undefined>(undefined)
   // reserved for future use if we switch to dynamic labels based on capture timing
 
   const refresh = async () => {
@@ -221,6 +227,8 @@ export default function PicoScope5244DView() {
           setStatus(res)
           setPreviewA(res.result.waveforms['A'])
           setPreviewB(res.result.waveforms['B'])
+          setLastTimeIntervalNs(res.result.time_interval_ns)
+          setLastSamples(res.result.samples)
         } catch (e:any) {
           setError(e.message)
         } finally {
@@ -373,7 +381,7 @@ export default function PicoScope5244DView() {
                 </Box>
               </Box>
               <Divider sx={{ my:2 }}/>
-              <WaveformCanvas dataA={previewA} dataB={previewB} status={s} />
+              <WaveformCanvas dataA={previewA} dataB={previewB} status={s} timeIntervalNs={lastTimeIntervalNs} sampleCount={lastSamples} />
             </CardContent>
           </Card>
         </Grid>
