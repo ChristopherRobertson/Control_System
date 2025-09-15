@@ -1,380 +1,396 @@
 import { useEffect, useRef, useState } from 'react'
+import { api, type PicoScopeStatus, type ChannelName, type TriggerSource } from './api'
 import {
-  Box,
-  Grid,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Switch,
-  FormControlLabel,
-  Chip,
-  Alert
+  Box, Grid, Card, CardContent, Typography, Button, Chip, Divider, TextField,
+  FormControlLabel, Switch, MenuItem, Select, FormControl, InputLabel, Alert, IconButton
 } from '@mui/material'
-import {
-  PlayArrow as StartIcon,
-  Stop as StopIcon,
-  SettingsApplications as AutoSetupIcon,
-  Memory as ScopeIcon
-} from '@mui/icons-material'
-import PicoScopeAPI, { ChannelConfig } from './api'
+import { PlayArrow, Stop, Refresh, Clear as ClearIcon } from '@mui/icons-material'
+import { Popover, RadioGroup, FormLabel, Radio, ButtonGroup } from '@mui/material'
 
-type ChannelsState = Record<'A' | 'B' | 'C' | 'D', ChannelConfig>
+const ranges = [
+  '±10mV','±20mV','±50mV',
+  '±100mV','±200mV','±500mV',
+  '±1V','±2V','±5V','±10V','±20V'
+]
+const couplings = ['DC', 'AC']
+const timePerDivOptions = [
+  '1ns/div','2ns/div','5ns/div',
+  '10ns/div','20ns/div','50ns/div',
+  '100ns/div','200ns/div','500ns/div',
+  '1µs/div','2µs/div','5µs/div',
+  '10µs/div','20µs/div','50µs/div',
+  '100µs/div','200µs/div','500µs/div',
+  '1ms/div','2ms/div','5ms/div',
+  '10ms/div','20ms/div','50ms/div',
+  '100ms/div','200ms/div','500ms/div',
+  '1s/div','2s/div','5s/div','10s/div','20s/div','50s/div',
+  '100s/div','200s/div','500s/div',
+  '1000s/div','2000s/div','5000s/div'
+]
 
-function PicoScope5244DView() {
-  const [connected, setConnected] = useState(false)
-  const [acquiring, setAcquiring] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+function parseRangeToVolts(rangeLabel?: string): number {
+  if (!rangeLabel) return 2
+  // Expect labels like '±2V', '±500mV'
+  const m = rangeLabel.match(/^±\s*(\d+(?:\.\d+)?)(m?V)$/i)
+  if (!m) return 2
+  let val = parseFloat(m[1])
+  const unit = m[2].toLowerCase()
+  if (unit === 'mv') val /= 1000
+  return val // this is the ± full-scale for one polarity
+}
 
-  const [channels, setChannels] = useState<ChannelsState>({
-    A: { enabled: true, range: '±2V', coupling: 'DC' },
-    B: { enabled: true, range: '±2V', coupling: 'DC' },
-    C: { enabled: false, range: '±2V', coupling: 'DC' },
-    D: { enabled: false, range: '±2V', coupling: 'DC' }
-  })
-  const wsRef = useRef<WebSocket | null>(null)
-  const [deviceInfo, setDeviceInfo] = useState<{ model?: string; serial?: string; driver_version?: string } | null>(null)
+function parseTimePerDiv(label?: string): number {
+  if (!label) return 0.001 // default 1ms/div
+  const m = label.match(/^(\d+(?:\.\d+)?)([munp]?s)\/div$/i)
+  if (!m) return 0.001
+  let v = parseFloat(m[1])
+  const unit = m[2].toLowerCase()
+  const mult: Record<string, number> = { 's':1, 'ms':1e-3, 'us':1e-6, 'µs':1e-6, 'ns':1e-9, 'ps':1e-12 }
+  return v * (mult[unit] ?? 1e-3)
+}
 
-  const handleConnect = async () => {
-    setLoading(true)
-    try {
-      const status = await PicoScopeAPI.connect()
-      setConnected(status.connected)
-      setAcquiring(status.acquiring)
-      setDeviceInfo({ model: status.model, serial: status.serial, driver_version: status.driver_version })
-      setError(null)
-    } catch (err) {
-      setError('Failed to connect to PicoScope')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDisconnect = async () => {
-    setLoading(true)
-    try {
-      const status = await PicoScopeAPI.disconnect()
-      setConnected(status.connected)
-      setAcquiring(status.acquiring)
-      setDeviceInfo(null)
-      setError(null)
-    } catch (err) {
-      setError('Failed to disconnect from PicoScope')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleAutoSetup = async () => {
-    setLoading(true)
-    try {
-      await PicoScopeAPI.autoSetup()
-      setError(null)
-    } catch (err) {
-      setError('Auto setup failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleStartAcquisition = async () => {
-    setLoading(true)
-    try {
-      const status = await PicoScopeAPI.startAcquisition()
-      setAcquiring(status.acquiring)
-      setError(null)
-    } catch (err) {
-      setError('Failed to start acquisition')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleStopAcquisition = async () => {
-    setLoading(true)
-    try {
-      const status = await PicoScopeAPI.stopAcquisition()
-      setAcquiring(status.acquiring)
-      setError(null)
-    } catch (err) {
-      setError('Failed to stop acquisition')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Helpers to call backend on UI changes
-  const updateChannel = async (ch: 'A'|'B'|'C'|'D', cfg: Partial<ChannelConfig>) => {
-    if (!connected) return
-    setLoading(true)
-    try {
-      const status = await PicoScopeAPI.setChannelConfig(ch, cfg)
-      setChannels(prev => ({ ...prev, [ch]: { ...prev[ch], ...cfg } }))
-      setConnected(status.connected)
-      setAcquiring(status.acquiring)
-      setDeviceInfo({ model: status.model, serial: status.serial, driver_version: status.driver_version })
-    } catch (e) {
-      setError(`Failed to configure channel ${ch}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const setTimebase = async (cfg: Record<string, any>) => {
-    if (!connected) return
-    setLoading(true)
-    try {
-      const status = await PicoScopeAPI.setTimebaseConfig(cfg)
-      setConnected(status.connected)
-      setAcquiring(status.acquiring)
-      setDeviceInfo({ model: status.model, serial: status.serial, driver_version: status.driver_version })
-    } catch (e) {
-      setError('Failed to set timebase')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const setTrigger = async (cfg: Record<string, any>) => {
-    if (!connected) return
-    setLoading(true)
-    try {
-      const status = await PicoScopeAPI.setTriggerConfig(cfg)
-      setConnected(status.connected)
-      setAcquiring(status.acquiring)
-      setDeviceInfo({ model: status.model, serial: status.serial, driver_version: status.driver_version })
-    } catch (e) {
-      setError('Failed to set trigger')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // WebSocket subscription for live status
+function WaveformCanvas({ dataA, dataB, status, showGrid=true, timeIntervalNs, sampleCount }: { dataA?: number[], dataB?: number[], status?: PicoScopeStatus | null, showGrid?: boolean, timeIntervalNs?: number, sampleCount?: number }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
-    if (!connected) {
-      if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
-      return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const dpr = window.devicePixelRatio || 1
+    const cssW = canvas.clientWidth
+    const cssH = canvas.clientHeight
+    if (canvas.width !== Math.floor(cssW*dpr) || canvas.height !== Math.floor(cssH*dpr)) {
+      canvas.width = Math.floor(cssW*dpr)
+      canvas.height = Math.floor(cssH*dpr)
     }
-    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const host = window.location.host
-    const ws = new WebSocket(`${scheme}://${host}/ws/picoscope_5244d`)
-    wsRef.current = ws
-    ws.onmessage = (evt) => {
-      try {
-        const msg = JSON.parse(evt.data)
-        if (msg?.type === 'status' && msg?.payload) {
-          const st = msg.payload
-          setConnected(!!st.connected)
-          setAcquiring(!!st.acquiring)
-          setDeviceInfo({ model: st.model, serial: st.serial, driver_version: st.driver_version })
-          if (st.channels) setChannels(st.channels)
+    const ctx = canvas.getContext('2d')!
+    const w = canvas.width
+    const h = canvas.height
+    // Background
+    ctx.fillStyle = '#0c0c0c'
+    ctx.fillRect(0,0,w,h)
+    // Grid (10x10)
+    if (showGrid) {
+      ctx.strokeStyle = '#222'
+      ctx.lineWidth = 1
+      for (let i=0;i<=10;i++) {
+        const x = (i/10)*w
+        const y = (i/10)*h
+        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke()
+      }
+      // Axes highlights at center
+      ctx.strokeStyle = '#333'
+      ctx.beginPath(); ctx.moveTo(0,h/2); ctx.lineTo(w,h/2); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(w/2,0); ctx.lineTo(w/2,h); ctx.stroke()
+    }
+    // Axis labels (time and voltage)
+    // Prefer actual capture length if available
+    const actualTotal = timeIntervalNs && sampleCount ? (timeIntervalNs * 1e-9 * sampleCount) : undefined
+    const tPerDiv = actualTotal ? (actualTotal/10) : parseTimePerDiv(status?.timebase?.time_per_div)
+    const fmtTime = (s: number) => {
+      const abs = Math.abs(s)
+      if (abs >= 1) return `${s.toFixed(2)} s`
+      if (abs >= 1e-3) return `${(s*1e3).toFixed(2)} ms`
+      if (abs >= 1e-6) return `${(s*1e6).toFixed(2)} µs`
+      if (abs >= 1e-9) return `${(s*1e9).toFixed(2)} ns`
+      return `${(s*1e12).toFixed(2)} ps`
+    }
+    ctx.fillStyle = '#999'
+    ctx.font = `${Math.max(10, Math.floor(12*dpr))}px sans-serif`
+    // Time labels along bottom
+    for (let i=0;i<=10;i++) {
+      const x = (i/10)*w
+      const t = i * tPerDiv
+      const label = fmtTime(t)
+      ctx.fillText(label, Math.max(2, Math.min(w-50, x+2)), h - 4)
+    }
+    // Voltage scale labels for A (left) and B (right)
+    const rangeA = parseRangeToVolts(status?.channels?.A?.range)
+    const rangeB = parseRangeToVolts(status?.channels?.B?.range)
+    const vPerDivA = (rangeA*2)/10
+    const vPerDivB = (rangeB*2)/10
+    for (let i=0;i<=10;i++) {
+      const y = (i/10)*h
+      const vA = (5 - i) * vPerDivA
+      const vB = (5 - i) * vPerDivB
+      ctx.fillText(`${vA.toFixed(2)} V`, 4, Math.max(10, Math.min(h-2, y+4)))
+      const text = `${vB.toFixed(2)} V`
+      const tw = ctx.measureText(text).width
+      ctx.fillText(text, Math.max(2, w - tw - 4), Math.max(10, Math.min(h-2, y+4)))
+    }
+
+    // Waveforms
+    const drawTrace = (data: number[]|undefined, color: string) => {
+      if (!data || data.length === 0) return
+      ctx.strokeStyle = color
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      const n = data.length
+      for (let i=0;i<n;i++) {
+        const x = (i/(n-1))*w
+        const y = h/2 - (data[i]/32767)*(h/2)
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y)
+      }
+      ctx.stroke()
+    }
+    drawTrace(dataA, '#00bcd4')
+    drawTrace(dataB, '#ff9800')
+  }, [dataA, dataB, status, showGrid])
+  return <canvas ref={canvasRef} style={{ width: '100%', height: 420, background: '#0c0c0c', borderRadius: 6 }} />
+}
+
+function ChannelCard({ name, status, onUpdate }: { name: ChannelName, status: PicoScopeStatus, onUpdate: (cfg: any) => void }) {
+  const cfg = status.channels[name]
+  return (
+    <Card>
+      <CardContent>
+        <Box sx={{ display:'flex', alignItems:'center', justifyContent:'space-between', mb:2 }}>
+          <Typography variant="h6">Channel {name}</Typography>
+          <FormControlLabel
+            control={<Switch checked={cfg.enabled} onChange={(e)=> onUpdate({ enabled: e.target.checked })} disabled={!status.connected} />}
+            label={cfg.enabled ? 'Enabled' : 'Disabled'}
+          />
+        </Box>
+        <Grid container spacing={2}>
+          <Grid item xs={6}>
+            <FormControl fullWidth size="small" disabled={!status.connected}>
+              <InputLabel>Range</InputLabel>
+              <Select value={cfg.range} label="Range" onChange={(e)=> onUpdate({ range: e.target.value })}>
+                {ranges.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={6}>
+            <FormControl fullWidth size="small" disabled={!status.connected}>
+              <InputLabel>Coupling</InputLabel>
+              <Select value={cfg.coupling} label="Coupling" onChange={(e)=> onUpdate({ coupling: e.target.value })}>
+                {couplings.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12}>
+            <TextField label="Offset (V)" type="number" size="small" fullWidth value={cfg.offset}
+              onChange={(e)=> onUpdate({ offset: parseFloat(e.target.value) })} disabled={!status.connected} />
+          </Grid>
+        </Grid>
+      </CardContent>
+    </Card>
+  )
+}
+
+export default function PicoScope5244DView() {
+  const [status, setStatus] = useState<PicoScopeStatus | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [previewA, setPreviewA] = useState<number[] | undefined>(undefined)
+  const [previewB, setPreviewB] = useState<number[] | undefined>(undefined)
+  const [anchor, setAnchor] = useState<{key: string, el: HTMLElement|null}>({key:'', el: null})
+  const runLoopRef = useRef<number | null>(null)
+  const previewBusyRef = useRef(false)
+  const [lastTimeIntervalNs, setLastTimeIntervalNs] = useState<number|undefined>(undefined)
+  const [lastSamples, setLastSamples] = useState<number|undefined>(undefined)
+
+  const refresh = async () => {
+    try { setStatus(await api.status()); } catch (e:any) { setError(e.message) }
+  }
+
+  const connect = async () => { setBusy(true); try { setStatus((await api.connect())); } catch(e:any){ setError(e.message) } finally { setBusy(false) } }
+  const disconnect = async () => { setBusy(true); try { setStatus((await api.disconnect())); } catch(e:any){ setError(e.message) } finally { setBusy(false) } }
+  const startRun = async () => {
+    if (!status?.connected) return
+    setBusy(true)
+    try {
+      setStatus((await api.run()))
+      // pull frames at ~5 Hz (200 ms)
+      if (runLoopRef.current) window.clearInterval(runLoopRef.current)
+      runLoopRef.current = window.setInterval(async () => {
+        if (previewBusyRef.current) return
+        previewBusyRef.current = true
+        try {
+          const res = await api.acquirePreview()
+          setStatus(res)
+          setPreviewA(res.result.waveforms['A'])
+          setPreviewB(res.result.waveforms['B'])
+          setLastTimeIntervalNs(res.result.time_interval_ns)
+          setLastSamples(res.result.samples)
+        } catch (e:any) {
+          setError(e.message)
+        } finally {
+          previewBusyRef.current = false
         }
+      }, 200)
+    } catch(e:any){ setError(e.message) } finally { setBusy(false) }
+  }
+  const stopRun = async () => {
+    setBusy(true)
+    try {
+      if (runLoopRef.current) { window.clearInterval(runLoopRef.current); runLoopRef.current = null }
+      setStatus((await api.stop()))
+    } catch(e:any){ setError(e.message) } finally { setBusy(false) }
+  }
+
+  useEffect(() => { refresh() }, [])
+
+  const wsRef = useRef<WebSocket | null>(null)
+  useEffect(() => {
+    // Live status updates
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/picoscope_5244d`)
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data)
+        if (msg?.type === 'status') setStatus(msg.payload)
       } catch {}
     }
-    ws.onerror = () => { /* errors surfaced via HTTP paths */ }
-    return () => { try { ws.close() } catch {} }
-  }, [connected])
+    ws.onerror = () => {}
+    wsRef.current = ws
+    return () => { ws.close() }
+  }, [])
 
+  const s = status
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          PicoScope 5244D MSO Control Panel
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Chip 
-            label={connected ? (deviceInfo?.serial ? `Connected (${deviceInfo.serial})` : 'Connected') : 'Disconnected'} 
-            color={connected ? 'success' : 'default'}
-            icon={<ScopeIcon />}
-          />
-          <Button
-            variant="contained"
-            onClick={connected ? handleDisconnect : handleConnect}
-            disabled={loading}
-            color={connected ? 'secondary' : 'primary'}
-          >
-            {connected ? 'Disconnect' : 'Connect'}
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<AutoSetupIcon />}
-            onClick={handleAutoSetup}
-            disabled={!connected || loading}
-          >
-            Auto Setup
-          </Button>
+    <Box>
+      <Box sx={{ display:'flex', alignItems:'center', gap:2, mb:2 }}>
+        <Typography variant="h4">PicoScope 5244D</Typography>
+        <Chip label={s?.connected ? 'Connected' : 'Disconnected'} color={s?.connected ? 'success' : 'default'} />
+        <Chip label={s?.acquiring ? 'Running' : 'Stopped'} color={s?.acquiring ? 'success' : 'default'} />
+        {s && (
+          <>
+            <Chip label={`Samples: ${s.timebase?.n_samples ?? '-'}`} />
+            <Chip label={`Rate: ${s.timebase?.sample_rate_hz ?? '-'} Hz`} />
+          </>
+        )}
+        <Box sx={{ ml:'auto', display:'flex', gap:1 }}>
+          {s?.connected ? (
+            <Button variant="outlined" color="secondary" onClick={disconnect} disabled={busy}>Disconnect</Button>
+          ) : (
+            <Button variant="contained" onClick={connect} disabled={busy}>Connect</Button>
+          )}
+          <IconButton onClick={refresh} disabled={busy} title="Refresh status"><Refresh/></IconButton>
         </Box>
       </Box>
 
-      {/* Error Alert */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+      {/* Top action bar similar to vendor UI */}
+      <Box sx={{ display:'flex', gap:1, mb:2, flexWrap:'wrap' }}>
+        <ButtonGroup variant='outlined' size='small'>
+          <Button onClick={(e)=> setAnchor({key:'scope', el: e.currentTarget})} disabled={!s?.connected}>Scope</Button>
+          <Button onClick={(e)=> setAnchor({key:'trigger', el: e.currentTarget})} disabled={!s?.connected}>Trigger</Button>
+          <Button onClick={(e)=> setAnchor({key:'res', el: e.currentTarget})} disabled={!s?.connected}>Hardware resolution</Button>
+          <Button onClick={async ()=> setStatus(await api.autosetup())} disabled={!s?.connected}>Auto setup</Button>
+          <IconButton onClick={()=> { setPreviewA(undefined); setPreviewB(undefined) }} title='Clear' disabled={!previewA && !previewB}><ClearIcon/></IconButton>
+        </ButtonGroup>
+      </Box>
 
-      <Grid container spacing={3}>
-        {/* Channel Controls */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Channel Configuration
-              </Typography>
-              {Object.entries(channels).map(([channel, config]) => (
-                <Box key={channel} sx={{ mb: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                    <Typography variant="subtitle1">Channel {channel}</Typography>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={config.enabled}
-                          onChange={(e) => updateChannel(channel as 'A'|'B'|'C'|'D', { enabled: e.target.checked })}
-                          disabled={!connected}
-                        />
-                      }
-                      label="Enabled"
-                    />
-                  </Box>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <FormControl size="small" disabled={!connected || !config.enabled}>
-                      <InputLabel>Range</InputLabel>
-                      <Select value={config.range} label="Range" onChange={(e) => updateChannel(channel as 'A'|'B'|'C'|'D', { range: e.target.value as string })}>
-                        <MenuItem value="±10V">±10V</MenuItem>
-                        <MenuItem value="±5V">±5V</MenuItem>
-                        <MenuItem value="±2V">±2V</MenuItem>
-                        <MenuItem value="±1V">±1V</MenuItem>
-                        <MenuItem value="±500mV">±500mV</MenuItem>
-                      </Select>
-                    </FormControl>
-                    <FormControl size="small" disabled={!connected || !config.enabled}>
-                      <InputLabel>Coupling</InputLabel>
-                      <Select value={config.coupling} label="Coupling" onChange={(e) => updateChannel(channel as 'A'|'B'|'C'|'D', { coupling: e.target.value as string })}>
-                        <MenuItem value="DC">DC</MenuItem>
-                        <MenuItem value="AC">AC</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Box>
-                </Box>
-              ))}
-            </CardContent>
-          </Card>
-        </Grid>
+      {/* Scope popover */}
+      <Popover open={anchor.key==='scope'} anchorEl={anchor.el} onClose={()=> setAnchor({key:'', el:null})} anchorOrigin={{vertical:'bottom',horizontal:'left'}}>
+        <Box sx={{ p:2, minWidth:260 }}>
+          <FormLabel>Time / division</FormLabel>
+          <FormControl fullWidth size='small'>
+            <InputLabel>Time/Div</InputLabel>
+            <Select label='Time/Div' value={s?.timebase?.time_per_div || '1ms/div'} onChange={async (e)=> setStatus(await api.setTimebase({ time_per_div: e.target.value }))}>
+              {timePerDivOptions.map(op => <MenuItem key={op} value={op}>{op}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Box>
+      </Popover>
 
-        {/* Acquisition Controls */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Acquisition Control
-              </Typography>
-              
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Status: {acquiring ? 'Acquiring' : 'Stopped'}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button
-                    variant="contained"
-                    startIcon={<StartIcon />}
-                    onClick={handleStartAcquisition}
-                    disabled={!connected || acquiring || loading}
-                    color="success"
-                  >
-                    Start
-                  </Button>
-                  <Button
-                    variant="contained"
-                    startIcon={<StopIcon />}
-                    onClick={handleStopAcquisition}
-                    disabled={!connected || !acquiring || loading}
-                    color="error"
-                  >
-                    Stop
-                  </Button>
-                </Box>
-              </Box>
+      {/* Trigger popover */}
+      <Popover open={anchor.key==='trigger'} anchorEl={anchor.el} onClose={()=> setAnchor({key:'', el:null})} anchorOrigin={{vertical:'bottom',horizontal:'left'}}>
+        <Box sx={{ p:2, minWidth:320 }}>
+          <FormLabel>Mode</FormLabel>
+          <RadioGroup row value={s?.trigger?.mode || 'None'} onChange={(_e,val)=> {
+            setStatus(prev => prev ? { ...prev, trigger: { ...prev.trigger, mode: val as any } } : prev)
+            api.setTrigger({ mode: val as any }).then(setStatus).catch((e:any)=> setError(e.message))
+          }}>
+            <FormControlLabel value='None' control={<Radio/>} label='None' />
+            <FormControlLabel value='Auto' control={<Radio/>} label='Auto' />
+            <FormControlLabel value='Single' control={<Radio/>} label='Single' />
+          </RadioGroup>
+          <Box sx={{ display:'flex', gap:2, mt:1 }}>
+            <FormControl fullWidth size='small'>
+              <InputLabel>Source</InputLabel>
+              <Select label='Source' value={s?.trigger?.source || 'A'} onChange={(e)=> {
+                const v = e.target.value as TriggerSource
+                setStatus(prev => prev ? { ...prev, trigger: { ...prev.trigger, source: v } } : prev)
+                api.setTrigger({ source: v }).then(setStatus).catch((err:any)=> setError(err.message))
+              }}>
+                <MenuItem value='A'>A</MenuItem>
+                <MenuItem value='B'>B</MenuItem>
+                <MenuItem value='Ext'>Ext</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size='small'>
+              <InputLabel>Edge</InputLabel>
+              <Select label='Edge' value={s?.trigger?.edge || 'Rising'} onChange={(e)=> {
+                const v = e.target.value as 'Rising'|'Falling'
+                setStatus(prev => prev ? { ...prev, trigger: { ...prev.trigger, edge: v } } : prev)
+                api.setTrigger({ edge: v }).then(setStatus).catch((err:any)=> setError(err.message))
+              }}>
+                <MenuItem value='Rising'>Rising</MenuItem>
+                <MenuItem value='Falling'>Falling</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <TextField sx={{ mt:2 }} fullWidth size='small' type='number' label='Threshold (V)'
+            value={s?.trigger?.level_v ?? 0} onChange={(e)=> {
+              const v = parseFloat(e.target.value)
+              setStatus(prev => prev ? { ...prev, trigger: { ...prev.trigger, level_v: v } } : prev)
+              api.setTrigger({ level_v: v }).then(setStatus).catch((err:any)=> setError(err.message))
+            }} />
+        </Box>
+      </Popover>
 
-              <Typography variant="h6" gutterBottom>
-                Timebase
-              </Typography>
-              <FormControl fullWidth size="small" disabled={!connected}>
-                <InputLabel>Time/Division</InputLabel>
-                <Select defaultValue="1ms/div" label="Time/Division" onChange={(e) => setTimebase({ scale: e.target.value })}>
-                  <MenuItem value="10ns/div">10ns/div</MenuItem>
-                  <MenuItem value="100ns/div">100ns/div</MenuItem>
-                  <MenuItem value="1µs/div">1µs/div</MenuItem>
-                  <MenuItem value="10µs/div">10µs/div</MenuItem>
-                  <MenuItem value="100µs/div">100µs/div</MenuItem>
-                  <MenuItem value="1ms/div">1ms/div</MenuItem>
-                  <MenuItem value="10ms/div">10ms/div</MenuItem>
-                  <MenuItem value="100ms/div">100ms/div</MenuItem>
-                  <MenuItem value="1s/div">1s/div</MenuItem>
-                </Select>
-              </FormControl>
+      {/* Resolution popover */}
+      <Popover open={anchor.key==='res'} anchorEl={anchor.el} onClose={()=> setAnchor({key:'', el:null})} anchorOrigin={{vertical:'bottom',horizontal:'left'}}>
+        <Box sx={{ p:2, minWidth:220 }}>
+          <FormControl fullWidth size='small'>
+            <InputLabel>Resolution</InputLabel>
+            <Select label='Resolution' value={s?.resolution_bits ?? 8} onChange={async (e)=> setStatus(await api.setResolution(Number(e.target.value)))}>
+              {[8,12,14,15].map(r => <MenuItem key={r} value={r}>{r}-bit</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Box>
+      </Popover>
 
-              <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>
-                Trigger
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                <FormControl size="small" disabled={!connected}>
-                  <InputLabel>Source</InputLabel>
-                  <Select defaultValue="Channel A" label="Source" onChange={(e) => setTrigger({ source: e.target.value })}>
-                    <MenuItem value="Channel A">Channel A</MenuItem>
-                    <MenuItem value="Channel B">Channel B</MenuItem>
-                    <MenuItem value="Channel C">Channel C</MenuItem>
-                    <MenuItem value="Channel D">Channel D</MenuItem>
-                    <MenuItem value="External">External</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" disabled={!connected}>
-                  <InputLabel>Edge</InputLabel>
-                  <Select defaultValue="Rising" label="Edge" onChange={(e) => setTrigger({ direction: e.target.value })}>
-                    <MenuItem value="Rising">Rising</MenuItem>
-                    <MenuItem value="Falling">Falling</MenuItem>
-                  </Select>
-                </FormControl>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
 
-        {/* Waveform Display Placeholder */}
+      {error && <Alert severity='error' sx={{ mb:2 }} onClose={()=> setError(null)}>{error}</Alert>}
+
+      <Grid container spacing={2}>
         <Grid item xs={12}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Waveform Display
-              </Typography>
-              <Box 
-                sx={{ 
-                  height: 300, 
-                  backgroundColor: 'background.default',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                <Typography color="text.secondary">
-                  {connected ? 'Waveform display will appear here' : 'Connect to device to view waveforms'}
-                </Typography>
+              <Box sx={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <Typography variant="h6">Acquisition</Typography>
+                <Box sx={{ display:'flex', gap:1 }}>
+                  <Button startIcon={<PlayArrow/>} variant='contained' onClick={startRun} disabled={!s?.connected || busy}>Run</Button>
+                  <Button startIcon={<Stop/>} variant='outlined' onClick={stopRun} disabled={!s?.connected || busy}>Stop</Button>
+                </Box>
               </Box>
+              <Divider sx={{ my:2 }}/>
+              <WaveformCanvas dataA={previewA} dataB={previewB} status={s} timeIntervalNs={lastTimeIntervalNs} sampleCount={lastSamples} />
             </CardContent>
           </Card>
         </Grid>
+
+        {s ? (
+          <>
+            <Grid item xs={12} md={6}>
+              <ChannelCard name='A' status={s} onUpdate={async (cfg)=> setStatus(await api.setChannel('A', cfg))} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <ChannelCard name='B' status={s} onUpdate={async (cfg)=> setStatus(await api.setChannel('B', cfg))} />
+            </Grid>
+          </>
+        ) : (
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant='body2' color='text.secondary'>
+                  Connect to the PicoScope to configure channels.
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
       </Grid>
     </Box>
   )
 }
-
-export default PicoScope5244DView
-
