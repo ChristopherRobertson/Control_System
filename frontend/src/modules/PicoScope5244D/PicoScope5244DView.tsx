@@ -39,16 +39,6 @@ function parseRangeToVolts(rangeLabel?: string): number {
   return val // this is the ± full-scale for one polarity
 }
 
-function countsMaxForBits(bits?: number): number {
-  switch (bits) {
-    case 8: return 127
-    case 12: return 2047
-    case 14: return 8191
-    case 15: return 16383
-    default: return 32767 // fallback if device reports full 16-bit codes
-  }
-}
-
 function parseTimePerDiv(label?: string): number {
   if (!label) return 0.001 // default 1ms/div
   const m = label.match(/^(\d+(?:\.\d+)?)([munp]?s)\/div$/i)
@@ -59,7 +49,7 @@ function parseTimePerDiv(label?: string): number {
   return v * (mult[unit] ?? 1e-3)
 }
 
-function WaveformCanvas({ dataA, dataB, status, showGrid=true, timeIntervalNs, sampleCount }: { dataA?: number[], dataB?: number[], status?: PicoScopeStatus | null, showGrid?: boolean, timeIntervalNs?: number, sampleCount?: number }) {
+function WaveformCanvas({ dataA, dataB, status, showGrid=true }: { dataA?: number[], dataB?: number[], status?: PicoScopeStatus | null, showGrid?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -93,9 +83,8 @@ function WaveformCanvas({ dataA, dataB, status, showGrid=true, timeIntervalNs, s
       ctx.beginPath(); ctx.moveTo(w/2,0); ctx.lineTo(w/2,h); ctx.stroke()
     }
     // Axis labels (time and voltage)
-    // Prefer actual capture length if available
-    const actualTotal = timeIntervalNs && sampleCount ? (timeIntervalNs * 1e-9 * sampleCount) : undefined
-    const tPerDiv = actualTotal ? (actualTotal/10) : parseTimePerDiv(status?.timebase?.time_per_div)
+    // Use configured time/div from status for stable labeling
+    const tPerDiv = parseTimePerDiv(status?.timebase?.time_per_div)
     const fmtTime = (s: number) => {
       const abs = Math.abs(s)
       if (abs >= 1) return `${s.toFixed(2)} s`
@@ -135,10 +124,12 @@ function WaveformCanvas({ dataA, dataB, status, showGrid=true, timeIntervalNs, s
       ctx.lineWidth = 1.5
       ctx.beginPath()
       const n = data.length
-      const cmax = countsMaxForBits(status?.resolution_bits)
+      const cmax = 32767 // PicoSDK ADC counts full-scale
       for (let i=0;i<n;i++) {
         const x = (i/(n-1))*w
-        const y = h/2 - (data[i]/cmax)*(h/2)
+        let norm = (data[i]/cmax)
+        if (norm > 1) norm = 1; else if (norm < -1) norm = -1
+        const y = h/2 - norm*(h/2)
         if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y)
       }
       ctx.stroke()
@@ -197,8 +188,7 @@ export default function PicoScope5244DView() {
   const [anchor, setAnchor] = useState<{key: string, el: HTMLElement|null}>({key:'', el: null})
   const runLoopRef = useRef<number | null>(null)
   const previewBusyRef = useRef(false)
-  const [lastTimeIntervalNs, setLastTimeIntervalNs] = useState<number|undefined>(undefined)
-  const [lastSamples, setLastSamples] = useState<number|undefined>(undefined)
+  // reserved for future use if we switch to dynamic labels based on capture timing
 
   const refresh = async () => {
     try { setStatus(await api.status()); } catch (e:any) { setError(e.message) }
@@ -221,8 +211,6 @@ export default function PicoScope5244DView() {
           setStatus(res)
           setPreviewA(res.result.waveforms['A'])
           setPreviewB(res.result.waveforms['B'])
-          setLastTimeIntervalNs(res.result.time_interval_ns)
-          setLastSamples(res.result.samples)
         } catch (e:any) {
           setError(e.message)
         } finally {
@@ -376,7 +364,7 @@ export default function PicoScope5244DView() {
                 </Box>
               </Box>
               <Divider sx={{ my:2 }}/>
-              <WaveformCanvas dataA={previewA} dataB={previewB} status={s} timeIntervalNs={lastTimeIntervalNs} sampleCount={lastSamples} />
+              <WaveformCanvas dataA={previewA} dataB={previewB} status={s} />
             </CardContent>
           </Card>
         </Grid>
