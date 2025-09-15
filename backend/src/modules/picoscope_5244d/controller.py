@@ -84,6 +84,8 @@ class PicoScopeState:
     })
     # Last preview waveform
     last_waveform: Dict[str, List[float]] = field(default_factory=dict)
+    # ADC full-scale counts for current resolution (queried from SDK)
+    adc_max_counts: Optional[int] = None
 
 
 class PicoScope5244DController:
@@ -216,6 +218,14 @@ class PicoScope5244DController:
             self.state.serial = unit_info(4) or None
             self.state.driver_version = unit_info(0)
 
+            # Query ADC max counts for current resolution
+            try:
+                max_adc = c_int16()
+                self._ps.ps5000aMaximumValue(self._handle, byref(max_adc))
+                self.state.adc_max_counts = int(max_adc.value)
+            except Exception:
+                self.state.adc_max_counts = 32767
+
             self.state.connected = True
             self.state.acquiring = False
             self.state.last_error = None
@@ -251,6 +261,7 @@ class PicoScope5244DController:
             'awg': s.awg,
             'resolution_bits': s.resolution_bits,
             'waveform_count': s.waveform_count,
+            'adc_max_counts': s.adc_max_counts,
             'model': s.model,
             'serial': s.serial,
             'driver_version': s.driver_version,
@@ -542,4 +553,5 @@ class PicoScope5244DController:
             'time_interval_ns': float(tb_info['time_interval_ns']),
             'overflow': int(overflow.value),
             'waveforms': self.state.last_waveform,
+            'adc_max_counts': self.state.adc_max_counts,
         }

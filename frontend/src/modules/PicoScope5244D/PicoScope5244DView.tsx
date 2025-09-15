@@ -124,7 +124,7 @@ function WaveformCanvas({ dataA, dataB, status, showGrid=true }: { dataA?: numbe
       ctx.lineWidth = 1.5
       ctx.beginPath()
       const n = data.length
-      const cmax = 32767 // PicoSDK ADC counts full-scale
+      const cmax = (status?.adc_max_counts && status.adc_max_counts > 0) ? status.adc_max_counts : 32767
       for (let i=0;i<n;i++) {
         const x = (i/(n-1))*w
         let norm = (data[i]/cmax)

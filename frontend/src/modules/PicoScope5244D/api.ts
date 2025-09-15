@@ -42,6 +42,7 @@ export interface PicoScopeStatus {
   timebase: TimebaseConfig
   trigger: TriggerConfig
   awg: AwgConfig
+  adc_max_counts?: number | null
   model?: string
   serial?: string
   driver_version?: string
@@ -79,5 +80,5 @@ export const api = {
   autosetup: () => http<PicoScopeStatus & { message: string }>(`/autosetup`, { method: 'POST' }),
   run: () => http<PicoScopeStatus & { message: string }>(`/run`, { method: 'POST' }),
   stop: () => http<PicoScopeStatus & { message: string }>(`/stop`, { method: 'POST' }),
-  acquirePreview: () => http<PicoScopeStatus & { message: string; result: { samples: number; time_interval_ns: number; waveforms: Record<string, number[]> } }>(`/acquire_preview`, { method: 'POST' }),
+  acquirePreview: () => http<PicoScopeStatus & { message: string; result: { samples: number; time_interval_ns: number; adc_max_counts?: number | null; waveforms: Record<string, number[]> } }>(`/acquire_preview`, { method: 'POST' }),
 }
