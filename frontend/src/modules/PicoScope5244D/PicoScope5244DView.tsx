@@ -41,12 +41,13 @@ function parseRangeToVolts(rangeLabel?: string): number {
 
 function parseTimePerDiv(label?: string): number {
   if (!label) return 0.001 // default 1ms/div
-  const m = label.match(/^(\d+(?:\.\d+)?)([munp]?s)\/div$/i)
+  // Accept ps, ns, µs, us, ms, s (case-insensitive), optional spaces before /div
+  const m = label.trim().match(/^(\d+(?:\.\d+)?)\s*(ps|ns|µs|us|ms|s)\s*\/\s*div$/i)
   if (!m) return 0.001
-  let v = parseFloat(m[1])
+  const val = parseFloat(m[1])
   const unit = m[2].toLowerCase()
-  const mult: Record<string, number> = { 's':1, 'ms':1e-3, 'us':1e-6, 'µs':1e-6, 'ns':1e-9, 'ps':1e-12 }
-  return v * (mult[unit] ?? 1e-3)
+  const mult: Record<string, number> = { s: 1, ms: 1e-3, us: 1e-6, 'µs': 1e-6, ns: 1e-9, ps: 1e-12 }
+  return val * (mult[unit] ?? 1e-3)
 }
 
 function WaveformCanvas({ dataA, dataB, status, showGrid=true }: { dataA?: number[], dataB?: number[], status?: PicoScopeStatus | null, showGrid?: boolean }) {
