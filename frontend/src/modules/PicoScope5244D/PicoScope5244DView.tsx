@@ -204,6 +204,7 @@ export default function PicoScope5244DView() {
   const previewBusyRef = useRef(false)
   const [lastTimeIntervalNs, setLastTimeIntervalNs] = useState<number|undefined>(undefined)
   const [lastSamples, setLastSamples] = useState<number|undefined>(undefined)
+  const [clipped, setClipped] = useState<{A?: boolean, B?: boolean}>({})
   // reserved for future use if we switch to dynamic labels based on capture timing
 
   const refresh = async () => {
@@ -229,6 +230,7 @@ export default function PicoScope5244DView() {
           setPreviewB(res.result.waveforms['B'])
           setLastTimeIntervalNs(res.result.time_interval_ns)
           setLastSamples(res.result.samples)
+          setClipped(res.result.clipped_channels || {})
         } catch (e:any) {
           setError(e.message)
         } finally {
@@ -272,6 +274,9 @@ export default function PicoScope5244DView() {
           <>
             <Chip label={`Samples: ${s.timebase?.n_samples ?? '-'}`} />
             <Chip label={`Rate: ${s.timebase?.sample_rate_hz ?? '-'} Hz`} />
+            {(clipped.A || clipped.B) && (
+              <Chip label={`Clipped${clipped.A? ' A':''}${clipped.B? ' B':''}`} color='error' />
+            )}
           </>
         )}
         <Box sx={{ ml:'auto', display:'flex', gap:1 }}>
@@ -346,6 +351,7 @@ export default function PicoScope5244DView() {
             </FormControl>
           </Box>
           <TextField sx={{ mt:2 }} fullWidth size='small' type='number' label='Threshold (V)'
+            inputProps={{ step: 0.01 }}
             value={s?.trigger?.level_v ?? 0} onChange={(e)=> {
               const v = parseFloat(e.target.value)
               setStatus(prev => prev ? { ...prev, trigger: { ...prev.trigger, level_v: v } } : prev)

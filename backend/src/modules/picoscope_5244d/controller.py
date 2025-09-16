@@ -227,6 +227,12 @@ class PicoScope5244DController:
             except Exception:
                 self.state.adc_max_counts = 32767
 
+            # Refresh timebase details for the current time/div
+            try:
+                await self.set_timebase_config({'time_per_div': self.state.timebase.get('time_per_div', '1ms/div')})
+            except Exception:
+                pass
+
             self.state.connected = True
             self.state.acquiring = False
             self.state.last_error = None
@@ -569,6 +575,13 @@ class PicoScope5244DController:
         invB = -1 if self.state.channels['B'].get('invert') else 1
         data_a = [int(buffer_a[i]) * invA for i in range(count)]
         data_b = [int(buffer_b[i]) * invB for i in range(count)]
+        cmax = self.state.adc_max_counts or 32767
+        max_abs_a = max((abs(v) for v in data_a), default=0)
+        max_abs_b = max((abs(v) for v in data_b), default=0)
+        clipped = {
+            'A': bool(max_abs_a >= int(0.98 * cmax)),
+            'B': bool(max_abs_b >= int(0.98 * cmax)),
+        }
         self.state.last_waveform = {'A': data_a, 'B': data_b}
         return {
             'samples': count,
@@ -576,4 +589,5 @@ class PicoScope5244DController:
             'overflow': int(overflow.value),
             'waveforms': self.state.last_waveform,
             'adc_max_counts': self.state.adc_max_counts,
+            'clipped_channels': clipped,
         }
