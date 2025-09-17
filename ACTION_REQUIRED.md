@@ -40,10 +40,10 @@ Provide the following information or perform the listed actions. This file track
 - Provide a time window to perform a short live connection test per device.
 
 ## Next Immediate Steps
-- Proceed to Phase 1 – Part D for PicoScope 5244D: install PicoSDK, confirm SDK path, and replace Phase 1 scaffolding with real SDK calls in `backend/src/modules/picoscope_5244d/controller.py`. Provide exact input range list and any lab‑preferred defaults (timebase, resolution, trigger).
+- PicoScope 5244D: proceed with Part D when ready (install PicoSDK, confirm SDK path); controller remains Phase‑1 for now.
 
 - Quantum Composers 9524 (Signal Generator):
-  - Confirm the COM port and baud rate used on each PC (update `hardware_configuration.toml` at `[quantum_composers_9524]`).
-  - Validate min/max ranges for thresholds and amplitudes already captured in `hardware_configuration.toml`; add missing items if any.
-  - Identify final channel mapping to devices (A/B/C/D to Nd:YAG Q-switch / fire, MIRcat trig in, HF2LI DI1) and note any required default delays/widths.
-  - For Part D: provide command set or serial protocol details so backend can replace Phase 1 in-memory updates with real device I/O.
+  - The module now performs live serial I/O (no simulation). Confirm the COM port and baud rate on each PC (`hardware_configuration.toml` → `[quantum_composers_9524]`).
+  - Verify the command templates in `hardware_configuration.toml` under `[quantum_composers_9524.commands]` against your firmware. Adjust mnemonics if needed (e.g., `PER` vs `PERIOD`, `RUN?` vs a different query). No code changes required.
+  - Validate min/max ranges for thresholds and amplitudes already captured in `hardware_configuration.toml`; add any missing items.
+  - Confirm final channel mapping to devices (A/B/C/D to Nd:YAG Q-switch / fire, MIRcat trig in, HF2LI DI1) and provide default delays/widths if the lab has standards.

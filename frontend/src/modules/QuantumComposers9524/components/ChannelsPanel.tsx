@@ -17,7 +17,7 @@ function ChannelsPanel({ status, selected, onSelect, onChange, disabled }: Props
     <Card>
       <CardContent>
         <Typography variant="h6" gutterBottom>Channels</Typography>
-        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
           {(['A','B','C','D'] as QCChannelKey[]).map((key) => (
             <Button key={key} variant={selected === key ? 'contained' : 'outlined'} size="small" onClick={() => onSelect(key)} disabled={disabled}>Ch {key}</Button>
           ))}

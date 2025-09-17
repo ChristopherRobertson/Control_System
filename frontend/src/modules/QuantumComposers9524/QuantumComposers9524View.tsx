@@ -39,12 +39,28 @@ function QuantumComposers9524View() {
   }
 
   const toggleRun = async () => {
+    if (!status) return
+    const nextRunning = !running
+    const previousStatus = status
     setLoading(true)
+    setStatus(prev => {
+      if (!prev) return prev
+      const updated = { ...prev, running: nextRunning, channels: { ...prev.channels } }
+      if (!nextRunning) {
+        const newChannels = {} as typeof prev.channels
+        (Object.keys(prev.channels) as QCChannelKey[]).forEach((key) => {
+          newChannels[key] = { ...prev.channels[key], enabled: false }
+        })
+        updated.channels = newChannels
+      }
+      return updated
+    })
     try {
-      const res = running ? await QuantumComposersAPI.stop() : await QuantumComposersAPI.start()
+      const res = nextRunning ? await QuantumComposersAPI.start() : await QuantumComposersAPI.stop()
       await refresh()
-      setSnack({open: true, msg: res.message || (running ? 'Stopped' : 'Started'), severity: 'success'})
+      setSnack({open: true, msg: res.message || (nextRunning ? 'Started' : 'Stopped'), severity: 'success'})
     } catch (e: any) {
+      setStatus(prev => previousStatus ? { ...previousStatus, channels: { ...previousStatus.channels } } : prev)
       setSnack({open: true, msg: e?.response?.data?.detail || e?.message || String(e), severity: 'error'})
     } finally {
       setLoading(false)
@@ -56,7 +72,10 @@ function QuantumComposers9524View() {
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Box>
           <Typography variant="h4" gutterBottom>Quantum Composers 9524</Typography>
-          <Typography variant="body2" color="text.secondary">{`Port: ${info.port ?? 'n/a'} | Baud: ${info.baud_rate ?? 'n/a'} | FW: ${info.firmware_version ?? 'n/a'}`}</Typography>
+          <Typography variant="body2" color="text.secondary">{`Port: ${info.port ?? 'n/a'} | Baud: ${info.baud_rate ?? 'n/a'}`}</Typography>
+          {!!info.identity && (
+            <Typography variant="body2" color="text.secondary">{String(info.identity)}</Typography>
+          )}
         </Box>
         <Chip label={connected ? 'Connected' : 'Disconnected'} color={connected ? 'success' : 'default'} icon={<SignalIcon />} />
         <Button variant="contained" onClick={toggleConnect} disabled={loading} color={connected ? 'secondary' : 'primary'}>{connected ? 'Disconnect' : 'Connect'}</Button>
@@ -76,7 +95,13 @@ function QuantumComposers9524View() {
         <TriggerPanel status={status} onChange={async (patch) => { setLoading(true); try { await QuantumComposersAPI.setExternal(patch); await refresh(); } finally { setLoading(false) } }} disabled={!connected || loading} />
       )}
       {activeTab === 2 && status && (
-        <ChannelsPanel status={status} selected={selectedChannel} onSelect={setSelectedChannel} onChange={async (patch) => { setLoading(true); try { await QuantumComposersAPI.setChannel(selectedChannel, patch); await refresh(); } finally { setLoading(false) } }} disabled={!connected || loading} />
+        <ChannelsPanel
+          status={status}
+          selected={selectedChannel}
+          onSelect={setSelectedChannel}
+          onChange={async (patch) => { setLoading(true); try { await QuantumComposersAPI.setChannel(selectedChannel, patch); await refresh(); } finally { setLoading(false) } }}
+          disabled={!connected || loading}
+        />
       )}
 
       <Box sx={{ mt: 3 }}>

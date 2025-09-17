@@ -1,9 +1,8 @@
 """
-Quantum Composers 9524 API Routes (Phase 1)
+Quantum Composers 9524 API Routes (Phase 1 – live serial)
 
-Clean, minimal endpoints to support the reorganized UI. These routes
-mutate in-memory state in the controller and return a fresh status
-snapshot with each call.
+Minimal REST endpoints mapping the UI to real device commands via the
+controller. No simulated responses are returned.
 """
 
 from fastapi import APIRouter, HTTPException, FastAPI
@@ -26,6 +25,10 @@ class DictPayload(BaseModel):
 class ChannelPayload(BaseModel):
     channel: str
     config: Dict[str, Any]
+
+
+class ChannelActionPayload(BaseModel):
+    channel: str
 
 
 class CommandPayload(BaseModel):
@@ -96,6 +99,17 @@ async def set_channel(payload: ChannelPayload):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/channel/stop")
+async def stop_channel(payload: ChannelActionPayload):
+    try:
+        resp = await qc_controller.stop_channel_output(payload.channel)
+        status = await qc_controller.get_status()
+        return {"message": f"Channel {payload.channel} stopped", "device_response": resp, **status}
+    except Exception as e:
+        logger.exception("QC channel stop error")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/external-trigger")
 async def set_external_trigger(payload: DictPayload):
     try:
@@ -132,6 +146,24 @@ async def config():
         return {"ranges": st.get("ranges", {}), "device_info": st.get("device_info", {})}
     except Exception as e:
         logger.exception("QC config error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ports")
+async def ports():
+    try:
+        return {"ports": qc_controller.available_ports()}
+    except Exception as e:
+        logger.exception("QC ports error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/health")
+async def health():
+    try:
+        return qc_controller.probe_open()
+    except Exception as e:
+        logger.exception("QC health error")
         raise HTTPException(status_code=500, detail=str(e))
 
 

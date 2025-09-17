@@ -244,10 +244,14 @@ time_per_div_options_s = [
 [quantum_composers_9524]
 device_type = "Quantum Composers 9524"
 connection_type = "USB"
-port = "COM4"  # Windows: COM4, Linux: /dev/ttyUSB1
+port = "COM6"  # Windows: COM4, Linux: /dev/ttyUSB1
 baud_rate = 115200
 timeout = 2.0
 description = "Signal generator for system synchronization"
+eol = "\r"                 # Command terminator sent to the device (default CR)
+read_terminator = "\n"     # Line terminator expected from device when reading
+encoding = "ascii"          # Encoding for serial I/O
+query_delay_s = 0.02        # Small wait between query and read, if needed
 
 [quantum_composers_9524.parameters]
 ## System timing parameters
@@ -282,6 +286,53 @@ channel_a_function = "ndyag_qswitch_trigger"  # TTL to Nd:YAG laser
 channel_b_function = "ndyag_fire_trigger"  # TTL to Nd:YAG laser
 channel_c_function = "mircat_trig_in"  # Waveform to MIRcat laser
 channel_d_function = "zurich_hf2li_di1"  # Waveform to Lock-in Amplifier
+
+[quantum_composers_9524.commands]
+# These templates are the live strings sent to the instrument for Phase 1.
+# If your firmware uses different mnemonics, adjust these without touching code.
+
+# Transport/queries
+[quantum_composers_9524.commands.query]
+identity = "*IDN?"
+running = "RUN?"
+
+# Run/stop control
+[quantum_composers_9524.commands.control]
+start = "RUN"
+stop = "STOP"
+
+# System settings
+[quantum_composers_9524.commands.system]
+pulse_mode = "MODE {pulse_mode}"
+period_s = "PER {period_s}"
+burst_count = "BURST {burst_count}"
+auto_start = "AUTOSTART {auto_start}"
+duty_cycle_on_counts = "DUTYON {duty_cycle_on_counts}"
+duty_cycle_off_counts = "DUTYOFF {duty_cycle_off_counts}"
+
+# Channel settings — the backend passes {channel} = A|B|C|D
+[quantum_composers_9524.commands.channel]
+enabled = "CH{channel}:ENAB {enabled}"
+delay_s = "CH{channel}:DELAY {delay_s}"
+width_s = "CH{channel}:WIDTH {width_s}"
+channel_mode = "CH{channel}:MODE {channel_mode}"
+sync_source = "CH{channel}:SYNC {sync_source}"
+burst_count = "CH{channel}:BURST {burst_count}"
+polarity = "CH{channel}:POL {polarity}"
+output_mode = "CH{channel}:OUTP {output_mode}"
+amplitude_v = "CH{channel}:AMPL {amplitude_v}"
+wait_count = "CH{channel}:WAIT {wait_count}"
+gate_mode = "CH{channel}:GATE {gate_mode}"
+multiplexer = "CH{channel}:MUX A={muxA},B={muxB},C={muxC},D={muxD}"
+
+# External trigger settings
+[quantum_composers_9524.commands.external]
+trigger_mode = "TRIG:MODE {trigger_mode}"
+trigger_edge = "TRIG:EDGE {trigger_edge}"
+trigger_threshold_v = "TRIG:THR {trigger_threshold_v}"
+gate_mode = "GATE:MODE {gate_mode}"
+gate_logic = "GATE:LOGIC {gate_logic}"
+gate_threshold_v = "GATE:THR {gate_threshold_v}"
 
 # ============================================================================
 # ZURICH HF2LI - Lock-in Amplifier
