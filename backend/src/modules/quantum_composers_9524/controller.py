@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SystemSettings:
     pulse_mode: str = "Continuous"  # Continuous | Burst | Single
-    period_s: float = 0.0001
     burst_count: int = 10
     auto_start: bool = False
     duty_cycle_on_counts: int = 4
@@ -296,8 +295,6 @@ class QuantumComposers9524Controller:
         return resp or "OK"
 
     async def set_system_config(self, cfg: Dict[str, Any]) -> bool:
-        if "period_s" in cfg:
-            cfg["period_s"] = float(self._clamp(float(cfg["period_s"]), "period_min_s", "period_max_s"))
         if "burst_count" in cfg:
             cfg["burst_count"] = int(self._clamp_int(int(cfg["burst_count"]), "burst_count_min", "burst_count_max"))
         if "duty_cycle_on_counts" in cfg:

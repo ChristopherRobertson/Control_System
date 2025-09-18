@@ -6,7 +6,6 @@ export type QCChannelKey = 'A' | 'B' | 'C' | 'D'
 
 export interface QCSystemSettings {
   pulse_mode: 'Continuous' | 'Burst' | 'Single'
-  period_s: number
   burst_count: number
   auto_start: boolean
   duty_cycle_on_counts: number
