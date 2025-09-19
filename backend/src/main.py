@@ -119,6 +119,21 @@ async def websocket_endpoint(websocket: WebSocket, device_id: str):
             print(f"WebSocket disconnected for device: {device_id}")
         except Exception as e:
             print(f"WebSocket error for {device_id}: {e}")
+    elif device_id == 'zurich_hf2li':
+        try:
+            from modules.zurich_hf2li.routes import hf2_controller
+            while True:
+                status = await hf2_controller.get_status()
+                await websocket.send_text(json.dumps({
+                    'device': device_id,
+                    'type': 'status',
+                    'payload': status
+                }))
+                await asyncio.sleep(0.5)
+        except WebSocketDisconnect:
+            print(f"WebSocket disconnected for device: {device_id}")
+        except Exception as e:
+            print(f"WebSocket error for {device_id}: {e}")
     else:
         try:
             while True:

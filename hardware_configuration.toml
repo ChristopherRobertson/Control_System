@@ -340,8 +340,24 @@ gate_threshold_v = "GATE:THR {gate_threshold_v}"
 [zurich_hf2li]
 device_type = "Zurich Instruments HF2LI"
 connection_type = "USB"
-device_id = "18500"  # Replace with actual device serial number
+# The device identifier used by the LabOne Data Server. For HF2LI the
+# canonical form is "dev<serial>", e.g. "dev18500". You can also leave this
+# as "AUTO" to let the software try to discover and use the first available
+# HF2LI.
+device_id = "dev18500"  # Update to your actual device id, e.g. dev12345
+host = "127.0.0.1"      # LabOne servers host (used by start.bat)
+data_server_port = 8005  # LabOne Data Server port (used by start.bat)
+web_server_port = 8006   # LabOne Web Server port (used by start.bat)
 description = "Dual-phase lock-in amplifier for signal processing"
+
+# LabOne installation and startup preferences for start.bat
+# Root installation directory; the script will look for
+#   <labone_root>/DataServer/ziDataServer.exe
+#   <labone_root>/WebServer/ziWebServer.exe
+# and start them with the configured ports if needed.
+labone_root = "C:/Program Files/Zurich Instruments/LabOne"
+auto_start_servers = true         # If true, start servers if unreachable
+require_web_server = true         # If true, fail start.bat if Web Server is not reachable
 
 [zurich_hf2li.parameters]
 # Hardware specifications from manual

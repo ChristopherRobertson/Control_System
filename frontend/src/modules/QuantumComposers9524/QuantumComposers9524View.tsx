@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Box, Typography, Chip, Button, Tabs, Tab, Snackbar, Alert } from '@mui/material'
 import { PlayArrow as StartIcon, Stop as StopIcon, Timeline as SignalIcon } from '@mui/icons-material'
-import QuantumComposersAPI, { QCStatus, QCChannelKey } from './api'
-import SystemPanel from './components/SystemPanel'
+import QuantumComposersAPI, { QCStatus, QCChannelKey, QCSystemSettings } from './api'
 import TriggerPanel from './components/TriggerPanel'
 import ChannelsPanel from './components/ChannelsPanel'
 import Terminal from './components/Terminal'
@@ -57,10 +56,28 @@ function QuantumComposers9524View() {
     })
     try {
       const res = nextRunning ? await QuantumComposersAPI.start() : await QuantumComposersAPI.stop()
-      await refresh()
-      setSnack({open: true, msg: res.message || (nextRunning ? 'Started' : 'Stopped'), severity: 'success'})
+      const { message: responseMessage, ...statusPayload } = res || {}
+      if (statusPayload && Object.keys(statusPayload).length > 0) {
+        setStatus(statusPayload as QCStatus)
+      } else {
+        await refresh()
+      }
+      setSnack({open: true, msg: responseMessage || (nextRunning ? 'Started' : 'Stopped'), severity: 'success'})
     } catch (e: any) {
       setStatus(prev => previousStatus ? { ...previousStatus, channels: { ...previousStatus.channels } } : prev)
+      setSnack({open: true, msg: e?.response?.data?.detail || e?.message || String(e), severity: 'error'})
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updateSystem = async (patch: Partial<QCSystemSettings>) => {
+    setLoading(true)
+    try {
+      const res = await QuantumComposersAPI.setSystem(patch)
+      await refresh()
+      setSnack({open: true, msg: res?.message || 'System updated', severity: 'success'})
+    } catch (e: any) {
       setSnack({open: true, msg: e?.response?.data?.detail || e?.message || String(e), severity: 'error'})
     } finally {
       setLoading(false)
@@ -83,27 +100,23 @@ function QuantumComposers9524View() {
       </Box>
 
       <Tabs value={activeTab} onChange={(_e, v) => setActiveTab(v)} sx={{ mb: 2 }}>
-        <Tab label="System" />
-        <Tab label="Triggers" />
         <Tab label="Channels" />
+        <Tab label="Triggers" />
       </Tabs>
 
       {activeTab === 0 && status && (
-        <SystemPanel status={status} onChange={async (patch) => { setLoading(true); try { await QuantumComposersAPI.setSystem(patch); await refresh(); } finally { setLoading(false) } }} disabled={!connected || loading} />
-      )}
-      {activeTab === 1 && status && (
-        <TriggerPanel status={status} onChange={async (patch) => { setLoading(true); try { await QuantumComposersAPI.setExternal(patch); await refresh(); } finally { setLoading(false) } }} disabled={!connected || loading} />
-      )}
-      {activeTab === 2 && status && (
         <ChannelsPanel
           status={status}
           selected={selectedChannel}
           onSelect={setSelectedChannel}
+          onSystemChange={updateSystem}
           onChange={async (patch) => { setLoading(true); try { await QuantumComposersAPI.setChannel(selectedChannel, patch); await refresh(); } finally { setLoading(false) } }}
           disabled={!connected || loading}
         />
       )}
-
+      {activeTab === 1 && status && (
+        <TriggerPanel status={status} onChange={async (patch) => { setLoading(true); try { await QuantumComposersAPI.setExternal(patch); await refresh(); } finally { setLoading(false) } }} disabled={!connected || loading} />
+      )}
       <Box sx={{ mt: 3 }}>
         <Terminal connected={!!status?.connected} />
       </Box>
