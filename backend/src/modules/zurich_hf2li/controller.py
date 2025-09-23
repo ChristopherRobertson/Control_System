@@ -1,5 +1,5 @@
-"""
-Zurich Instruments HF2LI Controller (Phase 1 – live LabOne API)
+﻿"""
+Zurich Instruments HF2LI Controller (Phase 1 - live LabOne API)
 
 This module implements a thin wrapper around Zurich Instruments' LabOne
 Data Server via the official `zhinst` Python package. It provides a
@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import os
+from array import array as array_type
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
@@ -65,7 +67,7 @@ class ZurichHF2LIController:
         self.device_id: str = os.getenv("HF2LI_DEVICE_ID", self.config.get("device_id", "AUTO"))
 
         self._daq = None  # type: ignore[attr-defined]
-        self._api_level = 6
+        self._api_level = 1
         self._connected: bool = False
         self._server_connected: bool = False
         self._server_version: Optional[str] = None
@@ -191,6 +193,21 @@ class ZurichHF2LIController:
         except Exception as e:
             raise RuntimeError(f"set failed for '{path}' -> {value}: {e}")
 
+    def _simplify_value(self, value: Any) -> Any:
+        if hasattr(value, 'tolist'):
+            value = value.tolist()
+        elif isinstance(value, array_type):
+            value = list(value)
+
+        if isinstance(value, (list, tuple)):
+            simplified = [self._simplify_value(v) for v in value]
+            if len(simplified) == 1:
+                return simplified[0]
+            return simplified
+        if isinstance(value, dict):
+            return {k: self._simplify_value(v) for k, v in value.items()}
+        return value
+
     def _extract_value(self, raw: Dict[str, Any]) -> Any:
         # The structure returned by get(flat=True) is a dict of path->{...}.
         # Each leaf commonly exposes 'value' (list) or 'vector'. Extract the
@@ -198,21 +215,12 @@ class ZurichHF2LIController:
         for _path, payload in raw.items():
             if isinstance(payload, dict):
                 if "value" in payload:
-                    val = payload["value"]
-                    if isinstance(val, list) and val:
-                        return val[0]
-                    return val
-                # Some nodes use 'vector' for arrays
+                    return self._simplify_value(payload["value"])
                 if "vector" in payload:
-                    vec = payload["vector"]
-                    if isinstance(vec, list) and len(vec) == 1 and isinstance(vec[0], list) and vec[0]:
-                        return vec[0][0]
-                    return vec
-                # Strings may be in 'string'
+                    return self._simplify_value(payload["vector"])
                 if "string" in payload:
                     return payload["string"]
-            # Fallback to the payload itself
-            return payload
+            return self._simplify_value(payload)
         return None
 
     async def get_nodes(self, paths: Iterable[str]) -> Dict[str, Any]:
@@ -241,4 +249,52 @@ class ZurichHF2LIController:
         except Exception:
             pass
         return results
+
+    async def zero_demod_phase(self, demod_index: int) -> float:
+        if demod_index < 0:
+            raise ValueError("demod_index must be non-negative")
+        daq = self._ensure_daq()
+        if not self.device_id:
+            raise RuntimeError("HF2LI device id not resolved; connect first")
+
+        base = f"/{self.device_id}/demods/{demod_index}"
+        sample_path = f"{base}/sample"
+        phase_path = f"{base}/phaseshift"
+
+        try:
+            sample = daq.getSample(sample_path)  # type: ignore[attr-defined]
+        except Exception as exc:  # pragma: no cover - hardware specific
+            raise RuntimeError(f"Failed to acquire demod sample for {demod_index}: {exc}")
+
+        try:
+            x_val = float(sample.get("x", [0.0])[0])
+            y_val = float(sample.get("y", [0.0])[0])
+        except Exception as exc:  # pragma: no cover - defensive
+            raise RuntimeError(f"Unexpected demod sample payload: {sample}: {exc}")
+
+        if x_val == 0.0 and y_val == 0.0:
+            raise RuntimeError("Demodulator sample is zero; cannot determine phase")
+
+        current_phase_data = await self.get_nodes([phase_path])
+        current_phase_raw = current_phase_data.get(phase_path, 0.0)
+        try:
+            current_phase = float(current_phase_raw)
+        except Exception:
+            current_phase = 0.0
+
+        measured_phase = math.degrees(math.atan2(y_val, x_val))
+        new_phase = current_phase - measured_phase
+
+        # Wrap to [-180, 180)
+        new_phase = ((new_phase + 180.0) % 360.0) - 180.0
+
+        try:
+            self._coerce_and_set(phase_path, new_phase)
+            daq.sync()  # type: ignore[attr-defined]
+        except Exception as exc:
+            raise RuntimeError(f"Failed to apply phase shift {new_phase:.3f}°: {exc}")
+
+        return new_phase
+
+
 

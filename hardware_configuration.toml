@@ -344,7 +344,7 @@ connection_type = "USB"
 # canonical form is "dev<serial>", e.g. "dev18500". You can also leave this
 # as "AUTO" to let the software try to discover and use the first available
 # HF2LI.
-device_id = "dev18500"  # Update to your actual device id, e.g. dev12345
+device_id = "AUTO"  # Update to your actual device id, e.g. dev12345
 host = "127.0.0.1"      # LabOne servers host (used by start.bat)
 data_server_port = 8005  # LabOne Data Server port (used by start.bat)
 web_server_port = 8006   # LabOne Web Server port (used by start.bat)
@@ -360,6 +360,50 @@ auto_start_servers = true         # If true, start servers if unreachable
 require_web_server = true         # If true, fail start.bat if Web Server is not reachable
 
 [zurich_hf2li.parameters]
-# Hardware specifications from manual
-frequency_range_min = 0.01  # Hz
-frequency_range_max = 50000000  # 50 MHz
+frequency_range_min = 0.01  # minimum frequency range detectable by the LIA in Hz
+frequency_range_max = 50000000  # maximum frequency range detectable by the LIA in Hz
+
+[zurich_hf2li.parameters.signal_inputs]
+range_min_v = 0.0 # Volts
+range_max_v = 2.0 # Volts
+impedance_options = ["50 Ohm", "1 MOhm"]  # Input impedance options, slider on = 50 Ohm, off = 1 MOhm
+coupling_options = ["AC", "DC"]  # Input coupling options
+units_options = ["V", "mV"]  # Signal units options, should be V for the MCT Detectors
+
+[zurich_hf2li.parameters.oscillators]
+mode_options = ["Manual", "External Reference"]  # oscillator mode options
+frequency_min_hz = 0.0 # Setting to 0 disables the oscillator in manual mode
+frequency_max_hz = 100000000.0 # absolute maximum frequency of the oscillator in manual mode
+
+[zurich_hf2li.parameters.demodulators]
+reference_mode_options = ["Manual", "External Reference"]
+oscillator_options = [1, 2]  # oscillator options available for demodulators
+harmonic_min = 1 # multiplies the demodulator reference frequency by the integer value
+harmonic_max = 1023 # multiplies the demodulator reference frequency by the integer value
+phase_min_deg = -180.0 # degrees
+phase_max_deg = 180.0  # degrees
+input_signal_options = ["Signal 1 In", "Signal 2 In", "Auxillary 1 In", "Auxillary 2 In", "DIO D0", "DIO D1"]  # input signal options for demodulators
+lowpass_order_options = [1, 2, 3, 4, 5, 6, 7, 8] # selects the filter roll off between 6db/oct and 48db/oct, 2nd order is 12db/oct
+lowpass_bandwidth_bw_3_db_min = 175.7e-6 # 3 db bandwidth in db
+lowpass_bandwidth_bw_3_db_max = 138.8e3 # 3 db bandwidth in db
+lowpass_bandwidth_bw_nep_min = 214.4e-6 # noise equivalent power bandwidth in db
+lowpass_bandwidth_bw_nep_max = 159.6e3 # noise equivalent power bandwidth in db
+lowpass_bandwidth_tc_min = 783.2e-9 # time constant in seconds
+lowpass_bandwidth_tc_max = 582.9 # time constant in seconds
+data_transfer_enabled_options = ["On", "Off"] # setting to "Off" disables the data transfer for that demodulator and sets the rate to zero
+data_rate_min_sa_per_s = 219.6e-3 # setting to zero disables the data transfer for that demodulator
+data_rate_max_sa_per_s = 1.842e6 # samples per second
+fixed_manual_input_signals = ["Signal 1 In", "Signal 1 In", "Signal 1 In", "Signal 2 In", "Signal 2 In", "Signal 2 In"]
+extref_demod_indices = [7, 8] # demodulators that can use external reference
+manual_demod_indices = [1, 2, 3, 4, 5, 6] # demodulators that use manual reference
+extref_input_options = ["Signal 1 In", "Signal 2 In", "Auxillary 1 In", "Auxillary 2 In", "DIO D0", "DIO D1"] # external reference input options for demodulators 7 or 8
+total_demodulators = 8
+
+[zurich_hf2li.parameters.demodulators.trigger]
+trigger_source = ["Continuous", "DIO 0", "DIO 1", "DIO 0|1"] # trigger source options for demodulators
+
+[zurich_hf2li.parameters.demodulators.trigger_modes] # trigger mode options for demodulators
+"DIO 0" = ["Continuous", "Rise", "Fall", "Both", "High", "Low"] # trigger mode options for DIO 0
+"DIO 1" = ["Continuous", "Rise", "Fall", "Both", "High", "Low"] # trigger mode options for DIO 1
+"DIO 0|1" = ["Continuous", "Rise", "Fall", "Both", "High", "Low"] # trigger mode options for DIO 0|1
+

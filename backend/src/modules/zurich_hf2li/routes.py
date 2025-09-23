@@ -79,6 +79,15 @@ async def set_nodes(payload: NodesSetPayload):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/demods/{index}/phase/zero")
+async def zero_demod_phase(index: int):
+    try:
+        new_phase = await hf2_controller.zero_demod_phase(index)
+        return {"phase": new_phase}
+    except Exception as e:
+        logger.exception("HF2LI zero demod phase failed")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 def register(app: FastAPI) -> None:
     app.include_router(router)
-

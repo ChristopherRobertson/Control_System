@@ -30,6 +30,9 @@ export class HF2API {
   static async setNodes(settings: { path: string, value: any }[]): Promise<Record<string, any>> {
     return (await axios.post(`${API_BASE}/nodes/set`, { settings })).data as any
   }
+  static async zeroPhase(demodIndex: number): Promise<{ phase: number }> {
+    return (await axios.post(`${API_BASE}/demods/${demodIndex}/phase/zero`)).data as { phase: number }
+  }
 }
 
 export default HF2API
