@@ -1,4 +1,4 @@
-dry_run = false
+﻿dry_run = false
 # IR Pump-Probe Spectroscopy Control Interface Hardware Configuration
 # Updated with actual hardware specifications from vendor documentation
 
@@ -176,11 +176,11 @@ description = "2-channel oscilloscope for data acquisition"
 
 [picoscope_5244d.parameters]
 # UI validation ranges for Phase 1 (complete from screenshots)
-# Input ranges cover the PicoScope standard 1-2-5 steps up to ±20 V.
+# Input ranges cover the PicoScope standard 1-2-5 steps up to Â±20 V.
 input_ranges = [
-  "±10mV","±20mV","±50mV",
-  "±100mV","±200mV","±500mV",
-  "±1V","±2V","±5V","±10V","±20V"
+  "Â±10mV","Â±20mV","Â±50mV",
+  "Â±100mV","Â±200mV","Â±500mV",
+  "Â±1V","Â±2V","Â±5V","Â±10V","Â±20V"
 ]
 coupling_options = ["DC","AC"]
 
@@ -189,9 +189,9 @@ time_per_div_options = [
   "1ns/div","2ns/div","5ns/div",
   "10ns/div","20ns/div","50ns/div",
   "100ns/div","200ns/div","500ns/div",
-  "1µs/div","2µs/div","5µs/div",
-  "10µs/div","20µs/div","50µs/div",
-  "100µs/div","200µs/div","500µs/div",
+  "1Âµs/div","2Âµs/div","5Âµs/div",
+  "10Âµs/div","20Âµs/div","50Âµs/div",
+  "100Âµs/div","200Âµs/div","500Âµs/div",
   "1ms/div","2ms/div","5ms/div",
   "10ms/div","20ms/div","50ms/div",
   "100ms/div","200ms/div","500ms/div",
@@ -230,9 +230,9 @@ time_per_div_options_s = [
 [picoscope_5244d.parameters.timebase_index_map]
 "10ns/div" = 1
 "100ns/div" = 5
-"1µs/div" = 8
-"10µs/div" = 11
-"100µs/div" = 14
+"1Âµs/div" = 8
+"10Âµs/div" = 11
+"100Âµs/div" = 14
 "1ms/div" = 17
 "10ms/div" = 20
 "100ms/div" = 23
@@ -310,7 +310,7 @@ auto_start = "AUTOSTART {auto_start}"
 duty_cycle_on_counts = "DUTYON {duty_cycle_on_counts}"
 duty_cycle_off_counts = "DUTYOFF {duty_cycle_off_counts}"
 
-# Channel settings — the backend passes {channel} = A|B|C|D
+# Channel settings â€” the backend passes {channel} = A|B|C|D
 [quantum_composers_9524.commands.channel]
 enabled = "CH{channel}:ENAB {enabled}"
 delay_s = "CH{channel}:DELAY {delay_s}"
@@ -380,19 +380,26 @@ reference_mode_options = ["Manual", "External Reference"]
 oscillator_options = [1, 2]  # oscillator options available for demodulators
 harmonic_min = 1 # multiplies the demodulator reference frequency by the integer value
 harmonic_max = 1023 # multiplies the demodulator reference frequency by the integer value
+harmonic_default = 1 # default value for harmonic multiplier
 phase_min_deg = -180.0 # degrees
 phase_max_deg = 180.0  # degrees
+phase_default = 0.0 # degrees
 input_signal_options = ["Signal 1 In", "Signal 2 In", "Auxillary 1 In", "Auxillary 2 In", "DIO D0", "DIO D1"]  # input signal options for demodulators
 lowpass_order_options = [1, 2, 3, 4, 5, 6, 7, 8] # selects the filter roll off between 6db/oct and 48db/oct, 2nd order is 12db/oct
 lowpass_bandwidth_bw_3_db_min = 175.7e-6 # 3 db bandwidth in db
 lowpass_bandwidth_bw_3_db_max = 138.8e3 # 3 db bandwidth in db
+lowpass_bandwidth_bw_3_db_default = 158.9 # default 3 db bandwidth in db
 lowpass_bandwidth_bw_nep_min = 214.4e-6 # noise equivalent power bandwidth in db
 lowpass_bandwidth_bw_nep_max = 159.6e3 # noise equivalent power bandwidth in db
+lowpass_bandwidth_bw_nep_default = 249.5 # default noise equivalent power bandwidth in db
 lowpass_bandwidth_tc_min = 783.2e-9 # time constant in seconds
 lowpass_bandwidth_tc_max = 582.9 # time constant in seconds
+lowpass_bandwidth_tc_default = 1.002 # default time constant in seconds
 data_transfer_enabled_options = ["On", "Off"] # setting to "Off" disables the data transfer for that demodulator and sets the rate to zero
+data_transfer_enabled_default = "Off"
 data_rate_min_sa_per_s = 219.6e-3 # setting to zero disables the data transfer for that demodulator
 data_rate_max_sa_per_s = 1.842e6 # samples per second
+data_rate_sa_per_s_default = 224.9
 fixed_manual_input_signals = ["Signal 1 In", "Signal 1 In", "Signal 1 In", "Signal 2 In", "Signal 2 In", "Signal 2 In"]
 extref_demod_indices = [7, 8] # demodulators that can use external reference
 manual_demod_indices = [1, 2, 3, 4, 5, 6] # demodulators that use manual reference
@@ -401,6 +408,7 @@ total_demodulators = 8
 
 [zurich_hf2li.parameters.demodulators.trigger]
 trigger_source = ["Continuous", "DIO 0", "DIO 1", "DIO 0|1"] # trigger source options for demodulators
+trigger_source_default = "Continuous" # default value for trigger source selection
 
 [zurich_hf2li.parameters.demodulators.trigger_modes] # trigger mode options for demodulators
 "DIO 0" = ["Continuous", "Rise", "Fall", "Both", "High", "Low"] # trigger mode options for DIO 0

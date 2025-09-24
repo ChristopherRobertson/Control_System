@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Typography, Chip, Button, Grid, Card, CardHeader, CardContent, TextField, Switch, FormControlLabel, Snackbar, Alert, Divider, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, MenuItem } from '@mui/material'
 import HF2API, { HF2Status } from './api'
 
@@ -31,7 +31,19 @@ function useHF2Nodes(connected: boolean) {
     setValues(prev => ({ ...prev, [path]: value }))
   }, [])
 
-  return { values, refresh, set, loading }
+  const setMany = useCallback(async (settings: { path: string; value: any }[]) => {
+    if (!settings.length) return
+    await HF2API.setNodes(settings)
+    setValues(prev => {
+      const next = { ...prev }
+      settings.forEach(({ path: settingPath, value }) => {
+        next[settingPath] = value
+      })
+      return next
+    })
+  }, [])
+
+  return { values, refresh, set, setMany, loading }
 }
 
 // Default node paths for the main controls we expose.
@@ -121,6 +133,16 @@ const INPUT_OPTION_LABELS: Record<number, string> = {
 
 const EXT_INPUT_OPTIONS = [0, 1, 2, 3, 4, 5].map(value => ({ value, label: INPUT_OPTION_LABELS[value] }))
 const FIXED_REF_DEMOD_INDICES = [6, 7]
+const FIXED_OSC_ASSIGNMENTS: Partial<Record<number, number>> = {
+  6: 0,
+  7: 1,
+}
+const DEMOD_GROUPS = [
+  { label: 'Demodulators 1-3', options: [0, 1, 2] as const },
+  { label: 'Demodulators 4-6', options: [3, 4, 5] as const },
+] as const
+const INDIVIDUAL_DEMODS = [6, 7] as const
+
 
 const makeNodeMap = (deviceId: string) => ({
   // Signal inputs
@@ -171,8 +193,9 @@ function ZurichHF2LIView() {
   const deviceId = status?.device_id || 'devXXXX'
 
   const nodes = useMemo(() => makeNodeMap(deviceId), [deviceId])
-  const { values, refresh, set } = useHF2Nodes(connected)
+  const { values, refresh, set, setMany } = useHF2Nodes(connected)
   const controlsDisabled = !connected
+  const [selectedDemodIndices, setSelectedDemodIndices] = useState<number[]>(() => DEMOD_GROUPS.map(group => group.options[0]))
 
   async function loadInitial() {
     const s = await HF2API.status()
@@ -352,13 +375,21 @@ function ZurichHF2LIView() {
     if (!connected) return
     try {
       const { phase } = await HF2API.zeroPhase(idx)
-      const phaseLabel = Number.isFinite(phase) ? ` (${phase.toFixed(2)}°)` : ''
+      const phaseLabel = Number.isFinite(phase) ? ` (${phase.toFixed(2)}Â°)` : ''
       setSnack({ open: true, msg: `Demod ${idx + 1} phase zeroed${phaseLabel}`, severity: 'success' })
       await refresh([nodes.demods[idx].phase])
     } catch (error: any) {
       const message = error?.response?.data?.detail ?? error?.message ?? String(error)
       setSnack({ open: true, msg: message, severity: 'error' })
     }
+  }
+
+  const handleDemodSelectionChange = (groupIdx: number, demodIdx: number) => {
+    setSelectedDemodIndices(prev => {
+      const next = [...prev]
+      next[groupIdx] = demodIdx
+      return next
+    })
   }
 
   const oscOptions = nodes.oscs.map((_, idx) => ({ value: idx, label: `${idx + 1}` }))
@@ -425,25 +456,343 @@ function ZurichHF2LIView() {
     if (controlsDisabled) return
     const oscIdx = demodIdx - 6
     const pll = nodes.plls?.[oscIdx]
-    if (!pll) return
-    const enable = mode === 'external'
-    await set(pll.enable, enable)
-    if (enable) {
-      await set(pll.demodselect, demodIdx)
-    }
     const demod = nodes.demods[demodIdx]
-    const expectedOsc = oscIdx
-    if (enable && asNumber(values[demod.oscselect]) !== expectedOsc) {
-      await set(demod.oscselect, expectedOsc)
+    if (!pll || !demod) return
+    const enable = mode === 'external'
+    const updates: { path: string; value: any }[] = [{ path: pll.enable, value: enable }]
+    if (enable) {
+      updates.push({ path: pll.demodselect, value: demodIdx })
+      const expectedOsc = FIXED_OSC_ASSIGNMENTS[demodIdx]
+      if (expectedOsc !== undefined && asNumber(values[demod.oscselect], expectedOsc) !== expectedOsc) {
+        updates.push({ path: demod.oscselect, value: expectedOsc })
+      }
     }
+    await setMany(updates)
   }
 
-  const renderDash = () => <Typography variant="body2" color="text.secondary">—</Typography>
+  const renderDash = () => <Typography variant="body2" color="text.secondary">â€”</Typography>
 
   const getFixedInputAssignment = (demodIdx: number) => {
     const assignments = FIXED_INPUT_ASSIGNMENTS as Record<string, number>
     const key = String(demodIdx)
     return assignments[key]
+  }
+
+  const renderDemodRow = (demodIdx: number, label: string, selectorProps?: { groupIdx: number; options: readonly number[] }) => {
+    const demod = nodes.demods[demodIdx]
+    if (!demod) return null
+
+    const isRefDemod = FIXED_REF_DEMOD_INDICES.includes(demodIdx)
+    const assignedInput = getFixedInputAssignment(demodIdx)
+    const expectedOsc = FIXED_OSC_ASSIGNMENTS[demodIdx]
+    const oscValue = expectedOsc !== undefined ? expectedOsc : asNumber(values[demod.oscselect])
+    const refModeValue = isRefDemod ? getRefModeForDemod(demodIdx) : 'manual'
+    const triggerState = decodeTriggerValue(values[demod.trigger])
+    const triggerSource = triggerState.source
+    const triggerMode = triggerState.mode
+    const triggerModeChoices = triggerSource === 'continuous'
+      ? TRIGGER_MODE_OPTIONS.filter(opt => opt.value === 'continuous')
+      : TRIGGER_MODE_OPTIONS
+    const showFullControls = demodIdx < 6
+    const inputLabel = assignedInput !== undefined ? INPUT_OPTION_LABELS[assignedInput] : undefined
+
+    return (
+      <TableRow key={`${label}-${demodIdx}`} hover>
+        <TableCell>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Typography variant="body2" color="text.secondary">{label}</Typography>
+            {selectorProps && (
+              <TextField
+                select
+                size="small"
+                value={demodIdx}
+                disabled={controlsDisabled}
+                onChange={event => {
+                  const parsed = Number(event.target.value)
+                  if (!Number.isFinite(parsed)) return
+                  if (!selectorProps.options.includes(parsed)) return
+                  handleDemodSelectionChange(selectorProps.groupIdx, parsed)
+                }}
+                sx={{ minWidth: 140 }}
+              >
+                {selectorProps.options.map(option => (
+                  <MenuItem key={option} value={option}>{'Demod ' + (option + 1)}</MenuItem>
+                ))}
+              </TextField>
+            )}
+          </Box>
+        </TableCell>
+        <TableCell>
+          {isRefDemod ? (
+            <TextField
+              select
+              size="small"
+              value={refModeValue}
+              disabled={controlsDisabled}
+              onChange={event => {
+                const mode = event.target.value as RefMode
+                void handleRefModeChange(demodIdx, mode)
+              }}
+              sx={{ minWidth: 170 }}
+            >
+              {REF_MODE_OPTIONS.map(opt => (
+                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            <Chip label="Manual" size="small" />
+          )}
+        </TableCell>
+        <TableCell>
+          {expectedOsc !== undefined ? (
+            <Chip label={`Osc ${expectedOsc + 1}`} size="small" color={isRefDemod && refModeValue === 'external' ? 'primary' : 'default'} />
+          ) : (
+            <TextField
+              select
+              size="small"
+              value={oscValue}
+              disabled={controlsDisabled}
+              onChange={event => {
+                if (controlsDisabled) return
+                const parsed = Number(event.target.value)
+                if (!Number.isFinite(parsed)) return
+                const clamped = clamp(Math.round(parsed), 0, oscOptions.length - 1)
+                void set(demod.oscselect, clamped)
+              }}
+              sx={{ minWidth: 80 }}
+            >
+              {oscOptions.map(opt => (
+                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+              ))}
+            </TextField>
+          )}
+        </TableCell>
+        <TableCell>
+          {showFullControls ? (
+            <TextField
+              size="small"
+              type="number"
+              value={fmt(values[demod.harmonic])}
+              disabled={controlsDisabled}
+              onChange={event => {
+                if (controlsDisabled) return
+                const parsed = Number(event.target.value)
+                if (!Number.isFinite(parsed)) return
+                const clamped = clamp(Math.round(parsed), HARMONIC_MIN, HARMONIC_MAX)
+                void set(demod.harmonic, clamped)
+              }}
+              sx={{ minWidth: 80 }}
+            />
+          ) : (
+            renderDash()
+          )}
+        </TableCell>
+        <TableCell>
+          {showFullControls ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TextField
+                size="small"
+                type="number"
+                value={fmt(values[demod.phase])}
+                disabled={controlsDisabled}
+                onChange={event => {
+                  if (controlsDisabled) return
+                  const parsed = Number(event.target.value)
+                  if (!Number.isFinite(parsed)) return
+                  const wrapped = wrapPhase(parsed)
+                  void set(demod.phase, wrapped)
+                }}
+                sx={{ minWidth: 110 }}
+              />
+              <Button variant="outlined" size="small" onClick={() => handlePhaseZero(demodIdx)} disabled={controlsDisabled}>Zero</Button>
+            </Box>
+          ) : (
+            renderDash()
+          )}
+        </TableCell>
+        <TableCell>
+          {inputLabel !== undefined ? (
+            <Chip label={inputLabel} size="small" />
+          ) : (
+            <TextField
+              select
+              size="small"
+              value={asNumber(values[demod.adcselect])}
+              disabled={controlsDisabled}
+              onChange={event => {
+                if (controlsDisabled) return
+                const parsed = Number(event.target.value)
+                if (!Number.isFinite(parsed)) return
+                const clamped = clamp(Math.round(parsed), EXT_INPUT_OPTIONS[0].value, EXT_INPUT_OPTIONS[EXT_INPUT_OPTIONS.length - 1].value)
+                void set(demod.adcselect, clamped)
+              }}
+              sx={{ minWidth: 140 }}
+            >
+              {EXT_INPUT_OPTIONS.map(opt => (
+                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+              ))}
+            </TextField>
+          )}
+        </TableCell>
+        <TableCell>
+          {showFullControls ? (
+            <TextField
+              select
+              size="small"
+              value={asNumber(values[demod.order], 1) || 1}
+              disabled={controlsDisabled}
+              onChange={event => {
+                if (controlsDisabled) return
+                const parsed = Number(event.target.value)
+                if (!Number.isFinite(parsed)) return
+                const clamped = clamp(Math.round(parsed), orderOptions[0], orderOptions[orderOptions.length - 1])
+                void set(demod.order, clamped)
+              }}
+              sx={{ minWidth: 80 }}
+            >
+              {orderOptions.map(val => (
+                <MenuItem key={val} value={val}>{val}</MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            renderDash()
+          )}
+        </TableCell>
+        <TableCell>
+          {showFullControls ? (
+            <TextField
+              select
+              size="small"
+              value={getFilterMode(demodIdx)}
+              disabled={controlsDisabled}
+              onChange={event => handleFilterModeSelection(demodIdx, event.target.value as FilterMode)}
+              sx={{ minWidth: 120 }}
+            >
+              {FILTER_MODE_OPTIONS.map(opt => (
+                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            renderDash()
+          )}
+        </TableCell>
+        <TableCell>
+          {showFullControls ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              {(() => {
+                const mode = getFilterMode(demodIdx)
+                const label = mode === 'TC' ? 'TC (s)' : mode === 'BW_3_DB' ? 'BW 3 dB (Hz)' : 'BW NEP (Hz)'
+                return (
+                  <TextField
+                    size="small"
+                    type="number"
+                    label={label}
+                    disabled={controlsDisabled}
+                    value={(() => {
+                      const displayValue = getFilterDisplayValue(demodIdx)
+                      return Number.isFinite(displayValue) ? displayValue : ''
+                    })()}
+                    onChange={event => {
+                      if (controlsDisabled) return
+                      const parsed = Number(event.target.value)
+                      if (!Number.isFinite(parsed)) return
+                      applyFilterValue(demodIdx, parsed)
+                    }}
+                    sx={{ minWidth: 140 }}
+                  />
+                )
+              })()}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Switch
+                  size="small"
+                  checked={asBool(values[demod.sinc])}
+                  disabled={controlsDisabled}
+                  onChange={event => {
+                    if (controlsDisabled) return
+                    void set(demod.sinc, event.target.checked)
+                  }}
+                  inputProps={{ 'aria-label': `Demod ${demodIdx + 1} sinc` }}
+                />
+                <Typography variant="caption">Sinc</Typography>
+              </Box>
+            </Box>
+          ) : (
+            renderDash()
+          )}
+        </TableCell>
+        <TableCell align="center">
+          {showFullControls ? (
+            <Switch
+              checked={asBool(values[demod.enable])}
+              disabled={controlsDisabled}
+              onChange={event => {
+                if (controlsDisabled) return
+                void set(demod.enable, event.target.checked)
+              }}
+              inputProps={{ 'aria-label': `Demod ${demodIdx + 1} enable` }}
+            />
+          ) : (
+            renderDash()
+          )}
+        </TableCell>
+        <TableCell>
+          {showFullControls ? (
+            <TextField
+              size="small"
+              type="number"
+              value={fmt(values[demod.rate])}
+              disabled={controlsDisabled}
+              onChange={event => {
+                if (controlsDisabled) return
+                const parsed = Number(event.target.value)
+                if (!Number.isFinite(parsed)) return
+                const clamped = clamp(parsed, DATA_RATE_MIN, DATA_RATE_MAX)
+                void set(demod.rate, clamped)
+              }}
+              sx={{ minWidth: 110 }}
+            />
+          ) : (
+            renderDash()
+          )}
+        </TableCell>
+        <TableCell>
+          {showFullControls ? (
+            <TextField
+              select
+              size="small"
+              value={triggerSource}
+              disabled={controlsDisabled}
+              onChange={event => handleTriggerSourceChange(demodIdx, event.target.value as TriggerSource)}
+              sx={{ minWidth: 140 }}
+            >
+              {TRIGGER_SOURCE_OPTIONS.map(opt => (
+                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            renderDash()
+          )}
+        </TableCell>
+        <TableCell>
+          {showFullControls ? (
+            <TextField
+              select
+              size="small"
+              value={triggerMode}
+              disabled={controlsDisabled || triggerSource === 'continuous'}
+              onChange={event => handleTriggerModeChange(demodIdx, event.target.value as TriggerMode)}
+              sx={{ minWidth: 140 }}
+            >
+              {triggerModeChoices.map(opt => (
+                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            renderDash()
+          )}
+        </TableCell>
+      </TableRow>
+    )
   }
 
   useEffect(() => {
@@ -457,6 +806,23 @@ function ZurichHF2LIView() {
       }
     })
   }, [connected, nodes.demods, set, values])
+
+  useEffect(() => {
+    if (!connected) return
+    const updates: { path: string; value: number }[] = []
+    FIXED_REF_DEMOD_INDICES.forEach(idx => {
+      const demod = nodes.demods[idx]
+      const expectedOsc = FIXED_OSC_ASSIGNMENTS[idx]
+      if (!demod || expectedOsc === undefined) return
+      const current = asNumber(values[demod.oscselect], expectedOsc)
+      if (current !== expectedOsc) {
+        updates.push({ path: demod.oscselect, value: expectedOsc })
+      }
+    })
+    if (updates.length) {
+      void setMany(updates)
+    }
+  }, [connected, nodes.demods, setMany, values])
 
   return (
     <Box>
@@ -498,7 +864,7 @@ function ZurichHF2LIView() {
               </Box>
               <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                 <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in1.ac])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in1.ac, e.target.checked) }} />} label="AC" />
-                <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in1.imp50])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in1.imp50, e.target.checked) }} />} label="50 Ω" />
+                <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in1.imp50])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in1.imp50, e.target.checked) }} />} label="50 Î©" />
                 <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in1.diff])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in1.diff, e.target.checked) }} />} label="Diff" />
               </Box>
               <Divider sx={{ my: 1 }} />
@@ -522,7 +888,7 @@ function ZurichHF2LIView() {
               </Box>
               <Box sx={{ display: 'flex', gap: 2 }}>
                 <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in2.ac])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in2.ac, e.target.checked) }} />} label="AC" />
-                <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in2.imp50])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in2.imp50, e.target.checked) }} />} label="50 Ω" />
+                <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in2.imp50])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in2.imp50, e.target.checked) }} />} label="50 Î©" />
                 <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in2.diff])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in2.diff, e.target.checked) }} />} label="Diff" />
               </Box>
             </SectionCard>
@@ -540,9 +906,9 @@ function ZurichHF2LIView() {
                           label="Frequency (Hz)"
                           type="number"
                           value={fmt(values[osc.freq])}
-                          disabled={controlsDisabled}
+                          disabled={controlsDisabled || refMode === 'external'}
                           onChange={e => {
-                            if (controlsDisabled) return
+                            if (controlsDisabled || refMode === 'external') return
                             const parsed = Number(e.target.value)
                             if (!Number.isFinite(parsed)) return
                             const clamped = clamp(parsed, OSC_FREQ_MIN, OSC_FREQ_MAX)
@@ -586,291 +952,15 @@ function ZurichHF2LIView() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {nodes.demods.map((demod, idx) => {
-                    const isRefDemod = FIXED_REF_DEMOD_INDICES.includes(idx)
-                    const assignedInput = getFixedInputAssignment(idx)
-                    const expectedOsc = idx === 6 ? 0 : 1
-                    const oscValue = isRefDemod ? expectedOsc : asNumber(values[demod.oscselect])
-                    const refModeValue = isRefDemod ? getRefModeForDemod(idx) : 'manual'
-                    const triggerState = decodeTriggerValue(values[demod.trigger])
-                    const triggerSource = triggerState.source
-                    const triggerMode = triggerState.mode
-                    const triggerModeChoices = triggerSource === 'continuous'
-                      ? TRIGGER_MODE_OPTIONS.filter(opt => opt.value === 'continuous')
-                      : TRIGGER_MODE_OPTIONS
-                    const showFullControls = idx < 6
-                    const inputLabel = assignedInput !== undefined ? INPUT_OPTION_LABELS[assignedInput] : undefined
-                    return (
-                      <TableRow key={demod.enable} hover>
-                        <TableCell>{idx + 1}</TableCell>
-                        <TableCell>
-                          {isRefDemod ? (
-                            <TextField
-                              select
-                              size="small"
-                              value={refModeValue}
-                              disabled={controlsDisabled}
-                              onChange={event => {
-                                const mode = event.target.value as RefMode
-                                void handleRefModeChange(idx, mode)
-                              }}
-                              sx={{ minWidth: 170 }}
-                            >
-                              {REF_MODE_OPTIONS.map(opt => (
-                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                              ))}
-                            </TextField>
-                          ) : (
-                            <Chip label="Manual" size="small" />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <TextField
-                            select
-                            size="small"
-                            value={oscValue}
-                            disabled={controlsDisabled || isRefDemod}
-                            onChange={event => {
-                              if (controlsDisabled) return
-                              const parsed = Number(event.target.value)
-                              if (!Number.isFinite(parsed)) return
-                              const clamped = clamp(Math.round(parsed), 0, oscOptions.length - 1)
-                              void set(demod.oscselect, clamped)
-                            }}
-                            sx={{ minWidth: 80 }}
-                            >
-                            {oscOptions.map(opt => (
-                              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                            ))}
-                          </TextField>
-                        </TableCell>
-                        <TableCell>
-                          {showFullControls ? (
-                            <TextField
-                              size="small"
-                              type="number"
-                              value={fmt(values[demod.harmonic])}
-                              disabled={controlsDisabled}
-                              onChange={event => {
-                                if (controlsDisabled) return
-                                const parsed = Number(event.target.value)
-                                if (!Number.isFinite(parsed)) return
-                                const clamped = clamp(Math.round(parsed), HARMONIC_MIN, HARMONIC_MAX)
-                                void set(demod.harmonic, clamped)
-                              }}
-                              sx={{ minWidth: 80 }}
-                            />
-                          ) : (
-                            renderDash()
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {showFullControls ? (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <TextField
-                                size="small"
-                                type="number"
-                                value={fmt(values[demod.phase])}
-                                disabled={controlsDisabled}
-                                onChange={event => {
-                                  if (controlsDisabled) return
-                                  const parsed = Number(event.target.value)
-                                  if (!Number.isFinite(parsed)) return
-                                  const wrapped = wrapPhase(parsed)
-                                  void set(demod.phase, wrapped)
-                                }}
-                                sx={{ minWidth: 110 }}
-                              />
-                              <Button variant="outlined" size="small" onClick={() => handlePhaseZero(idx)} disabled={controlsDisabled}>Zero</Button>
-                            </Box>
-                          ) : (
-                            renderDash()
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {inputLabel !== undefined ? (
-                            <Chip label={inputLabel} size="small" />
-                          ) : (
-                            <TextField
-                              select
-                              size="small"
-                              value={asNumber(values[demod.adcselect])}
-                              disabled={controlsDisabled}
-                              onChange={event => {
-                                if (controlsDisabled) return
-                                const parsed = Number(event.target.value)
-                                if (!Number.isFinite(parsed)) return
-                                const clamped = clamp(Math.round(parsed), EXT_INPUT_OPTIONS[0].value, EXT_INPUT_OPTIONS[EXT_INPUT_OPTIONS.length - 1].value)
-                                void set(demod.adcselect, clamped)
-                              }}
-                              sx={{ minWidth: 140 }}
-                            >
-                              {EXT_INPUT_OPTIONS.map(opt => (
-                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                              ))}
-                            </TextField>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {showFullControls ? (
-                            <TextField
-                              select
-                              size="small"
-                              value={asNumber(values[demod.order], 1) || 1}
-                              disabled={controlsDisabled}
-                              onChange={event => {
-                                if (controlsDisabled) return
-                                const parsed = Number(event.target.value)
-                                if (!Number.isFinite(parsed)) return
-                                const clamped = clamp(Math.round(parsed), orderOptions[0], orderOptions[orderOptions.length - 1])
-                                void set(demod.order, clamped)
-                              }}
-                              sx={{ minWidth: 80 }}
-                            >
-                              {orderOptions.map(val => (
-                                <MenuItem key={val} value={val}>{val}</MenuItem>
-                              ))}
-                            </TextField>
-                          ) : (
-                            renderDash()
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {showFullControls ? (
-                            <TextField
-                              select
-                              size="small"
-                              value={getFilterMode(idx)}
-                              disabled={controlsDisabled}
-                              onChange={event => handleFilterModeSelection(idx, event.target.value as FilterMode)}
-                              sx={{ minWidth: 120 }}
-                            >
-                              {FILTER_MODE_OPTIONS.map(opt => (
-                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                              ))}
-                            </TextField>
-                          ) : (
-                            renderDash()
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {showFullControls ? (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                              {(() => {
-                                const mode = getFilterMode(idx)
-                                const label = mode === 'TC' ? 'TC (s)' : mode === 'BW_3_DB' ? 'BW 3 dB (Hz)' : 'BW NEP (Hz)'
-                                return (
-                                  <TextField
-                                    size="small"
-                                    type="number"
-                                    label={label}
-                                    disabled={controlsDisabled}
-                                    value={(() => {
-                                      const displayValue = getFilterDisplayValue(idx)
-                                      return Number.isFinite(displayValue) ? displayValue : ''
-                                    })()}
-                                    onChange={event => {
-                                      if (controlsDisabled) return
-                                      const parsed = Number(event.target.value)
-                                      if (!Number.isFinite(parsed)) return
-                                      applyFilterValue(idx, parsed)
-                                    }}
-                                    sx={{ minWidth: 140 }}
-                                  />
-                                )
-                              })()}
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Switch
-                                  size="small"
-                                  checked={asBool(values[demod.sinc])}
-                                  disabled={controlsDisabled}
-                                  onChange={event => {
-                                    if (controlsDisabled) return
-                                    void set(demod.sinc, event.target.checked)
-                                  }}
-                                  inputProps={{ 'aria-label': `Demod ${idx + 1} sinc` }}
-                                />
-                                <Typography variant="caption">Sinc</Typography>
-                              </Box>
-                            </Box>
-                          ) : (
-                            renderDash()
-                          )}
-                        </TableCell>
-                        <TableCell align="center">
-                          {showFullControls ? (
-                            <Switch
-                              checked={asBool(values[demod.enable])}
-                              disabled={controlsDisabled}
-                              onChange={event => {
-                                if (controlsDisabled) return
-                                void set(demod.enable, event.target.checked)
-                              }}
-                              inputProps={{ 'aria-label': `Demod ${idx + 1} enable` }}
-                            />
-                          ) : (
-                            renderDash()
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {showFullControls ? (
-                            <TextField
-                              size="small"
-                              type="number"
-                              value={fmt(values[demod.rate])}
-                              disabled={controlsDisabled}
-                              onChange={event => {
-                                if (controlsDisabled) return
-                                const parsed = Number(event.target.value)
-                                if (!Number.isFinite(parsed)) return
-                                const clamped = clamp(parsed, DATA_RATE_MIN, DATA_RATE_MAX)
-                                void set(demod.rate, clamped)
-                              }}
-                              sx={{ minWidth: 110 }}
-                            />
-                          ) : (
-                            renderDash()
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {showFullControls ? (
-                            <TextField
-                              select
-                              size="small"
-                              value={triggerSource}
-                              disabled={controlsDisabled}
-                              onChange={event => handleTriggerSourceChange(idx, event.target.value as TriggerSource)}
-                              sx={{ minWidth: 140 }}
-                            >
-                              {TRIGGER_SOURCE_OPTIONS.map(opt => (
-                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                              ))}
-                            </TextField>
-                          ) : (
-                            renderDash()
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {showFullControls ? (
-                            <TextField
-                              select
-                              size="small"
-                              value={triggerMode}
-                              disabled={controlsDisabled || triggerSource === 'continuous'}
-                              onChange={event => handleTriggerModeChange(idx, event.target.value as TriggerMode)}
-                              sx={{ minWidth: 140 }}
-                            >
-                              {triggerModeChoices.map(opt => (
-                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                              ))}
-                            </TextField>
-                          ) : (
-                            renderDash()
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )
+                  {DEMOD_GROUPS.map((group, groupIdx) => {
+                    const options = group.options
+                    const candidate = selectedDemodIndices[groupIdx]
+                    const selectedIdx = candidate !== undefined && options.includes(candidate)
+                      ? candidate
+                      : options[0]
+                    return renderDemodRow(selectedIdx, group.label, { groupIdx, options })
                   })}
+                  {INDIVIDUAL_DEMODS.map(demodIdx => renderDemodRow(demodIdx, 'Demod ' + (demodIdx + 1)))}
                 </TableBody>
               </Table>
             </TableContainer>
