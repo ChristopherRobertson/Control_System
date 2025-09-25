@@ -15,8 +15,9 @@ function useHF2Nodes(connected: boolean) {
   const [values, setValues] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(false)
 
-  const refresh = useCallback(async (paths: string[]) => {
-    if (!connected) return
+  const refresh = useCallback(async (paths: string[], options: { force?: boolean } = {}) => {
+    if (!paths?.length) return
+    if (!connected && !options.force) return
     setLoading(true)
     try {
       const res = await HF2API.getNodes(paths)
@@ -197,18 +198,20 @@ function ZurichHF2LIView() {
   const controlsDisabled = !connected
   const [selectedDemodIndices, setSelectedDemodIndices] = useState<number[]>(() => DEMOD_GROUPS.map(group => group.options[0]))
 
-  async function loadInitial() {
-    const s = await HF2API.status()
-    setStatus(s)
-    if (s?.connected && s?.device_id) {
+  const loadInitial = useCallback(async (statusOverride?: HF2Status) => {
+    const nextStatus = statusOverride ?? await HF2API.status()
+    setStatus(nextStatus)
+    const resolvedId = nextStatus?.device_id
+    if (nextStatus?.connected && resolvedId) {
+      const dynamicNodes = makeNodeMap(resolvedId)
       const paths: string[] = []
-      paths.push(...Object.values(nodes.in1))
-      paths.push(...Object.values(nodes.in2))
-      nodes.oscs.forEach(o => paths.push(o.freq))
-      nodes.plls?.forEach(pll => {
+      paths.push(...Object.values(dynamicNodes.in1))
+      paths.push(...Object.values(dynamicNodes.in2))
+      dynamicNodes.oscs.forEach(o => paths.push(o.freq))
+      dynamicNodes.plls?.forEach(pll => {
         paths.push(pll.enable, pll.demodselect)
       })
-      nodes.demods.forEach(d => {
+      dynamicNodes.demods.forEach(d => {
         paths.push(
           d.enable,
           d.adcselect,
@@ -222,22 +225,19 @@ function ZurichHF2LIView() {
           d.sinc,
         )
       })
-      await refresh(paths)
+      await refresh(paths, { force: true })
     }
-  }
+  }, [refresh])
 
-  useEffect(() => { loadInitial() }, [])
+  useEffect(() => { void loadInitial() }, [loadInitial])
 
   const toggleConnect = async () => {
     setLoading(true)
     try {
       const res = !connected ? await HF2API.connect() : await HF2API.disconnect()
-      setStatus(await HF2API.status())
+      const nextStatus = await HF2API.status()
+      await loadInitial(nextStatus)
       setSnack({ open: true, msg: res?.message || (!connected ? 'Connected' : 'Disconnected'), severity: 'success' })
-      if (!connected && res?.device_id) {
-        // Freshly connected; fetch values.
-        await loadInitial()
-      }
     } catch (e: any) {
       setSnack({ open: true, msg: e?.response?.data?.detail || e?.message || String(e), severity: 'error' })
     } finally {
@@ -375,7 +375,7 @@ function ZurichHF2LIView() {
     if (!connected) return
     try {
       const { phase } = await HF2API.zeroPhase(idx)
-      const phaseLabel = Number.isFinite(phase) ? ` (${phase.toFixed(2)}Â°)` : ''
+      const phaseLabel = Number.isFinite(phase) ? ` ({phase.toFixed(2)}\u00B0)` : ''
       setSnack({ open: true, msg: `Demod ${idx + 1} phase zeroed${phaseLabel}`, severity: 'success' })
       await refresh([nodes.demods[idx].phase])
     } catch (error: any) {
@@ -470,7 +470,7 @@ function ZurichHF2LIView() {
     await setMany(updates)
   }
 
-  const renderDash = () => <Typography variant="body2" color="text.secondary">â€”</Typography>
+  const renderDash = () => <Typography variant="body2" color="text.secondary">{'\u2014'}</Typography>
 
   const getFixedInputAssignment = (demodIdx: number) => {
     const assignments = FIXED_INPUT_ASSIGNMENTS as Record<string, number>
@@ -702,19 +702,6 @@ function ZurichHF2LIView() {
                   />
                 )
               })()}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Switch
-                  size="small"
-                  checked={asBool(values[demod.sinc])}
-                  disabled={controlsDisabled}
-                  onChange={event => {
-                    if (controlsDisabled) return
-                    void set(demod.sinc, event.target.checked)
-                  }}
-                  inputProps={{ 'aria-label': `Demod ${demodIdx + 1} sinc` }}
-                />
-                <Typography variant="caption">Sinc</Typography>
-              </Box>
             </Box>
           ) : (
             renderDash()
@@ -864,7 +851,7 @@ function ZurichHF2LIView() {
               </Box>
               <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                 <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in1.ac])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in1.ac, e.target.checked) }} />} label="AC" />
-                <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in1.imp50])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in1.imp50, e.target.checked) }} />} label="50 Î©" />
+                <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in1.imp50])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in1.imp50, e.target.checked) }} />} label="50 Ohm" />
                 <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in1.diff])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in1.diff, e.target.checked) }} />} label="Diff" />
               </Box>
               <Divider sx={{ my: 1 }} />
@@ -888,7 +875,7 @@ function ZurichHF2LIView() {
               </Box>
               <Box sx={{ display: 'flex', gap: 2 }}>
                 <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in2.ac])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in2.ac, e.target.checked) }} />} label="AC" />
-                <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in2.imp50])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in2.imp50, e.target.checked) }} />} label="50 Î©" />
+                <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in2.imp50])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in2.imp50, e.target.checked) }} />} label="50 Ohm" />
                 <FormControlLabel disabled={controlsDisabled} control={<Switch checked={asBool(values[nodes.in2.diff])} disabled={controlsDisabled} onChange={e => { if (controlsDisabled) return; void set(nodes.in2.diff, e.target.checked) }} />} label="Diff" />
               </Box>
             </SectionCard>

@@ -109,7 +109,7 @@ class MIRcatController:
         """Load configuration from hardware_configuration.toml"""
         config_path = Path(__file__).parent.parent.parent.parent.parent / "hardware_configuration.toml"
         try:
-            with open(config_path, 'r') as f:
+            with config_path.open('r', encoding='utf-8-sig') as f:
                 config = toml.load(f)
             return config.get('daylight_mircat', {})
         except Exception as e:

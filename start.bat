@@ -60,7 +60,7 @@ REM Ensure Zurich Instruments LabOne Data Server is reachable
 echo 🔌 Checking LabOne Data Server...
 set "CFG_PATH=%~dp0hardware_configuration.toml"
 REM Parse LabOne settings from [zurich_hf2li] using Python (reliable TOML parser)
-for /f "usebackq tokens=1,* delims==" %%A in (`%PYEXE% -c "import tomllib,sys; p=r'%CFG_PATH%'; d=tomllib.load(open(p,'rb')).get('zurich_hf2li',{}); g=lambda k,df:d.get(k,df); print('LABONE_HOST='+str(g('host','127.0.0.1'))); print('LABONE_PORT='+str(g('data_server_port',8005))); print('LABONE_WEB_PORT='+str(g('web_server_port',8006))); print('ZI_LABONE_ROOT='+str(g('labone_root','C:/Program Files/Zurich Instruments/LabOne'))); print('AUTO_START_LABONE='+str(g('auto_start_servers',True)).lower()); print('REQUIRE_WEB_SERVER='+str(g('require_web_server',True)).lower())"`) do set "%%A=%%B"
+for /f "usebackq tokens=1,* delims==" %%A in (`%PYEXE% -c "import tomllib,sys; from pathlib import Path; p=Path(r'%CFG_PATH%'); data=p.read_text(encoding='utf-8-sig'); d=tomllib.loads(data).get('zurich_hf2li',{}); g=lambda k,df:d.get(k,df); print('LABONE_HOST='+str(g('host','127.0.0.1'))); print('LABONE_PORT='+str(g('data_server_port',8005))); print('LABONE_WEB_PORT='+str(g('web_server_port',8006))); print('ZI_LABONE_ROOT='+str(g('labone_root','C:/Program Files/Zurich Instruments/LabOne'))); print('AUTO_START_LABONE='+str(g('auto_start_servers',True)).lower()); print('REQUIRE_WEB_SERVER='+str(g('require_web_server',True)).lower())"`) do set "%%A=%%B"
 if not defined LABONE_HOST set "LABONE_HOST=127.0.0.1"
 if not defined LABONE_PORT set "LABONE_PORT=8005"
 if not defined LABONE_WEB_PORT set "LABONE_WEB_PORT=8006"
