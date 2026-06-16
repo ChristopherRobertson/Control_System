@@ -1,0 +1,19 @@
+{
+  "actual_wavelength_record": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260616_mircat_status_tune\\mircat_actual_wavelength_record.json",
+  "cleanup_errors": [],
+  "config_hash": "09b0759147b79505a96066759b577ff992f24ade93d0bf7304ba99f6e1269a99",
+  "manual_tune_cancel_return_code": 0,
+  "operator": "Codex",
+  "request": {
+    "allow_emission_on": false,
+    "approved_laser_safety_condition": false,
+    "poll_interval_s": 0.5,
+    "qcl": 1,
+    "tec_timeout_s": 120.0,
+    "tune_timeout_s": 120.0,
+    "wavenumber_cm1": 1858.0
+  },
+  "state_readback": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260616_mircat_status_tune\\mircat_state_readback.json",
+  "status": "PASS",
+  "timestamp_utc": "2026-06-16T17:28:44+00:00"
+}

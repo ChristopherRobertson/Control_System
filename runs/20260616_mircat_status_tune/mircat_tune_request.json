@@ -1,0 +1,9 @@
+{
+  "allow_emission_on": false,
+  "approved_laser_safety_condition": false,
+  "poll_interval_s": 0.5,
+  "qcl": 1,
+  "tec_timeout_s": 120.0,
+  "tune_timeout_s": 120.0,
+  "wavenumber_cm1": 1858.0
+}

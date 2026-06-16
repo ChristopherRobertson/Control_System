@@ -1,0 +1,562 @@
+"""Real MIRcat SDK service for the Daylight probe laser."""
+
+from __future__ import annotations
+
+from ctypes import (
+    POINTER,
+    byref,
+    c_bool,
+    c_float,
+    c_uint8,
+    c_uint16,
+    c_uint32,
+    cdll,
+)
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, TextIO
+import os
+import sys
+import time
+
+from control_app.config_loader import REPO_ROOT, load_hardware_config
+
+
+RET_SUCCESS = 0
+RET_NO_SYSTEM_FOUND = 30
+RET_INITIALIZATION_FAILURE = 32
+RET_STOP_SCAN_FAILURE = 67
+RET_WW_OUTOFTUNINGRANGE = 80
+RET_NO_SCAN_INPROGRESS = 81
+RET_EMISSION_ON_FAILURE = 82
+RET_EMISSION_ALREADY_OFF = 83
+RET_EMISSION_OFF_FAILURE = 84
+RET_EMISSION_ALREADY_ON = 85
+RET_LASER_ALREADY_ARMED = 91
+RET_LASER_ALREADY_DISARMED = 92
+RET_LASER_NOT_ARMED = 93
+RET_LASER_NOT_TUNED = 94
+RET_TECS_NOT_AT_SET_TEMPERATURE = 95
+RET_COMM_ERROR = 100
+RET_NOT_INITIALIZED = 101
+RET_ALREADY_CREATED = 102
+RET_PASSED_NULL_POINTER = 105
+
+UNITS_MICRONS = 1
+UNITS_CM1 = 2
+
+RETURN_CODE_NAMES = {
+    RET_SUCCESS: "SUCCESS",
+    RET_NO_SYSTEM_FOUND: "NO_SYSTEM_FOUND",
+    RET_INITIALIZATION_FAILURE: "INITIALIZATION_FAILURE",
+    RET_STOP_SCAN_FAILURE: "STOP_SCAN_FAILURE",
+    RET_WW_OUTOFTUNINGRANGE: "WW_OUTOFTUNINGRANGE",
+    RET_NO_SCAN_INPROGRESS: "NO_SCAN_INPROGRESS",
+    RET_EMISSION_ON_FAILURE: "EMISSION_ON_FAILURE",
+    RET_EMISSION_ALREADY_OFF: "EMISSION_ALREADY_OFF",
+    RET_EMISSION_OFF_FAILURE: "EMISSION_OFF_FAILURE",
+    RET_EMISSION_ALREADY_ON: "EMISSION_ALREADY_ON",
+    RET_LASER_ALREADY_ARMED: "LASER_ALREADY_ARMED",
+    RET_LASER_ALREADY_DISARMED: "LASER_ALREADY_DISARMED",
+    RET_LASER_NOT_ARMED: "LASER_NOT_ARMED",
+    RET_LASER_NOT_TUNED: "LASER_NOT_TUNED",
+    RET_TECS_NOT_AT_SET_TEMPERATURE: "TECS_NOT_AT_SET_TEMPERATURE",
+    RET_COMM_ERROR: "COMM_ERROR",
+    RET_NOT_INITIALIZED: "NOT_INITIALIZED",
+    RET_ALREADY_CREATED: "ALREADY_CREATED",
+    RET_PASSED_NULL_POINTER: "PASSED_NULL_POINTER",
+}
+
+
+class MircatError(RuntimeError):
+    """Base error for MIRcat service failures."""
+
+
+class MircatConfigurationError(MircatError):
+    """Raised when MIRcat configuration or SDK runtime setup is unusable."""
+
+
+class MircatCommandError(MircatError):
+    """Raised when a MIRcat SDK call returns an unexpected code."""
+
+
+class MircatSafetyError(MircatError):
+    """Raised when a requested laser action is not safety-approved."""
+
+
+@dataclass(frozen=True)
+class MircatState:
+    """State snapshot from the real MIRcat SDK."""
+
+    timestamp_utc: str
+    connected: bool | None = None
+    api_version: str | None = None
+    num_qcls: int | None = None
+    interlock_set: bool | None = None
+    key_switch_set: bool | None = None
+    armed: bool | None = None
+    tec_ready: bool | None = None
+    tuned: bool | None = None
+    set_wavelength: float | None = None
+    set_wavelength_units: str | None = None
+    preferred_qcl: int | None = None
+    actual_wavelength: float | None = None
+    actual_wavelength_units: str | None = None
+    light_valid: bool | None = None
+    emission_on: bool | None = None
+    system_error_word: int | None = None
+    last_return_code: int | None = None
+    last_return_code_name: str | None = None
+    last_error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable state dictionary."""
+
+        return asdict(self)
+
+
+class MircatService:
+    """Thin ctypes wrapper around the real MIRcat SDK DLL."""
+
+    def __init__(
+        self,
+        device_config: dict[str, Any],
+        *,
+        sdk_path: str | Path | None = None,
+        command_log: TextIO | None = None,
+    ) -> None:
+        self.device_config = device_config
+        self.sdk_path = sdk_path
+        self.command_log = command_log
+        self._sdk = None
+        self._initialized = False
+        self.last_return_code: int | None = None
+
+    @classmethod
+    def from_config(
+        cls,
+        *,
+        config_path: str | Path | None = None,
+        sdk_path: str | Path | None = None,
+        command_log: TextIO | None = None,
+    ) -> "MircatService":
+        """Create a MIRcat service from hardware_configuration.yaml."""
+
+        config, _, _ = load_hardware_config(config_path)
+        devices = config.get("devices") or {}
+        device_config = devices.get("mircat")
+        if not isinstance(device_config, dict):
+            raise MircatConfigurationError("mircat missing from hardware configuration")
+        return cls(device_config, sdk_path=sdk_path, command_log=command_log)
+
+    def initialize(self) -> None:
+        """Load the SDK and initialize the real MIRcat controller."""
+
+        if self._sdk is None:
+            self._sdk = self._load_sdk()
+            self._bind_functions()
+        self._check(self._call("MIRcatSDK_Initialize"), "MIRcatSDK_Initialize")
+        self._initialized = True
+
+    def deinitialize(self) -> None:
+        """Deinitialize the SDK session if it is active."""
+
+        if self._sdk is None:
+            return
+        status = self._call("MIRcatSDK_DeInitialize")
+        if status not in {RET_SUCCESS, RET_NOT_INITIALIZED}:
+            self._raise(status, "MIRcatSDK_DeInitialize")
+        self._initialized = False
+        self._sdk = None
+
+    def get_api_version(self) -> str:
+        """Return the SDK API version string."""
+
+        major = c_uint16()
+        minor = c_uint16()
+        patch = c_uint16()
+        self._check(
+            self._call("MIRcatSDK_GetAPIVersion", byref(major), byref(minor), byref(patch)),
+            "MIRcatSDK_GetAPIVersion",
+        )
+        return f"{major.value}.{minor.value}.{patch.value}"
+
+    def get_num_installed_qcls(self) -> int:
+        """Return the number of installed QCL channels."""
+
+        count = c_uint8()
+        self._check(
+            self._call("MIRcatSDK_GetNumInstalledQcls", byref(count)),
+            "MIRcatSDK_GetNumInstalledQcls",
+        )
+        return int(count.value)
+
+    def is_connected(self) -> bool:
+        """Return whether the SDK reports a valid laser connection."""
+
+        return self._bool_call("MIRcatSDK_IsConnectedToLaser")
+
+    def is_interlock_set(self) -> bool:
+        """Return whether the interlock circuit is closed."""
+
+        return self._bool_call("MIRcatSDK_IsInterlockedStatusSet")
+
+    def is_key_switch_set(self) -> bool:
+        """Return whether the key switch is set."""
+
+        return self._bool_call("MIRcatSDK_IsKeySwitchStatusSet")
+
+    def is_laser_armed(self) -> bool:
+        """Return whether the laser is armed."""
+
+        return self._bool_call("MIRcatSDK_IsLaserArmed")
+
+    def are_tecs_ready(self) -> bool:
+        """Return whether all TECs are at set temperature."""
+
+        return self._bool_call("MIRcatSDK_AreTECsAtSetTemperature")
+
+    def is_tuned(self) -> bool:
+        """Return whether the laser is tuned."""
+
+        return self._bool_call("MIRcatSDK_IsTuned")
+
+    def is_emission_on(self) -> bool:
+        """Return whether the MIRcat emission gate is on."""
+
+        return self._bool_call("MIRcatSDK_IsEmissionOn")
+
+    def get_system_error_word(self) -> int:
+        """Return the MIRcat system error word."""
+
+        error_word = c_uint16()
+        self._check(
+            self._call("MIRcatSDK_GetSystemErrorWord", byref(error_word)),
+            "MIRcatSDK_GetSystemErrorWord",
+        )
+        return int(error_word.value)
+
+    def clear_system_error(self) -> bool:
+        """Attempt to clear a system error and return the SDK's boolean result."""
+
+        cleared = c_bool(False)
+        self._check(
+            self._call("MIRcatSDK_ClearSystemError", byref(cleared)),
+            "MIRcatSDK_ClearSystemError",
+        )
+        return bool(cleared.value)
+
+    def arm(self) -> None:
+        """Arm the laser, accepting the SDK's already-armed return code."""
+
+        status = self._call("MIRcatSDK_ArmLaser")
+        if status not in {RET_SUCCESS, RET_LASER_ALREADY_ARMED}:
+            self._raise(status, "MIRcatSDK_ArmLaser")
+
+    def disarm(self) -> None:
+        """Disarm the laser, accepting the SDK's already-disarmed return code."""
+
+        status = self._call("MIRcatSDK_DisarmLaser")
+        if status not in {RET_SUCCESS, RET_LASER_ALREADY_DISARMED, RET_LASER_ALREADY_ARMED}:
+            self._raise(status, "MIRcatSDK_DisarmLaser")
+
+    def wait_for_tecs_ready(self, *, timeout_s: float, poll_interval_s: float) -> bool:
+        """Poll TEC readiness until ready or timeout."""
+
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            if self.are_tecs_ready():
+                return True
+            time.sleep(poll_interval_s)
+        return False
+
+    def tune_to_wavenumber(self, wavenumber_cm1: float, *, qcl: int) -> None:
+        """Tune to a wavenumber in cm^-1 using the preferred QCL."""
+
+        self._check(
+            self._call(
+                "MIRcatSDK_TuneToWW",
+                c_float(float(wavenumber_cm1)),
+                c_uint8(UNITS_CM1),
+                c_uint8(int(qcl)),
+            ),
+            "MIRcatSDK_TuneToWW",
+        )
+
+    def wait_for_tuned(self, *, timeout_s: float, poll_interval_s: float) -> bool:
+        """Poll tuned status until tuned or timeout."""
+
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            if self.is_tuned():
+                return True
+            time.sleep(poll_interval_s)
+        return False
+
+    def get_set_wavelength(self) -> dict[str, Any]:
+        """Return the current target wavelength/wavenumber readback."""
+
+        value = c_float()
+        units = c_uint8()
+        qcl = c_uint8()
+        self._check(
+            self._call("MIRcatSDK_GetTuneWW", byref(value), byref(units), byref(qcl)),
+            "MIRcatSDK_GetTuneWW",
+        )
+        return {
+            "value": float(value.value),
+            "units": units_name(int(units.value)),
+            "preferred_qcl": int(qcl.value),
+        }
+
+    def get_actual_wavelength(self) -> dict[str, Any]:
+        """Return actual wavelength/wavenumber and light-valid readback."""
+
+        value = c_float()
+        units = c_uint8()
+        light_valid = c_bool(False)
+        self._check(
+            self._call("MIRcatSDK_GetActualWW", byref(value), byref(units), byref(light_valid)),
+            "MIRcatSDK_GetActualWW",
+        )
+        return {
+            "value": float(value.value),
+            "units": units_name(int(units.value)),
+            "light_valid": bool(light_valid.value),
+        }
+
+    def cancel_manual_tune(self) -> int:
+        """Cancel single-tune/manual-tune mode, allowing a no-scan return as already clear."""
+
+        status = self._call("MIRcatSDK_CancelManualTuneMode")
+        if status not in {RET_SUCCESS, RET_NO_SCAN_INPROGRESS}:
+            self._raise(status, "MIRcatSDK_CancelManualTuneMode")
+        return status
+
+    def turn_emission_on(self, *, approved_laser_safety_condition: bool) -> None:
+        """Open the emission gate only when an explicit safety approval flag is true."""
+
+        if not approved_laser_safety_condition:
+            raise MircatSafetyError(
+                "MIRcat emission-on requires approved_laser_safety_condition=True"
+            )
+        status = self._call("MIRcatSDK_TurnEmissionOn")
+        if status not in {RET_SUCCESS, RET_EMISSION_ALREADY_ON}:
+            self._raise(status, "MIRcatSDK_TurnEmissionOn")
+
+    def turn_emission_off(self) -> None:
+        """Close the emission gate, accepting the already-off return code."""
+
+        status = self._call("MIRcatSDK_TurnEmissionOff")
+        if status not in {RET_SUCCESS, RET_EMISSION_ALREADY_OFF}:
+            self._raise(status, "MIRcatSDK_TurnEmissionOff")
+
+    def stop_scan_if_needed(self) -> int:
+        """Stop any scan in progress, allowing no-scan as already safe."""
+
+        status = self._call("MIRcatSDK_StopScanInProgress")
+        if status not in {RET_SUCCESS, RET_NO_SCAN_INPROGRESS}:
+            self._raise(status, "MIRcatSDK_StopScanInProgress")
+        return status
+
+    def read_state(self) -> MircatState:
+        """Read the status fields required by the Day 5 MIRcat widget."""
+
+        errors: list[str] = []
+        connected = self._safe_value(self.is_connected, errors)
+        api_version = self._safe_value(self.get_api_version, errors)
+        num_qcls = self._safe_value(self.get_num_installed_qcls, errors)
+        interlock = self._safe_value(self.is_interlock_set, errors)
+        key_switch = self._safe_value(self.is_key_switch_set, errors)
+        armed = self._safe_value(self.is_laser_armed, errors)
+        tec_ready = self._safe_value(self.are_tecs_ready, errors)
+        tuned = self._safe_value(self.is_tuned, errors)
+        setpoint = self._safe_value(self.get_set_wavelength, errors)
+        actual = self._safe_value(self.get_actual_wavelength, errors)
+        emission = self._safe_value(self.is_emission_on, errors)
+        error_word = self._safe_value(self.get_system_error_word, errors)
+
+        return MircatState(
+            timestamp_utc=datetime.now(UTC).isoformat(timespec="seconds"),
+            connected=connected,
+            api_version=api_version,
+            num_qcls=num_qcls,
+            interlock_set=interlock,
+            key_switch_set=key_switch,
+            armed=armed,
+            tec_ready=tec_ready,
+            tuned=tuned,
+            set_wavelength=_dict_value(setpoint, "value"),
+            set_wavelength_units=_dict_value(setpoint, "units"),
+            preferred_qcl=_dict_value(setpoint, "preferred_qcl"),
+            actual_wavelength=_dict_value(actual, "value"),
+            actual_wavelength_units=_dict_value(actual, "units"),
+            light_valid=_dict_value(actual, "light_valid"),
+            emission_on=emission,
+            system_error_word=error_word,
+            last_return_code=self.last_return_code,
+            last_return_code_name=return_code_name(self.last_return_code),
+            last_error="; ".join(errors) if errors else None,
+        )
+
+    def _load_sdk(self):
+        candidates = [str(path) for path in self._sdk_candidates()]
+        errors: list[str] = []
+        for candidate in candidates:
+            try:
+                candidate_path = Path(candidate)
+                if sys.platform.startswith("win") and candidate_path.parent.exists():
+                    os.add_dll_directory(str(candidate_path.parent))
+                sdk = cdll.LoadLibrary(str(candidate_path))
+                self._log(f"loaded MIRcat SDK {candidate_path}")
+                return sdk
+            except OSError as exc:
+                errors.append(f"{candidate}: {exc}")
+        raise MircatConfigurationError(
+            "MIRcat SDK DLL not available: "
+            + "; ".join(errors)
+            + ". If the manufacturer UI is open, close it before connecting."
+        )
+
+    def _sdk_candidates(self) -> list[Path]:
+        configured = self.sdk_path or self.device_config.get("sdk_path")
+        candidates: list[Path] = []
+        if configured:
+            candidates.append(self._resolve_path(configured))
+        search_paths = self.device_config.get("sdk_search_paths") or []
+        if isinstance(search_paths, list):
+            for directory in search_paths:
+                candidates.append(self._resolve_path(directory) / "MIRcatSDK.dll")
+        candidates.extend(
+            [
+                REPO_ROOT / "docs" / "MIRcat" / "SDK" / "bin" / "MIRcatSDK.dll",
+                Path(
+                    r"C:\Program Files\National Instruments\LabVIEW 2025\user.lib"
+                    r"\MIRcatSDKx64-1\MIRcatSDK.dll"
+                ),
+                Path("MIRcatSDK.dll"),
+            ]
+        )
+        unique: list[Path] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            key = str(candidate)
+            if key not in seen:
+                unique.append(candidate)
+                seen.add(key)
+        return unique
+
+    def _resolve_path(self, value: Any) -> Path:
+        candidate = Path(str(value))
+        if candidate.is_absolute():
+            return candidate
+        return REPO_ROOT / candidate
+
+    def _bind_functions(self) -> None:
+        assert self._sdk is not None
+        sdk = self._sdk
+        sdk.MIRcatSDK_Initialize.restype = c_uint32
+        sdk.MIRcatSDK_DeInitialize.restype = c_uint32
+        sdk.MIRcatSDK_GetAPIVersion.argtypes = [
+            POINTER(c_uint16),
+            POINTER(c_uint16),
+            POINTER(c_uint16),
+        ]
+        sdk.MIRcatSDK_GetAPIVersion.restype = c_uint32
+        sdk.MIRcatSDK_GetNumInstalledQcls.argtypes = [POINTER(c_uint8)]
+        sdk.MIRcatSDK_GetNumInstalledQcls.restype = c_uint32
+        for name in [
+            "MIRcatSDK_IsConnectedToLaser",
+            "MIRcatSDK_IsInterlockedStatusSet",
+            "MIRcatSDK_IsKeySwitchStatusSet",
+            "MIRcatSDK_IsEmissionOn",
+            "MIRcatSDK_IsLaserArmed",
+            "MIRcatSDK_AreTECsAtSetTemperature",
+            "MIRcatSDK_IsTuned",
+        ]:
+            function = getattr(sdk, name)
+            function.argtypes = [POINTER(c_bool)]
+            function.restype = c_uint32
+        sdk.MIRcatSDK_ClearSystemError.argtypes = [POINTER(c_bool)]
+        sdk.MIRcatSDK_ClearSystemError.restype = c_uint32
+        sdk.MIRcatSDK_GetSystemErrorWord.argtypes = [POINTER(c_uint16)]
+        sdk.MIRcatSDK_GetSystemErrorWord.restype = c_uint32
+        sdk.MIRcatSDK_ArmLaser.restype = c_uint32
+        sdk.MIRcatSDK_DisarmLaser.restype = c_uint32
+        sdk.MIRcatSDK_StopScanInProgress.restype = c_uint32
+        sdk.MIRcatSDK_TuneToWW.argtypes = [c_float, c_uint8, c_uint8]
+        sdk.MIRcatSDK_TuneToWW.restype = c_uint32
+        sdk.MIRcatSDK_GetTuneWW.argtypes = [POINTER(c_float), POINTER(c_uint8), POINTER(c_uint8)]
+        sdk.MIRcatSDK_GetTuneWW.restype = c_uint32
+        sdk.MIRcatSDK_GetActualWW.argtypes = [
+            POINTER(c_float),
+            POINTER(c_uint8),
+            POINTER(c_bool),
+        ]
+        sdk.MIRcatSDK_GetActualWW.restype = c_uint32
+        sdk.MIRcatSDK_CancelManualTuneMode.restype = c_uint32
+        sdk.MIRcatSDK_TurnEmissionOn.restype = c_uint32
+        sdk.MIRcatSDK_TurnEmissionOff.restype = c_uint32
+
+    def _bool_call(self, name: str) -> bool:
+        value = c_bool(False)
+        self._check(self._call(name, byref(value)), name)
+        return bool(value.value)
+
+    def _safe_value(self, callback, errors: list[str]) -> Any:
+        try:
+            return callback()
+        except MircatError as exc:
+            errors.append(str(exc))
+            return None
+
+    def _call(self, name: str, *args) -> int:
+        if self._sdk is None:
+            raise MircatCommandError("MIRcat SDK is not loaded")
+        status = int(getattr(self._sdk, name)(*args))
+        self.last_return_code = status
+        self._log(f"{name} -> {status} ({return_code_name(status)})")
+        return status
+
+    def _check(self, status: int, label: str) -> None:
+        if status != RET_SUCCESS:
+            self._raise(status, label)
+
+    def _raise(self, status: int, label: str) -> None:
+        name = return_code_name(status)
+        hint = ""
+        if status in {RET_NO_SYSTEM_FOUND, RET_INITIALIZATION_FAILURE, RET_COMM_ERROR}:
+            hint = "; close the manufacturer MIRcat UI and verify no other process owns the controller"
+        raise MircatCommandError(f"{label} returned {status} ({name}){hint}")
+
+    def _log(self, message: str) -> None:
+        if self.command_log is None:
+            return
+        timestamp = datetime.now(UTC).isoformat(timespec="seconds")
+        self.command_log.write(f"{timestamp} mircat {message}\n")
+        self.command_log.flush()
+
+
+def units_name(value: int) -> str:
+    """Return a stable unit label from the SDK unit code."""
+
+    if value == UNITS_MICRONS:
+        return "microns"
+    if value == UNITS_CM1:
+        return "cm^-1"
+    return f"unknown:{value}"
+
+
+def return_code_name(value: int | None) -> str | None:
+    """Return a readable return-code name."""
+
+    if value is None:
+        return None
+    return RETURN_CODE_NAMES.get(int(value), "UNKNOWN")
+
+
+def _dict_value(value: Any, key: str) -> Any:
+    if isinstance(value, dict):
+        return value.get(key)
+    return None
