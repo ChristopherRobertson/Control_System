@@ -1,0 +1,30 @@
+name: safe_idle
+description: "Stop triggers and disable all configured T660 outputs."
+approved_laser_safety_condition: false
+t660:
+  t660_2:
+    stop_first: true
+    trigger_source: "OFF"
+    force_eod: true
+    channels:
+      A:
+        enabled: false
+      B:
+        enabled: false
+      C:
+        enabled: false
+      D:
+        enabled: false
+  t660_1:
+    stop_first: true
+    trigger_source: "OFF"
+    force_eod: true
+    channels:
+      A:
+        enabled: false
+      B:
+        enabled: false
+      C:
+        enabled: false
+      D:
+        enabled: false

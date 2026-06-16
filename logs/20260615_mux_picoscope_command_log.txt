@@ -1,0 +1,1 @@
+2026-06-16T02:01:42+00:00 BLOCKED before hardware open: hardware_configuration.yaml does not define PicoScope capture settings

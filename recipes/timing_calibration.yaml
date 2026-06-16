@@ -1,0 +1,41 @@
+name: timing_calibration
+description: "Program non-emitting timing outputs; all laser-driving outputs remain disabled."
+approved_laser_safety_condition: false
+t660:
+  t660_2:
+    stop_first: true
+    clock:
+      frequency: 2MHz
+      shots: 0
+    trigger_source: "OFF"
+    force_eod: true
+    signals:
+      hf2li_extref:
+        delay: 0
+        width: 150ns
+        polarity: positive
+        termination: 50OHM
+        enabled: false
+      hf2li_daq_trigger:
+        delay: 0
+        width: 2ms
+        polarity: positive
+        termination: 50OHM
+        enabled: false
+      mircat_trig_in:
+        enabled: false
+      t660_1_trig_in:
+        enabled: false
+  t660_1:
+    stop_first: true
+    trigger_source: "OFF"
+    force_eod: true
+    signals:
+      ndyag_fire:
+        enabled: false
+      ndyag_q_switch:
+        enabled: false
+      mircat_db9_pin_4_process_trigger:
+        enabled: false
+      mircat_db9_pin_5_laser_output_on_off:
+        enabled: false

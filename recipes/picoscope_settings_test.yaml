@@ -1,0 +1,31 @@
+name: picoscope_settings_test
+description: "Apply PicoScope settings through the real ps5000a driver without claiming a measured signal."
+approved_laser_safety_condition: false
+picoscope:
+  capture_mode: "settings_apply_only"
+  route_context: "No T660 TTL lines are routed through the Arduino MUX for this test."
+  capture_settings:
+    resolution: "8BIT"
+    channels:
+      A:
+        enabled: true
+        coupling: "DC"
+        range: "10V"
+        analog_offset_v: 0.0
+      B:
+        enabled: true
+        coupling: "DC"
+        range: "10V"
+        analog_offset_v: 0.0
+    external_trigger:
+      source: "EXT"
+      threshold_adc: 5000
+      direction: 2
+      direction_name: "rising"
+      delay_samples: 0
+      auto_trigger_ms: 0
+    total_samples: 100000
+    pre_trigger_samples: 1000
+    timebase: 1
+    timeout_s: 10.0
+    pulse_count_threshold_adc: 5000

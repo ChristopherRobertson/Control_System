@@ -1,0 +1,6 @@
+2026-06-16T13:17:42+00:00 picoscope added PicoSDK DLL directory C:\Users\Chris\Documents\GitHub\Control_System\vendor\picosdk\win64
+2026-06-16T13:17:42+00:00 picoscope added PicoSDK DLL directory C:\Program Files\Pico Technology\SDK\lib
+2026-06-16T13:17:42+00:00 picoscope added PicoSDK DLL directory C:\Program Files\Pico Technology\PicoScope 7 T&M Stable
+2026-06-16T13:17:42+00:00 picoscope added PicoSDK DLL directory C:\Program Files\Pico Technology\PicoLog
+2026-06-16T13:17:42+00:00 picoscope loaded PicoSDK driver C:\Users\Chris\Documents\GitHub\Control_System\vendor\picosdk\win64\ps5000a.dll
+2026-06-16T13:17:42+00:00 picoscope ps5000aOpenUnit -> 3

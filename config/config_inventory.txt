@@ -1,0 +1,148 @@
+Hardware Configuration Inventory
+config_path: C:\Users\Chris\Documents\GitHub\Control_System\hardware_configuration.yaml
+config_hash_sha256: 09b0759147b79505a96066759b577ff992f24ade93d0bf7304ba99f6e1269a99
+schema_version: 0.1
+
+Devices:
+- arduino_mux: Arduino MUX Controller (mux_controller)
+- hf2li: Zurich Instruments HF2LI (lockin_amplifier)
+- mircat: Daylight MIRcat (probe_laser)
+- picoscope: PicoScope 5000 Series (oscilloscope)
+- slopo: SLOPO / Horizon OPO (opo_controller)
+- t660_1: T660-1 (pump_timing)
+- t660_2: T660-2 (master_timing_trains_frames)
+
+T660 signal map:
+- hf2li_daq_trigger: t660_2 channel C
+- hf2li_extref: t660_2 channel A
+- mircat_db9_pin_4_process_trigger: t660_1 channel C
+- mircat_db9_pin_5_laser_output_on_off: t660_1 channel D
+- mircat_trig_in: t660_2 channel B
+- ndyag_fire: t660_1 channel A
+- ndyag_q_switch: t660_1 channel B
+- t660_1_trig_in: t660_2 channel D
+
+MUX routes:
+- amb1_c0_hf2li_aux1: {"mux_board": "amb1", "mux_channel": "C0", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "AUX 1"}
+- amb1_c1_hf2li_aux2: {"mux_board": "amb1", "mux_channel": "C1", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "AUX 2"}
+- amb1_c2_hf2li_aux3: {"mux_board": "amb1", "mux_channel": "C2", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "AUX 3"}
+- amb1_c3_hf2li_aux4: {"mux_board": "amb1", "mux_channel": "C3", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "AUX 4"}
+- amb2_c0_hf2li_aux1: {"mux_board": "amb2", "mux_channel": "C0", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "AUX 1"}
+- amb2_c1_hf2li_aux2: {"mux_board": "amb2", "mux_channel": "C1", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "AUX 2"}
+- amb2_c2_hf2li_aux3: {"mux_board": "amb2", "mux_channel": "C2", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "AUX 3"}
+- amb2_c3_hf2li_aux4: {"mux_board": "amb2", "mux_channel": "C3", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "AUX 4"}
+- diagnostic: {"ch_a_route": "dmb1_c0_hf2li_dio9", "ch_b_route": "dmb2_c1_hf2li_dio10", "ext_route": "dmb3_c2_hf2li_dio11", "notes": "Default documented digital MUX route set; verify routed TTL source before using for pulse-count capture.", "source_document": "docs/Wiring Table.xlsx"}
+- dmb1_c0_hf2li_dio9: {"mux_board": "dmb1", "mux_channel": "C0", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 9"}
+- dmb1_c1_hf2li_dio10: {"mux_board": "dmb1", "mux_channel": "C1", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 10"}
+- dmb1_c2_hf2li_dio11: {"mux_board": "dmb1", "mux_channel": "C2", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 11"}
+- dmb1_c3_hf2li_dio12: {"mux_board": "dmb1", "mux_channel": "C3", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 12"}
+- dmb1_c4_hf2li_dio13: {"mux_board": "dmb1", "mux_channel": "C4", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 13"}
+- dmb1_c5_hf2li_dio14: {"mux_board": "dmb1", "mux_channel": "C5", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 14"}
+- dmb1_c6_hf2li_dio15: {"mux_board": "dmb1", "mux_channel": "C6", "picoscope_input": "channel_a", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 15"}
+- dmb2_c0_hf2li_dio9: {"mux_board": "dmb2", "mux_channel": "C0", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 9"}
+- dmb2_c1_hf2li_dio10: {"mux_board": "dmb2", "mux_channel": "C1", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 10"}
+- dmb2_c2_hf2li_dio11: {"mux_board": "dmb2", "mux_channel": "C2", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 11"}
+- dmb2_c3_hf2li_dio12: {"mux_board": "dmb2", "mux_channel": "C3", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 12"}
+- dmb2_c4_hf2li_dio13: {"mux_board": "dmb2", "mux_channel": "C4", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 13"}
+- dmb2_c5_hf2li_dio14: {"mux_board": "dmb2", "mux_channel": "C5", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 14"}
+- dmb2_c6_hf2li_dio15: {"mux_board": "dmb2", "mux_channel": "C6", "picoscope_input": "channel_b", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 15"}
+- dmb3_c0_hf2li_dio9: {"mux_board": "dmb3", "mux_channel": "C0", "picoscope_input": "external_trigger", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 9"}
+- dmb3_c1_hf2li_dio10: {"mux_board": "dmb3", "mux_channel": "C1", "picoscope_input": "external_trigger", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 10"}
+- dmb3_c2_hf2li_dio11: {"mux_board": "dmb3", "mux_channel": "C2", "picoscope_input": "external_trigger", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 11"}
+- dmb3_c3_hf2li_dio12: {"mux_board": "dmb3", "mux_channel": "C3", "picoscope_input": "external_trigger", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 12"}
+- dmb3_c4_hf2li_dio13: {"mux_board": "dmb3", "mux_channel": "C4", "picoscope_input": "external_trigger", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 13"}
+- dmb3_c5_hf2li_dio14: {"mux_board": "dmb3", "mux_channel": "C5", "picoscope_input": "external_trigger", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 14"}
+- dmb3_c6_hf2li_dio15: {"mux_board": "dmb3", "mux_channel": "C6", "picoscope_input": "external_trigger", "source_device": "hf2li", "source_document": "docs/Wiring Table.xlsx", "source_signal": "DIO 15"}
+
+PicoScope settings:
+{
+  "capture_capabilities": {
+    "analog_channels": [
+      "A",
+      "B"
+    ],
+    "channel_ranges": [
+      "10MV",
+      "20MV",
+      "50MV",
+      "100MV",
+      "200MV",
+      "500MV",
+      "1V",
+      "2V",
+      "5V",
+      "10V",
+      "20V",
+      "50V"
+    ],
+    "coupling_modes": [
+      "AC",
+      "DC"
+    ],
+    "recipe_required_fields": [
+      "resolution",
+      "channels.A.coupling",
+      "channels.A.range",
+      "channels.B.coupling",
+      "channels.B.range",
+      "external_trigger.source",
+      "external_trigger.threshold_adc",
+      "external_trigger.direction",
+      "total_samples",
+      "pre_trigger_samples",
+      "timebase",
+      "pulse_count_threshold_adc"
+    ],
+    "resolutions": [
+      "8BIT",
+      "12BIT",
+      "14BIT",
+      "15BIT",
+      "16BIT"
+    ],
+    "threshold": {
+      "maximum": 32767,
+      "minimum": -32767,
+      "units": "adc_counts"
+    },
+    "trigger_sources": {
+      "external": {
+        "api_source": "EXT",
+        "ps5000a_source_value": 4
+      }
+    }
+  },
+  "display_name": "PicoScope 5000 Series",
+  "driver_search_paths": [
+    "vendor\\picosdk\\win64",
+    "C:\\Program Files\\Pico Technology\\SDK\\lib",
+    "C:\\Program Files\\Pico Technology\\PicoScope 7 T&M Stable",
+    "C:\\Program Files\\Pico Technology\\PicoLog"
+  ],
+  "model": "5244D",
+  "role": "oscilloscope",
+  "routing_alignment": {
+    "direct_ttl_destinations": {
+      "t660_1_channel_a": "Nd:YAG FIRE",
+      "t660_1_channel_b": "Nd:YAG Q-SWITCH",
+      "t660_2_channel_a": "HF2LI DIO 0 external reference BNC",
+      "t660_2_channel_b": "MIRcat TRIG IN",
+      "t660_2_channel_c": "HF2LI DIO 1 DAQ trigger BNC",
+      "t660_2_channel_d": "T660-1 TRIG IN"
+    },
+    "mux_routes_t660_ttl": false,
+    "mux_scope_sources": {
+      "analog": "HF2LI AUX 1-4 diagnostic outputs",
+      "digital": "HF2LI DIO 9-15 diagnostic outputs"
+    },
+    "t660_ttl_routes_are_direct": true
+  },
+  "sdk_api": "ps5000a",
+  "sdk_serial_number": "10261/0071",
+  "serial_number": "10261",
+  "settings_source": "workflow_recipe",
+  "settings_test_recipe": "recipes/picoscope_settings_test.yaml"
+}
+
+Warnings:
+- none
