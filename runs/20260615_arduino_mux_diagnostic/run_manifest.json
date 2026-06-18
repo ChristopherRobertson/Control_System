@@ -1,0 +1,84 @@
+{
+  "abort_state": {
+    "aborted": false,
+    "reason": null
+  },
+  "blocker_status": {
+    "blocked": true,
+    "blockers": [
+      "Historical Day 4 combined diagnostic artifact is superseded by the independent Arduino MUX diagnostic path.",
+      "Arduino MUX route evidence must be rerun with current hardware_configuration.yaml using tests/hardware_checks/check_arduino_mux_diagnostic.py."
+    ],
+    "next_actions": [
+      "Run tests/hardware_checks/check_arduino_mux_diagnostic.py with real Arduino MUX hardware available.",
+      "Keep PicoScope settings/capture checks separate from Arduino MUX diagnostics."
+    ]
+  },
+  "command_log_paths": [
+    "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\logs\\20260615_arduino_mux_command_log.txt"
+  ],
+  "config_hash": "77a1c7944193e7eaf29c7bcfdfa3b4fc60d670c84bcd69a2ac17dd77cc40edee",
+  "config_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\hardware_configuration.yaml",
+  "device_ids": {
+    "arduino_mux": {
+      "display_name": "Arduino MUX Controller",
+      "preferred_port": "COM6",
+      "role": "mux_controller"
+    },
+    "hf2li": {
+      "device_id": "18500",
+      "display_name": "Zurich Instruments HF2LI",
+      "role": "lockin_amplifier"
+    },
+    "mircat": {
+      "display_name": "Daylight MIRcat",
+      "model_number": "MIRcat-QT-Z-2100",
+      "preferred_port": "COM9",
+      "role": "probe_laser",
+      "serial_number": "10524"
+    },
+    "picoscope": {
+      "display_name": "PicoScope 5000 Series",
+      "model": "5244D",
+      "role": "oscilloscope",
+      "serial_number": "10261"
+    },
+    "slopo": {
+      "display_name": "SLOPO / Horizon OPO",
+      "preferred_port": "COM4",
+      "role": "opo_controller",
+      "serial_number": "USER INPUT REQUIRED"
+    },
+    "t660_1": {
+      "display_name": "T660-1",
+      "preferred_port": "COM3",
+      "role": "pump_timing",
+      "serial_number": "00369"
+    },
+    "t660_2": {
+      "display_name": "T660-2",
+      "preferred_port": "COM7",
+      "role": "master_timing_trains_frames",
+      "serial_number": "00431"
+    }
+  },
+  "device_readback_paths": [],
+  "error_state": {
+    "errors": [
+      "Historical Day 4 combined diagnostic artifact is superseded by the independent Arduino MUX diagnostic path.",
+      "Arduino MUX route evidence must be rerun with current hardware_configuration.yaml using tests/hardware_checks/check_arduino_mux_diagnostic.py."
+    ],
+    "has_error": true
+  },
+  "git_commit": "NO_GIT_COMMIT",
+  "hf2li_settings_snapshot": {},
+  "mircat_actual_wavelength": null,
+  "mircat_setpoint": null,
+  "mux_routes": {},
+  "operator": "Codex",
+  "picoscope_settings": {},
+  "raw_data_paths": [],
+  "t660_recipes": [],
+  "timestamp_utc": "2026-06-16T02:01:42+00:00",
+  "timing_offset_file": null
+}

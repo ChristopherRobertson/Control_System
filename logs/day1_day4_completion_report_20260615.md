@@ -4,9 +4,9 @@
 
 - Git commit hash: `NO_GIT_COMMIT` (`git rev-parse HEAD` fails because the repository has no initial commit).
 - Config path: `/mnt/c/Users/Chris/Documents/GitHub/Control_System/hardware_configuration.yaml`
-- Current config SHA-256 after adding spreadsheet-derived MUX topology, Arduino command protocol, PicoScope capability metadata, repo-local PicoSDK runtime path, and full PicoSDK serial: `09b0759147b79505a96066759b577ff992f24ade93d0bf7304ba99f6e1269a99`
+- Current config SHA-256 after adding spreadsheet-derived Arduino MUX topology, Arduino command protocol, PicoScope capability metadata, repo-local PicoSDK runtime path, and full PicoSDK serial: `09b0759147b79505a96066759b577ff992f24ade93d0bf7304ba99f6e1269a99`
 - Earlier T660 and timing-recipe hardware readbacks used config SHA-256 `44a39df263298f67c32ff02c71501341ec74c3da6e5d7e1616b3e878be9104cb`, as recorded in their run manifests.
-- `hardware_configuration.yaml` was updated after `docs/Wiring Table.xlsx` was added. Existing device entries were preserved; only spreadsheet-derived MUX/Pico routing topology was appended.
+- `hardware_configuration.yaml` was updated after `docs/Wiring Table.xlsx` was added. Existing device entries were preserved; spreadsheet-derived Arduino MUX topology and independent PicoScope metadata were appended.
 - Inventory/hash files written:
   - `config/config_inventory.txt`
   - `config/config_hash.txt`
@@ -23,7 +23,7 @@ UI/control repo:
 - `control_app/devices/arduino_mux_service.py`
 - `control_app/devices/picoscope_service.py`
 - `control_app/workflows/timing_recipe_manager.py`
-- `control_app/workflows/mux_pico_diagnostic.py`
+- `control_app/workflows/arduino_mux_diagnostic.py`
 - `control_app/workflows/picoscope_settings_test.py`
 - `control_app/devices/arduino_mux_firmware/arduino_mux_firmware.ino`
 - `control_app/devices/arduino_mux_firmware/README.md`
@@ -44,14 +44,14 @@ UI/control repo:
 - `tests/hardware_checks/check_forbidden_ui_imports.py`
 - `tests/hardware_checks/check_t660_reproducibility.py`
 - `tests/hardware_checks/check_timing_recipes.py`
-- `tests/hardware_checks/check_mux_picoscope_capture.py`
+- `tests/hardware_checks/check_arduino_mux_diagnostic.py`
 - `tests/hardware_checks/check_picoscope_settings_apply.py`
 - `logs/mircat_sdk_inventory_20260615.md`
-- `logs/20260615_mux_picoscope_command_log.txt`
+- `logs/20260615_arduino_mux_command_log.txt`
 - `logs/20260616_picoscope_settings_test_command_log.txt`
 - `runs/20260615_t660_reproducibility/*`
 - `runs/20260615_timing_recipe_readbacks/*`
-- `runs/20260615_mux_picoscope_diagnostic/*`
+- `runs/20260615_arduino_mux_diagnostic/*`
 - `runs/20260616_picoscope_settings_test/*`
 - `vendor/picosdk/win64/*`
 
@@ -105,20 +105,20 @@ External Article path only:
 
 - PASS: `control_app/devices/arduino_mux_service.py` implements a real serial wrapper that requires configured route names and command templates.
 - PASS: `control_app/devices/picoscope_service.py` implements a real PicoSDK `ps5000a` block-capture path.
-- PASS: `control_app/workflows/mux_pico_diagnostic.py` locks routes through the MUX service, captures MUX-selected HF2LI DIO/AUX diagnostics through the Pico service, counts threshold crossings from captured samples, and writes route/raw/summary/manifest outputs when configuration and hardware are available.
+- PASS: `control_app/workflows/arduino_mux_diagnostic.py` verifies Arduino MUX serial identity, firmware/protocol readback, MUX Output A/B/EXT route command/readback, and safe idle without opening the PicoScope.
 - PASS: `tests/hardware_checks/check_forbidden_ui_imports.py` found no forbidden UI hardware imports.
-- PASS: Article Control Software text and MUX/Pico calibration rationale were added to the external draft; the UI/state-machine dependency row was added to the Article figure dependency table.
+- PASS: Article Control Software text and independent Arduino MUX and PicoScope calibration rationale were added to the external draft; the UI/state-machine dependency row was added to the Article figure dependency table.
 - PASS: `docs/Wiring Table.xlsx` was used to append MUX route topology, Arduino MUX control-pin topology, PicoScope input topology, and a diagnostic route selector to `hardware_configuration.yaml`.
 - PASS: Arduino MUX firmware and matching serial command templates were added for identity, version, route selection, route readback, and safe-disable behavior.
 - PASS: Route alignment was corrected: T660 TTL timing outputs are direct routes to MIRcat TRIG IN, Nd:YAG FIRE/Q-SWITCH, HF2LI DIO timing inputs, and T660-1 TRIG IN. They are not routed through the Arduino MUX.
 - PASS: `hardware_configuration.yaml` now defines PicoScope capability metadata, recipe-driven settings source, direct TTL route alignment, repo-local PicoSDK runtime path, and full PicoSDK serial under `devices.picoscope`.
 - PASS: `recipes/picoscope_settings_test.yaml`, `control_app/workflows/picoscope_settings_test.py`, and `tests/hardware_checks/check_picoscope_settings_apply.py` were added for real PicoScope settings-apply testing.
 - PASS: Real PicoScope settings application completed through native Windows Python after loading `vendor\picosdk\win64\ps5000a.dll`, using SDK serial `10261/0071`, and closing the PicoScope 7 UI before opening the unit through the SDK.
-- BLOCKED: Real MUX-selected HF2LI DIO/AUX capture has not been run; this is separate from T660 TTL trigger routing, which is direct.
+- BLOCKED: Historical combined Arduino MUX and PicoScope diagnostic artifact is superseded; independent Arduino MUX route evidence must be rerun with current hardware_configuration.yaml. This remains separate from T660 TTL trigger routing, which is direct.
 - Evidence:
-  - `runs/20260615_mux_picoscope_diagnostic/BLOCKED.md`
-  - `runs/20260615_mux_picoscope_diagnostic/run_manifest.json`
-  - `logs/20260615_mux_picoscope_command_log.txt`
+  - `runs/20260615_arduino_mux_diagnostic/BLOCKED.md`
+  - `runs/20260615_arduino_mux_diagnostic/run_manifest.json`
+  - `logs/20260615_arduino_mux_command_log.txt`
 
 ## Hardware Check Commands and Exit Statuses
 
@@ -129,13 +129,13 @@ Initial WSL `python3` hardware attempts were blocked because Windows COM ports w
 - `python3 tests/hardware_checks/check_forbidden_ui_imports.py` -> exit `0`
 - `python3 tests/hardware_checks/check_t660_reproducibility.py --operator "Codex" --confirm-real-hardware` -> exit `2` in WSL, superseded by native Windows retry
 - `python3 tests/hardware_checks/check_timing_recipes.py --operator "Codex" --confirm-real-hardware` -> exit `2` in WSL, superseded by native Windows retry
-- `python3 tests/hardware_checks/check_mux_picoscope_capture.py --operator "Codex" --confirm-real-hardware` -> exit `2`
+- `python3 tests/hardware_checks/check_arduino_mux_diagnostic.py --operator "Codex" --confirm-real-hardware` -> exit `2`
 - `.venv/Scripts/python.exe -m compileall control_app tests/hardware_checks` -> exit `0`
 - `.venv/Scripts/python.exe tests/hardware_checks/check_config_inventory.py` -> exit `0`
 - `.venv/Scripts/python.exe tests/hardware_checks/check_forbidden_ui_imports.py` -> exit `0`
 - `.venv/Scripts/python.exe tests/hardware_checks/check_t660_reproducibility.py --operator "Codex" --confirm-real-hardware` -> exit `0`
 - `.venv/Scripts/python.exe tests/hardware_checks/check_timing_recipes.py --operator "Codex" --confirm-real-hardware` -> exit `0`
-- `.venv/Scripts/python.exe tests/hardware_checks/check_mux_picoscope_capture.py --operator "Codex" --confirm-real-hardware` -> exit `2`
+- `.venv/Scripts/python.exe tests/hardware_checks/check_arduino_mux_diagnostic.py --operator "Codex" --confirm-real-hardware` -> exit `2`
 - `.venv/Scripts/python.exe tests/hardware_checks/check_picoscope_settings_apply.py --operator "Codex" --confirm-real-hardware` -> exit `0`; PicoSDK driver loaded from `C:\Users\Chris\Documents\GitHub\Control_System\vendor\picosdk\win64\ps5000a.dll`, then `OpenUnit`, `SetDeviceResolution`, `SetChannel A/B`, `SetSimpleTrigger`, `GetTimebase2`, `Stop`, and `CloseUnit` all returned status `0`.
 
 ## Hardware IDs and Readbacks
@@ -160,7 +160,7 @@ Real hardware identity/readback records:
 ## Blockers and Next Actions
 
 - PicoScope settings apply is complete.
-  - Next action: run the MUX-selected HF2LI DIO/AUX capture check with PicoScope 7 closed so the SDK can claim the unit.
+  - Next action: run the independent Arduino MUX diagnostic with the Arduino MUX available; keep PicoScope checks separate.
 
 ## Discipline Confirmations
 

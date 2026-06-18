@@ -15,3 +15,6 @@ Thumbs.db
 
 # Archived legacy artifacts kept outside active app path
 archive/
+
+#MIRcat SDK files
+/docs/MIRcat/SDK/docs/*

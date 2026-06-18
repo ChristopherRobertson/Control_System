@@ -49,9 +49,9 @@ devices:
       status: "STATUS"
       protocol: "PROTOCOL"
       query_active_route: "ROUTES?"
-      set_ch_a_route: "ROUTE A {route}"
-      set_ch_b_route: "ROUTE B {route}"
-      set_ext_route: "ROUTE EXT {route}"
+      set_output_a_route: "ROUTE A {route}"
+      set_output_b_route: "ROUTE B {route}"
+      set_output_ext_route: "ROUTE EXT {route}"
       safe_idle: "SAFE"
 
   mircat:
@@ -98,19 +98,6 @@ devices:
       - "C:\\Program Files\\Pico Technology\\PicoLog"
     settings_source: "workflow_recipe"
     settings_test_recipe: "recipes/picoscope_settings_test.yaml"
-    routing_alignment:
-      t660_ttl_routes_are_direct: true
-      mux_routes_t660_ttl: false
-      direct_ttl_destinations:
-        t660_2_channel_a: "HF2LI DIO 0 external reference BNC"
-        t660_2_channel_b: "MIRcat TRIG IN"
-        t660_2_channel_c: "HF2LI DIO 1 DAQ trigger BNC"
-        t660_2_channel_d: "T660-1 TRIG IN"
-        t660_1_channel_a: "Nd:YAG FIRE"
-        t660_1_channel_b: "Nd:YAG Q-SWITCH"
-      mux_scope_sources:
-        digital: "HF2LI DIO 9-15 diagnostic outputs"
-        analog: "HF2LI AUX 1-4 diagnostic outputs"
     capture_capabilities:
       resolutions:
         - "8BIT"
@@ -159,21 +146,50 @@ devices:
         - "timebase"
         - "pulse_count_threshold_adc"
 
-picoscope_inputs:
+timing_routes:
+  t660_ttl_routes_are_direct: true
+  mux_routes_t660_ttl: false
+  direct_ttl_destinations:
+    t660_2_channel_a: "HF2LI DIO 0 external reference BNC"
+    t660_2_channel_b: "MIRcat TRIG IN"
+    t660_2_channel_c: "HF2LI DIO 1 DAQ trigger BNC"
+    t660_2_channel_d: "T660-1 TRIG IN"
+    t660_1_channel_a: "Nd:YAG FIRE"
+    t660_1_channel_b: "Nd:YAG Q-SWITCH"
+
+arduino_mux_topology:
+  controller_device: "arduino_mux"
   source_document: "docs/Wiring Table.xlsx"
+  control_section: "arduino_mux_control"
+  routes_section: "mux_routes"
+  routed_signal_sources:
+    digital: "HF2LI DIO 9-15 diagnostic outputs"
+    analog: "HF2LI AUX 1-4 diagnostic outputs"
+  outputs:
+    output_a:
+      label: "MUX Output A"
+      source_mux_boards:
+        - "dmb1"
+        - "amb1"
+    output_b:
+      label: "MUX Output B"
+      source_mux_boards:
+        - "dmb2"
+        - "amb2"
+    output_ext:
+      label: "MUX Output EXT"
+      source_mux_boards:
+        - "dmb3"
+
+picoscope_connectors:
   channel_a:
-    source_mux_boards:
-      - "dmb1"
-      - "amb1"
+    input_label: "PicoScope Channel A"
     connector: "Front BNC"
   channel_b:
-    source_mux_boards:
-      - "dmb2"
-      - "amb2"
+    input_label: "PicoScope Channel B"
     connector: "Front BNC"
   external_trigger:
-    source_mux_boards:
-      - "dmb3"
+    input_label: "PicoScope External Trigger"
     connector: "Front BNC"
 
 arduino_mux_control:
@@ -185,7 +201,7 @@ arduino_mux_control:
     amb2: "D5"
     dmb3: "A0"
   select_buses:
-    channel_a:
+    output_a:
       boards:
         - "dmb1"
         - "amb1"
@@ -194,7 +210,7 @@ arduino_mux_control:
         S1: "D7"
         S2: "D8"
         S3: "D9"
-    channel_b:
+    output_b:
       boards:
         - "dmb2"
         - "amb2"
@@ -203,7 +219,7 @@ arduino_mux_control:
         S1: "D11"
         S2: "D12"
         S3: "D13"
-    external_trigger:
+    output_ext:
       boards:
         - "dmb3"
       pins:
@@ -214,210 +230,210 @@ arduino_mux_control:
 
 mux_routes:
   diagnostic:
-    ch_a_route: "dmb1_c0_hf2li_dio9"
-    ch_b_route: "dmb2_c1_hf2li_dio10"
-    ext_route: "dmb3_c2_hf2li_dio11"
+    output_a_route: "dmb1_c0_hf2li_dio9"
+    output_b_route: "dmb2_c1_hf2li_dio10"
+    output_ext_route: "dmb3_c2_hf2li_dio11"
     source_document: "docs/Wiring Table.xlsx"
     notes: "Default documented digital MUX route set; verify routed TTL source before using for pulse-count capture."
   dmb1_c0_hf2li_dio9:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "dmb1"
     mux_channel: "C0"
     source_device: "hf2li"
     source_signal: "DIO 9"
   dmb1_c1_hf2li_dio10:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "dmb1"
     mux_channel: "C1"
     source_device: "hf2li"
     source_signal: "DIO 10"
   dmb1_c2_hf2li_dio11:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "dmb1"
     mux_channel: "C2"
     source_device: "hf2li"
     source_signal: "DIO 11"
   dmb1_c3_hf2li_dio12:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "dmb1"
     mux_channel: "C3"
     source_device: "hf2li"
     source_signal: "DIO 12"
   dmb1_c4_hf2li_dio13:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "dmb1"
     mux_channel: "C4"
     source_device: "hf2li"
     source_signal: "DIO 13"
   dmb1_c5_hf2li_dio14:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "dmb1"
     mux_channel: "C5"
     source_device: "hf2li"
     source_signal: "DIO 14"
   dmb1_c6_hf2li_dio15:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "dmb1"
     mux_channel: "C6"
     source_device: "hf2li"
     source_signal: "DIO 15"
   dmb2_c0_hf2li_dio9:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "dmb2"
     mux_channel: "C0"
     source_device: "hf2li"
     source_signal: "DIO 9"
   dmb2_c1_hf2li_dio10:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "dmb2"
     mux_channel: "C1"
     source_device: "hf2li"
     source_signal: "DIO 10"
   dmb2_c2_hf2li_dio11:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "dmb2"
     mux_channel: "C2"
     source_device: "hf2li"
     source_signal: "DIO 11"
   dmb2_c3_hf2li_dio12:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "dmb2"
     mux_channel: "C3"
     source_device: "hf2li"
     source_signal: "DIO 12"
   dmb2_c4_hf2li_dio13:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "dmb2"
     mux_channel: "C4"
     source_device: "hf2li"
     source_signal: "DIO 13"
   dmb2_c5_hf2li_dio14:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "dmb2"
     mux_channel: "C5"
     source_device: "hf2li"
     source_signal: "DIO 14"
   dmb2_c6_hf2li_dio15:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "dmb2"
     mux_channel: "C6"
     source_device: "hf2li"
     source_signal: "DIO 15"
   dmb3_c0_hf2li_dio9:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "external_trigger"
+    mux_output: "output_ext"
     mux_board: "dmb3"
     mux_channel: "C0"
     source_device: "hf2li"
     source_signal: "DIO 9"
   dmb3_c1_hf2li_dio10:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "external_trigger"
+    mux_output: "output_ext"
     mux_board: "dmb3"
     mux_channel: "C1"
     source_device: "hf2li"
     source_signal: "DIO 10"
   dmb3_c2_hf2li_dio11:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "external_trigger"
+    mux_output: "output_ext"
     mux_board: "dmb3"
     mux_channel: "C2"
     source_device: "hf2li"
     source_signal: "DIO 11"
   dmb3_c3_hf2li_dio12:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "external_trigger"
+    mux_output: "output_ext"
     mux_board: "dmb3"
     mux_channel: "C3"
     source_device: "hf2li"
     source_signal: "DIO 12"
   dmb3_c4_hf2li_dio13:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "external_trigger"
+    mux_output: "output_ext"
     mux_board: "dmb3"
     mux_channel: "C4"
     source_device: "hf2li"
     source_signal: "DIO 13"
   dmb3_c5_hf2li_dio14:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "external_trigger"
+    mux_output: "output_ext"
     mux_board: "dmb3"
     mux_channel: "C5"
     source_device: "hf2li"
     source_signal: "DIO 14"
   dmb3_c6_hf2li_dio15:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "external_trigger"
+    mux_output: "output_ext"
     mux_board: "dmb3"
     mux_channel: "C6"
     source_device: "hf2li"
     source_signal: "DIO 15"
   amb1_c0_hf2li_aux1:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "amb1"
     mux_channel: "C0"
     source_device: "hf2li"
     source_signal: "AUX 1"
   amb1_c1_hf2li_aux2:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "amb1"
     mux_channel: "C1"
     source_device: "hf2li"
     source_signal: "AUX 2"
   amb1_c2_hf2li_aux3:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "amb1"
     mux_channel: "C2"
     source_device: "hf2li"
     source_signal: "AUX 3"
   amb1_c3_hf2li_aux4:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_a"
+    mux_output: "output_a"
     mux_board: "amb1"
     mux_channel: "C3"
     source_device: "hf2li"
     source_signal: "AUX 4"
   amb2_c0_hf2li_aux1:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "amb2"
     mux_channel: "C0"
     source_device: "hf2li"
     source_signal: "AUX 1"
   amb2_c1_hf2li_aux2:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "amb2"
     mux_channel: "C1"
     source_device: "hf2li"
     source_signal: "AUX 2"
   amb2_c2_hf2li_aux3:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "amb2"
     mux_channel: "C2"
     source_device: "hf2li"
     source_signal: "AUX 3"
   amb2_c3_hf2li_aux4:
     source_document: "docs/Wiring Table.xlsx"
-    picoscope_input: "channel_b"
+    mux_output: "output_b"
     mux_board: "amb2"
     mux_channel: "C3"
     source_device: "hf2li"

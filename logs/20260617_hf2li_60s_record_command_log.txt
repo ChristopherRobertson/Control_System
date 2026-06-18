@@ -1,0 +1,237 @@
+2026-06-17T12:55:24+00:00 check_hf2li_60s_record start operator=Codex Day 6 preset=dark_baseline duration_s=60.0
+2026-06-17T12:55:24+00:00 hf2li connect ziDAQServer host=127.0.0.1 port=8005 api_level=1
+2026-06-17T12:55:25+00:00 hf2li discovery getString /zi/devices/connected failed: Could not find any node that matches path "/zi/devices/connected" [zi:api:16387]
+2026-06-17T12:55:25+00:00 hf2li discovery getString /zi/devices/visible failed: Could not find any node that matches path "/zi/devices/visible" [zi:api:16387]
+2026-06-17T12:55:25+00:00 hf2li discovered_devices=['dev18500']
+2026-06-17T12:55:25+00:00 hf2li connectDevice device=dev18500 interface=USB
+2026-06-17T12:55:25+00:00 hf2li setInt /dev18500/sigins/0/ac 0
+2026-06-17T12:55:25+00:00 hf2li setInt /dev18500/sigins/0/imp50 0
+2026-06-17T12:55:25+00:00 hf2li setInt /dev18500/sigins/0/diff 0
+2026-06-17T12:55:25+00:00 hf2li setDouble /dev18500/sigins/0/range 1.0
+2026-06-17T12:56:13+00:00 check_hf2li_60s_record start operator=Codex Day 6 preset=dark_baseline duration_s=60.0
+2026-06-17T12:56:13+00:00 hf2li connect ziDAQServer host=127.0.0.1 port=8005 api_level=1
+2026-06-17T12:56:13+00:00 hf2li discovery getString /zi/devices/connected failed: Could not find any node that matches path "/zi/devices/connected" [zi:api:16387]
+2026-06-17T12:56:13+00:00 hf2li discovery getString /zi/devices/visible failed: Could not find any node that matches path "/zi/devices/visible" [zi:api:16387]
+2026-06-17T12:56:13+00:00 hf2li discovered_devices=['dev18500']
+2026-06-17T12:56:13+00:00 hf2li connectDevice device=dev18500 interface=USB
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/sigins/0/ac 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/sigins/0/imp50 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/sigins/0/diff 0
+2026-06-17T12:56:13+00:00 hf2li setDouble /dev18500/sigins/0/range 1.0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/sigins/1/ac 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/sigins/1/imp50 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/sigins/1/diff 0
+2026-06-17T12:56:13+00:00 hf2li setDouble /dev18500/sigins/1/range 1.0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/plls/0/enable 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/plls/0/adcselect 4
+2026-06-17T12:56:13+00:00 hf2li setDouble /dev18500/plls/0/freqcenter 2000000.0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/plls/0/harmonic 1
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/plls/0/order 4
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/plls/0/adcthreshold 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/plls/0/enable 1
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/0/enable 1
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/0/adcselect 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/0/oscselect 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/0/harmonic 1
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/0/order 4
+2026-06-17T12:56:13+00:00 hf2li setDouble /dev18500/demods/0/timeconstant 0.001
+2026-06-17T12:56:13+00:00 hf2li setDouble /dev18500/demods/0/rate 2000.0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/0/trigger 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/3/enable 1
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/3/adcselect 1
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/3/oscselect 0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/3/harmonic 1
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/3/order 4
+2026-06-17T12:56:13+00:00 hf2li setDouble /dev18500/demods/3/timeconstant 0.001
+2026-06-17T12:56:13+00:00 hf2li setDouble /dev18500/demods/3/rate 2000.0
+2026-06-17T12:56:13+00:00 hf2li setInt /dev18500/demods/3/trigger 0
+2026-06-17T12:56:13+00:00 hf2li applied_preset=dark_baseline
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/sigins/0/ac 0
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/sigins/0/imp50 0
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/sigins/0/diff 0
+2026-06-17T12:56:14+00:00 hf2li setDouble /dev18500/sigins/0/range 1.014444200633764
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/sigins/1/ac 0
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/sigins/1/imp50 0
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/sigins/1/diff 0
+2026-06-17T12:56:14+00:00 hf2li setDouble /dev18500/sigins/1/range 1.0144783062439409
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/plls/0/enable 1
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/plls/0/adcselect 4
+2026-06-17T12:56:14+00:00 hf2li setDouble /dev18500/plls/0/freqcenter 999993.579105194
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/plls/0/harmonic 1
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/plls/0/order 4
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/plls/0/adcthreshold 0
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/0/enable 1
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/0/adcselect 0
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/0/oscselect 0
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/0/harmonic 1
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/0/order 4
+2026-06-17T12:56:14+00:00 hf2li setDouble /dev18500/demods/0/timeconstant 0.0010018887078828383
+2026-06-17T12:56:14+00:00 hf2li setDouble /dev18500/demods/0/rate 1798.9309210526317
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/0/trigger 0
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/3/enable 1
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/3/adcselect 1
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/3/oscselect 0
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/3/harmonic 1
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/3/order 4
+2026-06-17T12:56:14+00:00 hf2li setDouble /dev18500/demods/3/timeconstant 0.0010018887078828383
+2026-06-17T12:56:14+00:00 hf2li setDouble /dev18500/demods/3/rate 1798.9309210526317
+2026-06-17T12:56:14+00:00 hf2li setInt /dev18500/demods/3/trigger 0
+2026-06-17T12:56:15+00:00 hf2li subscribe /dev18500/demods/0/sample.x
+2026-06-17T12:56:15+00:00 hf2li subscribe /dev18500/demods/0/sample.y
+2026-06-17T12:56:15+00:00 hf2li subscribe /dev18500/demods/0/sample.r
+2026-06-17T12:56:15+00:00 hf2li subscribe /dev18500/demods/3/sample.x
+2026-06-17T12:56:15+00:00 hf2li subscribe /dev18500/demods/3/sample.y
+2026-06-17T12:56:15+00:00 hf2li subscribe /dev18500/demods/3/sample.r
+2026-06-17T12:56:15+00:00 hf2li poll duration_s=60.0
+2026-06-17T12:57:15+00:00 hf2li unsubscribe /dev18500/demods/0/sample.x
+2026-06-17T12:57:15+00:00 hf2li unsubscribe /dev18500/demods/0/sample.y
+2026-06-17T12:57:15+00:00 hf2li unsubscribe /dev18500/demods/0/sample.r
+2026-06-17T12:57:15+00:00 hf2li unsubscribe /dev18500/demods/3/sample.x
+2026-06-17T12:57:15+00:00 hf2li unsubscribe /dev18500/demods/3/sample.y
+2026-06-17T12:57:15+00:00 hf2li unsubscribe /dev18500/demods/3/sample.r
+2026-06-17T12:58:41+00:00 check_hf2li_60s_record start operator=Codex Day 6 preset=dark_baseline duration_s=60.0
+2026-06-17T12:58:42+00:00 hf2li connect ziDAQServer host=127.0.0.1 port=8005 api_level=1
+2026-06-17T12:58:42+00:00 hf2li discovery getString /zi/devices/connected failed: Could not find any node that matches path "/zi/devices/connected" [zi:api:16387]
+2026-06-17T12:58:42+00:00 hf2li discovery getString /zi/devices/visible failed: Could not find any node that matches path "/zi/devices/visible" [zi:api:16387]
+2026-06-17T12:58:42+00:00 hf2li discovered_devices=['dev18500']
+2026-06-17T12:58:42+00:00 hf2li connectDevice device=dev18500 interface=USB
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/sigins/0/ac 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/sigins/0/imp50 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/sigins/0/diff 0
+2026-06-17T12:58:42+00:00 hf2li setDouble /dev18500/sigins/0/range 1.0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/sigins/1/ac 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/sigins/1/imp50 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/sigins/1/diff 0
+2026-06-17T12:58:42+00:00 hf2li setDouble /dev18500/sigins/1/range 1.0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/plls/0/enable 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/plls/0/adcselect 4
+2026-06-17T12:58:42+00:00 hf2li setDouble /dev18500/plls/0/freqcenter 2000000.0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/plls/0/harmonic 1
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/plls/0/order 4
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/plls/0/adcthreshold 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/plls/0/enable 1
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/0/enable 1
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/0/adcselect 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/0/oscselect 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/0/harmonic 1
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/0/order 4
+2026-06-17T12:58:42+00:00 hf2li setDouble /dev18500/demods/0/timeconstant 0.001
+2026-06-17T12:58:42+00:00 hf2li setDouble /dev18500/demods/0/rate 2000.0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/0/trigger 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/3/enable 1
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/3/adcselect 1
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/3/oscselect 0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/3/harmonic 1
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/3/order 4
+2026-06-17T12:58:42+00:00 hf2li setDouble /dev18500/demods/3/timeconstant 0.001
+2026-06-17T12:58:42+00:00 hf2li setDouble /dev18500/demods/3/rate 2000.0
+2026-06-17T12:58:42+00:00 hf2li setInt /dev18500/demods/3/trigger 0
+2026-06-17T12:58:42+00:00 hf2li applied_preset=dark_baseline
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/sigins/0/ac 0
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/sigins/0/imp50 0
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/sigins/0/diff 0
+2026-06-17T12:58:43+00:00 hf2li setDouble /dev18500/sigins/0/range 1.014444200633764
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/sigins/1/ac 0
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/sigins/1/imp50 0
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/sigins/1/diff 0
+2026-06-17T12:58:43+00:00 hf2li setDouble /dev18500/sigins/1/range 1.0144783062439409
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/plls/0/enable 1
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/plls/0/adcselect 4
+2026-06-17T12:58:43+00:00 hf2li setDouble /dev18500/plls/0/freqcenter 999993.579105194
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/plls/0/harmonic 1
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/plls/0/order 4
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/plls/0/adcthreshold 0
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/0/enable 1
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/0/adcselect 0
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/0/oscselect 0
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/0/harmonic 1
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/0/order 4
+2026-06-17T12:58:43+00:00 hf2li setDouble /dev18500/demods/0/timeconstant 0.0010018887078828383
+2026-06-17T12:58:43+00:00 hf2li setDouble /dev18500/demods/0/rate 1798.9309210526317
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/0/trigger 0
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/3/enable 1
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/3/adcselect 1
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/3/oscselect 0
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/3/harmonic 1
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/3/order 4
+2026-06-17T12:58:43+00:00 hf2li setDouble /dev18500/demods/3/timeconstant 0.0010018887078828383
+2026-06-17T12:58:43+00:00 hf2li setDouble /dev18500/demods/3/rate 1798.9309210526317
+2026-06-17T12:58:43+00:00 hf2li setInt /dev18500/demods/3/trigger 0
+2026-06-17T12:58:43+00:00 hf2li subscribe /dev18500/demods/0/sample fields=['x', 'y', 'r']
+2026-06-17T12:58:43+00:00 hf2li subscribe /dev18500/demods/3/sample fields=['x', 'y', 'r']
+2026-06-17T12:58:43+00:00 hf2li poll duration_s=60.0
+2026-06-17T12:59:43+00:00 hf2li unsubscribe /dev18500/demods/0/sample
+2026-06-17T12:59:43+00:00 hf2li unsubscribe /dev18500/demods/3/sample
+2026-06-17T13:00:23+00:00 check_hf2li_60s_record start operator=Codex Day 6 preset=dark_baseline duration_s=60.0
+2026-06-17T13:00:23+00:00 hf2li connect ziDAQServer host=127.0.0.1 port=8005 api_level=1
+2026-06-17T13:00:24+00:00 hf2li discovery getString /zi/devices/connected failed: Could not find any node that matches path "/zi/devices/connected" [zi:api:16387]
+2026-06-17T13:00:24+00:00 hf2li discovery getString /zi/devices/visible failed: Could not find any node that matches path "/zi/devices/visible" [zi:api:16387]
+2026-06-17T13:00:24+00:00 hf2li discovered_devices=['dev18500']
+2026-06-17T13:00:24+00:00 hf2li connectDevice device=dev18500 interface=USB
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/0/ac 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/0/imp50 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/0/diff 0
+2026-06-17T13:00:24+00:00 hf2li setDouble /dev18500/sigins/0/range 1.0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/1/ac 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/1/imp50 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/1/diff 0
+2026-06-17T13:00:24+00:00 hf2li setDouble /dev18500/sigins/1/range 1.0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/plls/0/enable 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/plls/0/adcselect 4
+2026-06-17T13:00:24+00:00 hf2li setDouble /dev18500/plls/0/freqcenter 2000000.0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/plls/0/harmonic 1
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/plls/0/order 4
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/plls/0/adcthreshold 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/plls/0/enable 1
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/0/enable 1
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/0/adcselect 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/0/oscselect 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/0/harmonic 1
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/0/order 4
+2026-06-17T13:00:24+00:00 hf2li setDouble /dev18500/demods/0/timeconstant 0.001
+2026-06-17T13:00:24+00:00 hf2li setDouble /dev18500/demods/0/rate 2000.0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/0/trigger 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/3/enable 1
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/3/adcselect 1
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/3/oscselect 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/3/harmonic 1
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/3/order 4
+2026-06-17T13:00:24+00:00 hf2li setDouble /dev18500/demods/3/timeconstant 0.001
+2026-06-17T13:00:24+00:00 hf2li setDouble /dev18500/demods/3/rate 2000.0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/demods/3/trigger 0
+2026-06-17T13:00:24+00:00 hf2li applied_preset=dark_baseline
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/0/ac 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/0/imp50 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/0/diff 0
+2026-06-17T13:00:24+00:00 hf2li setDouble /dev18500/sigins/0/range 1.014444200633764
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/1/ac 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/1/imp50 0
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/sigins/1/diff 0
+2026-06-17T13:00:24+00:00 hf2li setDouble /dev18500/sigins/1/range 1.0144783062439409
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/plls/0/enable 1
+2026-06-17T13:00:24+00:00 hf2li setInt /dev18500/plls/0/adcselect 4
+2026-06-17T13:00:25+00:00 hf2li setDouble /dev18500/plls/0/freqcenter 999993.579105194
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/plls/0/harmonic 1
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/plls/0/order 4
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/plls/0/adcthreshold 0
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/0/enable 1
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/0/adcselect 0
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/0/oscselect 0
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/0/harmonic 1
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/0/order 4
+2026-06-17T13:00:25+00:00 hf2li setDouble /dev18500/demods/0/timeconstant 0.0010018887078828383
+2026-06-17T13:00:25+00:00 hf2li setDouble /dev18500/demods/0/rate 1798.9309210526317
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/0/trigger 0
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/3/enable 1
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/3/adcselect 1
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/3/oscselect 0
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/3/harmonic 1
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/3/order 4
+2026-06-17T13:00:25+00:00 hf2li setDouble /dev18500/demods/3/timeconstant 0.0010018887078828383
+2026-06-17T13:00:25+00:00 hf2li setDouble /dev18500/demods/3/rate 1798.9309210526317
+2026-06-17T13:00:25+00:00 hf2li setInt /dev18500/demods/3/trigger 0
+2026-06-17T13:00:25+00:00 hf2li subscribe /dev18500/demods/0/sample fields=['x', 'y', 'r']
+2026-06-17T13:00:25+00:00 hf2li subscribe /dev18500/demods/3/sample fields=['x', 'y', 'r']
+2026-06-17T13:00:25+00:00 hf2li poll duration_s=60.0
+2026-06-17T13:01:25+00:00 hf2li unsubscribe /dev18500/demods/0/sample
+2026-06-17T13:01:25+00:00 hf2li unsubscribe /dev18500/demods/3/sample

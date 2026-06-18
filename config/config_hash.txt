@@ -1,1 +1,1 @@
-09b0759147b79505a96066759b577ff992f24ade93d0bf7304ba99f6e1269a99  C:\Users\Chris\Documents\GitHub\Control_System\hardware_configuration.yaml
+2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7  C:\Users\Chris\Documents\GitHub\Control_System\hardware_configuration.yaml

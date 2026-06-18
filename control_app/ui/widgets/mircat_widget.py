@@ -21,18 +21,15 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
     title="MIRcat Probe Laser",
     status_fields=(
         StatusField("connected", "Connected", critical=True),
-        StatusField("api_version", "API Version"),
-        StatusField("interlock_set", "Interlock", critical=True),
-        StatusField("key_switch_set", "Key Switch", critical=True),
         StatusField("armed", "Armed", critical=True),
         StatusField("tec_ready", "TEC Ready", critical=True),
-        StatusField("set_wavelength", "Setpoint", units="cm^-1"),
-        StatusField("actual_wavelength", "Actual", units="cm^-1"),
-        StatusField("light_valid", "Light Valid"),
         StatusField("emission_on", "Emission Gate", critical=True),
         StatusField("tuned", "Tuned"),
-        StatusField("last_return_code", "Last Return"),
-        StatusField("last_error", "Last Error", critical=True),
+        StatusField("scan_active", "Scan Active"),
+        StatusField("scan_paused", "Scan Paused"),
+        StatusField("scan_current_wavelength", "Scan Wavenumber", units="cm^-1"),
+        StatusField("qcl_pulse_rate_hz", "Pulse Rate", units="Hz"),
+        StatusField("qcl_pulse_width_ns", "Pulse Width", units="ns"),
     ),
     parameter_fields=(
         ParameterField(
@@ -46,6 +43,54 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             step=0.1,
         ),
         ParameterField("qcl", "QCL", "int", 1, minimum=1, maximum=4, step=1),
+        ParameterField(
+            "scan_start_cm1",
+            "Start Wavenumber",
+            "float",
+            1848.0,
+            units="cm^-1",
+            minimum=1638.8,
+            maximum=2077.3,
+            step=0.1,
+        ),
+        ParameterField(
+            "scan_stop_cm1",
+            "Stop Wavenumber",
+            "float",
+            1868.0,
+            units="cm^-1",
+            minimum=1638.8,
+            maximum=2077.3,
+            step=0.1,
+        ),
+        ParameterField(
+            "scan_rate_cm1_s",
+            "Scan Rate",
+            "float",
+            1.0,
+            units="cm^-1/s",
+            minimum=0.001,
+            step=0.1,
+        ),
+        ParameterField("scan_repetitions", "Repetitions", "int", 1, minimum=1, maximum=65535, step=1),
+        ParameterField(
+            "pulse_rate_hz",
+            "Pulse Repetition Rate",
+            "float",
+            100000.0,
+            units="Hz",
+            minimum=0.001,
+            step=1000.0,
+        ),
+        ParameterField(
+            "pulse_width_ns",
+            "Pulse Width",
+            "float",
+            500.0,
+            units="ns",
+            minimum=0.001,
+            step=10.0,
+        ),
         ParameterField("tec_timeout_s", "TEC Timeout", "float", 120.0, units="s", minimum=1),
         ParameterField("tune_timeout_s", "Tune Timeout", "float", 120.0, units="s", minimum=1),
         ParameterField("poll_interval_s", "Poll Interval", "float", 0.5, units="s", minimum=0.1),
@@ -61,8 +106,17 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
         WidgetControl("initialize", "Initialize", "mircat.initialize"),
         WidgetControl("refresh_status", "Refresh", "mircat.refresh_status"),
         WidgetControl("arm", "Arm", "mircat.arm", kind="guarded"),
-        WidgetControl("safe_tune", "Safe Tune", "mircat.safe_tune", kind="guarded"),
-        WidgetControl("cancel_manual_tune", "Cancel Tune", "mircat.cancel_manual_tune"),
+        WidgetControl("safe_tune", "Direct Tune", "mircat.safe_tune", kind="guarded"),
+        WidgetControl("configure_pulse", "Apply Pulse Params", "mircat.configure_pulse", kind="guarded"),
+        WidgetControl(
+            "start_sweep_scan",
+            "Start Scan",
+            "mircat.start_sweep_scan",
+            kind="guarded",
+            safety_approval_required=True,
+        ),
+        WidgetControl("stop_scan", "Stop Scan", "mircat.stop_scan", kind="danger"),
+        WidgetControl("cancel_manual_tune", "Cancel Manual Tune", "mircat.cancel_manual_tune"),
         WidgetControl("emission_off", "Emission Off", "mircat.emission_off", kind="danger"),
         WidgetControl("disarm", "Disarm", "mircat.disarm", kind="danger"),
         WidgetControl("deinitialize", "Deinitialize", "mircat.deinitialize"),
@@ -76,9 +130,26 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
     ),
 )
 
+DIRECT_PARAMETER_KEYS = ("wavenumber_cm1", "pulse_rate_hz", "pulse_width_ns")
+SCAN_PARAMETER_KEYS = (
+    "scan_start_cm1",
+    "scan_stop_cm1",
+    "scan_rate_cm1_s",
+    "scan_repetitions",
+    "pulse_rate_hz",
+    "pulse_width_ns",
+)
+COMMON_PARAMETER_KEYS = (
+    "qcl",
+    "tec_timeout_s",
+    "tune_timeout_s",
+    "poll_interval_s",
+    "approved_laser_safety_condition",
+)
+
 
 try:
-    from PySide6.QtCore import QObject, QThread, Signal, Slot
+    from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
     from PySide6.QtWidgets import (
         QCheckBox,
         QDoubleSpinBox,
@@ -90,6 +161,7 @@ try:
         QLabel,
         QPushButton,
         QSpinBox,
+        QTabWidget,
         QTextEdit,
         QVBoxLayout,
         QWidget,
@@ -100,6 +172,7 @@ except ImportError:  # pragma: no cover - import-safe in non-UI hardware environ
     PYSIDE6_AVAILABLE = False
     QObject = object
     QThread = object
+    QTimer = object
     Signal = None
     Slot = None
     QCheckBox = object
@@ -112,6 +185,7 @@ except ImportError:  # pragma: no cover - import-safe in non-UI hardware environ
     QLabel = object
     QPushButton = object
     QSpinBox = object
+    QTabWidget = object
     QTextEdit = object
     QVBoxLayout = object
     QWidget = object
@@ -157,11 +231,12 @@ class MircatWidget(QWidget):
         self.command_handler = command_handler or blocked_handler(
             "No workflow command handler is attached."
         )
-        self.parameter_inputs: dict[str, Any] = {}
+        self.parameter_inputs: dict[str, list[Any]] = {}
         self.status_labels: dict[str, Any] = {}
         self.control_buttons: list[Any] = []
         self._active_thread: Any = None
         self._active_worker: Any = None
+        self._active_command: str | None = None
         self.result_log = QTextEdit()
         self.result_log.setReadOnly(True)
         self._build()
@@ -218,13 +293,40 @@ class MircatWidget(QWidget):
 
     def _build_parameter_group(self) -> QGroupBox:
         group = QGroupBox("Parameters")
-        form = QFormLayout(group)
-        for field in MIRCAT_WIDGET_SPEC.parameter_fields:
-            widget = self._parameter_widget(field)
-            self.parameter_inputs[field.key] = widget
-            label = field.label if field.units is None else f"{field.label} ({field.units})"
-            form.addRow(label, widget)
+        layout = QVBoxLayout(group)
+        tabs = QTabWidget()
+        tabs.addTab(self._build_parameter_page(DIRECT_PARAMETER_KEYS), "Direct Tune")
+        tabs.addTab(self._build_parameter_page(SCAN_PARAMETER_KEYS), "Sweep Scan")
+        layout.addWidget(tabs)
+
+        common = QGroupBox("Common")
+        common_form = QFormLayout(common)
+        self._add_parameter_fields(common_form, COMMON_PARAMETER_KEYS)
+        layout.addWidget(common)
         return group
+
+    def _build_parameter_page(self, keys: tuple[str, ...]) -> QWidget:
+        page = QWidget()
+        form = QFormLayout(page)
+        self._add_parameter_fields(form, keys)
+        return page
+
+    def _add_parameter_fields(self, form: QFormLayout, keys: tuple[str, ...]) -> None:
+        fields = {field.key: field for field in MIRCAT_WIDGET_SPEC.parameter_fields}
+        for key in keys:
+            field = fields[key]
+            widget = self._parameter_widget(field)
+            self.parameter_inputs.setdefault(field.key, []).append(widget)
+            self._connect_linked_parameter(field.key, widget)
+            form.addRow(_field_label(field), widget)
+
+    def _connect_linked_parameter(self, key: str, widget: Any) -> None:
+        if isinstance(widget, QCheckBox):
+            widget.toggled.connect(lambda value, name=key, source=widget: self._sync_parameter(name, source, value))
+        elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+            widget.valueChanged.connect(
+                lambda value, name=key, source=widget: self._sync_parameter(name, source, value)
+            )
 
     def _parameter_widget(self, field: ParameterField) -> Any:
         if field.kind == "bool":
@@ -296,6 +398,7 @@ class MircatWidget(QWidget):
         thread.finished.connect(self._clear_active_worker)
         self._active_thread = thread
         self._active_worker = worker
+        self._active_command = control.command
         thread.start()
 
     def _handle_worker_result(self, result: WorkflowResult) -> None:
@@ -303,11 +406,21 @@ class MircatWidget(QWidget):
         state = result.data.get("state") if isinstance(result.data, dict) else None
         if isinstance(state, dict):
             self.update_state(state)
-        self._set_controls_enabled(True)
+        if self._active_command == "mircat.arm":
+            self._show_result(
+                WorkflowResult(
+                    status="accepted",
+                    message="Waiting 5 seconds for the armed state to settle...",
+                )
+            )
+            QTimer.singleShot(5000, lambda: self._set_controls_enabled(True))
+        else:
+            self._set_controls_enabled(True)
 
     def _clear_active_worker(self) -> None:
         self._active_thread = None
         self._active_worker = None
+        self._active_command = None
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         for button in self.control_buttons:
@@ -317,7 +430,8 @@ class MircatWidget(QWidget):
         """Return current parameter values."""
 
         values: dict[str, Any] = {}
-        for key, widget in self.parameter_inputs.items():
+        for key, widgets in self.parameter_inputs.items():
+            widget = widgets[0]
             if isinstance(widget, QCheckBox):
                 values[key] = widget.isChecked()
             elif isinstance(widget, QSpinBox):
@@ -325,6 +439,19 @@ class MircatWidget(QWidget):
             elif isinstance(widget, QDoubleSpinBox):
                 values[key] = float(widget.value())
         return values
+
+    def _sync_parameter(self, key: str, source: Any, value: Any) -> None:
+        for widget in self.parameter_inputs.get(key, []):
+            if widget is source:
+                continue
+            widget.blockSignals(True)
+            try:
+                if isinstance(widget, QCheckBox):
+                    widget.setChecked(bool(value))
+                elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+                    widget.setValue(value)
+            finally:
+                widget.blockSignals(False)
 
     def _show_result(self, result: WorkflowResult) -> None:
         self.result_log.append(f"{result.status.upper()}: {result.message}")
@@ -336,3 +463,9 @@ def _display_value(value: Any) -> str:
     if isinstance(value, bool):
         return "ON" if value else "OFF"
     return str(value)
+
+
+def _field_label(field: ParameterField) -> str:
+    if field.units is None:
+        return field.label
+    return f"{field.label} ({field.units})"

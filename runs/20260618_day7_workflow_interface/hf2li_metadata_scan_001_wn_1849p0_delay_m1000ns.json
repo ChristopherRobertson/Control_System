@@ -1,0 +1,30 @@
+{
+  "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+  "demodulators": [
+    0,
+    3
+  ],
+  "duration_s": 5.0,
+  "fields": [
+    "x",
+    "y",
+    "r"
+  ],
+  "point": {
+    "delay_ns": -1000,
+    "hf2li_preset": "myoglobin_co_pump_probe",
+    "wavenumber_cm1": 1849.0
+  },
+  "point_index": 1,
+  "preset": "myoglobin_co_pump_probe",
+  "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_001_wn_1849p0_delay_m1000ns.csv",
+  "save_summary": {
+    "path_count": 4,
+    "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_001_wn_1849p0_delay_m1000ns.csv",
+    "sample_count": 36272,
+    "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_001_wn_1849p0_delay_m1000ns.csv",
+    "timestamp_utc": "2026-06-18T17:22:02+00:00"
+  },
+  "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_001_wn_1849p0_delay_m1000ns.csv",
+  "timestamp_utc": "2026-06-18T17:22:02+00:00"
+}

@@ -1,0 +1,87 @@
+schema_version: "0.1"
+name: "myoglobin_co_acquisition_day7"
+description: "Frozen Day 7 Myoglobin-CO acquisition recipe for workflow validation and later real hardware acquisition."
+approved_laser_safety_condition: false
+
+probe:
+  qcl: 1
+  mircat:
+    wavenumber_cm1: 1858.0
+    qcl: 1
+    tec_timeout_s: 120.0
+    tune_timeout_s: 120.0
+    poll_interval_s: 0.5
+    pulse_rate_hz: 100000.0
+    pulse_width_ns: 500.0
+    emission_allowed: false
+  co_band_scan_cm1:
+    start: 1848.0
+    stop: 1868.0
+    step: 1.0
+    include:
+      - 1858.0
+    dwell_s_per_point: 5.0
+    installed_range_cm1:
+      min: 1638.8
+      max: 2077.3
+
+pump:
+  default_wavelength_nm: 355.0
+  source: "Surelite EX / SD-1/ST 355 nm path"
+  enabled_for_day7: false
+  fluence_plan: "BLOCKED_UNTIL_MEASURED_PULSE_ENERGY_SPOT_SIZE_AND_ATTENUATION_EXIST"
+  repetition_rate_hz_max: 10.0
+  required_before_enable:
+    - "Measured pulse energy at the sample."
+    - "Measured pump spot diameter and area convention."
+    - "Attenuation setting and detector/sample protection approval."
+    - "Sample optical density and path length."
+
+delay_list_ns:
+  - -1000
+  - -100
+  - 0
+  - 100
+  - 1000
+  - 10000
+  - 100000
+delay_strategy: "Use the fixed list relative to configured T0; after Day 8 calibration, apply timing_offsets.yaml rather than editing the recipe from observed kinetics."
+
+timing_recipe: "recipes/pump_probe_single_point.yaml"
+hf2li_preset: "myoglobin_co_pump_probe"
+picoscope_recipe: "recipes/picoscope_settings_test.yaml"
+mux_checkpoint_routes:
+  output_a_route: "dmb1_c0_hf2li_dio9"
+  output_b_route: "dmb2_c1_hf2li_dio10"
+  output_ext_route: "dmb3_c2_hf2li_dio11"
+
+controls:
+  - "dark_baseline_qcl_off_pump_blocked"
+  - "qcl_reference_baseline_pump_blocked"
+  - "myoglobin_co_spectrum_without_pump"
+  - "pump_probe_with_pump_blocked_control"
+  - "repeat_pump_probe_same_delay_list"
+
+file_naming:
+  qcl_spectrum_run_dir: "runs/YYYYMMDD_myoglobin_co_qcl_spectrum"
+  pump_probe_run_dir: "runs/YYYYMMDD_myoglobin_co_pump_probe_scan"
+  day7_interface_run_dir: "runs/YYYYMMDD_day7_workflow_interface"
+  raw_hf2li_pattern: "hf2li_raw_samples.csv"
+  picoscope_trace_pattern: "picoscope_trace_delay_{delay_ns}_point_{point_index}.csv"
+  manifest_name: "run_manifest.json"
+  command_log_name: "command_log.txt"
+
+go_no_go_criteria:
+  go:
+    - "hardware_configuration.yaml hash is present in the run manifest."
+    - "Workflow state machine logs startup_check, route_scope_signal, program_timing_recipe, arm_measurement, acquire_point, acquire_scan, abort_to_safe, and safe_shutdown."
+    - "MIRcat manufacturer UI is closed and single-client SDK ownership is available."
+    - "T660 timing recipe validates with laser-driving outputs disabled unless explicit laser-safety approval is recorded."
+    - "HF2LI preset myoglobin_co_pump_probe exists and settings snapshots are written for real acquisitions."
+    - "PicoScope recipe validates independently from Arduino MUX route selection."
+  no_go:
+    - "Any required real device handshake fails or is unavailable."
+    - "Any route is undefined in hardware_configuration.yaml."
+    - "MIRcat emission, pump firing, or detector acquisition lacks operator approval."
+    - "Sample preparation, CO handling, path length, or FTIR reference metadata are missing for article spectral-validation claims."
+    - "A run would require non-real data, non-real traces, or device-response substitution."

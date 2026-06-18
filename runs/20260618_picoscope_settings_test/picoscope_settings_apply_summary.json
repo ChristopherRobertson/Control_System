@@ -1,0 +1,45 @@
+{
+  "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+  "operator": "Chris",
+  "picoscope_model": "5244D",
+  "picoscope_serial": "10261",
+  "recipe_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\recipes\\picoscope_settings_test.yaml",
+  "sample_timing_validation": {
+    "max_samples": 268435392,
+    "requested_samples": 100000,
+    "sample_interval_ns": 2.0,
+    "timebase": 1
+  },
+  "settings_applied": {
+    "channels": {
+      "A": {
+        "analog_offset_v": 0.0,
+        "coupling": "DC",
+        "enabled": true,
+        "range": "10V"
+      },
+      "B": {
+        "analog_offset_v": 0.0,
+        "coupling": "DC",
+        "enabled": true,
+        "range": "10V"
+      }
+    },
+    "external_trigger": {
+      "auto_trigger_ms": 0,
+      "delay_samples": 0,
+      "direction": 2,
+      "direction_name": "rising",
+      "source": "EXT",
+      "threshold_adc": 5000
+    },
+    "pre_trigger_samples": 1000,
+    "pulse_count_threshold_adc": 5000,
+    "resolution": "8BIT",
+    "timebase": 1,
+    "timeout_s": 10.0,
+    "total_samples": 100000
+  },
+  "status": "PASS",
+  "timestamp_utc": "2026-06-18T16:45:52+00:00"
+}

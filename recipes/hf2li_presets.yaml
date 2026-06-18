@@ -1,0 +1,211 @@
+schema_version: "0.1"
+description: "Real HF2LI LabOne presets for detector evidence and Myoglobin-CO acquisition. These presets do not create simulated data."
+source_reference: "docs/ui_hardware_control_reference.md HF2LI LabOne Configuration"
+presets:
+  dark_baseline:
+    purpose: "Detector dark baseline with QCL emission off and pump blocked."
+    operator_checks:
+      - "Confirm QCL emission is off before acquisition."
+      - "Confirm pump beam is blocked before acquisition."
+      - "Confirm CH1/CH2 are connected to the approved detector outputs."
+    signal_inputs:
+      ch1:
+        index: 0
+        ac: false
+        impedance_50ohm: false
+        differential: false
+        range_v: 1.0
+      ch2:
+        index: 1
+        ac: false
+        impedance_50ohm: false
+        differential: false
+        range_v: 1.0
+    pll:
+      index: 0
+      enable: true
+      adcselect: 4
+      freqcenter_hz: 2000000.0
+      harmonic: 1
+      order: 4
+      adcthreshold: 0
+    demodulators:
+      - index: 0
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 2000.0
+        trigger: 0
+        enable: true
+      - index: 3
+        adcselect: 1
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 2000.0
+        trigger: 0
+        enable: true
+    acquisition:
+      duration_s: 60.0
+      demodulators: [0, 3]
+      fields: ["x", "y", "r"]
+      expected_output: "runs/YYYYMMDD_hf2li_60s_record"
+
+  qcl_reference_baseline:
+    purpose: "QCL-on reference baseline with pump blocked at the approved Myoglobin-CO probe region."
+    operator_checks:
+      - "Confirm pump beam is blocked."
+      - "Confirm MIRcat setpoint/actual wavelength is logged in the run manifest."
+      - "Confirm detector response is within approved dynamic range before continuing."
+    signal_inputs:
+      ch1:
+        index: 0
+        ac: false
+        impedance_50ohm: false
+        differential: false
+        range_v: 1.0
+      ch2:
+        index: 1
+        ac: false
+        impedance_50ohm: false
+        differential: false
+        range_v: 1.0
+    pll:
+      index: 0
+      enable: true
+      adcselect: 4
+      freqcenter_hz: 2000000.0
+      harmonic: 1
+      order: 4
+      adcthreshold: 0
+    demodulators:
+      - index: 0
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 2000.0
+        trigger: 0
+        enable: true
+      - index: 3
+        adcselect: 1
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 2000.0
+        trigger: 0
+        enable: true
+    acquisition:
+      duration_s: 60.0
+      demodulators: [0, 3]
+      fields: ["x", "y", "r"]
+      expected_output: "runs/YYYYMMDD_detector_baseline"
+
+  myoglobin_co_spectrum:
+    purpose: "Step-scan detector acquisition for Myoglobin-CO QCL/FTIR spectral validation."
+    operator_checks:
+      - "Confirm sample preparation, path length, and CO handling notes are present in Article Tables before acquisition."
+      - "Confirm MIRcat actual wavelength/readback is saved for every step."
+      - "Confirm FTIR reference source or blocker is recorded."
+    signal_inputs:
+      ch1:
+        index: 0
+        ac: false
+        impedance_50ohm: false
+        differential: false
+        range_v: 1.0
+      ch2:
+        index: 1
+        ac: false
+        impedance_50ohm: false
+        differential: false
+        range_v: 1.0
+    pll:
+      index: 0
+      enable: true
+      adcselect: 4
+      freqcenter_hz: 2000000.0
+      harmonic: 1
+      order: 4
+      adcthreshold: 0
+    demodulators:
+      - index: 0
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 2000.0
+        trigger: 0
+        enable: true
+      - index: 3
+        adcselect: 1
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 2000.0
+        trigger: 0
+        enable: true
+    acquisition:
+      duration_s: 5.0
+      demodulators: [0, 3]
+      fields: ["x", "y", "r"]
+      expected_output: "runs/YYYYMMDD_myoglobin_co_qcl_spectrum"
+
+  myoglobin_co_pump_probe:
+    purpose: "Detector acquisition preset for the Myoglobin-CO pump-probe proof-of-concept workflow."
+    operator_checks:
+      - "Confirm run starts in SAFE_IDLE."
+      - "Confirm approved pump/probe/sample readiness and laser-safety approval before emission."
+      - "Confirm timing recipe, delay list, and Pico route or direct-route fallback are documented."
+    signal_inputs:
+      ch1:
+        index: 0
+        ac: false
+        impedance_50ohm: false
+        differential: false
+        range_v: 1.0
+      ch2:
+        index: 1
+        ac: false
+        impedance_50ohm: false
+        differential: false
+        range_v: 1.0
+    pll:
+      index: 0
+      enable: true
+      adcselect: 4
+      freqcenter_hz: 2000000.0
+      harmonic: 1
+      order: 4
+      adcthreshold: 0
+    demodulators:
+      - index: 0
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 2000.0
+        trigger: 0
+        enable: true
+      - index: 3
+        adcselect: 1
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 2000.0
+        trigger: 0
+        enable: true
+    acquisition:
+      duration_s: 5.0
+      demodulators: [0, 3]
+      fields: ["x", "y", "r"]
+      expected_output: "runs/YYYYMMDD_myoglobin_co_pump_probe_scan"

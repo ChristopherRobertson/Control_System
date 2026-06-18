@@ -4,7 +4,7 @@
 
   Purpose:
   - Identify the Arduino over USB serial.
-  - Route configured MUX inputs to PicoScope CH A, CH B, and EXT.
+  - Route configured MUX inputs to MUX Output A, Output B, and Output EXT.
   - Report latched route state for hardware logs.
   - Provide a safe state that disables all MUX boards.
 
@@ -26,11 +26,11 @@ const int LED_PIN = LED_BUILTIN;
 // Verify the installed boards before changing this constant.
 const bool MUX_ENABLE_ACTIVE_LOW = true;
 
-const int DMB1_EN = 2;   // PicoScope CH A digital mux
-const int DMB2_EN = 3;   // PicoScope CH B digital mux
-const int AMB1_EN = 4;   // PicoScope CH A analog mux
-const int AMB2_EN = 5;   // PicoScope CH B analog mux
-const int DMB3_EN = A0;  // PicoScope EXT trigger digital mux
+const int DMB1_EN = 2;   // MUX Output A digital board
+const int DMB2_EN = 3;   // MUX Output B digital board
+const int AMB1_EN = 4;   // MUX Output A analog board
+const int AMB2_EN = 5;   // MUX Output B analog board
+const int DMB3_EN = A0;  // MUX Output EXT digital board
 
 const int CH_A_SELECT_PINS[4] = {6, 7, 8, 9};
 const int CH_B_SELECT_PINS[4] = {10, 11, 12, 13};

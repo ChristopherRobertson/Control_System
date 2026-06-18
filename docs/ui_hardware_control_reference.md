@@ -27,7 +27,11 @@ The confirmed T660-1 usage is:
 | `A` | Nd:YAG Fire input | Surelite fire TTL |
 | `B` | Nd:YAG Q-switch input | Surelite Q-switch TTL |
 
-These T660 TTL timing lines are direct point-to-point routes. They are not routed through the Arduino MUX. The Arduino MUX only selects HF2LI DIO 9-15 and HF2LI AUX 1-4 diagnostic outputs onto PicoScope CH A, CH B, and EXT trigger inputs.
+These T660 TTL timing lines are direct point-to-point routes. They are not routed through the Arduino MUX. In `hardware_configuration.yaml`, this route truth belongs under `timing_routes`, not under the PicoScope device identity.
+
+The Arduino MUX and PicoScope are independent devices. The Arduino MUX owns `arduino_mux_topology`, `arduino_mux_control`, and `mux_routes`; each MUX route is assigned to `mux_output` (`output_a`, `output_b`, or `output_ext`). The PicoScope owns only Pico identity, driver/API paths, supported capture capabilities, editable capture recipes, and `picoscope_connectors` metadata. MUX diagnostics must not import or open the PicoScope, and PicoScope settings/capture checks must not require MUX route selection.
+
+The PicoScope device configuration contains Pico identity, driver/API paths, supported capture capabilities, and recipe references only. Scenario-specific capture settings are stored in editable `recipes/picoscope_*.yaml` files and recorded in run manifests with the hardware configuration hash.
 
 ## Runtime Environment
 

@@ -388,8 +388,8 @@ device_io:
     split_count: 1
 mux_boards:
   dmb1:
-    role: picoscope_channel_a_digital_mux
-    output: picoscope_5244d.channel_a
+    role: arduino_mux_output_a_digital
+    mux_output: output_a
     enable: arduino.D2
     select_bus:
       S0: arduino.D6
@@ -406,8 +406,8 @@ mux_boards:
       C6: hf2li.DIO 15
     unused_channels: C7-C15
   dmb2:
-    role: picoscope_channel_b_digital_mux
-    output: picoscope_5244d.channel_b
+    role: arduino_mux_output_b_digital
+    mux_output: output_b
     enable: arduino.D3
     select_bus:
       S0: arduino.D10
@@ -424,8 +424,8 @@ mux_boards:
       C6: hf2li.DIO 15
     unused_channels: C7-C15
   dmb3:
-    role: picoscope_external_trigger_digital_mux
-    output: picoscope_5244d.ext_trigger
+    role: arduino_mux_output_ext_digital
+    mux_output: output_ext
     enable: arduino.A0
     select_bus:
       S0: arduino.A1
@@ -442,8 +442,8 @@ mux_boards:
       C6: hf2li.DIO 15
     unused_channels: C7-C15
   amb1:
-    role: picoscope_channel_a_analog_mux
-    output: picoscope_5244d.channel_a
+    role: arduino_mux_output_a_analog
+    mux_output: output_a
     enable: arduino.D4
     select_bus:
       S0: arduino.D6
@@ -457,8 +457,8 @@ mux_boards:
       C3: hf2li.AUX4
     unused_channels: C4-C15
   amb2:
-    role: picoscope_channel_b_analog_mux
-    output: picoscope_5244d.channel_b
+    role: arduino_mux_output_b_analog
+    mux_output: output_b
     enable: arduino.D5
     select_bus:
       S0: arduino.D10
@@ -487,7 +487,7 @@ arduino_mux_control:
     D5: amb2.EN
     A0: dmb3.EN
   select_buses:
-    channel_a_bus:
+    output_a_bus:
       D6: S0
       D7: S1
       D8: S2
@@ -495,7 +495,7 @@ arduino_mux_control:
       boards:
       - dmb1
       - amb1
-    channel_b_bus:
+    output_b_bus:
       D10: S0
       D11: S1
       D12: S2
@@ -503,7 +503,7 @@ arduino_mux_control:
       boards:
       - dmb2
       - amb2
-    trigger_bus:
+    output_ext_bus:
       A1: S0
       A2: S1
       A3: S2

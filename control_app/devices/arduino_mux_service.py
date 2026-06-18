@@ -51,8 +51,12 @@ class ArduinoMuxService:
         device_config = devices.get("arduino_mux")
         if not isinstance(device_config, dict):
             raise ArduinoMuxConfigurationError("arduino_mux missing from hardware configuration")
+        mux_topology = config.get("arduino_mux_topology") or {}
+        if not isinstance(mux_topology, dict):
+            mux_topology = {}
         routes = (
             config.get("mux_routes")
+            or mux_topology.get("routes")
             or config.get("routes", {}).get("mux")
             or device_config.get("routes", {})
         )
@@ -95,20 +99,36 @@ class ArduinoMuxService:
             return None
         return self._command(command)
 
-    def set_ch_a_route(self, route_name: str) -> str:
-        """Set PicoScope CH A to a documented MUX route."""
+    def get_status(self) -> str | None:
+        """Query controller status if the firmware command is configured."""
 
-        return self._set_route("ch_a", route_name)
+        command = self._protocol().get("status")
+        if not command:
+            return None
+        return self._command(command)
 
-    def set_ch_b_route(self, route_name: str) -> str:
-        """Set PicoScope CH B to a documented MUX route."""
+    def get_protocol_version(self) -> str | None:
+        """Query firmware protocol version if the firmware command is configured."""
 
-        return self._set_route("ch_b", route_name)
+        command = self._protocol().get("protocol")
+        if not command:
+            return None
+        return self._command(command)
 
-    def set_ext_route(self, route_name: str) -> str:
-        """Set PicoScope EXT trigger to a documented MUX route."""
+    def set_output_a_route(self, route_name: str) -> str:
+        """Set MUX Output A to a documented route."""
 
-        return self._set_route("ext", route_name)
+        return self._set_route("output_a", route_name)
+
+    def set_output_b_route(self, route_name: str) -> str:
+        """Set MUX Output B to a documented route."""
+
+        return self._set_route("output_b", route_name)
+
+    def set_output_ext_route(self, route_name: str) -> str:
+        """Set MUX Output EXT to a documented route."""
+
+        return self._set_route("output_ext", route_name)
 
     def query_active_route(self) -> dict[str, Any]:
         """Return hardware route readback or the last latched command state."""
@@ -126,6 +146,18 @@ class ArduinoMuxService:
             "latched_routes": dict(self._latched_routes),
             "notes": "Firmware route query is not configured; latched_routes records commands sent successfully.",
         }
+
+    def safe_idle(self) -> str:
+        """Disable all MUX boards through the configured firmware safe command."""
+
+        command = self._protocol().get("safe_idle")
+        if not command:
+            raise ArduinoMuxConfigurationError(
+                "Arduino MUX command template 'safe_idle' is missing from hardware_configuration.yaml"
+            )
+        response = self._command(command)
+        self._latched_routes.clear()
+        return response
 
     def close(self) -> None:
         """Close the serial port."""
@@ -183,4 +215,3 @@ class ArduinoMuxService:
             for line in response.splitlines():
                 self.command_log.write(f"{timestamp} arduino_mux >> {line}\n")
         self.command_log.flush()
-

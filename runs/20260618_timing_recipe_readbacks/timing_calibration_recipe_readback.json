@@ -1,0 +1,302 @@
+{
+  "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+  "devices": {
+    "t660_1": {
+      "channels": {
+        "A": {
+          "delay_edge": {
+            "ok": true,
+            "response": "+000.000000000000"
+          },
+          "enabled": {
+            "ok": true,
+            "response": "OFF"
+          },
+          "termination": {
+            "ok": true,
+            "response": "50OHM"
+          },
+          "timing_mode": {
+            "ok": true,
+            "response": "DW"
+          },
+          "width_edge": {
+            "ok": true,
+            "response": "+000.000010000000"
+          }
+        },
+        "B": {
+          "delay_edge": {
+            "ok": true,
+            "response": "+000.000000000000"
+          },
+          "enabled": {
+            "ok": true,
+            "response": "OFF"
+          },
+          "termination": {
+            "ok": true,
+            "response": "50OHM"
+          },
+          "timing_mode": {
+            "ok": true,
+            "response": "DW"
+          },
+          "width_edge": {
+            "ok": true,
+            "response": "+000.000010000000"
+          }
+        },
+        "C": {
+          "delay_edge": {
+            "ok": true,
+            "response": "+000.000004000000"
+          },
+          "enabled": {
+            "ok": true,
+            "response": "OFF"
+          },
+          "termination": {
+            "ok": true,
+            "response": "50OHM"
+          },
+          "timing_mode": {
+            "ok": true,
+            "response": "DW"
+          },
+          "width_edge": {
+            "ok": true,
+            "response": "+000.000002000000"
+          }
+        },
+        "D": {
+          "delay_edge": {
+            "ok": true,
+            "response": "+000.000006000000"
+          },
+          "enabled": {
+            "ok": true,
+            "response": "OFF"
+          },
+          "termination": {
+            "ok": true,
+            "response": "50OHM"
+          },
+          "timing_mode": {
+            "ok": true,
+            "response": "DW"
+          },
+          "width_edge": {
+            "ok": true,
+            "response": "+000.000002000000"
+          }
+        }
+      },
+      "device": "t660_1",
+      "queries": {
+        "firmware": {
+          "error": "t660_1 command 'IDentify' failed: ?22: Command not recognized: The named command was not recognized as a command or query",
+          "ok": false
+        },
+        "identity": {
+          "ok": true,
+          "response": "HTI,T660-1,00369,28E660-1-1.7"
+        },
+        "shots": {
+          "ok": true,
+          "response": "10"
+        },
+        "synth_frequency": {
+          "ok": true,
+          "response": "+000010000.000000"
+        },
+        "trigger_source": {
+          "ok": true,
+          "response": "OFF"
+        }
+      },
+      "timestamp_utc": "2026-06-18T16:47:21+00:00"
+    },
+    "t660_2": {
+      "channels": {
+        "A": {
+          "delay_edge": {
+            "ok": true,
+            "response": "+000.000000000000"
+          },
+          "enabled": {
+            "ok": true,
+            "response": "OFF"
+          },
+          "termination": {
+            "ok": true,
+            "response": "50OHM"
+          },
+          "timing_mode": {
+            "ok": true,
+            "response": "DW"
+          },
+          "width_edge": {
+            "ok": true,
+            "response": "+000.000000150000"
+          }
+        },
+        "B": {
+          "delay_edge": {
+            "ok": true,
+            "response": "+000.000000000000"
+          },
+          "enabled": {
+            "ok": true,
+            "response": "OFF"
+          },
+          "termination": {
+            "ok": true,
+            "response": "50OHM"
+          },
+          "timing_mode": {
+            "ok": true,
+            "response": "DW"
+          },
+          "width_edge": {
+            "ok": true,
+            "response": "+000.000000150000"
+          }
+        },
+        "C": {
+          "delay_edge": {
+            "ok": true,
+            "response": "+000.000000000000"
+          },
+          "enabled": {
+            "ok": true,
+            "response": "OFF"
+          },
+          "termination": {
+            "ok": true,
+            "response": "50OHM"
+          },
+          "timing_mode": {
+            "ok": true,
+            "response": "DW"
+          },
+          "width_edge": {
+            "ok": true,
+            "response": "+000.002000000000"
+          }
+        },
+        "D": {
+          "delay_edge": {
+            "ok": true,
+            "response": "+000.000000000000"
+          },
+          "enabled": {
+            "ok": true,
+            "response": "OFF"
+          },
+          "termination": {
+            "ok": true,
+            "response": "50OHM"
+          },
+          "timing_mode": {
+            "ok": true,
+            "response": "DW"
+          },
+          "width_edge": {
+            "ok": true,
+            "response": "+000.001000000000"
+          }
+        }
+      },
+      "device": "t660_2",
+      "queries": {
+        "firmware": {
+          "error": "t660_2 command 'IDentify' failed: ?22: Command not recognized: The named command was not recognized as a command or query",
+          "ok": false
+        },
+        "identity": {
+          "ok": true,
+          "response": "HTI,T660-2,00431,28E660-1-1.7"
+        },
+        "shots": {
+          "ok": true,
+          "response": "0"
+        },
+        "synth_frequency": {
+          "ok": true,
+          "response": "+002000000.000000"
+        },
+        "trigger_source": {
+          "ok": true,
+          "response": "OFF"
+        }
+      },
+      "timestamp_utc": "2026-06-18T16:47:03+00:00"
+    }
+  },
+  "matches_recipe": true,
+  "mismatches": [],
+  "recipe_name": "timing_calibration",
+  "recipe_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\recipes\\timing_calibration.yaml",
+  "resolved_settings": {
+    "t660_1": {
+      "channels": {
+        "A": {
+          "enabled": false,
+          "signal": "ndyag_fire"
+        },
+        "B": {
+          "enabled": false,
+          "signal": "ndyag_q_switch"
+        },
+        "C": {
+          "enabled": false,
+          "signal": "mircat_db9_pin_4_process_trigger"
+        },
+        "D": {
+          "enabled": false,
+          "signal": "mircat_db9_pin_5_laser_output_on_off"
+        }
+      },
+      "force_eod": true,
+      "stop_first": true,
+      "trigger_source": "OFF"
+    },
+    "t660_2": {
+      "channels": {
+        "A": {
+          "delay": 0,
+          "enabled": false,
+          "polarity": "positive",
+          "signal": "hf2li_extref",
+          "termination": "50OHM",
+          "width": "150ns"
+        },
+        "B": {
+          "enabled": false,
+          "signal": "mircat_trig_in"
+        },
+        "C": {
+          "delay": 0,
+          "enabled": false,
+          "polarity": "positive",
+          "signal": "hf2li_daq_trigger",
+          "termination": "50OHM",
+          "width": "2ms"
+        },
+        "D": {
+          "enabled": false,
+          "signal": "t660_1_trig_in"
+        }
+      },
+      "clock": {
+        "frequency": "2MHz",
+        "shots": 0
+      },
+      "force_eod": true,
+      "stop_first": true,
+      "trigger_source": "OFF"
+    }
+  },
+  "timestamp_utc": "2026-06-18T16:46:51+00:00"
+}

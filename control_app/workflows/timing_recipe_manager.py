@@ -109,6 +109,22 @@ class TimingRecipeManager:
             raise TimingRecipeError(f"readback mismatch: {readback['mismatches']}")
         return readback
 
+    def validate_recipe(self, recipe: str | Path | dict[str, Any]) -> dict[str, Any]:
+        """Resolve and safety-check a timing recipe without opening hardware."""
+
+        if not self.inventory.config_hash:
+            raise TimingRecipeError("config hash is missing; refusing to validate recipe")
+        recipe_data = self.load_recipe(recipe) if not isinstance(recipe, dict) else dict(recipe)
+        resolved = self._resolve_recipe(recipe_data)
+        return {
+            "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+            "recipe_name": recipe_data.get("name"),
+            "recipe_path": recipe_data.get("_path"),
+            "config_hash": self.inventory.config_hash,
+            "resolved_settings": resolved,
+            "status": "VALIDATED_PREHARDWARE",
+        }
+
     def _resolve_recipe(self, recipe: dict[str, Any]) -> dict[str, dict[str, Any]]:
         approved = bool(recipe.get("approved_laser_safety_condition", False))
         resolved: dict[str, dict[str, Any]] = {}
@@ -183,4 +199,3 @@ class TimingRecipeManager:
                             }
                         )
         return mismatches
-

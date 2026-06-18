@@ -30,6 +30,8 @@ class ConfigInventory:
     devices: dict[str, dict[str, Any]]
     t660_devices: dict[str, dict[str, Any]]
     signal_map: dict[str, dict[str, str]]
+    timing_routes: dict[str, Any]
+    mux_settings: dict[str, Any]
     mux_routes: dict[str, Any]
     picoscope_settings: dict[str, Any]
     warnings: list[str]
@@ -114,8 +116,19 @@ def build_config_inventory(
                     "channel": str(channel).upper(),
                 }
 
+    timing_routes = config.get("timing_routes") or {}
+    if not isinstance(timing_routes, dict):
+        timing_routes = {}
+        warnings.append("timing_routes must be a mapping when present")
+
+    mux_settings = config.get("arduino_mux_topology") or {}
+    if not isinstance(mux_settings, dict):
+        mux_settings = {}
+        warnings.append("arduino_mux_topology must be a mapping when present")
+
     mux_routes = (
         config.get("mux_routes")
+        or mux_settings.get("routes")
         or config.get("routes", {}).get("mux")
         or devices.get("arduino_mux", {}).get("routes", {})
     )
@@ -124,7 +137,7 @@ def build_config_inventory(
     if not mux_routes:
         warnings.append(
             "No MUX routes are defined in hardware_configuration.yaml; "
-            "MUX/Pico route diagnostics must remain BLOCKED."
+            "Arduino MUX diagnostics must remain BLOCKED."
         )
 
     picoscope_settings = dict(devices.get("picoscope") or {})
@@ -173,6 +186,8 @@ def build_config_inventory(
         devices={name: dict(value or {}) for name, value in devices.items()},
         t660_devices={name: dict(value or {}) for name, value in t660_devices.items()},
         signal_map=signal_map,
+        timing_routes=timing_routes,
+        mux_settings=mux_settings,
         mux_routes=mux_routes,
         picoscope_settings=picoscope_settings,
         warnings=warnings,
@@ -207,6 +222,10 @@ def write_inventory_files(
     lines.extend(["", "T660 signal map:"])
     for signal, mapping in sorted(inventory.signal_map.items()):
         lines.append(f"- {signal}: {mapping['device']} channel {mapping['channel']}")
+    lines.extend(["", "Timing routes:"])
+    lines.append(json.dumps(inventory.timing_routes, indent=2, sort_keys=True))
+    lines.extend(["", "Arduino MUX topology:"])
+    lines.append(json.dumps(inventory.mux_settings, indent=2, sort_keys=True))
     lines.extend(["", "MUX routes:"])
     if inventory.mux_routes:
         for name in sorted(inventory.mux_routes):

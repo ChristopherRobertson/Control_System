@@ -1,0 +1,2132 @@
+[
+  {
+    "command": "workflow.startup_check",
+    "data": {
+      "command_paths": {
+        "arduino_mux": [
+          "UI button",
+          "WorkflowCommand",
+          "WorkflowStateMachine",
+          "arduino_mux DeviceAdapter/Service"
+        ],
+        "hf2li": [
+          "UI button",
+          "WorkflowCommand",
+          "WorkflowStateMachine",
+          "hf2li DeviceAdapter/Service"
+        ],
+        "mircat": [
+          "UI button",
+          "WorkflowCommand",
+          "WorkflowStateMachine",
+          "mircat DeviceAdapter/Service"
+        ],
+        "picoscope": [
+          "UI button",
+          "WorkflowCommand",
+          "WorkflowStateMachine",
+          "picoscope DeviceAdapter/Service"
+        ],
+        "t660": [
+          "UI button",
+          "WorkflowCommand",
+          "WorkflowStateMachine",
+          "t660 DeviceAdapter/Service"
+        ]
+      },
+      "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+      "config_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\hardware_configuration.yaml",
+      "hardware_access": true,
+      "recipe_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\recipes\\myoglobin_co_acquisition.yaml",
+      "required_commands": [
+        "startup_check",
+        "safe_shutdown",
+        "route_scope_signal",
+        "program_timing_recipe",
+        "arm_measurement",
+        "acquire_point",
+        "acquire_scan",
+        "abort_to_safe"
+      ],
+      "state": "STARTUP_CHECKED"
+    },
+    "from_state": "SAFE_IDLE",
+    "message": "Startup configuration and recipe checks passed.",
+    "status": "complete",
+    "timestamp_utc": "2026-06-18T17:20:20+00:00",
+    "to_state": "STARTUP_CHECKED"
+  },
+  {
+    "command": "workflow.route_scope_signal",
+    "data": {
+      "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+      "hardware_action_sent": true,
+      "mux_readback": {
+        "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+        "firmware_version": "0.1.0",
+        "identity": "ARDUINO_MUX_V1",
+        "protocol_version": "MUX_ROUTE_PROTOCOL_1",
+        "requested_routes": {
+          "output_a": "dmb1_c0_hf2li_dio9",
+          "output_b": "dmb2_c1_hf2li_dio10",
+          "output_ext": "dmb3_c2_hf2li_dio11"
+        },
+        "route_readback": {
+          "latched_routes": {
+            "output_a": "dmb1_c0_hf2li_dio9",
+            "output_b": "dmb2_c1_hf2li_dio10",
+            "output_ext": "dmb3_c2_hf2li_dio11"
+          },
+          "response": "ROUTES A=DMB1_C0_HF2LI_DIO9 B=DMB2_C1_HF2LI_DIO10 EXT=DMB3_C2_HF2LI_DIO11",
+          "timestamp_utc": "2026-06-18T17:20:29+00:00"
+        },
+        "route_responses": {
+          "output_a": "OK ROUTE A DMB1_C0_HF2LI_DIO9",
+          "output_b": "OK ROUTE B DMB2_C1_HF2LI_DIO10",
+          "output_ext": "OK ROUTE EXT DMB3_C2_HF2LI_DIO11"
+        },
+        "status_after_routes": "READY A=DMB1_C0_HF2LI_DIO9 B=DMB2_C1_HF2LI_DIO10 EXT=DMB3_C2_HF2LI_DIO11",
+        "status_before_routes": "READY A=DISABLED B=DISABLED EXT=DISABLED",
+        "timestamp_utc": "2026-06-18T17:20:31+00:00"
+      },
+      "mux_routes": {
+        "output_a_route": "dmb1_c0_hf2li_dio9",
+        "output_b_route": "dmb2_c1_hf2li_dio10",
+        "output_ext_route": "dmb3_c2_hf2li_dio11"
+      },
+      "picoscope_independent_of_arduino_mux": true,
+      "picoscope_settings": {
+        "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+        "picoscope_model": "5244D",
+        "picoscope_serial": "10261",
+        "recipe_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\recipes\\picoscope_settings_test.yaml",
+        "sample_timing_validation": {
+          "max_samples": 268435392,
+          "requested_samples": 100000,
+          "sample_interval_ns": 2.0,
+          "timebase": 1
+        },
+        "settings": {
+          "channels": {
+            "A": {
+              "analog_offset_v": 0.0,
+              "coupling": "DC",
+              "enabled": true,
+              "range": "10V"
+            },
+            "B": {
+              "analog_offset_v": 0.0,
+              "coupling": "DC",
+              "enabled": true,
+              "range": "10V"
+            }
+          },
+          "external_trigger": {
+            "auto_trigger_ms": 0,
+            "delay_samples": 0,
+            "direction": 2,
+            "direction_name": "rising",
+            "source": "EXT",
+            "threshold_adc": 5000
+          },
+          "pre_trigger_samples": 1000,
+          "pulse_count_threshold_adc": 5000,
+          "resolution": "8BIT",
+          "timebase": 1,
+          "timeout_s": 10.0,
+          "total_samples": 100000
+        },
+        "timestamp_utc": "2026-06-18T17:20:32+00:00"
+      },
+      "state": "SCOPE_ROUTE_APPLIED"
+    },
+    "from_state": "STARTUP_CHECKED",
+    "message": "Arduino MUX routes and PicoScope settings were applied through independent real device services.",
+    "status": "complete",
+    "timestamp_utc": "2026-06-18T17:20:32+00:00",
+    "to_state": "SCOPE_ROUTE_APPLIED"
+  },
+  {
+    "command": "workflow.program_timing_recipe",
+    "data": {
+      "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+      "hardware_action_sent": true,
+      "state": "TIMING_RECIPE_PROGRAMMED",
+      "timing_readback": {
+        "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+        "devices": {
+          "t660_1": {
+            "channels": {
+              "A": {
+                "delay_edge": {
+                  "ok": true,
+                  "response": "+000.000000000000"
+                },
+                "enabled": {
+                  "ok": true,
+                  "response": "OFF"
+                },
+                "termination": {
+                  "ok": true,
+                  "response": "50OHM"
+                },
+                "timing_mode": {
+                  "ok": true,
+                  "response": "DW"
+                },
+                "width_edge": {
+                  "ok": true,
+                  "response": "+000.000010000000"
+                }
+              },
+              "B": {
+                "delay_edge": {
+                  "ok": true,
+                  "response": "+000.000000000000"
+                },
+                "enabled": {
+                  "ok": true,
+                  "response": "OFF"
+                },
+                "termination": {
+                  "ok": true,
+                  "response": "50OHM"
+                },
+                "timing_mode": {
+                  "ok": true,
+                  "response": "DW"
+                },
+                "width_edge": {
+                  "ok": true,
+                  "response": "+000.000010000000"
+                }
+              },
+              "C": {
+                "delay_edge": {
+                  "ok": true,
+                  "response": "+000.000004000000"
+                },
+                "enabled": {
+                  "ok": true,
+                  "response": "OFF"
+                },
+                "termination": {
+                  "ok": true,
+                  "response": "50OHM"
+                },
+                "timing_mode": {
+                  "ok": true,
+                  "response": "DW"
+                },
+                "width_edge": {
+                  "ok": true,
+                  "response": "+000.000002000000"
+                }
+              },
+              "D": {
+                "delay_edge": {
+                  "ok": true,
+                  "response": "+000.000006000000"
+                },
+                "enabled": {
+                  "ok": true,
+                  "response": "OFF"
+                },
+                "termination": {
+                  "ok": true,
+                  "response": "50OHM"
+                },
+                "timing_mode": {
+                  "ok": true,
+                  "response": "DW"
+                },
+                "width_edge": {
+                  "ok": true,
+                  "response": "+000.000002000000"
+                }
+              }
+            },
+            "device": "t660_1",
+            "queries": {
+              "firmware": {
+                "error": "t660_1 command 'IDentify' failed: ?22: Command not recognized: The named command was not recognized as a command or query",
+                "ok": false
+              },
+              "identity": {
+                "ok": true,
+                "response": "HTI,T660-1,00369,28E660-1-1.7"
+              },
+              "shots": {
+                "ok": true,
+                "response": "10"
+              },
+              "synth_frequency": {
+                "ok": true,
+                "response": "+000010000.000000"
+              },
+              "trigger_source": {
+                "ok": true,
+                "response": "OFF"
+              }
+            },
+            "timestamp_utc": "2026-06-18T17:21:13+00:00"
+          },
+          "t660_2": {
+            "channels": {
+              "A": {
+                "delay_edge": {
+                  "ok": true,
+                  "response": "+000.000000000000"
+                },
+                "enabled": {
+                  "ok": true,
+                  "response": "OFF"
+                },
+                "termination": {
+                  "ok": true,
+                  "response": "50OHM"
+                },
+                "timing_mode": {
+                  "ok": true,
+                  "response": "DW"
+                },
+                "width_edge": {
+                  "ok": true,
+                  "response": "+000.000000150000"
+                }
+              },
+              "B": {
+                "delay_edge": {
+                  "ok": true,
+                  "response": "+000.000000000000"
+                },
+                "enabled": {
+                  "ok": true,
+                  "response": "OFF"
+                },
+                "termination": {
+                  "ok": true,
+                  "response": "50OHM"
+                },
+                "timing_mode": {
+                  "ok": true,
+                  "response": "DW"
+                },
+                "width_edge": {
+                  "ok": true,
+                  "response": "+000.000000150000"
+                }
+              },
+              "C": {
+                "delay_edge": {
+                  "ok": true,
+                  "response": "+000.000000000000"
+                },
+                "enabled": {
+                  "ok": true,
+                  "response": "OFF"
+                },
+                "termination": {
+                  "ok": true,
+                  "response": "50OHM"
+                },
+                "timing_mode": {
+                  "ok": true,
+                  "response": "DW"
+                },
+                "width_edge": {
+                  "ok": true,
+                  "response": "+000.002000000000"
+                }
+              },
+              "D": {
+                "delay_edge": {
+                  "ok": true,
+                  "response": "+000.000000000000"
+                },
+                "enabled": {
+                  "ok": true,
+                  "response": "OFF"
+                },
+                "termination": {
+                  "ok": true,
+                  "response": "50OHM"
+                },
+                "timing_mode": {
+                  "ok": true,
+                  "response": "DW"
+                },
+                "width_edge": {
+                  "ok": true,
+                  "response": "+000.001000000000"
+                }
+              }
+            },
+            "device": "t660_2",
+            "queries": {
+              "firmware": {
+                "error": "t660_2 command 'IDentify' failed: ?22: Command not recognized: The named command was not recognized as a command or query",
+                "ok": false
+              },
+              "identity": {
+                "ok": true,
+                "response": "HTI,T660-2,00431,28E660-1-1.7"
+              },
+              "shots": {
+                "ok": true,
+                "response": "0"
+              },
+              "synth_frequency": {
+                "ok": true,
+                "response": "+002000000.000000"
+              },
+              "trigger_source": {
+                "ok": true,
+                "response": "OFF"
+              }
+            },
+            "timestamp_utc": "2026-06-18T17:20:50+00:00"
+          }
+        },
+        "matches_recipe": true,
+        "mismatches": [],
+        "recipe_name": "pump_probe_single_point",
+        "recipe_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\recipes\\pump_probe_single_point.yaml",
+        "resolved_settings": {
+          "t660_1": {
+            "channels": {
+              "A": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "ndyag_fire",
+                "termination": "50OHM",
+                "width": "10us"
+              },
+              "B": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "ndyag_q_switch",
+                "termination": "50OHM",
+                "width": "10us"
+              },
+              "C": {
+                "enabled": false,
+                "signal": "mircat_db9_pin_4_process_trigger"
+              },
+              "D": {
+                "enabled": false,
+                "signal": "mircat_db9_pin_5_laser_output_on_off"
+              }
+            },
+            "force_eod": true,
+            "stop_first": true,
+            "trigger_source": "OFF"
+          },
+          "t660_2": {
+            "channels": {
+              "A": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "hf2li_extref",
+                "termination": "50OHM",
+                "width": "150ns"
+              },
+              "B": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "mircat_trig_in",
+                "termination": "50OHM",
+                "width": "150ns"
+              },
+              "C": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "hf2li_daq_trigger",
+                "termination": "50OHM",
+                "width": "2ms"
+              },
+              "D": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "t660_1_trig_in",
+                "termination": "50OHM",
+                "width": "1ms"
+              }
+            },
+            "clock": {
+              "frequency": "2MHz",
+              "shots": 0
+            },
+            "force_eod": true,
+            "stop_first": true,
+            "trigger_source": "OFF"
+          }
+        },
+        "timestamp_utc": "2026-06-18T17:20:32+00:00"
+      },
+      "timing_readback_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\day7_pump_probe_single_point_readback.json",
+      "timing_recipe": "recipes/pump_probe_single_point.yaml",
+      "timing_validation": {
+        "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+        "recipe_name": "pump_probe_single_point",
+        "recipe_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\recipes\\pump_probe_single_point.yaml",
+        "resolved_settings": {
+          "t660_1": {
+            "channels": {
+              "A": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "ndyag_fire",
+                "termination": "50OHM",
+                "width": "10us"
+              },
+              "B": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "ndyag_q_switch",
+                "termination": "50OHM",
+                "width": "10us"
+              },
+              "C": {
+                "enabled": false,
+                "signal": "mircat_db9_pin_4_process_trigger"
+              },
+              "D": {
+                "enabled": false,
+                "signal": "mircat_db9_pin_5_laser_output_on_off"
+              }
+            },
+            "force_eod": true,
+            "stop_first": true,
+            "trigger_source": "OFF"
+          },
+          "t660_2": {
+            "channels": {
+              "A": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "hf2li_extref",
+                "termination": "50OHM",
+                "width": "150ns"
+              },
+              "B": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "mircat_trig_in",
+                "termination": "50OHM",
+                "width": "150ns"
+              },
+              "C": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "hf2li_daq_trigger",
+                "termination": "50OHM",
+                "width": "2ms"
+              },
+              "D": {
+                "delay": 0,
+                "enabled": false,
+                "polarity": "positive",
+                "signal": "t660_1_trig_in",
+                "termination": "50OHM",
+                "width": "1ms"
+              }
+            },
+            "clock": {
+              "frequency": "2MHz",
+              "shots": 0
+            },
+            "force_eod": true,
+            "stop_first": true,
+            "trigger_source": "OFF"
+          }
+        },
+        "status": "VALIDATED_PREHARDWARE",
+        "timestamp_utc": "2026-06-18T17:20:32+00:00"
+      }
+    },
+    "from_state": "SCOPE_ROUTE_APPLIED",
+    "message": "Timing recipe was programmed on real T660 hardware and readback matched the recipe.",
+    "status": "complete",
+    "timestamp_utc": "2026-06-18T17:21:27+00:00",
+    "to_state": "TIMING_RECIPE_PROGRAMMED"
+  },
+  {
+    "command": "workflow.arm_measurement",
+    "data": {
+      "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+      "hardware_action_sent": true,
+      "hf2li_preset": "myoglobin_co_pump_probe",
+      "hf2li_readback": {
+        "applied": {
+          "device_id": "dev18500",
+          "preset": "myoglobin_co_pump_probe",
+          "timestamp_utc": "2026-06-18T17:21:45+00:00"
+        },
+        "preset": "myoglobin_co_pump_probe",
+        "read_errors": {},
+        "settings_snapshot_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\day7_hf2li_arm_settings_snapshot.json"
+      },
+      "laser_safety_approved": false,
+      "mircat_parameter_change": {
+        "emission_on": false,
+        "hardware_action_sent": true,
+        "validated": true
+      },
+      "mircat_readback": {
+        "actual_wavelength": {
+          "light_valid": true,
+          "units": "microns",
+          "value": 5.382140636444092
+        },
+        "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+        "emission_on": false,
+        "pulse_settings": {
+          "preserved_current_ma": 1000.0,
+          "pulse_rate_hz": 100000.0,
+          "pulse_width_ns": 500.0,
+          "qcl": 1
+        },
+        "setpoint": {
+          "co_band_scan_cm1": {
+            "dwell_s_per_point": 5.0,
+            "include": [
+              1858.0
+            ],
+            "installed_range_cm1": {
+              "max": 2077.3,
+              "min": 1638.8
+            },
+            "start": 1848.0,
+            "step": 1.0,
+            "stop": 1868.0
+          },
+          "qcl": 1,
+          "units": "cm^-1",
+          "wavenumber_cm1": 1858.0
+        },
+        "state_after": {
+          "active_qcl": 1,
+          "actual_wavelength": 5.382133960723877,
+          "actual_wavelength_units": "microns",
+          "api_version": "2.4.1",
+          "armed": true,
+          "connected": true,
+          "current_scan_number": 1,
+          "emission_on": false,
+          "interlock_set": true,
+          "key_switch_set": true,
+          "last_error": null,
+          "last_return_code": 0,
+          "last_return_code_name": "SUCCESS",
+          "light_valid": true,
+          "manual_tuning": false,
+          "num_qcls": 1,
+          "preferred_qcl": 1,
+          "qcl_pulse_rate_hz": 100000.0,
+          "qcl_pulse_width_ns": 500.0,
+          "scan_active": true,
+          "scan_current_wavelength": 5.382129669189453,
+          "scan_current_wavelength_units": "microns",
+          "scan_in_progress": true,
+          "scan_motion_in_progress": false,
+          "scan_paused": false,
+          "scan_percent": 100,
+          "scan_tec_in_progress": false,
+          "scan_waiting_process_trigger": false,
+          "set_wavelength": 1858.0,
+          "set_wavelength_units": "cm^-1",
+          "status_mask": 664615,
+          "status_mask_scanning": true,
+          "system_error_word": 0,
+          "tec_ready": true,
+          "timestamp_utc": "2026-06-18T17:21:45+00:00",
+          "tuned": true
+        },
+        "state_before": {
+          "active_qcl": 1,
+          "actual_wavelength": 5.4054036140441895,
+          "actual_wavelength_units": "microns",
+          "api_version": "2.4.1",
+          "armed": true,
+          "connected": true,
+          "current_scan_number": 1,
+          "emission_on": true,
+          "interlock_set": true,
+          "key_switch_set": true,
+          "last_error": null,
+          "last_return_code": 0,
+          "last_return_code_name": "SUCCESS",
+          "light_valid": true,
+          "manual_tuning": false,
+          "num_qcls": 1,
+          "preferred_qcl": 1,
+          "qcl_pulse_rate_hz": 2000000.0,
+          "qcl_pulse_width_ns": 150.0,
+          "scan_active": true,
+          "scan_current_wavelength": 5.405405521392822,
+          "scan_current_wavelength_units": "microns",
+          "scan_in_progress": true,
+          "scan_motion_in_progress": false,
+          "scan_paused": false,
+          "scan_percent": 100,
+          "scan_tec_in_progress": false,
+          "scan_waiting_process_trigger": false,
+          "set_wavelength": 1850.0,
+          "set_wavelength_units": "cm^-1",
+          "status_mask": 668711,
+          "status_mask_scanning": true,
+          "system_error_word": 0,
+          "tec_ready": true,
+          "timestamp_utc": "2026-06-18T17:21:44+00:00",
+          "tuned": true
+        },
+        "timestamp_utc": "2026-06-18T17:21:45+00:00"
+      },
+      "mircat_setpoint": {
+        "co_band_scan_cm1": {
+          "dwell_s_per_point": 5.0,
+          "include": [
+            1858.0
+          ],
+          "installed_range_cm1": {
+            "max": 2077.3,
+            "min": 1638.8
+          },
+          "start": 1848.0,
+          "step": 1.0,
+          "stop": 1868.0
+        },
+        "qcl": 1,
+        "units": "cm^-1",
+        "wavenumber_cm1": 1858.0
+      },
+      "state": "MEASUREMENT_ARMED"
+    },
+    "from_state": "TIMING_RECIPE_PROGRAMMED",
+    "message": "MIRcat was tuned with emission off and HF2LI was configured with the Myoglobin-CO preset.",
+    "status": "complete",
+    "timestamp_utc": "2026-06-18T17:21:46+00:00",
+    "to_state": "MEASUREMENT_ARMED"
+  },
+  {
+    "command": "workflow.acquire_point",
+    "data": {
+      "acquisition": {
+        "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+        "demodulators": [
+          0,
+          3
+        ],
+        "duration_s": 5.0,
+        "fields": [
+          "x",
+          "y",
+          "r"
+        ],
+        "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_point_000_wn_1858p0_delay_m1000ns.json",
+        "point": {
+          "delay_ns": -1000,
+          "hf2li_preset": "myoglobin_co_pump_probe",
+          "wavenumber_cm1": 1858.0
+        },
+        "point_index": 0,
+        "preset": "myoglobin_co_pump_probe",
+        "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_point_000_wn_1858p0_delay_m1000ns.csv",
+        "save_summary": {
+          "path_count": 4,
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_point_000_wn_1858p0_delay_m1000ns.csv",
+          "sample_count": 36274,
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_point_000_wn_1858p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:21:51+00:00"
+        },
+        "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_point_000_wn_1858p0_delay_m1000ns.csv",
+        "timestamp_utc": "2026-06-18T17:21:51+00:00"
+      },
+      "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+      "hardware_action_sent": true,
+      "point": {
+        "delay_ns": -1000,
+        "hf2li_preset": "myoglobin_co_pump_probe",
+        "wavenumber_cm1": 1858.0
+      },
+      "raw_data_created": true,
+      "state": "ACQUIRING_POINT"
+    },
+    "from_state": "MEASUREMENT_ARMED",
+    "message": "Acquire-point collected real HF2LI detector data for the selected Myoglobin-CO point.",
+    "status": "complete",
+    "timestamp_utc": "2026-06-18T17:21:51+00:00",
+    "to_state": "ACQUIRING_POINT"
+  },
+  {
+    "command": "workflow.acquire_scan",
+    "data": {
+      "acquisitions": [
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_000_wn_1848p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1848.0
+          },
+          "point_index": 0,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_000_wn_1848p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_000_wn_1848p0_delay_m1000ns.csv",
+            "sample_count": 36330,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_000_wn_1848p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:21:56+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_000_wn_1848p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:21:56+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_001_wn_1849p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1849.0
+          },
+          "point_index": 1,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_001_wn_1849p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_001_wn_1849p0_delay_m1000ns.csv",
+            "sample_count": 36272,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_001_wn_1849p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:02+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_001_wn_1849p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:02+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_002_wn_1850p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1850.0
+          },
+          "point_index": 2,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_002_wn_1850p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_002_wn_1850p0_delay_m1000ns.csv",
+            "sample_count": 36314,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_002_wn_1850p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:07+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_002_wn_1850p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:07+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_003_wn_1851p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1851.0
+          },
+          "point_index": 3,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_003_wn_1851p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_003_wn_1851p0_delay_m1000ns.csv",
+            "sample_count": 36304,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_003_wn_1851p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:12+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_003_wn_1851p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:12+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_004_wn_1852p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1852.0
+          },
+          "point_index": 4,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_004_wn_1852p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_004_wn_1852p0_delay_m1000ns.csv",
+            "sample_count": 36336,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_004_wn_1852p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:17+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_004_wn_1852p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:17+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_005_wn_1853p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1853.0
+          },
+          "point_index": 5,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_005_wn_1853p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_005_wn_1853p0_delay_m1000ns.csv",
+            "sample_count": 36398,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_005_wn_1853p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:23+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_005_wn_1853p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:23+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_006_wn_1854p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1854.0
+          },
+          "point_index": 6,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_006_wn_1854p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_006_wn_1854p0_delay_m1000ns.csv",
+            "sample_count": 36350,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_006_wn_1854p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:28+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_006_wn_1854p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:28+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_007_wn_1855p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1855.0
+          },
+          "point_index": 7,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_007_wn_1855p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_007_wn_1855p0_delay_m1000ns.csv",
+            "sample_count": 36348,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_007_wn_1855p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:33+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_007_wn_1855p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:33+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_008_wn_1856p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1856.0
+          },
+          "point_index": 8,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_008_wn_1856p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_008_wn_1856p0_delay_m1000ns.csv",
+            "sample_count": 36302,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_008_wn_1856p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:38+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_008_wn_1856p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:38+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_009_wn_1857p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1857.0
+          },
+          "point_index": 9,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_009_wn_1857p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_009_wn_1857p0_delay_m1000ns.csv",
+            "sample_count": 36368,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_009_wn_1857p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:44+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_009_wn_1857p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:44+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_010_wn_1858p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1858.0
+          },
+          "point_index": 10,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_010_wn_1858p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_010_wn_1858p0_delay_m1000ns.csv",
+            "sample_count": 36382,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_010_wn_1858p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:49+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_010_wn_1858p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:49+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_011_wn_1859p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1859.0
+          },
+          "point_index": 11,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_011_wn_1859p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_011_wn_1859p0_delay_m1000ns.csv",
+            "sample_count": 36252,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_011_wn_1859p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:22:54+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_011_wn_1859p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:22:54+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_012_wn_1860p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1860.0
+          },
+          "point_index": 12,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_012_wn_1860p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_012_wn_1860p0_delay_m1000ns.csv",
+            "sample_count": 36272,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_012_wn_1860p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:23:00+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_012_wn_1860p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:23:00+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_013_wn_1861p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1861.0
+          },
+          "point_index": 13,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_013_wn_1861p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_013_wn_1861p0_delay_m1000ns.csv",
+            "sample_count": 36342,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_013_wn_1861p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:23:05+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_013_wn_1861p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:23:05+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_014_wn_1862p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1862.0
+          },
+          "point_index": 14,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_014_wn_1862p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_014_wn_1862p0_delay_m1000ns.csv",
+            "sample_count": 36454,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_014_wn_1862p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:23:10+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_014_wn_1862p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:23:10+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_015_wn_1863p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1863.0
+          },
+          "point_index": 15,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_015_wn_1863p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_015_wn_1863p0_delay_m1000ns.csv",
+            "sample_count": 36416,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_015_wn_1863p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:23:15+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_015_wn_1863p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:23:15+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_016_wn_1864p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1864.0
+          },
+          "point_index": 16,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_016_wn_1864p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_016_wn_1864p0_delay_m1000ns.csv",
+            "sample_count": 36324,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_016_wn_1864p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:23:21+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_016_wn_1864p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:23:21+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_017_wn_1865p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1865.0
+          },
+          "point_index": 17,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_017_wn_1865p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_017_wn_1865p0_delay_m1000ns.csv",
+            "sample_count": 36430,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_017_wn_1865p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:23:26+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_017_wn_1865p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:23:26+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_018_wn_1866p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1866.0
+          },
+          "point_index": 18,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_018_wn_1866p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_018_wn_1866p0_delay_m1000ns.csv",
+            "sample_count": 36310,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_018_wn_1866p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:23:31+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_018_wn_1866p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:23:31+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_019_wn_1867p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1867.0
+          },
+          "point_index": 19,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_019_wn_1867p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_019_wn_1867p0_delay_m1000ns.csv",
+            "sample_count": 36384,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_019_wn_1867p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:23:37+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_019_wn_1867p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:23:37+00:00"
+        },
+        {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "demodulators": [
+            0,
+            3
+          ],
+          "duration_s": 5.0,
+          "fields": [
+            "x",
+            "y",
+            "r"
+          ],
+          "metadata_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_metadata_scan_020_wn_1868p0_delay_m1000ns.json",
+          "point": {
+            "delay_ns": -1000,
+            "hf2li_preset": "myoglobin_co_pump_probe",
+            "wavenumber_cm1": 1868.0
+          },
+          "point_index": 20,
+          "preset": "myoglobin_co_pump_probe",
+          "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_020_wn_1868p0_delay_m1000ns.csv",
+          "save_summary": {
+            "path_count": 4,
+            "raw_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_raw_scan_020_wn_1868p0_delay_m1000ns.csv",
+            "sample_count": 36210,
+            "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_020_wn_1868p0_delay_m1000ns.csv",
+            "timestamp_utc": "2026-06-18T17:23:42+00:00"
+          },
+          "summary_csv_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\hf2li_summary_scan_020_wn_1868p0_delay_m1000ns.csv",
+          "timestamp_utc": "2026-06-18T17:23:42+00:00"
+        }
+      ],
+      "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+      "first_point": {
+        "delay_ns": -1000,
+        "hf2li_preset": "myoglobin_co_pump_probe",
+        "wavenumber_cm1": 1848.0
+      },
+      "hardware_action_sent": true,
+      "last_point": {
+        "delay_ns": -1000,
+        "hf2li_preset": "myoglobin_co_pump_probe",
+        "wavenumber_cm1": 1868.0
+      },
+      "planned_point_count": 21,
+      "raw_data_created": true,
+      "state": "ACQUIRING_SCAN"
+    },
+    "from_state": "ACQUIRING_POINT",
+    "message": "Acquire-scan collected real HF2LI detector data for every Myoglobin-CO scan point.",
+    "status": "complete",
+    "timestamp_utc": "2026-06-18T17:23:42+00:00",
+    "to_state": "ACQUIRING_SCAN"
+  },
+  {
+    "command": "workflow.abort_to_safe",
+    "data": {
+      "abort_state": {
+        "aborted": true,
+        "reason": "Day 7 abort-path logging verification",
+        "timestamp_utc": "2026-06-18T17:23:42+00:00"
+      },
+      "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+      "hardware_action_sent": true,
+      "safe_actions": {
+        "arduino_mux": {
+          "safe_idle_response": "OK SAFE"
+        },
+        "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+        "hf2li": "closed",
+        "label": "abort_to_safe",
+        "mircat": {
+          "safe_state": "emission_off_disarmed_deinitialized",
+          "state": {
+            "active_qcl": 0,
+            "actual_wavelength": 0.0,
+            "actual_wavelength_units": "microns",
+            "api_version": "2.4.1",
+            "armed": false,
+            "connected": true,
+            "current_scan_number": 0,
+            "emission_on": false,
+            "interlock_set": true,
+            "key_switch_set": true,
+            "last_error": null,
+            "last_return_code": 0,
+            "last_return_code_name": "SUCCESS",
+            "light_valid": false,
+            "manual_tuning": false,
+            "num_qcls": 1,
+            "preferred_qcl": 1,
+            "qcl_pulse_rate_hz": 100000.0,
+            "qcl_pulse_width_ns": 500.0,
+            "scan_active": false,
+            "scan_current_wavelength": 0.0,
+            "scan_current_wavelength_units": "microns",
+            "scan_in_progress": false,
+            "scan_motion_in_progress": false,
+            "scan_paused": false,
+            "scan_percent": 0,
+            "scan_tec_in_progress": false,
+            "scan_waiting_process_trigger": false,
+            "set_wavelength": 1858.0,
+            "set_wavelength_units": "cm^-1",
+            "status_mask": 663559,
+            "status_mask_scanning": false,
+            "system_error_word": 0,
+            "tec_ready": true,
+            "timestamp_utc": "2026-06-18T17:23:42+00:00",
+            "tuned": true
+          }
+        },
+        "picoscope": null,
+        "readback_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\day7_abort_to_safe_safe_actions.json",
+        "t660": {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "devices": {
+            "t660_1": {
+              "channels": {
+                "A": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000010000000"
+                  }
+                },
+                "B": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000010000000"
+                  }
+                },
+                "C": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000004000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000002000000"
+                  }
+                },
+                "D": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000006000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000002000000"
+                  }
+                }
+              },
+              "device": "t660_1",
+              "queries": {
+                "firmware": {
+                  "error": "t660_1 command 'IDentify' failed: ?22: Command not recognized: The named command was not recognized as a command or query",
+                  "ok": false
+                },
+                "identity": {
+                  "ok": true,
+                  "response": "HTI,T660-1,00369,28E660-1-1.7"
+                },
+                "shots": {
+                  "ok": true,
+                  "response": "10"
+                },
+                "synth_frequency": {
+                  "ok": true,
+                  "response": "+000010000.000000"
+                },
+                "trigger_source": {
+                  "ok": true,
+                  "response": "OFF"
+                }
+              },
+              "timestamp_utc": "2026-06-18T17:24:06+00:00"
+            },
+            "t660_2": {
+              "channels": {
+                "A": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000000150000"
+                  }
+                },
+                "B": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000000150000"
+                  }
+                },
+                "C": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.002000000000"
+                  }
+                },
+                "D": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.001000000000"
+                  }
+                }
+              },
+              "device": "t660_2",
+              "queries": {
+                "firmware": {
+                  "error": "t660_2 command 'IDentify' failed: ?22: Command not recognized: The named command was not recognized as a command or query",
+                  "ok": false
+                },
+                "identity": {
+                  "ok": true,
+                  "response": "HTI,T660-2,00431,28E660-1-1.7"
+                },
+                "shots": {
+                  "ok": true,
+                  "response": "0"
+                },
+                "synth_frequency": {
+                  "ok": true,
+                  "response": "+002000000.000000"
+                },
+                "trigger_source": {
+                  "ok": true,
+                  "response": "OFF"
+                }
+              },
+              "timestamp_utc": "2026-06-18T17:23:48+00:00"
+            }
+          },
+          "matches_recipe": true,
+          "mismatches": [],
+          "recipe_name": "safe_idle",
+          "recipe_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\recipes\\safe_idle.yaml",
+          "resolved_settings": {
+            "t660_1": {
+              "channels": {
+                "A": {
+                  "enabled": false,
+                  "signal": "ndyag_fire"
+                },
+                "B": {
+                  "enabled": false,
+                  "signal": "ndyag_q_switch"
+                },
+                "C": {
+                  "enabled": false,
+                  "signal": "mircat_db9_pin_4_process_trigger"
+                },
+                "D": {
+                  "enabled": false,
+                  "signal": "mircat_db9_pin_5_laser_output_on_off"
+                }
+              },
+              "force_eod": true,
+              "stop_first": true,
+              "trigger_source": "OFF"
+            },
+            "t660_2": {
+              "channels": {
+                "A": {
+                  "enabled": false,
+                  "signal": "hf2li_extref"
+                },
+                "B": {
+                  "enabled": false,
+                  "signal": "mircat_trig_in"
+                },
+                "C": {
+                  "enabled": false,
+                  "signal": "hf2li_daq_trigger"
+                },
+                "D": {
+                  "enabled": false,
+                  "signal": "t660_1_trig_in"
+                }
+              },
+              "force_eod": true,
+              "stop_first": true,
+              "trigger_source": "OFF"
+            }
+          },
+          "timestamp_utc": "2026-06-18T17:23:42+00:00"
+        },
+        "timestamp_utc": "2026-06-18T17:23:42+00:00"
+      },
+      "safe_actions_required": [
+        "Stop acquisition",
+        "MIRcat emission off",
+        "T660 outputs off",
+        "Arduino MUX safe idle"
+      ],
+      "state": "ABORT_LOGGED"
+    },
+    "from_state": "ACQUIRING_SCAN",
+    "message": "Abort was logged and real safe-state commands were sent where services were active.",
+    "status": "complete",
+    "timestamp_utc": "2026-06-18T17:24:20+00:00",
+    "to_state": "ABORT_LOGGED"
+  },
+  {
+    "command": "workflow.safe_shutdown",
+    "data": {
+      "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+      "hardware_action_sent": true,
+      "safe_actions": {
+        "arduino_mux": {
+          "safe_idle_response": "OK SAFE"
+        },
+        "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+        "hf2li": null,
+        "label": "safe_shutdown",
+        "mircat": null,
+        "picoscope": null,
+        "readback_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\runs\\20260618_day7_workflow_interface\\day7_safe_shutdown_safe_actions.json",
+        "t660": {
+          "config_hash": "2cd31abe64978db566aecaffaf9cc81528d79400cb5c9bd0003cf922088c7ca7",
+          "devices": {
+            "t660_1": {
+              "channels": {
+                "A": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000010000000"
+                  }
+                },
+                "B": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000010000000"
+                  }
+                },
+                "C": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000004000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000002000000"
+                  }
+                },
+                "D": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000006000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000002000000"
+                  }
+                }
+              },
+              "device": "t660_1",
+              "queries": {
+                "firmware": {
+                  "error": "t660_1 command 'IDentify' failed: ?22: Command not recognized: The named command was not recognized as a command or query",
+                  "ok": false
+                },
+                "identity": {
+                  "ok": true,
+                  "response": "HTI,T660-1,00369,28E660-1-1.7"
+                },
+                "shots": {
+                  "ok": true,
+                  "response": "10"
+                },
+                "synth_frequency": {
+                  "ok": true,
+                  "response": "+000010000.000000"
+                },
+                "trigger_source": {
+                  "ok": true,
+                  "response": "OFF"
+                }
+              },
+              "timestamp_utc": "2026-06-18T17:24:44+00:00"
+            },
+            "t660_2": {
+              "channels": {
+                "A": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000000150000"
+                  }
+                },
+                "B": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.000000150000"
+                  }
+                },
+                "C": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.002000000000"
+                  }
+                },
+                "D": {
+                  "delay_edge": {
+                    "ok": true,
+                    "response": "+000.000000000000"
+                  },
+                  "enabled": {
+                    "ok": true,
+                    "response": "OFF"
+                  },
+                  "termination": {
+                    "ok": true,
+                    "response": "50OHM"
+                  },
+                  "timing_mode": {
+                    "ok": true,
+                    "response": "DW"
+                  },
+                  "width_edge": {
+                    "ok": true,
+                    "response": "+000.001000000000"
+                  }
+                }
+              },
+              "device": "t660_2",
+              "queries": {
+                "firmware": {
+                  "error": "t660_2 command 'IDentify' failed: ?22: Command not recognized: The named command was not recognized as a command or query",
+                  "ok": false
+                },
+                "identity": {
+                  "ok": true,
+                  "response": "HTI,T660-2,00431,28E660-1-1.7"
+                },
+                "shots": {
+                  "ok": true,
+                  "response": "0"
+                },
+                "synth_frequency": {
+                  "ok": true,
+                  "response": "+002000000.000000"
+                },
+                "trigger_source": {
+                  "ok": true,
+                  "response": "OFF"
+                }
+              },
+              "timestamp_utc": "2026-06-18T17:24:26+00:00"
+            }
+          },
+          "matches_recipe": true,
+          "mismatches": [],
+          "recipe_name": "safe_idle",
+          "recipe_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\recipes\\safe_idle.yaml",
+          "resolved_settings": {
+            "t660_1": {
+              "channels": {
+                "A": {
+                  "enabled": false,
+                  "signal": "ndyag_fire"
+                },
+                "B": {
+                  "enabled": false,
+                  "signal": "ndyag_q_switch"
+                },
+                "C": {
+                  "enabled": false,
+                  "signal": "mircat_db9_pin_4_process_trigger"
+                },
+                "D": {
+                  "enabled": false,
+                  "signal": "mircat_db9_pin_5_laser_output_on_off"
+                }
+              },
+              "force_eod": true,
+              "stop_first": true,
+              "trigger_source": "OFF"
+            },
+            "t660_2": {
+              "channels": {
+                "A": {
+                  "enabled": false,
+                  "signal": "hf2li_extref"
+                },
+                "B": {
+                  "enabled": false,
+                  "signal": "mircat_trig_in"
+                },
+                "C": {
+                  "enabled": false,
+                  "signal": "hf2li_daq_trigger"
+                },
+                "D": {
+                  "enabled": false,
+                  "signal": "t660_1_trig_in"
+                }
+              },
+              "force_eod": true,
+              "stop_first": true,
+              "trigger_source": "OFF"
+            }
+          },
+          "timestamp_utc": "2026-06-18T17:24:20+00:00"
+        },
+        "timestamp_utc": "2026-06-18T17:24:20+00:00"
+      },
+      "state": "SAFE_SHUTDOWN_SENT"
+    },
+    "from_state": "ABORT_LOGGED",
+    "message": "Safe-shutdown commands were sent to real hardware services and readbacks were recorded.",
+    "status": "complete",
+    "timestamp_utc": "2026-06-18T17:25:01+00:00",
+    "to_state": "SAFE_SHUTDOWN_SENT"
+  }
+]
