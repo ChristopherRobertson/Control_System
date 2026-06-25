@@ -27,6 +27,7 @@ from control_app.workflows.picoscope_settings_test import (
     load_recipe as load_picoscope_recipe,
     validate_capture_settings,
 )
+from control_app.workflows.t660_widget_commands import T660WidgetCommandHandler
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
 
 
@@ -40,7 +41,7 @@ REQUIRED_WORKFLOW_COMMANDS = (
     "acquire_scan",
     "abort_to_safe",
 )
-WORKFLOW_DEVICE_KEYS = ("mircat", "t660", "picoscope", "arduino_mux", "hf2li")
+WORKFLOW_DEVICE_KEYS = ("mircat", "t660", "t660_2", "picoscope", "arduino_mux", "hf2li")
 INITIAL_STATE = "SAFE_IDLE"
 HARDWARE_REQUIRED_STATES = {
     "SAFE_SHUTDOWN_SENT",
@@ -113,6 +114,7 @@ class WorkflowStateMachine:
         self.abort_state: dict[str, Any] = {"aborted": False, "reason": None}
         self._mircat_handler: MircatWidgetCommandHandler | None = None
         self._mux_handler: MuxWidgetCommandHandler | None = None
+        self._t660_handler: T660WidgetCommandHandler | None = None
         self.run_dir = self._resolve_run_dir(run_dir)
         self.raw_data_paths: list[str] = []
         self.command_log_paths: list[str] = []
@@ -265,6 +267,13 @@ class WorkflowStateMachine:
                     inventory=self.inventory,
                 )
             result = self._mux_handler(command)
+        elif command.device_key == "t660_2":
+            if self._t660_handler is None:
+                self._t660_handler = T660WidgetCommandHandler(
+                    operator=self.operator,
+                    inventory=self.inventory,
+                )
+            result = self._t660_handler(command)
         else:
             message = (
                 f"{command.device_key} direct widget command namespace is not exposed; "

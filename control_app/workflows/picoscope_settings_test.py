@@ -233,6 +233,9 @@ def _trigger_sources(capabilities: dict[str, Any]) -> set[str]:
         for value in configured.values():
             if isinstance(value, dict) and value.get("api_source"):
                 sources.add(str(value["api_source"]).upper())
+    analog_channels = capabilities.get("analog_channels")
+    if isinstance(analog_channels, list):
+        sources.update(str(channel).upper() for channel in analog_channels)
     return sources or set(TRIGGER_SOURCES.keys())
 
 

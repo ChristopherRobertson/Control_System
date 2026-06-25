@@ -55,6 +55,12 @@ RET_WARNING_DEPRECATED_PARAMETER = 117
 
 UNITS_MICRONS = 1
 UNITS_CM1 = 2
+PULSE_MODE_INTERNAL = 1
+PULSE_MODE_EXTERNAL_TRIGGER = 2
+PULSE_MODE_EXTERNAL_PASSTHRU = 3
+PROC_TRIG_MODE_INTERNAL = 1
+PROC_TRIG_MODE_EXTERNAL = 2
+PROC_TRIG_MODE_MANUAL = 3
 STATUS_MASK_SCANNING = 0x00000020
 STATUS_MASK_MANUAL_TUNING = 0x00000040
 
@@ -478,17 +484,19 @@ class MircatService:
         qcl: int,
         pulse_rate_hz: float,
         pulse_width_ns: float,
+        current_ma: float | None = None,
     ) -> dict[str, Any]:
-        """Set pulse rate/width while preserving the existing QCL current."""
+        """Set pulse rate/width, preserving current unless a value is explicitly supplied."""
 
-        current_ma = self.get_qcl_current(qcl)
+        previous_current_ma = self.get_qcl_current(qcl)
+        current_ma_used = previous_current_ma if current_ma is None else float(current_ma)
         self._check(
             self._call(
                 "MIRcatSDK_SetQCLParams",
                 c_uint8(int(qcl)),
                 c_float(float(pulse_rate_hz)),
                 c_float(float(pulse_width_ns)),
-                c_float(float(current_ma)),
+                c_float(float(current_ma_used)),
             ),
             "MIRcatSDK_SetQCLParams",
         )
@@ -496,8 +504,116 @@ class MircatService:
             "qcl": int(qcl),
             "pulse_rate_hz": self.get_qcl_pulse_rate(qcl),
             "pulse_width_ns": self.get_qcl_pulse_width(qcl),
-            "preserved_current_ma": current_ma,
+            "preserved_current_ma": previous_current_ma,
+            "current_ma_used": current_ma_used,
+            "current_source": "preserved_existing" if current_ma is None else "requested",
         }
+
+    def get_qcl_pulse_limits(self, qcl: int) -> dict[str, float]:
+        """Return pulse-rate, pulse-width, and duty-cycle limits for a QCL."""
+
+        max_rate_hz = c_float()
+        max_width_ns = c_float()
+        max_duty_cycle = c_float()
+        self._check(
+            self._call(
+                "MIRcatSDK_GetQCLPulseLimits",
+                c_uint8(int(qcl)),
+                byref(max_rate_hz),
+                byref(max_width_ns),
+                byref(max_duty_cycle),
+            ),
+            "MIRcatSDK_GetQCLPulseLimits",
+        )
+        return {
+            "qcl": int(qcl),
+            "max_pulse_rate_hz": float(max_rate_hz.value),
+            "max_pulse_width_ns": float(max_width_ns.value),
+            "max_duty_cycle": float(max_duty_cycle.value),
+        }
+
+    def get_wavelength_trigger_params(self) -> dict[str, Any]:
+        """Return MIRcat wavelength-trigger/pulse-trigger settings."""
+
+        pulse_mode = c_uint8()
+        proc_mode = c_uint8()
+        start = c_float()
+        stop = c_float()
+        interval = c_float()
+        units = c_uint8()
+        dwell_us = c_uint32()
+        after_off_us = c_uint32()
+        self._check(
+            self._call(
+                "MIRcatSDK_GetWlTrigParams",
+                byref(pulse_mode),
+                byref(proc_mode),
+                byref(start),
+                byref(stop),
+                byref(interval),
+                byref(units),
+                byref(dwell_us),
+                byref(after_off_us),
+            ),
+            "MIRcatSDK_GetWlTrigParams",
+        )
+        return {
+            "pulse_mode": int(pulse_mode.value),
+            "pulse_mode_name": pulse_mode_name(int(pulse_mode.value)),
+            "process_trigger_mode": int(proc_mode.value),
+            "process_trigger_mode_name": process_trigger_mode_name(int(proc_mode.value)),
+            "start": float(start.value),
+            "stop": float(stop.value),
+            "interval": float(interval.value),
+            "units": int(units.value),
+            "units_name": units_name(int(units.value)),
+            "dwell_us": int(dwell_us.value),
+            "after_off_us": int(after_off_us.value),
+        }
+
+    def set_wavelength_trigger_params(
+        self,
+        *,
+        pulse_mode: int,
+        process_trigger_mode: int,
+        start: float,
+        stop: float,
+        interval: float,
+        units: int,
+        dwell_us: int = 0,
+        after_off_us: int = 0,
+    ) -> dict[str, Any]:
+        """Set MIRcat wavelength-trigger/pulse-trigger settings and return readback."""
+
+        self._check(
+            self._call(
+                "MIRcatSDK_SetWlTrigParams",
+                c_uint8(int(pulse_mode)),
+                c_uint8(int(process_trigger_mode)),
+                c_float(float(start)),
+                c_float(float(stop)),
+                c_float(float(interval)),
+                c_uint8(int(units)),
+                c_uint32(int(dwell_us)),
+                c_uint32(int(after_off_us)),
+            ),
+            "MIRcatSDK_SetWlTrigParams",
+        )
+        return self.get_wavelength_trigger_params()
+
+    def set_external_trigger_params(self, *, wavenumber_cm1: float) -> dict[str, Any]:
+        """Configure one optical pulse per external TTL rising edge."""
+
+        return self.set_wavelength_trigger_params(
+            pulse_mode=PULSE_MODE_EXTERNAL_TRIGGER,
+            process_trigger_mode=PROC_TRIG_MODE_INTERNAL,
+            start=float(wavenumber_cm1),
+            stop=float(wavenumber_cm1),
+            interval=0.0,
+            units=UNITS_CM1,
+            dwell_us=0,
+            after_off_us=0,
+        )
 
     def get_actual_wavelength(self) -> dict[str, Any]:
         """Return actual wavelength/wavenumber and light-valid readback."""
@@ -748,6 +864,35 @@ class MircatService:
         sdk.MIRcatSDK_GetQCLCurrent.restype = c_uint32
         sdk.MIRcatSDK_SetQCLParams.argtypes = [c_uint8, c_float, c_float, c_float]
         sdk.MIRcatSDK_SetQCLParams.restype = c_uint32
+        sdk.MIRcatSDK_GetQCLPulseLimits.argtypes = [
+            c_uint8,
+            POINTER(c_float),
+            POINTER(c_float),
+            POINTER(c_float),
+        ]
+        sdk.MIRcatSDK_GetQCLPulseLimits.restype = c_uint32
+        sdk.MIRcatSDK_GetWlTrigParams.argtypes = [
+            POINTER(c_uint8),
+            POINTER(c_uint8),
+            POINTER(c_float),
+            POINTER(c_float),
+            POINTER(c_float),
+            POINTER(c_uint8),
+            POINTER(c_uint32),
+            POINTER(c_uint32),
+        ]
+        sdk.MIRcatSDK_GetWlTrigParams.restype = c_uint32
+        sdk.MIRcatSDK_SetWlTrigParams.argtypes = [
+            c_uint8,
+            c_uint8,
+            c_float,
+            c_float,
+            c_float,
+            c_uint8,
+            c_uint32,
+            c_uint32,
+        ]
+        sdk.MIRcatSDK_SetWlTrigParams.restype = c_uint32
 
     def _bool_call(self, name: str) -> bool:
         value = c_bool(False)
@@ -795,6 +940,30 @@ def units_name(value: int) -> str:
         return "microns"
     if value == UNITS_CM1:
         return "cm^-1"
+    return f"unknown:{value}"
+
+
+def pulse_mode_name(value: int) -> str:
+    """Return a readable MIRcat pulse-trigger mode label."""
+
+    if value == PULSE_MODE_INTERNAL:
+        return "internal"
+    if value == PULSE_MODE_EXTERNAL_TRIGGER:
+        return "external_trigger"
+    if value == PULSE_MODE_EXTERNAL_PASSTHRU:
+        return "external_passthru"
+    return f"unknown:{value}"
+
+
+def process_trigger_mode_name(value: int) -> str:
+    """Return a readable MIRcat process-trigger mode label."""
+
+    if value == PROC_TRIG_MODE_INTERNAL:
+        return "internal"
+    if value == PROC_TRIG_MODE_EXTERNAL:
+        return "external"
+    if value == PROC_TRIG_MODE_MANUAL:
+        return "manual"
     return f"unknown:{value}"
 
 

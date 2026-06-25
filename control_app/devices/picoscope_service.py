@@ -37,7 +37,7 @@ PICO_STATUS_NAMES = {
 }
 CHANNELS = {"A": 0, "B": 1}
 COUPLING = {"AC": 0, "DC": 1}
-TRIGGER_SOURCES = {"EXT": 4}
+TRIGGER_SOURCES = {"A": 0, "B": 1, "EXT": 4}
 RANGES = {
     "10MV": 0,
     "20MV": 1,

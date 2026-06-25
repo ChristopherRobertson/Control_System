@@ -5,6 +5,7 @@ from __future__ import annotations
 from control_app.ui.contracts import WorkflowCommandHandler, blocked_handler
 from control_app.ui.widgets.mircat_widget import MircatWidget
 from control_app.ui.widgets.mux_widget import MuxWidget
+from control_app.ui.widgets.t660_widget import T660Widget
 
 
 try:
@@ -37,6 +38,8 @@ class ControlSystemMainWindow(QMainWindow):
         tabs = QTabWidget()
         self.mircat_widget = MircatWidget(handler)
         tabs.addTab(self.mircat_widget, "MIRcat")
+        self.t660_widget = T660Widget(handler)
+        tabs.addTab(self.t660_widget, "T660-2")
         self.mux_widget = MuxWidget(
             handler,
             route_options=mux_route_options,
@@ -49,7 +52,7 @@ class ControlSystemMainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override name
         """Prevent application shutdown while hardware commands are still active."""
 
-        for widget in (self.mircat_widget, self.mux_widget):
+        for widget in (self.mircat_widget, self.t660_widget, self.mux_widget):
             if widget.command_running():
                 widget.closeEvent(event)
                 return
