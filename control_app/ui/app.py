@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+import atexit
+import signal
 import sys
+import traceback
+from datetime import UTC, datetime
 
-from control_app.config_loader import load_config_inventory
+from control_app.config_loader import REPO_ROOT, load_config_inventory
 from control_app.ui.main_window import ControlSystemMainWindow
-from control_app.workflows.mux_widget_commands import (
-    build_mux_default_routes,
-    build_mux_route_labels,
-    build_mux_route_options,
-)
 from control_app.workflows.state_machine import WorkflowStateMachine
 
 
@@ -34,13 +33,56 @@ def main() -> int:
     )
     window = ControlSystemMainWindow(
         command_handler=handler,
-        mux_route_options=build_mux_route_options(inventory),
-        mux_route_labels=build_mux_route_labels(inventory),
-        mux_default_routes=build_mux_default_routes(inventory),
     )
     window.resize(1100, 780)
     window.show()
+    shutdown_state = {"safe_completed": False, "emergency_done": False}
+
+    def mark_safe_shutdown_completed() -> None:
+        shutdown_state["safe_completed"] = True
+
+    window.safe_shutdown_completed_callback = mark_safe_shutdown_completed
+
+    def emergency_stop(reason: str) -> None:
+        if shutdown_state["emergency_done"] or shutdown_state["safe_completed"]:
+            return
+        shutdown_state["emergency_done"] = True
+        stop = getattr(handler, "emergency_stop", None)
+        if callable(stop):
+            try:
+                stop(reason=reason)
+            except Exception:  # noqa: BLE001 - emergency-exit hooks must not crash Qt/Python teardown
+                _log_emergency_stop_error(reason)
+
+    def handle_signal(signum, _frame) -> None:
+        try:
+            emergency_stop(f"signal_{signum}")
+        finally:
+            app.quit()
+
+    app.aboutToQuit.connect(lambda: emergency_stop("qt_about_to_quit"))
+    atexit.register(lambda: emergency_stop("python_atexit"))
+    for signal_name in ("SIGINT", "SIGTERM"):
+        if hasattr(signal, signal_name):
+            signal.signal(getattr(signal, signal_name), handle_signal)
     return int(app.exec())
+
+
+def _log_emergency_stop_error(reason: str) -> None:
+    """Record emergency-stop hook failures without raising during process exit."""
+
+    try:
+        log_path = REPO_ROOT / "logs" / f"{datetime.now().strftime('%Y%m%d')}_ui_shutdown_errors.txt"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f"{datetime.now(UTC).isoformat(timespec='seconds')} emergency_stop "
+                f"reason={reason} failed\n"
+            )
+            handle.write(traceback.format_exc())
+            handle.write("\n")
+    except Exception:  # noqa: BLE001 - never raise from an emergency-exit logging fallback
+        return
 
 
 if __name__ == "__main__":

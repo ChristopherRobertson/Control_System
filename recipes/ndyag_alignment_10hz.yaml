@@ -1,0 +1,67 @@
+name: ndyag_alignment_10hz
+description: "Nd:YAG DAT Mode 2 alignment timing: continuous 10 Hz Fire and Q-switch from T660-1, driven by T660-2."
+approved_laser_safety_condition: true
+workflow_entrypoint: "control_app.ui.widgets.ndyag_widget.NdYagWidget"
+standalone_t660_only: true
+duration:
+  mode: continuous
+  t660_shots: 0
+  stop_condition: "Press Safe Idle in the Nd:YAG UI tab when beam alignment is complete."
+timing:
+  repetition_rate_hz: 10
+  period_ms: 100
+  pulse_width_us: 10
+  surelite_dat_mode: 2
+  surelite_fire_to_lasing_us: 180
+  surelite_q_switch_to_lasing_ns: 170
+  target_fire_to_q_switch_delay_ns: 179830
+  programmed_fire_delay_ns: 0
+  programmed_q_switch_delay_ns: 179829.205
+  timing_offsets_source: "calibration/timing_offsets.yaml"
+  timing_offsets_applied:
+    t660_1_trigger_to_pump_fire_zero_residual_ns: 25.301131306136377
+    pump_fire_to_q_switch_interpolated_residual_ns: 0.794687226210168
+    pump_fire_to_q_switch_interpolation_ns: [100000, 1000000]
+routes:
+  t660_2_drive: "T660-2 CHD -> T660-1 TRIG IN"
+  ndyag_fire: "T660-1 CHA -> Nd:YAG Fire command"
+  ndyag_q_switch: "T660-1 CHB -> Nd:YAG Q-switch command"
+operator_prerequisites:
+  - "Surelite DAT Mode 2 enabled with external Q-switch selected."
+  - "Surelite START/STOP and SHUTTER are on before loading the continuous 10 Hz timing workflow."
+  - "Nd:YAG beam path is enclosed or otherwise approved for alignment operation."
+  - "Press Safe Idle before leaving the alignment setup unattended."
+t660:
+  t660_1:
+    stop_first: true
+    trigger_source: "EXT"
+    force_eod: true
+    start: true
+    signals:
+      ndyag_fire:
+        delay: 0
+        width: 10us
+        polarity: negative
+        termination: 50OHM
+        enabled: true
+      ndyag_q_switch:
+        delay: 179829.205ns
+        width: 10us
+        polarity: negative
+        termination: 50OHM
+        enabled: true
+  t660_2:
+    stop_first: true
+    clock:
+      frequency: 10Hz
+      shots: 0
+    trigger_source: "SYN"
+    force_eod: true
+    start: true
+    channels:
+      D:
+        delay: 0
+        width: 10us
+        polarity: positive
+        termination: 50OHM
+        enabled: true

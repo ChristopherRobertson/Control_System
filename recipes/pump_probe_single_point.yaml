@@ -58,10 +58,6 @@ t660:
         enabled: false
       mircat_db9_pin_5_laser_output_on_off:
         enabled: false
-mux_checkpoint_routes:
-  output_a_route: CONFIG_REQUIRED
-  output_b_route: CONFIG_REQUIRED
-  output_ext_route: CONFIG_REQUIRED
 hf2li_preset: pump_probe_acquisition
 pico_capture_settings:
   source: workflow_recipe

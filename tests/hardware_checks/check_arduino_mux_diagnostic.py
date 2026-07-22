@@ -51,35 +51,46 @@ def main() -> int:
     inventory = load_config_inventory(write_files=True)
     blockers: list[str] = []
 
-    command_protocol = inventory.devices.get("arduino_mux", {}).get("command_protocol")
-    required_mux_commands = {
-        "identify",
-        "version",
-        "protocol",
-        "status",
-        "query_active_route",
-        "set_output_a_route",
-        "set_output_b_route",
-        "set_output_ext_route",
-        "safe_idle",
-    }
-    if not isinstance(command_protocol, dict) or not required_mux_commands.issubset(
-        command_protocol.keys()
-    ):
-        blockers.append("hardware_configuration.yaml does not define complete Arduino MUX command_protocol templates")
+    mux_device = inventory.devices.get("arduino_mux", {})
+    mux_disabled = isinstance(mux_device, dict) and mux_device.get("enabled") is False
+    if mux_disabled:
+        blockers.append(
+            "Arduino MUX is disabled/bypassed in hardware_configuration.yaml; "
+            "do not run route diagnostics until the MUX is rewired and requalified"
+        )
 
     output_a_route = args.output_a_route or _configured_route(inventory, "output_a_route")
     output_b_route = args.output_b_route or _configured_route(inventory, "output_b_route")
     output_ext_route = args.output_ext_route or _configured_route(inventory, "output_ext_route")
-    if not output_a_route or not output_b_route or not output_ext_route:
-        blockers.append("diagnostic MUX Output A, Output B, and Output EXT routes are not configured")
+    if not mux_disabled:
+        command_protocol = inventory.devices.get("arduino_mux", {}).get("command_protocol")
+        required_mux_commands = {
+            "identify",
+            "version",
+            "protocol",
+            "status",
+            "query_active_route",
+            "set_output_a_route",
+            "set_output_b_route",
+            "set_output_ext_route",
+            "safe_idle",
+        }
+        if not isinstance(command_protocol, dict) or not required_mux_commands.issubset(
+            command_protocol.keys()
+        ):
+            blockers.append("hardware_configuration.yaml does not define complete Arduino MUX command_protocol templates")
+
+        if not output_a_route or not output_b_route or not output_ext_route:
+            blockers.append("diagnostic MUX Output A, Output B, and Output EXT routes are not configured")
 
     if blockers:
         next_actions = []
         if any("command_protocol" in blocker for blocker in blockers):
             next_actions.append("Add documented Arduino MUX firmware command templates for Output A, Output B, and Output EXT route selection.")
-        if any("diagnostic" in blocker for blocker in blockers):
+        if any("diagnostic MUX Output" in blocker for blocker in blockers):
             next_actions.append("Add documented mux_routes.diagnostic output_a_route, output_b_route, and output_ext_route values.")
+        if any("disabled/bypassed" in blocker for blocker in blockers):
+            next_actions.append("Keep the Arduino MUX physically bypassed and use direct scope/HF2LI wiring.")
         next_actions.append("Re-run only after hardware_configuration.yaml is updated by the operator.")
         manifest = new_manifest(
             operator=args.operator,

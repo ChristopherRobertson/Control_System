@@ -68,6 +68,31 @@ class T660WidgetCommandHandler:
                 "safe_idle_readback.json",
             )
             return self._complete("T660 safe idle applied", command_log, readback=readback)
+        if name == "t660_2.apply_manual_cha":
+            source = str(command.parameters.get("trigger_source", "SYN")).strip().upper()
+            if source != "SYN":
+                return WorkflowResult(
+                    status="blocked",
+                    message="Apply + Start CHA Only requires trigger source SYN. Use Safe Idle to stop CHA.",
+                )
+            frequency = str(command.parameters.get("frequency", "")).strip()
+            delay = str(command.parameters.get("cha_delay", "")).strip()
+            width = str(command.parameters.get("cha_width", "")).strip()
+            if not frequency or not delay or not width:
+                return WorkflowResult(
+                    status="blocked",
+                    message="Synth frequency, CHA delay, and CHA width are required.",
+                )
+            readback = self._apply_recipe(
+                command_log,
+                _manual_cha_recipe(frequency=frequency, delay=delay, width=width),
+                "t6602_manual_cha_readback.json",
+            )
+            return self._complete(
+                f"T660-2 CHA started: SYN, {frequency}, delay {delay}, width {width}; all other outputs are off",
+                command_log,
+                readback=readback,
+            )
         if name == "t660_2.start_cha":
             readback = self._apply_recipe(
                 command_log,
@@ -237,6 +262,19 @@ def _fixed_recipe(*, enable_cha: bool, enable_chb: bool) -> dict[str, Any]:
             },
         },
     }
+
+
+def _manual_cha_recipe(*, frequency: str, delay: str, width: str) -> dict[str, Any]:
+    """Laser-safe manual reference recipe: only T660-2 CHA may be active."""
+
+    recipe = _fixed_recipe(enable_cha=True, enable_chb=False)
+    t660_2 = recipe["t660"]["t660_2"]
+    t660_2["clock"]["frequency"] = frequency
+    t660_2["signals"]["hf2li_extref"]["delay"] = delay
+    t660_2["signals"]["hf2li_extref"]["width"] = width
+    recipe["name"] = "t6602_ui_manual_cha_reference"
+    recipe["description"] = "Manual, CHA-only reference diagnostic; all laser-driving channels are disabled."
+    return recipe
 
 
 def _response(value: Any) -> Any:

@@ -50,10 +50,6 @@ delay_strategy: "Use the fixed list relative to configured T0; after Day 8 calib
 timing_recipe: "recipes/pump_probe_single_point.yaml"
 hf2li_preset: "myoglobin_co_pump_probe"
 picoscope_recipe: "recipes/picoscope_settings_test.yaml"
-mux_checkpoint_routes:
-  output_a_route: "dmb1_c0_hf2li_dio9"
-  output_b_route: "dmb2_c1_hf2li_dio10"
-  output_ext_route: "dmb3_c2_hf2li_dio11"
 
 controls:
   - "dark_baseline_qcl_off_pump_blocked"
@@ -78,10 +74,10 @@ go_no_go_criteria:
     - "MIRcat manufacturer UI is closed and single-client SDK ownership is available."
     - "T660 timing recipe validates with laser-driving outputs disabled unless explicit laser-safety approval is recorded."
     - "HF2LI preset myoglobin_co_pump_probe exists and settings snapshots are written for real acquisitions."
-    - "PicoScope recipe validates independently from Arduino MUX route selection."
+    - "PicoScope recipe validates with Arduino MUX bypassed and direct scope wiring."
   no_go:
     - "Any required real device handshake fails or is unavailable."
-    - "Any route is undefined in hardware_configuration.yaml."
+    - "Any required direct timing or detector route is undefined in hardware_configuration.yaml."
     - "MIRcat emission, pump firing, or detector acquisition lacks operator approval."
     - "Sample preparation, CO handling, path length, or FTIR reference metadata are missing for article spectral-validation claims."
     - "A run would require non-real data, non-real traces, or device-response substitution."

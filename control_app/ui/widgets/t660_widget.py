@@ -70,11 +70,14 @@ try:
     from PySide6.QtCore import QObject, QThread, Signal, Slot
     from PySide6.QtWidgets import (
         QCheckBox,
+        QComboBox,
         QFrame,
+        QFormLayout,
         QGridLayout,
         QGroupBox,
         QHBoxLayout,
         QLabel,
+        QLineEdit,
         QPushButton,
         QTextEdit,
         QVBoxLayout,
@@ -89,11 +92,14 @@ except ImportError:  # pragma: no cover - import-safe in non-UI hardware environ
     Signal = None
     Slot = None
     QCheckBox = object
+    QComboBox = object
     QFrame = object
+    QFormLayout = object
     QGridLayout = object
     QGroupBox = object
     QHBoxLayout = object
     QLabel = object
+    QLineEdit = object
     QPushButton = object
     QTextEdit = object
     QVBoxLayout = object
@@ -143,6 +149,11 @@ class T660Widget(QWidget):
         self.status_labels: dict[str, Any] = {}
         self.control_buttons: list[Any] = []
         self.safety_approval = QCheckBox("Safety Approval")
+        self.manual_source = QComboBox()
+        self.manual_source.addItems(["SYN", "OFF"])
+        self.manual_frequency = QLineEdit("2MHz")
+        self.manual_cha_delay = QLineEdit("0ns")
+        self.manual_cha_width = QLineEdit("150ns")
         self._active_thread: Any = None
         self._active_worker: Any = None
         self.result_log = QTextEdit()
@@ -180,6 +191,7 @@ class T660Widget(QWidget):
         title = QLabel(T660_WIDGET_SPEC.title)
         title.setObjectName("deviceTitle")
         layout.addWidget(title)
+        layout.addWidget(self._build_manual_cha_group())
         layout.addWidget(self._build_fixed_settings_group())
         layout.addWidget(self._build_status_group())
         layout.addWidget(self._build_controls_group())
@@ -197,6 +209,21 @@ class T660Widget(QWidget):
             grid.addWidget(QLabel(rate), row, 1)
             grid.addWidget(QLabel(width), row, 2)
             grid.addWidget(QLabel(delay), row, 3)
+        return group
+
+    def _build_manual_cha_group(self) -> QGroupBox:
+        """Provide a laser-safe CHA-only synthesizer diagnostic control."""
+
+        group = QGroupBox("Manual CHA Reference Test")
+        form = QFormLayout(group)
+        form.addRow("Trigger source", self.manual_source)
+        form.addRow("Synth frequency", self.manual_frequency)
+        form.addRow("CHA delay", self.manual_cha_delay)
+        form.addRow("CHA width", self.manual_cha_width)
+        button = QPushButton("Apply + Start CHA Only")
+        button.clicked.connect(self._dispatch_manual_cha)
+        form.addRow(button)
+        self.control_buttons.append(button)
         return group
 
     def _build_status_group(self) -> QGroupBox:
@@ -261,6 +288,37 @@ class T660Widget(QWidget):
         self._active_worker = worker
         thread.start()
 
+    def _dispatch_manual_cha(self) -> None:
+        """Start only CHA; CHB/CHC/CHD and all T660-1 channels remain off."""
+
+        parameters = {
+            "approved_laser_safety_condition": False,
+            "trigger_source": self.manual_source.currentText(),
+            "frequency": self.manual_frequency.text().strip(),
+            "cha_delay": self.manual_cha_delay.text().strip(),
+            "cha_width": self.manual_cha_width.text().strip(),
+        }
+        command = WorkflowCommand(
+            device_key=T660_WIDGET_SPEC.device_key,
+            command="t660_2.apply_manual_cha",
+            parameters=parameters,
+            safety_approval=False,
+        )
+        self._show_result(WorkflowResult(status="accepted", message="Applying manual CHA-only reference test..."))
+        self._set_controls_enabled(False)
+        thread = QThread(self)
+        worker = _CommandWorker(self.command_handler, command)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._handle_worker_result)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._clear_active_worker)
+        self._active_thread = thread
+        self._active_worker = worker
+        thread.start()
+
     def _handle_worker_result(self, result: WorkflowResult) -> None:
         self._show_result(result)
         state = result.data.get("state") if isinstance(result.data, dict) else None
@@ -276,6 +334,10 @@ class T660Widget(QWidget):
         for button in self.control_buttons:
             button.setEnabled(enabled)
         self.safety_approval.setEnabled(enabled)
+        self.manual_source.setEnabled(enabled)
+        self.manual_frequency.setEnabled(enabled)
+        self.manual_cha_delay.setEnabled(enabled)
+        self.manual_cha_width.setEnabled(enabled)
 
     def _show_result(self, result: WorkflowResult) -> None:
         self.result_log.append(f"{result.status.upper()}: {result.message}")

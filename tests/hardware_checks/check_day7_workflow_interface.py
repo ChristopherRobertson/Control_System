@@ -228,7 +228,7 @@ def _hardware_blocker(confirmed: bool) -> str:
     return (
         "Real hardware execution was not enabled for this run. Re-run from native "
         "Windows Python with --confirm-real-hardware only after the T660 units, "
-        "MIRcat single-client SDK session, PicoScope, Arduino MUX, HF2LI LabOne "
+        "MIRcat single-client SDK session, PicoScope, HF2LI LabOne "
         "server, detector inputs, and laser-safety conditions are confirmed."
     )
 
@@ -237,7 +237,7 @@ def _next_actions(confirmed: bool) -> list[str]:
     actions = [
         "Keep the recorded BLOCKED status; do not create detector data or traces for Day 7 validation.",
         "Close the manufacturer MIRcat UI before any approved MIRcat hardware run because the controller is single-client.",
-        "Verify T660 COM ports, Arduino MUX COM port, PicoScope USB/driver visibility, and HF2LI LabOne dev18500 before hardware execution.",
+        "Verify T660 COM ports, direct scope/HF2LI wiring, PicoScope USB/driver visibility, and HF2LI LabOne dev18500 before hardware execution.",
         "Confirm sample readiness, pump fluence measurement plan, beam blocks, detector protection, and laser-safety approval before arm/acquire commands.",
     ]
     if not confirmed:

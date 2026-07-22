@@ -14,7 +14,7 @@ from ctypes import (
 )
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, Callable, TextIO
 import csv
 import os
 import sys
@@ -230,7 +230,12 @@ class PicoScopeService:
             "max_samples": int(max_samples.value),
         }
 
-    def capture_block(self, raw_csv_path: str | Path) -> dict[str, Any]:
+    def capture_block(
+        self,
+        raw_csv_path: str | Path,
+        *,
+        after_arm: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
         """Capture a real block and save raw CH A/B ADC samples to CSV."""
 
         self._require_open()
@@ -272,6 +277,9 @@ class PicoScopeService:
             None,
         )
         self._check(status, "ps5000aRunBlock")
+        if after_arm is not None:
+            self._log("PicoScope armed; invoking one-shot trigger callback")
+            after_arm()
 
         ready = c_int16(0)
         deadline = time.time() + float(self.capture_settings.get("timeout_s", 10.0))
@@ -317,7 +325,7 @@ class PicoScopeService:
     def stop(self) -> None:
         """Stop the PicoScope if it is open."""
 
-        if self._driver is not None:
+        if self._driver is not None and self._is_open:
             status = self._driver.ps5000aStop(self._handle)
             self._check(status, "ps5000aStop")
 

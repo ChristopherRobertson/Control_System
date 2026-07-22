@@ -26,10 +26,12 @@ The confirmed T660-1 usage is:
 | --- | --- | --- |
 | `A` | Nd:YAG Fire input | Surelite fire TTL |
 | `B` | Nd:YAG Q-switch input | Surelite Q-switch TTL |
+| `C` | MIRcat DB9 pin 4 | Process Trigger control |
+| `D` | MIRcat DB9 pin 5 | Laser Output On/Off control |
 
 These T660 TTL timing lines are direct point-to-point routes. They are not routed through the Arduino MUX. In `hardware_configuration.yaml`, this route truth belongs under `timing_routes`, not under the PicoScope device identity.
 
-The Arduino MUX and PicoScope are independent devices. The Arduino MUX owns `arduino_mux_topology`, `arduino_mux_control`, and `mux_routes`; each MUX route is assigned to `mux_output` (`output_a`, `output_b`, or `output_ext`). The PicoScope owns only Pico identity, driver/API paths, supported capture capabilities, editable capture recipes, and `picoscope_connectors` metadata. MUX diagnostics must not import or open the PicoScope, and PicoScope settings/capture checks must not require MUX route selection.
+The Arduino MUX is disabled and bypassed until the MUX inputs are rewired and requalified. The old MUX route table is intentionally empty because HF2LI `DIO16-DIO22` inputs do not mirror to HF2LI `DIO9-DIO15` outputs. The PicoScope owns only Pico identity, driver/API paths, supported capture capabilities, editable capture recipes, and `picoscope_connectors` metadata. PicoScope settings/capture checks must use direct wiring and must not require MUX route selection.
 
 The PicoScope device configuration contains Pico identity, driver/API paths, supported capture capabilities, and recipe references only. Scenario-specific capture settings are stored in editable `recipes/picoscope_*.yaml` files and recorded in run manifests with the hardware configuration hash.
 

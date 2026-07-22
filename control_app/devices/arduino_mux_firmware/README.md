@@ -1,5 +1,8 @@
 # Arduino MUX Firmware
 
+Status: archived/inactive. The Arduino MUX is disabled and bypassed in the
+active control system until the MUX inputs are rewired and requalified.
+
 Firmware for the Arduino UNO R4 Minima that controls the IR spectroscope MUX boards documented in `docs/Wiring Table.xlsx`.
 
 ## Hardware Target

@@ -104,10 +104,16 @@ def main() -> int:
         manager = TimingRecipeManager(inventory, command_log=command_log)
         try:
             safe_before_path = run_dir / "safe_idle_before_chb_verification_readback.json"
+            print(
+                "Applying safe idle before CHB verification. This touches configured T660 units.",
+                flush=True,
+            )
             manager.apply_recipe(REPO_ROOT / "recipes" / "safe_idle.yaml", output_path=safe_before_path)
             readback_paths.append(str(safe_before_path))
+            print(f"Safe idle readback written to {safe_before_path}", flush=True)
 
             start_path = run_dir / "t6602_chb_2mhz_150ns_readback.json"
+            print("Starting T660-2 CHB only at 2 MHz / 150 ns...", flush=True)
             readback = manager.apply_recipe(SIGNAL_RECIPE, output_path=start_path)
             readback_paths.append(str(start_path))
             write_json(run_dir / "signal_verification_request.json", SIGNAL_RECIPE)
@@ -127,8 +133,10 @@ def main() -> int:
         finally:
             try:
                 safe_after_path = run_dir / "safe_idle_after_chb_verification_readback.json"
+                print("Applying safe idle after CHB verification...", flush=True)
                 manager.apply_recipe(REPO_ROOT / "recipes" / "safe_idle.yaml", output_path=safe_after_path)
                 readback_paths.append(str(safe_after_path))
+                print(f"Safe idle cleanup readback written to {safe_after_path}", flush=True)
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"safe_idle cleanup failed: {exc}")
 
@@ -178,7 +186,7 @@ def wait_for_stop(args: argparse.Namespace) -> str:
             time.sleep(min(1.0, max(0.0, deadline - time.time())))
         return "duration_elapsed"
 
-    print("Press Enter to stop CHB and apply safe idle.", flush=True)
+    print("CHB is intentionally held ON. Press Enter to stop CHB and apply safe idle.", flush=True)
     input()
     return "operator_enter"
 

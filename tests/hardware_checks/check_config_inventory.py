@@ -70,6 +70,11 @@ def _validate_independent_mux_and_picoscope(config) -> None:
     mux_topology = config.get("arduino_mux_topology")
     if not isinstance(mux_topology, dict):
         raise HardwareConfigError("arduino_mux_topology section is required")
+    mux_disabled = _arduino_mux_disabled(config)
+    if mux_disabled and mux_topology.get("enabled") is not False:
+        raise HardwareConfigError(
+            "arduino_mux_topology.enabled must be false while devices.arduino_mux is disabled"
+        )
     if mux_topology.get("controller_device") != "arduino_mux":
         raise HardwareConfigError("arduino_mux_topology.controller_device must be arduino_mux")
     if "observed_by_device" in mux_topology or "inputs_section" in mux_topology:
@@ -93,6 +98,12 @@ def _validate_independent_mux_and_picoscope(config) -> None:
                 )
 
     mux_routes = config.get("mux_routes")
+    if mux_disabled:
+        if mux_routes not in ({}, None):
+            raise HardwareConfigError(
+                "mux_routes must be empty while Arduino MUX is disabled/bypassed"
+            )
+        return
     if not isinstance(mux_routes, dict):
         raise HardwareConfigError("mux_routes section is required")
     allowed_outputs = set((mux_topology.get("outputs") or {}).keys())
@@ -119,6 +130,19 @@ def _validate_independent_mux_and_picoscope(config) -> None:
                 f"mux_routes.{route_name}.mux_output {mux_output!r} is not one of "
                 f"{sorted(allowed_outputs)!r}"
             )
+
+
+def _arduino_mux_disabled(config) -> bool:
+    devices = config.get("devices") or {}
+    mux_device = devices.get("arduino_mux")
+    mux_topology = config.get("arduino_mux_topology")
+    return (
+        isinstance(mux_device, dict)
+        and mux_device.get("enabled") is False
+    ) or (
+        isinstance(mux_topology, dict)
+        and mux_topology.get("enabled") is False
+    )
 
 
 if __name__ == "__main__":

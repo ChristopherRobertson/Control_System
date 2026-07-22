@@ -49,16 +49,21 @@ class ArduinoMuxDiagnostic:
         calibration_dir = Path("calibration")
         calibration_dir.mkdir(parents=True, exist_ok=True)
 
+        device_config = self.inventory.devices.get("arduino_mux")
+        if not isinstance(device_config, dict):
+            raise ArduinoMuxDiagnosticError("arduino_mux missing from hardware configuration")
+        if device_config.get("enabled") is False:
+            raise ArduinoMuxDiagnosticError(
+                "Arduino MUX is disabled/bypassed in hardware_configuration.yaml; "
+                "do not run route diagnostics until the MUX is rewired and requalified"
+            )
+
         requested_routes = {
             "output_a": output_a_route,
             "output_b": output_b_route,
             "output_ext": output_ext_route,
         }
         self._validate_routes(requested_routes)
-
-        device_config = self.inventory.devices.get("arduino_mux")
-        if not isinstance(device_config, dict):
-            raise ArduinoMuxDiagnosticError("arduino_mux missing from hardware configuration")
 
         mux = ArduinoMuxService.from_config(config_path=self.config_path, command_log=self.command_log)
         route_responses: dict[str, str] = {}

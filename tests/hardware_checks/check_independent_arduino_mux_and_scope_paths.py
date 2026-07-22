@@ -125,6 +125,8 @@ def _wiring_map_failures() -> list[str]:
     mux_boards = data.get("mux_boards")
     if not isinstance(mux_boards, dict):
         return ["wiring_map.yaml does not define mux_boards"]
+    mux_subsystem = data.get("mux_subsystem") if isinstance(data.get("mux_subsystem"), dict) else {}
+    mux_disabled = mux_subsystem.get("active") is False
 
     expected_outputs = {
         "dmb1": "output_a",
@@ -139,6 +141,8 @@ def _wiring_map_failures() -> list[str]:
         if not isinstance(board_config, dict):
             failures.append(f"wiring_map.yaml mux_boards.{board} is missing")
             continue
+        if mux_disabled and board_config.get("active") is not False:
+            failures.append(f"wiring_map.yaml mux_boards.{board}.active must be false while MUX is bypassed")
         role = str(board_config.get("role") or "")
         if "picoscope" in role.lower():
             failures.append(f"wiring_map.yaml mux_boards.{board}.role still assigns MUX ownership to PicoScope")
@@ -149,6 +153,16 @@ def _wiring_map_failures() -> list[str]:
         if "output" in board_config:
             failures.append(
                 f"wiring_map.yaml mux_boards.{board} must use mux_output, not legacy output"
+            )
+    if mux_disabled:
+        mux_control = data.get("arduino_mux_control")
+        if not isinstance(mux_control, dict) or mux_control.get("active") is not False:
+            failures.append("wiring_map.yaml arduino_mux_control.active must be false while MUX is bypassed")
+        breakouts = data.get("breakouts") if isinstance(data.get("breakouts"), dict) else {}
+        hf2li_breakout = breakouts.get("hf2li_dio_breakout") if isinstance(breakouts.get("hf2li_dio_breakout"), dict) else {}
+        if "outputs_to_muxes" in hf2li_breakout:
+            failures.append(
+                "wiring_map.yaml hf2li_dio_breakout must not expose active outputs_to_muxes while MUX is bypassed"
             )
     return failures
 

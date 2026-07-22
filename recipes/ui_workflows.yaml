@@ -1,0 +1,43 @@
+schema_version: "1.0"
+workflows:
+  mircat_detector_alignment:
+    label: "MIRcat Detector Alignment"
+    description: "Continuous MIRcat detector alignment with the Custom UI owning the single-client MIRcat SDK session."
+    device_key: mircat
+    command: mircat.start_detector_alignment
+    stop_command: mircat.stop_detector_alignment
+    timing_recipe: recipes/mircat_detector_alignment_2mhz.yaml
+    safety_approval_required: true
+    fixed_settings:
+      laser_pulse_mode: "controlled by Use T660 Timing: external when enabled, internal when disabled"
+      process_trigger_mode: internal
+      hf2li_preset: "controlled by Use T660 Timing"
+      mircat_gui_must_be_closed: true
+    parameters:
+      wavenumber_cm1: {label: Wavenumber, type: float, default: 1850.0, minimum: 1638.8, maximum: 2077.3, step: 0.1, units: cm^-1}
+      qcl: {label: QCL, type: int, default: 1, minimum: 1, maximum: 4, step: 1}
+      pulse_rate_hz: {label: Pulse Repetition Rate, type: float, default: 2000000.0, minimum: 1.0, maximum: 10000000.0, step: 1000.0, units: Hz}
+      pulse_width_ns: {label: MIRcat Pulse Width, type: float, default: 150.0, minimum: 1.0, maximum: 10000.0, step: 1.0, units: ns}
+      current_ma: {label: QCL Current, type: float, default: 1000.0, minimum: 1.0, step: 10.0, units: mA}
+      use_t660_timing: {label: Use T660 Timing, type: bool, default: true}
+      tec_timeout_s: {label: TEC Timeout, type: float, default: 120.0, minimum: 1.0, maximum: 600.0, step: 1.0, units: s}
+      tune_timeout_s: {label: Tune Timeout, type: float, default: 120.0, minimum: 1.0, maximum: 600.0, step: 1.0, units: s}
+      poll_interval_s: {label: Status Poll Interval, type: float, default: 0.5, minimum: 0.1, maximum: 10.0, step: 0.1, units: s}
+
+  ndyag_alignment_10hz:
+    label: "Nd:YAG 10 Hz Alignment"
+    description: "Surelite DAT Mode 2 alignment using the two T660 delay generators."
+    device_key: ndyag
+    command: ndyag.load_alignment_10hz
+    stop_command: ndyag.safe_idle
+    timing_recipe: recipes/ndyag_alignment_10hz.yaml
+    safety_approval_required: true
+    fixed_settings:
+      surelite_dat_mode: 2
+      repetition_rate_hz: 10
+      t660_2_trigger_source: SYN
+      t660_1_trigger_source: EXT
+    parameters:
+      q_switch_delay_us: {label: Q-switch Delay, type: float, default: 250.0, minimum: 100.0, maximum: 300.0, step: 1.0, units: us}
+      continuous_mode: {label: Continuous Mode, type: bool, default: true}
+      shot_count: {label: Shot Count, type: int, default: 0, minimum: 0, maximum: 1000000, step: 1}

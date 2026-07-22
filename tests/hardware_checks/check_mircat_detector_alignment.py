@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Run MIRcat/T660 detector alignment with MIRcat configured before T660 start.
+"""Run MIRcat detector alignment with optional T660 external timing.
 
 Usage:
     python tests/hardware_checks/check_mircat_detector_alignment.py --operator "Name" --confirm-real-hardware --approved-laser-safety-condition
 
-The workflow applies safe idle first, initializes/configures/arms/tunes the
-MIRcat, opens the emission gate, then starts the T660-2 2 MHz / 150 ns timing
-train. By default it holds the process open until Enter is pressed, then applies
-safe idle and closes MIRcat emission.
+By default this hardware-check script preserves the historical T660 external
+timing path. Pass --use-internal-mircat-timing to use MIRcat internal pulsing
+without starting T660-2. The UI Start Alignment button defaults to the internal
+MIRcat mode.
 """
 
 from __future__ import annotations
@@ -24,6 +24,9 @@ from control_app.workflows.mircat_detector_alignment import (
     DEFAULT_PULSE_WIDTH_NS,
     DEFAULT_QCL,
     DEFAULT_WAVENUMBER_CM1,
+    DEFAULT_CURRENT_MA,
+    DEFAULT_HF2LI_PRESET,
+    EXTERNAL_T660_HF2LI_PRESET,
     ALIGNMENT_TIMING_RECIPE,
     SAFE_IDLE_RECIPE,
     MircatDetectorAlignmentRequest,
@@ -48,9 +51,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--current-ma",
         type=float,
-        default=None,
-        help="Optional MIRcat current override. Omit to preserve the existing QCL current.",
+        default=DEFAULT_CURRENT_MA,
+        help="MIRcat QCL current in mA. Defaults to the detector-alignment recipe value.",
     )
+    parser.add_argument("--hf2li-preset", default=None)
     parser.add_argument("--tec-timeout-s", type=float, default=120.0)
     parser.add_argument("--tune-timeout-s", type=float, default=120.0)
     parser.add_argument("--poll-interval-s", type=float, default=0.5)
@@ -64,6 +68,11 @@ def parse_args() -> argparse.Namespace:
         "--stop-only",
         action="store_true",
         help="Apply T660 safe idle and close/disarm/deinitialize MIRcat without starting alignment.",
+    )
+    parser.add_argument(
+        "--use-internal-mircat-timing",
+        action="store_true",
+        help="Do not start T660 timing; use MIRcat internal pulse timing for alignment.",
     )
     return parser.parse_args()
 
@@ -102,10 +111,19 @@ def main() -> int:
                         pulse_rate_hz=args.pulse_rate_hz,
                         pulse_width_ns=args.pulse_width_ns,
                         current_ma=args.current_ma,
+                        hf2li_preset=(
+                            args.hf2li_preset
+                            or (
+                                DEFAULT_HF2LI_PRESET
+                                if args.use_internal_mircat_timing
+                                else EXTERNAL_T660_HF2LI_PRESET
+                            )
+                        ),
                         tec_timeout_s=args.tec_timeout_s,
                         tune_timeout_s=args.tune_timeout_s,
                         poll_interval_s=args.poll_interval_s,
                         approved_laser_safety_condition=args.approved_laser_safety_condition,
+                        use_t660_timing=not args.use_internal_mircat_timing,
                     )
                     workflow.start_alignment(
                         request=request,
@@ -138,6 +156,7 @@ def main() -> int:
         t660_recipes=[SAFE_IDLE_RECIPE] if args.stop_only else [SAFE_IDLE_RECIPE, ALIGNMENT_TIMING_RECIPE],
         mircat_setpoint=workflow.mircat_setpoint,
         mircat_actual_wavelength=workflow.mircat_actual_wavelength,
+        hf2li_settings_snapshot=workflow.hf2li_settings_snapshot,
         command_log_paths=[str(command_log_path)],
         device_readback_paths=workflow.device_readback_paths,
         error_state={"has_error": blocked, "errors": errors},

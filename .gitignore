@@ -20,6 +20,7 @@ archive/
 runs/
 logs/
 calibration/
+**/raw_pico_traces/
 
 #MIRcat SDK files
 /docs/MIRcat/SDK/docs/*

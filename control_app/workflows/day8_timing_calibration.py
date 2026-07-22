@@ -1,4 +1,9 @@
-"""Day 8 electrical timing calibration workflow for Myoglobin-CO routes."""
+"""Legacy Day 8 electrical acquisition helpers and trace analysis.
+
+The complete operator-guided Step 0-9 procedure is implemented in
+``control_app.workflows.timing_calibration_procedure``.  This module remains the
+shared low-level analyzer and preserves compatibility with earlier Day 8 runs.
+"""
 
 from __future__ import annotations
 
@@ -189,16 +194,6 @@ class Day8TimingCalibration:
 
         selected_pairs = pairs or list(CRITICAL_PAIRS)
         picoscope_connectors = self.hardware_config.get("picoscope_connectors") or {}
-        mux_diagnostic = self.inventory.mux_routes.get("diagnostic") or {}
-        mux_route_details = {
-            name: self.inventory.mux_routes.get(route)
-            for name, route in {
-                "output_a_route": mux_diagnostic.get("output_a_route"),
-                "output_b_route": mux_diagnostic.get("output_b_route"),
-                "output_ext_route": mux_diagnostic.get("output_ext_route"),
-            }.items()
-            if route
-        }
         return {
             "config_hash": self.inventory.config_hash,
             "config_path": self.inventory.config_path,
@@ -218,12 +213,11 @@ class Day8TimingCalibration:
                 ),
             },
             "direct_ttl_routes": self.inventory.timing_routes.get("direct_ttl_destinations", {}),
-            "mux_routes_used_for_day8_diagnostics": {
-                "diagnostic_defaults": mux_diagnostic,
-                "route_details": mux_route_details,
+            "arduino_mux_status": {
+                "active": False,
                 "note": (
-                    "Arduino MUX diagnostics remain route-readback evidence only; T660 TTL timing "
-                    "signals are captured through direct PicoScope timing connections."
+                    "Arduino MUX is bypassed; Day 8 timing signals are captured through "
+                    "direct PicoScope/HF2LI wiring only."
                 ),
             },
             "critical_pairs": [self._pair_identity(pair) for pair in selected_pairs],

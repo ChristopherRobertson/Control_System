@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, TextIO
+from typing import Any, Callable, Iterable, TextIO
 import csv
 import json
 import math
@@ -181,6 +181,7 @@ class HF2LIService:
 
         self.configure_signal_inputs(preset.settings.get("signal_inputs") or {})
         self.configure_pll(preset.settings.get("pll") or {})
+        self.configure_oscillators(preset.settings.get("oscillators") or [])
         self.configure_demodulators(preset.settings.get("demodulators") or [])
         self.sync()
         applied = {
@@ -238,6 +239,18 @@ class HF2LIService:
                 self._set_node(method, f"{base}/{node}", value)
         if pll.get("enable") is not None:
             self._set_node("setInt", f"{base}/enable", _bool_int(pll.get("enable")))
+
+    def configure_oscillators(self, oscillators: Iterable[dict[str, Any]]) -> None:
+        """Configure HF2LI internal oscillator frequencies used by demodulators."""
+
+        for settings in oscillators:
+            if not isinstance(settings, dict):
+                raise HF2LIConfigurationError("each oscillator preset must be a mapping")
+            index = int(settings["index"])
+            base = f"/{self.device_id}/oscs/{index}"
+            frequency_hz = settings.get("frequency_hz")
+            if frequency_hz is not None:
+                self._set_node("setDouble", f"{base}/freq", frequency_hz)
 
     def configure_demodulators(self, demodulators: Iterable[dict[str, Any]]) -> None:
         """Configure HF2LI demodulators used for detector CH1/CH2."""
@@ -424,6 +437,145 @@ class HF2LIService:
         finally:
             self.stop_acquisition()
 
+    def acquire_digital_triggered_record(
+        self,
+        *,
+        duration_s: float,
+        demodulators: Iterable[int],
+        trigger_demodulator: int,
+        bits: int,
+        bit_mask: int,
+        fields: Iterable[str] = DEFAULT_SUBSCRIBE_FIELDS,
+    ) -> dict[str, Any]:
+        """Capture one DAQ-module shot on a positive edge of a DIO condition.
+
+        A demodulator ``sample.dio`` node carries the global HF2LI DIO word;
+        ``trigger_demodulator`` therefore identifies the spare demodulator used
+        as the timing monitor, not a detector channel.
+        """
+        server = self._require_server()
+        factory = getattr(server, "dataAcquisitionModule", None)
+        if factory is None:
+            raise HF2LIError("LabOne dataAcquisitionModule is unavailable")
+        module = factory()
+        paths = [f"/{self.device_id}/demods/{int(item)}/sample" for item in demodulators]
+        try:
+            module.set("device", self.device_id)
+            module.set("type", 2)  # LabOne digital trigger
+            module.set("triggernode", f"/{self.device_id}/demods/{int(trigger_demodulator)}/sample.dio")
+            module.set("edge", 1)  # positive condition edge
+            module.set("bits", int(bits))
+            module.set("bitmask", int(bit_mask))
+            module.set("count", 1)
+            module.set("endless", 0)  # one Count=1 shot must terminate after its duration
+            module.set("duration", float(duration_s))
+            module.set("delay", 0.0)
+            for path in paths:
+                module.subscribe(path)
+            module.execute()
+            deadline = datetime.now(UTC).timestamp() + float(duration_s) + 15.0
+            while not bool(module.finished()):
+                if datetime.now(UTC).timestamp() > deadline:
+                    raise HF2LIError(
+                        "HF2LI DAQ did not complete after the digital trigger "
+                        f"(Demod {trigger_demodulator} DIO, bits={bits}, bit_mask={bit_mask}). "
+                        "The configured DIO bit did not show the expected low-to-high transition."
+                    )
+                import time
+                time.sleep(0.01)
+            data = module.read(True)
+            return {
+                "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+                "duration_s": float(duration_s),
+                "fields": list(fields),
+                "data": data,
+                "digital_trigger": {"demodulator": int(trigger_demodulator), "bits": int(bits), "bit_mask": int(bit_mask)},
+            }
+        finally:
+            try:
+                module.finish()
+                module.clear()
+            except Exception:
+                pass
+
+    def acquire_continuous_daq_record(
+        self,
+        *,
+        duration_s: float,
+        demodulators: Iterable[int],
+        fields: Iterable[str] = DEFAULT_SUBSCRIBE_FIELDS,
+        grid_cols: int | None = None,
+        after_execute: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Record one continuous interval using LabOne's DAQ Module."""
+        server = self._require_server()
+        factory = getattr(server, "dataAcquisitionModule", None)
+        if factory is None:
+            raise HF2LIError("LabOne dataAcquisitionModule is unavailable")
+        module = factory()
+        # DAQ modules require concrete streaming nodes.  Unlike ``poll()``,
+        # subscribing to the aggregate ``.../sample`` node can return no data
+        # on an HF2LI even though the demodulators are visibly producing data.
+        # X/Y are used to derive R in the export step; DIO is needed only for
+        # the spare timing demodulator, but including it on every requested
+        # demodulator is harmless and makes the record self-describing.
+        paths: list[str] = []
+        requested_field_list = [str(field).lower() for field in fields]
+        requested_fields = set(requested_field_list)
+        for item in demodulators:
+            base = f"/{self.device_id}/demods/{int(item)}/sample"
+            if "r" in requested_fields or "x" in requested_fields:
+                paths.append(f"{base}.x")
+            if "r" in requested_fields or "y" in requested_fields:
+                paths.append(f"{base}.y")
+            if "dio" in requested_fields:
+                paths.append(f"{base}.dio")
+        try:
+            module.set("device", self.device_id)
+            module.set("type", 0)  # LabOne DAQ continuous acquisition
+            module.set("count", 1)
+            module.set("endless", 0)
+            module.set("duration", float(duration_s))
+            if grid_cols is not None:
+                if int(grid_cols) < 2:
+                    raise HF2LIError("HF2LI DAQ grid_cols must be at least 2")
+                # Exact mode preserves the device timestamps and makes the
+                # grid long enough to contain the complete requested sweep.
+                module.set("grid/mode", 4)
+                module.set("grid/cols", int(grid_cols))
+            for path in paths:
+                module.subscribe(path)
+            module.execute()
+            if after_execute is not None:
+                after_execute()
+            # In continuous mode LabOne produces back-to-back bursts. The
+            # caller's requested interval is therefore the stop condition.
+            import time
+            time.sleep(float(duration_s))
+            # Read while the module is still active. Some HF2/LabOne builds
+            # discard a continuous burst when ``finish()`` is called first.
+            data = module.read(True)
+            module.finish()
+            # Exact grids are delivered by some HF2/LabOne versions only as
+            # the module is finished. Preserve both the live data already
+            # read and that final buffered grid.
+            data = _merge_module_data(data, module.read(True))
+            return {
+                "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+                "duration_s": float(duration_s),
+                "fields": requested_field_list,
+                "data": data,
+                "daq_mode": "continuous",
+                "subscribed_paths": paths,
+                "grid_cols": grid_cols,
+            }
+        finally:
+            try:
+                module.finish()
+                module.clear()
+            except Exception:
+                pass
+
     def save_record(
         self,
         record: dict[str, Any],
@@ -489,6 +641,26 @@ class HF2LIService:
         if sync is not None:
             sync()
 
+    def get_clockbase(self) -> int:
+        """Return the HF2LI device-timestamp clock rate in ticks per second."""
+
+        server = self._require_server()
+        try:
+            return int(server.getInt(f"/{self.device_id}/clockbase"))
+        except Exception as exc:
+            raise HF2LIError(f"Unable to read HF2LI timestamp clockbase: {exc}") from exc
+
+    def get_oscillator_frequency(self, index: int) -> float:
+        """Read the actual frequency of an HF2LI oscillator/reference."""
+
+        server = self._require_server()
+        try:
+            return float(server.getDouble(f"/{self.device_id}/oscs/{int(index)}/freq"))
+        except Exception as exc:
+            raise HF2LIError(
+                f"Unable to read HF2LI oscillator {int(index) + 1} frequency: {exc}"
+            ) from exc
+
     def close(self) -> None:
         """Close the LabOne session if the API exposes disconnect."""
 
@@ -540,6 +712,7 @@ class HF2LIService:
         input_indices = {0, 1}
         demod_indices = {0, 3}
         pll_indices = {0}
+        oscillator_indices = {0}
         if preset is not None:
             for settings in (preset.settings.get("signal_inputs") or {}).values():
                 if isinstance(settings, dict):
@@ -547,9 +720,13 @@ class HF2LIService:
             for settings in preset.settings.get("demodulators") or []:
                 if isinstance(settings, dict) and "index" in settings:
                     demod_indices.add(int(settings["index"]))
+                    oscillator_indices.add(int(settings.get("oscselect", 0)))
             pll = preset.settings.get("pll") or {}
             if isinstance(pll, dict):
                 pll_indices.add(int(pll.get("index", 0)))
+            for settings in preset.settings.get("oscillators") or []:
+                if isinstance(settings, dict) and "index" in settings:
+                    oscillator_indices.add(int(settings["index"]))
         for index in sorted(input_indices):
             base = f"/{device}/sigins/{index}"
             yield f"{base}/ac", "int"
@@ -564,6 +741,9 @@ class HF2LIService:
             yield f"{base}/harmonic", "int"
             yield f"{base}/order", "int"
             yield f"{base}/adcthreshold", "int"
+        for index in sorted(oscillator_indices):
+            base = f"/{device}/oscs/{index}"
+            yield f"{base}/freq", "double"
         for index in sorted(demod_indices):
             base = f"/{device}/demods/{index}"
             yield f"{base}/enable", "int"
@@ -628,8 +808,11 @@ class HF2LIService:
         if self.command_log is None:
             return
         timestamp = datetime.now(UTC).isoformat(timespec="seconds")
-        self.command_log.write(f"{timestamp} hf2li {message}\n")
-        self.command_log.flush()
+        try:
+            self.command_log.write(f"{timestamp} hf2li {message}\n")
+            self.command_log.flush()
+        except ValueError:
+            self.command_log = None
 
 
 def _add_labone_package_paths(device_config: dict[str, Any]) -> None:
@@ -647,6 +830,23 @@ def _add_labone_package_paths(device_config: dict[str, Any]) -> None:
         path = str(Path(str(raw_path)).expanduser())
         if path not in sys.path:
             sys.path.insert(0, path)
+
+
+def _merge_module_data(first: Any, second: Any) -> dict[str, Any]:
+    """Combine successive DAQ Module reads without losing a final burst."""
+
+    merged: dict[str, Any] = {}
+    for source in (first, second):
+        if not isinstance(source, dict):
+            continue
+        for path, payload in source.items():
+            if path not in merged:
+                merged[path] = payload
+                continue
+            prior = merged[path] if isinstance(merged[path], list) else [merged[path]]
+            current = payload if isinstance(payload, list) else [payload]
+            merged[path] = prior + current
+    return merged
 
 
 def _extract_device_ids(value: Any) -> set[str]:

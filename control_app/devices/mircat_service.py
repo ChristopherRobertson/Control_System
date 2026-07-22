@@ -601,11 +601,73 @@ class MircatService:
         )
         return self.get_wavelength_trigger_params()
 
+    def get_wavelength_trigger_pulse_width_us(self) -> int:
+        """Return the DB9 wavelength-trigger output pulse width in microseconds."""
+
+        width_us = c_uint16()
+        self._check(
+            self._call("MIRcatSDK_GetWlTrigPulseWidth", byref(width_us)),
+            "MIRcatSDK_GetWlTrigPulseWidth",
+        )
+        return int(width_us.value)
+
+    def set_wavelength_trigger_pulse_width_us(self, width_us: int) -> int:
+        """Set and verify the DB9 wavelength-trigger output pulse width."""
+
+        width = int(width_us)
+        if width <= 0 or width > 65535:
+            raise ValueError("Wavelength-trigger pulse width must be from 1 through 65535 us")
+        self._check(
+            self._call("MIRcatSDK_SetWlTrigPulseWidth", c_uint16(width)),
+            "MIRcatSDK_SetWlTrigPulseWidth",
+        )
+        return self.get_wavelength_trigger_pulse_width_us()
+
     def set_external_trigger_params(self, *, wavenumber_cm1: float) -> dict[str, Any]:
         """Configure one optical pulse per external TTL rising edge."""
 
         return self.set_wavelength_trigger_params(
             pulse_mode=PULSE_MODE_EXTERNAL_TRIGGER,
+            process_trigger_mode=PROC_TRIG_MODE_INTERNAL,
+            start=float(wavenumber_cm1),
+            stop=float(wavenumber_cm1),
+            interval=0.0,
+            units=UNITS_CM1,
+            dwell_us=0,
+            after_off_us=0,
+        )
+
+    def set_external_sweep_trigger_params(
+        self,
+        *,
+        start_cm1: float,
+        stop_cm1: float,
+        wavelength_trigger_interval_cm1: float,
+        external_process_trigger: bool = False,
+    ) -> dict[str, Any]:
+        """Configure external laser pulses and sparse sweep wavelength markers."""
+
+        interval = float(wavelength_trigger_interval_cm1)
+        if interval <= 0:
+            raise ValueError("wavelength_trigger_interval_cm1 must be positive")
+        return self.set_wavelength_trigger_params(
+            pulse_mode=PULSE_MODE_EXTERNAL_TRIGGER,
+            process_trigger_mode=(
+                PROC_TRIG_MODE_EXTERNAL if external_process_trigger else PROC_TRIG_MODE_INTERNAL
+            ),
+            start=float(start_cm1),
+            stop=float(stop_cm1),
+            interval=interval,
+            units=UNITS_CM1,
+            dwell_us=0,
+            after_off_us=0,
+        )
+
+    def set_internal_trigger_params(self, *, wavenumber_cm1: float) -> dict[str, Any]:
+        """Configure MIRcat internal pulse timing at the current QCL pulse parameters."""
+
+        return self.set_wavelength_trigger_params(
+            pulse_mode=PULSE_MODE_INTERNAL,
             process_trigger_mode=PROC_TRIG_MODE_INTERNAL,
             start=float(wavenumber_cm1),
             stop=float(wavenumber_cm1),
@@ -658,10 +720,10 @@ class MircatService:
             self._raise(status, "MIRcatSDK_TurnEmissionOff")
 
     def stop_scan_if_needed(self) -> int:
-        """Stop any scan in progress, allowing no-scan as already safe."""
+        """Stop any scan in progress, allowing already-safe SDK states."""
 
         status = self._call("MIRcatSDK_StopScanInProgress")
-        if status not in {RET_SUCCESS, RET_NO_SCAN_INPROGRESS}:
+        if status not in {RET_SUCCESS, RET_NO_SCAN_INPROGRESS, RET_NOT_INITIALIZED}:
             self._raise(status, "MIRcatSDK_StopScanInProgress")
         return status
 
@@ -893,6 +955,10 @@ class MircatService:
             c_uint32,
         ]
         sdk.MIRcatSDK_SetWlTrigParams.restype = c_uint32
+        sdk.MIRcatSDK_GetWlTrigPulseWidth.argtypes = [POINTER(c_uint16)]
+        sdk.MIRcatSDK_GetWlTrigPulseWidth.restype = c_uint32
+        sdk.MIRcatSDK_SetWlTrigPulseWidth.argtypes = [c_uint16]
+        sdk.MIRcatSDK_SetWlTrigPulseWidth.restype = c_uint32
 
     def _bool_call(self, name: str) -> bool:
         value = c_bool(False)
@@ -929,8 +995,11 @@ class MircatService:
         if self.command_log is None:
             return
         timestamp = datetime.now(UTC).isoformat(timespec="seconds")
-        self.command_log.write(f"{timestamp} mircat {message}\n")
-        self.command_log.flush()
+        try:
+            self.command_log.write(f"{timestamp} mircat {message}\n")
+            self.command_log.flush()
+        except ValueError:
+            self.command_log = None
 
 
 def units_name(value: int) -> str:

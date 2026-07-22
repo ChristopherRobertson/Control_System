@@ -1,30 +1,85 @@
 name: safe_idle
-description: "Stop triggers and disable all configured T660 outputs."
+description: "Stop triggers, disable every output, and restore deterministic trigger and channel state."
 approved_laser_safety_condition: false
 t660:
   t660_2:
     stop_first: true
+    predivider: 1
+    gate_mode: 0
+    burst_enabled: false
+    frames_engine: "OFF"
+    external_trigger:
+      polarity: "positive"
+      termination: "50OHM"
+      threshold_v: 2.0
     trigger_source: "OFF"
     force_eod: true
     channels:
       A:
+        timing_mode: "delay_width"
+        delay: 0ns
+        width: 150ns
+        polarity: "positive"
+        termination: "50OHM"
         enabled: false
       B:
+        timing_mode: "delay_width"
+        delay: 0ns
+        width: 150ns
+        polarity: "positive"
+        termination: "50OHM"
         enabled: false
       C:
+        timing_mode: "delay_width"
+        delay: 0ns
+        width: 150ns
+        polarity: "positive"
+        termination: "50OHM"
         enabled: false
       D:
+        timing_mode: "delay_width"
+        delay: 0ns
+        width: 150ns
+        polarity: "positive"
+        termination: "50OHM"
         enabled: false
   t660_1:
     stop_first: true
+    predivider: 1
+    gate_mode: 0
+    burst_enabled: false
+    external_trigger:
+      polarity: "positive"
+      termination: "50OHM"
+      threshold_v: 2.0
     trigger_source: "OFF"
     force_eod: true
     channels:
       A:
+        timing_mode: "delay_width"
+        delay: 0ns
+        width: 150ns
+        polarity: "positive"
+        termination: "50OHM"
         enabled: false
       B:
+        timing_mode: "delay_width"
+        delay: 0ns
+        width: 150ns
+        polarity: "positive"
+        termination: "50OHM"
         enabled: false
       C:
+        timing_mode: "delay_width"
+        delay: 0ns
+        width: 150ns
+        polarity: "positive"
+        termination: "50OHM"
         enabled: false
       D:
+        timing_mode: "delay_width"
+        delay: 0ns
+        width: 150ns
+        polarity: "positive"
+        termination: "50OHM"
         enabled: false

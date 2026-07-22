@@ -1,4 +1,8 @@
-"""Reusable Qt Arduino MUX routing widget."""
+"""Dormant Qt Arduino MUX routing widget.
+
+The active desktop UI does not instantiate this widget while the Arduino MUX is
+disabled/bypassed in hardware_configuration.yaml.
+"""
 
 from __future__ import annotations
 

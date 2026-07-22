@@ -36,7 +36,7 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             "wavenumber_cm1",
             "Wavenumber",
             "float",
-            1858.0,
+            1850.0,
             units="cm^-1",
             minimum=1638.8,
             maximum=2077.3,
@@ -47,7 +47,7 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             "scan_start_cm1",
             "Start Wavenumber",
             "float",
-            1848.0,
+            2050.0,
             units="cm^-1",
             minimum=1638.8,
             maximum=2077.3,
@@ -57,7 +57,7 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             "scan_stop_cm1",
             "Stop Wavenumber",
             "float",
-            1868.0,
+            1650.0,
             units="cm^-1",
             minimum=1638.8,
             maximum=2077.3,
@@ -67,7 +67,7 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             "scan_rate_cm1_s",
             "Scan Rate",
             "float",
-            1.0,
+            40.0,
             units="cm^-1/s",
             minimum=0.001,
             step=0.1,
@@ -77,7 +77,7 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             "pulse_rate_hz",
             "Pulse Repetition Rate",
             "float",
-            100000.0,
+            2000000.0,
             units="Hz",
             minimum=0.001,
             step=1000.0,
@@ -86,10 +86,26 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             "pulse_width_ns",
             "Pulse Width",
             "float",
-            500.0,
+            150.0,
             units="ns",
             minimum=0.001,
             step=10.0,
+        ),
+        ParameterField(
+            "current_ma",
+            "Current",
+            "float",
+            1000.0,
+            units="mA",
+            minimum=0.001,
+            step=10.0,
+        ),
+        ParameterField(
+            "use_t660_timing",
+            "Use T660 Timing",
+            "bool",
+            False,
+            required=False,
         ),
         ParameterField("tec_timeout_s", "TEC Timeout", "float", 120.0, units="s", minimum=1),
         ParameterField("tune_timeout_s", "Tune Timeout", "float", 120.0, units="s", minimum=1),
@@ -108,6 +124,14 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
         WidgetControl("arm", "Arm", "mircat.arm", kind="guarded"),
         WidgetControl("safe_tune", "Direct Tune", "mircat.safe_tune", kind="guarded"),
         WidgetControl("configure_pulse", "Apply Pulse Params", "mircat.configure_pulse", kind="guarded"),
+        WidgetControl(
+            "start_detector_alignment",
+            "Start Alignment",
+            "mircat.start_detector_alignment",
+            kind="guarded",
+            safety_approval_required=True,
+        ),
+        WidgetControl("stop_detector_alignment", "Stop Alignment", "mircat.stop_detector_alignment", kind="danger"),
         WidgetControl(
             "start_sweep_scan",
             "Start Scan",
@@ -130,7 +154,7 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
     ),
 )
 
-DIRECT_PARAMETER_KEYS = ("wavenumber_cm1", "pulse_rate_hz", "pulse_width_ns")
+DIRECT_PARAMETER_KEYS = ("wavenumber_cm1", "pulse_rate_hz", "pulse_width_ns", "current_ma")
 SCAN_PARAMETER_KEYS = (
     "scan_start_cm1",
     "scan_stop_cm1",
@@ -138,6 +162,14 @@ SCAN_PARAMETER_KEYS = (
     "scan_repetitions",
     "pulse_rate_hz",
     "pulse_width_ns",
+    "current_ma",
+)
+ALIGNMENT_PARAMETER_KEYS = (
+    "wavenumber_cm1",
+    "pulse_rate_hz",
+    "pulse_width_ns",
+    "current_ma",
+    "use_t660_timing",
 )
 COMMON_PARAMETER_KEYS = (
     "qcl",
@@ -145,6 +177,28 @@ COMMON_PARAMETER_KEYS = (
     "tune_timeout_s",
     "poll_interval_s",
     "approved_laser_safety_condition",
+)
+GLOBAL_CONTROL_KEYS = (
+    "initialize",
+    "refresh_status",
+    "arm",
+    "emission_off",
+    "disarm",
+    "deinitialize",
+)
+DIRECT_CONTROL_KEYS = (
+    "safe_tune",
+    "configure_pulse",
+    "emission_on",
+    "cancel_manual_tune",
+)
+SCAN_CONTROL_KEYS = (
+    "start_sweep_scan",
+    "stop_scan",
+)
+ALIGNMENT_CONTROL_KEYS = (
+    "start_detector_alignment",
+    "stop_detector_alignment",
 )
 
 
@@ -237,6 +291,7 @@ class MircatWidget(QWidget):
         self._active_thread: Any = None
         self._active_worker: Any = None
         self._active_command: str | None = None
+        self.scan_data_ready_callback = None
         self.result_log = QTextEdit()
         self.result_log.setReadOnly(True)
         self._build()
@@ -274,7 +329,7 @@ class MircatWidget(QWidget):
         layout.addWidget(title)
         layout.addWidget(self._build_status_group())
         layout.addWidget(self._build_parameter_group())
-        layout.addWidget(self._build_controls_group())
+        layout.addWidget(self._build_controls_group(GLOBAL_CONTROL_KEYS, title="Device Controls"))
         layout.addWidget(self.result_log)
 
     def _build_status_group(self) -> QGroupBox:
@@ -295,8 +350,18 @@ class MircatWidget(QWidget):
         group = QGroupBox("Parameters")
         layout = QVBoxLayout(group)
         tabs = QTabWidget()
-        tabs.addTab(self._build_parameter_page(DIRECT_PARAMETER_KEYS), "Direct Tune")
-        tabs.addTab(self._build_parameter_page(SCAN_PARAMETER_KEYS), "Sweep Scan")
+        tabs.addTab(
+            self._build_parameter_page(DIRECT_PARAMETER_KEYS, DIRECT_CONTROL_KEYS),
+            "Direct Tune",
+        )
+        tabs.addTab(
+            self._build_parameter_page(SCAN_PARAMETER_KEYS, SCAN_CONTROL_KEYS),
+            "Sweep Scan",
+        )
+        tabs.addTab(
+            self._build_parameter_page(ALIGNMENT_PARAMETER_KEYS, ALIGNMENT_CONTROL_KEYS),
+            "Alignment",
+        )
         layout.addWidget(tabs)
 
         common = QGroupBox("Common")
@@ -305,10 +370,19 @@ class MircatWidget(QWidget):
         layout.addWidget(common)
         return group
 
-    def _build_parameter_page(self, keys: tuple[str, ...]) -> QWidget:
+    def _build_parameter_page(
+        self,
+        keys: tuple[str, ...],
+        control_keys: tuple[str, ...],
+    ) -> QWidget:
         page = QWidget()
-        form = QFormLayout(page)
+        layout = QVBoxLayout(page)
+        form_container = QWidget()
+        form = QFormLayout(form_container)
         self._add_parameter_fields(form, keys)
+        layout.addWidget(form_container)
+        layout.addWidget(self._build_controls_group(control_keys, title="Actions"))
+        layout.addStretch(1)
         return page
 
     def _add_parameter_fields(self, form: QFormLayout, keys: tuple[str, ...]) -> None:
@@ -348,11 +422,18 @@ class MircatWidget(QWidget):
         widget.setValue(float(field.default))
         return widget
 
-    def _build_controls_group(self) -> QGroupBox:
-        group = QGroupBox("Controls")
+    def _build_controls_group(
+        self,
+        control_keys: tuple[str, ...],
+        *,
+        title: str = "Controls",
+    ) -> QGroupBox:
+        group = QGroupBox(title)
         rows = QVBoxLayout(group)
         row = QHBoxLayout()
-        for index, control in enumerate(MIRCAT_WIDGET_SPEC.controls):
+        controls = {control.key: control for control in MIRCAT_WIDGET_SPEC.controls}
+        for index, key in enumerate(control_keys):
+            control = controls[key]
             button = QPushButton(control.label)
             button.clicked.connect(lambda _checked=False, item=control: self._dispatch(item))
             if control.kind == "danger":
@@ -406,6 +487,8 @@ class MircatWidget(QWidget):
         state = result.data.get("state") if isinstance(result.data, dict) else None
         if isinstance(state, dict):
             self.update_state(state)
+        if isinstance(result.data, dict) and result.data.get("scan_rows") and callable(self.scan_data_ready_callback):
+            self.scan_data_ready_callback(result.data["scan_rows"])
         if self._active_command == "mircat.arm":
             self._show_result(
                 WorkflowResult(

@@ -11,9 +11,8 @@ import json
 import yaml
 
 from control_app.config_loader import ConfigInventory, REPO_ROOT, load_config_inventory
-from control_app.devices.arduino_mux_service import ArduinoMuxService
 from control_app.devices.hf2li_service import HF2LIPreset, HF2LIService
-from control_app.devices.mircat_service import MircatService
+from control_app.devices.mircat_service import RET_NOT_INITIALIZED, MircatService
 from control_app.devices.picoscope_service import PicoScopeService
 from control_app.ui.contracts import WorkflowCommand, WorkflowResult
 from control_app.workflows.mircat_widget_commands import (
@@ -21,7 +20,7 @@ from control_app.workflows.mircat_widget_commands import (
     MIRCAT_WAVENUMBER_MIN_CM1,
     MircatWidgetCommandHandler,
 )
-from control_app.workflows.mux_widget_commands import MuxWidgetCommandHandler
+from control_app.workflows.ndyag_widget_commands import NdYagWidgetCommandHandler
 from control_app.workflows.picoscope_settings_test import (
     capture_settings_from_recipe,
     load_recipe as load_picoscope_recipe,
@@ -29,6 +28,14 @@ from control_app.workflows.picoscope_settings_test import (
 )
 from control_app.workflows.t660_widget_commands import T660WidgetCommandHandler
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
+from control_app.workflows.selectable_workflows import (
+    ConfiguredWorkflow,
+    SelectableWorkflowError,
+    configure_workflow,
+    load_workflow_catalog,
+    validate_workflow_parameters,
+    workflow_fingerprint,
+)
 
 
 REQUIRED_WORKFLOW_COMMANDS = (
@@ -41,7 +48,8 @@ REQUIRED_WORKFLOW_COMMANDS = (
     "acquire_scan",
     "abort_to_safe",
 )
-WORKFLOW_DEVICE_KEYS = ("mircat", "t660", "t660_2", "picoscope", "arduino_mux", "hf2li")
+WORKFLOW_DEVICE_KEYS = ("mircat", "t660", "t660_2", "picoscope", "hf2li")
+DEVICE_COMMAND_KEYS = WORKFLOW_DEVICE_KEYS + ("ndyag",)
 INITIAL_STATE = "SAFE_IDLE"
 HARDWARE_REQUIRED_STATES = {
     "SAFE_SHUTDOWN_SENT",
@@ -113,8 +121,8 @@ class WorkflowStateMachine:
         self.blockers: list[str] = []
         self.abort_state: dict[str, Any] = {"aborted": False, "reason": None}
         self._mircat_handler: MircatWidgetCommandHandler | None = None
-        self._mux_handler: MuxWidgetCommandHandler | None = None
         self._t660_handler: T660WidgetCommandHandler | None = None
+        self._ndyag_handler: NdYagWidgetCommandHandler | None = None
         self.run_dir = self._resolve_run_dir(run_dir)
         self.raw_data_paths: list[str] = []
         self.command_log_paths: list[str] = []
@@ -124,12 +132,13 @@ class WorkflowStateMachine:
         self.mircat_setpoint: dict[str, Any] | None = None
         self.mircat_actual_wavelength: dict[str, Any] | None = None
         self.hf2li_settings_snapshot: dict[str, Any] = {}
-        self._arduino_mux_service: ArduinoMuxService | None = None
         self._picoscope_service: PicoScopeService | None = None
         self._picoscope_capture_settings: dict[str, Any] | None = None
         self._mircat_service: MircatService | None = None
         self._hf2li_service: HF2LIService | None = None
         self._hf2li_preset: HF2LIPreset | None = None
+        self._configured_ui_workflow: ConfiguredWorkflow | None = None
+        self._active_ui_workflow: ConfiguredWorkflow | None = None
         if command_log is not None and getattr(command_log, "name", None):
             self._remember_command_log(str(command_log.name))
 
@@ -137,9 +146,15 @@ class WorkflowStateMachine:
         """Handle one UI command through the workflow state machine."""
 
         name = _normalize_command(command.command)
+        if command.device_key == "workflow" and name == "configure_selected":
+            return self._configure_selected_workflow(command)
+        if command.device_key == "workflow" and name == "run_selected":
+            return self._run_selected_workflow(command)
+        if command.device_key == "workflow" and name == "stop_selected":
+            return self._stop_selected_workflow()
         if name in REQUIRED_WORKFLOW_COMMANDS:
             return self._handle_workflow_command(name, command)
-        if command.device_key in WORKFLOW_DEVICE_KEYS:
+        if command.device_key in DEVICE_COMMAND_KEYS:
             return self._handle_device_command(command)
         result = WorkflowResult(
             status="blocked",
@@ -147,6 +162,112 @@ class WorkflowStateMachine:
             data={"state": self.state, "config_hash": self.inventory.config_hash},
         )
         self._record(name, self.state, "blocked", result.message, result.data)
+        return result
+
+    def _configure_selected_workflow(self, command: WorkflowCommand) -> WorkflowResult:
+        """Validate and persist a complete UI workflow plan before Run is enabled."""
+
+        if self._active_ui_workflow is not None:
+            return WorkflowResult(
+                status="blocked",
+                message="Stop the active selected workflow before configuring another workflow.",
+            )
+        workflow_id = str(command.parameters.get("workflow_id", "")).strip()
+        values = command.parameters.get("workflow_parameters")
+        if not workflow_id or not isinstance(values, dict):
+            return WorkflowResult(
+                status="blocked",
+                message="Select a workflow and provide its settings before configuring it.",
+            )
+        plan_dir = (
+            REPO_ROOT
+            / "runs"
+            / "configured_workflows"
+            / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        )
+        try:
+            configured = configure_workflow(workflow_id, values, output_dir=plan_dir)
+        except SelectableWorkflowError as exc:
+            return WorkflowResult(status="blocked", message=str(exc))
+        self._configured_ui_workflow = configured
+        return WorkflowResult(
+            status="complete",
+            message=(
+                f"{workflow_id} settings validated and saved. Run is enabled until a setting changes."
+            ),
+            data={
+                "workflow_id": configured.workflow_id,
+                "fingerprint": configured.fingerprint,
+                "configured_workflow_path": str(configured.saved_path),
+                "parameters": configured.parameters,
+            },
+        )
+
+    def _run_selected_workflow(self, command: WorkflowCommand) -> WorkflowResult:
+        """Run only the exact configuration most recently validated and saved."""
+
+        configured = self._configured_ui_workflow
+        fingerprint = str(command.parameters.get("fingerprint", ""))
+        workflow_id = str(command.parameters.get("workflow_id", ""))
+        current_values = command.parameters.get("workflow_parameters")
+        try:
+            definition = load_workflow_catalog().get(workflow_id)
+            validated = (
+                validate_workflow_parameters(definition, current_values)
+                if definition is not None and isinstance(current_values, dict)
+                else None
+            )
+            current_fingerprint = (
+                workflow_fingerprint(workflow_id, validated) if validated is not None else None
+            )
+        except SelectableWorkflowError:
+            current_fingerprint = None
+        if (
+            configured is None
+            or not fingerprint
+            or fingerprint != configured.fingerprint
+            or current_fingerprint != configured.fingerprint
+        ):
+            return WorkflowResult(
+                status="blocked",
+                message="Workflow settings are not configured and saved, or have changed. Configure & Save again.",
+            )
+        if configured.safety_approval_required and not command.safety_approval:
+            return WorkflowResult(
+                status="blocked",
+                message="Safety approval is required before this configured workflow can run.",
+            )
+        delegated = WorkflowCommand(
+            device_key=configured.device_key,
+            command=configured.command,
+            parameters=dict(configured.parameters),
+            safety_approval=bool(command.safety_approval),
+        )
+        result = self._handle_device_command(delegated)
+        if result.status == "complete" and configured.stop_command is not None:
+            self._active_ui_workflow = configured
+        result.data.setdefault("configured_workflow_path", str(configured.saved_path))
+        result.data.setdefault("workflow_id", configured.workflow_id)
+        result.data.setdefault("fingerprint", configured.fingerprint)
+        return result
+
+    def _stop_selected_workflow(self) -> WorkflowResult:
+        """Invoke the configured workflow's established stop/safe-idle command."""
+
+        configured = self._active_ui_workflow or self._configured_ui_workflow
+        if configured is None or configured.stop_command is None:
+            return WorkflowResult(
+                status="blocked",
+                message="The selected workflow has no configured stop action.",
+            )
+        result = self._handle_device_command(
+            WorkflowCommand(
+                device_key=configured.device_key,
+                command=configured.stop_command,
+            )
+        )
+        if result.status == "complete":
+            self._active_ui_workflow = None
         return result
 
     def export_event_log(self, path: str | Path) -> Path:
@@ -175,6 +296,77 @@ class WorkflowStateMachine:
             "mircat_actual_wavelength": self.mircat_actual_wavelength,
             "hf2li_settings_snapshot": self.hf2li_settings_snapshot,
         }
+
+    def ui_close_blockers(self) -> list[str]:
+        """Return user actions that must happen before normal UI close."""
+
+        blockers: list[str] = []
+        if self._mircat_handler is not None:
+            blockers.extend(self._mircat_handler.close_blockers())
+        return blockers
+
+    def ui_safe_shutdown(self, *, reason: str = "ui_close") -> WorkflowResult:
+        """Run the normal application-close safe shutdown sequence."""
+
+        blockers = self.ui_close_blockers()
+        if blockers:
+            return WorkflowResult(
+                status="blocked",
+                message="Some operations must be stopped manually before closing the app.",
+                data={"blockers": blockers, "state": self.state},
+            )
+        return self._ui_shutdown(reason=reason, emergency=False)
+
+    def emergency_stop(self, *, reason: str = "emergency_stop") -> WorkflowResult:
+        """Best-effort shutdown for forced process exit paths."""
+
+        return self._ui_shutdown(reason=reason, emergency=True)
+
+    def _ui_shutdown(self, *, reason: str, emergency: bool) -> WorkflowResult:
+        actions: dict[str, Any] = {
+            "reason": reason,
+            "emergency": emergency,
+            "mircat_widget_shutdown": None,
+            "workflow_safe_shutdown": None,
+        }
+        errors: list[str] = []
+
+        if self._mircat_handler is not None:
+            result = self._mircat_handler.shutdown_for_ui_close(
+                emergency=emergency,
+                reason=reason,
+            )
+            actions["mircat_widget_shutdown"] = result.to_dict()
+            if result.status != "complete":
+                errors.append(result.message)
+
+        safe_result = self(
+            WorkflowCommand(
+                device_key="workflow",
+                command="workflow.safe_shutdown",
+                parameters={"reason": reason, "emergency": emergency},
+            )
+        )
+        actions["workflow_safe_shutdown"] = safe_result.to_dict()
+        if safe_result.status != "complete":
+            errors.append(safe_result.message)
+
+        status = "complete" if not errors else "failed"
+        message = (
+            "Application shutdown safe-state commands completed."
+            if not errors
+            else "Application shutdown safe-state commands reported errors: " + "; ".join(errors)
+        )
+        return WorkflowResult(
+            status=status,
+            message=message,
+            data={
+                "state": self.state,
+                "config_hash": self.inventory.config_hash,
+                "actions": actions,
+                "errors": errors,
+            },
+        )
 
     def _resolve_run_dir(self, run_dir: str | Path | None) -> Path:
         if run_dir is None:
@@ -260,13 +452,6 @@ class WorkflowStateMachine:
             if self._mircat_handler is None:
                 self._mircat_handler = MircatWidgetCommandHandler(operator=self.operator)
             result = self._mircat_handler(command)
-        elif command.device_key == "arduino_mux":
-            if self._mux_handler is None:
-                self._mux_handler = MuxWidgetCommandHandler(
-                    operator=self.operator,
-                    inventory=self.inventory,
-                )
-            result = self._mux_handler(command)
         elif command.device_key == "t660_2":
             if self._t660_handler is None:
                 self._t660_handler = T660WidgetCommandHandler(
@@ -274,6 +459,13 @@ class WorkflowStateMachine:
                     inventory=self.inventory,
                 )
             result = self._t660_handler(command)
+        elif command.device_key == "ndyag":
+            if self._ndyag_handler is None:
+                self._ndyag_handler = NdYagWidgetCommandHandler(
+                    operator=self.operator,
+                    inventory=self.inventory,
+                )
+            result = self._ndyag_handler(command)
         else:
             message = (
                 f"{command.device_key} direct widget command namespace is not exposed; "
@@ -329,7 +521,7 @@ class WorkflowStateMachine:
                         "MIRcat emission off",
                         "MIRcat disarm/deinitialize if connected",
                         "T660 safe_idle recipe",
-                        "Arduino MUX safe idle",
+                        "Arduino MUX remains bypassed/inactive",
                         "HF2LI unsubscribe/stop acquisition if active",
                         "PicoScope stop/close if active",
                     ],
@@ -350,25 +542,14 @@ class WorkflowStateMachine:
 
     def _route_scope_signal(self, command: WorkflowCommand) -> WorkflowResult:
         recipe = self._require_recipe()
-        routes = _recipe_routes(recipe, self.inventory)
-        for output_key, route_name in routes.items():
-            route_config = self.inventory.mux_routes.get(route_name)
-            expected_output = output_key.removesuffix("_route")
-            if not isinstance(route_config, dict):
-                raise WorkflowStateMachineError(
-                    f"MUX route {route_name!r} is not defined in hardware_configuration.yaml"
-                )
-            if route_config.get("mux_output") != expected_output:
-                raise WorkflowStateMachineError(
-                    f"MUX route {route_name!r} is configured for "
-                    f"{route_config.get('mux_output')!r}, not {expected_output!r}"
-                )
         pico_recipe_path = recipe.get("picoscope_recipe") or recipe.get("pico_capture_recipe")
         pico_settings = self._validate_picoscope_recipe(pico_recipe_path)
         data = {
             "state": "SCOPE_ROUTE_VALIDATED",
             "config_hash": self.inventory.config_hash,
-            "mux_routes": routes,
+            "mux_routes": {},
+            "mux_bypassed": True,
+            "scope_routing": "Direct wiring only; Arduino MUX is inactive.",
             "picoscope_settings": pico_settings,
             "picoscope_independent_of_arduino_mux": True,
         }
@@ -376,30 +557,24 @@ class WorkflowStateMachine:
             return self._blocked_hardware(
                 command.command,
                 "SCOPE_ROUTE_VALIDATED",
-                "Arduino MUX route and PicoScope settings construction were validated; no hardware command was sent.",
+                "PicoScope settings were validated with Arduino MUX bypassed; no hardware command was sent.",
                 data,
             )
 
-        mux_readback = self._apply_arduino_mux_routes(routes)
         picoscope_readback = self._apply_picoscope_settings(pico_settings)
-        self.mux_routes = {
-            "requested_routes": mux_readback["requested_routes"],
-            "route_responses": mux_readback["route_responses"],
-            "route_readback": mux_readback["route_readback"],
-        }
+        self.mux_routes = {}
         self.picoscope_settings = picoscope_readback
         data.update(
             {
                 "state": "SCOPE_ROUTE_APPLIED",
                 "hardware_action_sent": True,
-                "mux_readback": mux_readback,
                 "picoscope_settings": picoscope_readback,
             }
         )
         return self._complete(
             command.command,
             "SCOPE_ROUTE_APPLIED",
-            "Arduino MUX routes and PicoScope settings were applied through independent real device services.",
+            "PicoScope settings were applied; Arduino MUX routing remained bypassed.",
             data,
         )
 
@@ -506,12 +681,19 @@ class WorkflowStateMachine:
                 data,
             )
 
-        acquisition = self._acquire_hf2li_point(point, point_index=0, prefix="point")
+        mircat_point_readback = self._prepare_mircat_for_point(point, point_index=0)
+        acquisition = self._acquire_hf2li_point(
+            point,
+            point_index=0,
+            prefix="point",
+            mircat_point_readback=mircat_point_readback,
+        )
         data.update(
             {
                 "state": "ACQUIRING_POINT",
                 "hardware_action_sent": True,
                 "raw_data_created": True,
+                "mircat_point_readback": mircat_point_readback,
                 "acquisition": acquisition,
             }
         )
@@ -541,10 +723,17 @@ class WorkflowStateMachine:
                 data,
             )
 
-        acquisitions = [
-            self._acquire_hf2li_point(point, point_index=index, prefix="scan")
-            for index, point in enumerate(scan_points)
-        ]
+        acquisitions = []
+        for index, point in enumerate(scan_points):
+            mircat_point_readback = self._prepare_mircat_for_point(point, point_index=index)
+            acquisitions.append(
+                self._acquire_hf2li_point(
+                    point,
+                    point_index=index,
+                    prefix="scan",
+                    mircat_point_readback=mircat_point_readback,
+                )
+            )
         data.update(
             {
                 "state": "ACQUIRING_SCAN",
@@ -575,7 +764,7 @@ class WorkflowStateMachine:
                 "Stop acquisition",
                 "MIRcat emission off",
                 "T660 outputs off",
-                "Arduino MUX safe idle",
+                "Arduino MUX remains bypassed/inactive",
             ],
         }
         if not self.hardware_access:
@@ -600,50 +789,6 @@ class WorkflowStateMachine:
             "Abort was logged and real safe-state commands were sent where services were active.",
             data,
         )
-
-    def _apply_arduino_mux_routes(self, routes: dict[str, str]) -> dict[str, Any]:
-        service = self._arduino_mux_service
-        if service is None:
-            service = ArduinoMuxService.from_config(
-                config_path=self.config_path,
-                command_log=self.command_log,
-            )
-            service.connect()
-            self._arduino_mux_service = service
-
-        requested_routes = {
-            "output_a": routes["output_a_route"],
-            "output_b": routes["output_b_route"],
-            "output_ext": routes["output_ext_route"],
-        }
-        identity = service.identify()
-        firmware_version = service.get_version()
-        protocol_version = service.get_protocol_version()
-        status_before = service.get_status()
-        route_responses = {
-            "output_a": service.set_output_a_route(requested_routes["output_a"]),
-            "output_b": service.set_output_b_route(requested_routes["output_b"]),
-            "output_ext": service.set_output_ext_route(requested_routes["output_ext"]),
-        }
-        for output, response in route_responses.items():
-            _assert_ok_route_response(output, response)
-        route_readback = service.query_active_route()
-        _assert_latched_routes(route_readback, requested_routes)
-        status_after = service.get_status()
-        readback = {
-            "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "config_hash": self.inventory.config_hash,
-            "identity": identity,
-            "firmware_version": firmware_version,
-            "protocol_version": protocol_version,
-            "status_before_routes": status_before,
-            "requested_routes": requested_routes,
-            "route_responses": route_responses,
-            "route_readback": route_readback,
-            "status_after_routes": status_after,
-        }
-        self._write_readback("day7_arduino_mux_route_readback.json", readback)
-        return readback
 
     def _apply_picoscope_settings(self, picoscope_recipe: dict[str, Any]) -> dict[str, Any]:
         settings = picoscope_recipe["settings"]
@@ -679,6 +824,8 @@ class WorkflowStateMachine:
         probe = recipe.get("probe") if isinstance(recipe.get("probe"), dict) else {}
         mircat = probe.get("mircat") if isinstance(probe.get("mircat"), dict) else {}
         qcl = int(setpoint["qcl"])
+        emission_requested = _mircat_emission_requested(recipe)
+        approved = bool(recipe.get("approved_laser_safety_condition"))
         service = self._mircat_service
         if service is None:
             device_config = self.inventory.devices.get("mircat")
@@ -710,7 +857,15 @@ class WorkflowStateMachine:
             poll_interval_s=float(mircat.get("poll_interval_s", 0.5)),
         ):
             raise WorkflowStateMachineError("MIRcat did not report tuned before timeout")
-        service.turn_emission_off()
+        trigger_settings = _configure_mircat_trigger_mode(
+            service,
+            mircat,
+            wavenumber_cm1=float(setpoint["wavenumber_cm1"]),
+        )
+        if emission_requested:
+            service.turn_emission_on(approved_laser_safety_condition=approved)
+        else:
+            service.turn_emission_off()
         actual = service.get_actual_wavelength()
         state_after = service.read_state().to_dict()
         self.mircat_setpoint = setpoint
@@ -721,11 +876,77 @@ class WorkflowStateMachine:
             "setpoint": setpoint,
             "actual_wavelength": actual,
             "pulse_settings": pulse_settings,
-            "emission_on": False,
+            "trigger_settings": trigger_settings,
+            "emission_requested": emission_requested,
+            "emission_on": bool(state_after.get("emission_on")),
             "state_before": state_before,
             "state_after": state_after,
         }
         self._write_readback("day7_mircat_arm_readback.json", readback)
+        return readback
+
+    def _prepare_mircat_for_point(
+        self,
+        point: dict[str, Any],
+        *,
+        point_index: int,
+    ) -> dict[str, Any]:
+        if self._mircat_service is None:
+            raise WorkflowStateMachineError("arm_measurement must complete before MIRcat scan points")
+        recipe = self._require_recipe()
+        probe = recipe.get("probe") if isinstance(recipe.get("probe"), dict) else {}
+        mircat = probe.get("mircat") if isinstance(probe.get("mircat"), dict) else {}
+        setpoint = _mircat_setpoint(recipe)
+        wavenumber_cm1 = float(point.get("wavenumber_cm1", setpoint["wavenumber_cm1"]))
+        qcl = int(point.get("qcl", setpoint["qcl"]))
+        emission_requested = _mircat_emission_requested(recipe)
+        approved = bool(recipe.get("approved_laser_safety_condition"))
+        service = self._mircat_service
+
+        state_before = service.read_state().to_dict()
+        service.turn_emission_off()
+        service.tune_to_wavenumber(wavenumber_cm1, qcl=qcl)
+        if not service.wait_for_tuned(
+            timeout_s=float(mircat.get("tune_timeout_s", 120.0)),
+            poll_interval_s=float(mircat.get("poll_interval_s", 0.5)),
+        ):
+            raise WorkflowStateMachineError(
+                f"MIRcat did not report tuned at {wavenumber_cm1:g} cm^-1 before timeout"
+            )
+        trigger_settings = _configure_mircat_trigger_mode(
+            service,
+            mircat,
+            wavenumber_cm1=wavenumber_cm1,
+        )
+        if emission_requested:
+            service.turn_emission_on(approved_laser_safety_condition=approved)
+        else:
+            service.turn_emission_off()
+        actual = service.get_actual_wavelength()
+        state_after = service.read_state().to_dict()
+        readback = {
+            "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+            "config_hash": self.inventory.config_hash,
+            "point_index": point_index,
+            "setpoint": {
+                "wavenumber_cm1": wavenumber_cm1,
+                "units": "cm^-1",
+                "qcl": qcl,
+            },
+            "actual_wavelength": actual,
+            "trigger_settings": trigger_settings,
+            "emission_requested": emission_requested,
+            "emission_on": bool(state_after.get("emission_on")),
+            "state_before": state_before,
+            "state_after": state_after,
+        }
+        readback_path = self._write_readback(
+            f"mircat_readback_scan_{_point_slug(point, point_index)}.json",
+            readback,
+        )
+        readback["readback_path"] = str(readback_path)
+        self.mircat_setpoint = readback["setpoint"]
+        self.mircat_actual_wavelength = actual
         return readback
 
     def _arm_hf2li(self, preset_name: str) -> dict[str, Any]:
@@ -756,13 +977,14 @@ class WorkflowStateMachine:
         *,
         point_index: int,
         prefix: str,
+        mircat_point_readback: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if self._hf2li_service is None or self._hf2li_preset is None:
             raise WorkflowStateMachineError("arm_measurement must complete before acquisition")
         service = self._hf2li_service
         preset = self._hf2li_preset
         acquisition = preset.settings.get("acquisition") or {}
-        duration_s = float(acquisition.get("duration_s", 5.0))
+        duration_s = float(point.get("dwell_s", acquisition.get("duration_s", 5.0)))
         demodulators = acquisition.get("demodulators") or [0, 3]
         fields = acquisition.get("fields") or ["x", "y", "r"]
         slug = _point_slug(point, point_index)
@@ -785,8 +1007,10 @@ class WorkflowStateMachine:
             "point": point,
             "preset": preset.name,
             "duration_s": duration_s,
+            "dwell_s": point.get("dwell_s", duration_s),
             "demodulators": demodulators,
             "fields": fields,
+            "mircat_point_readback": mircat_point_readback,
             "raw_csv_path": str(raw_csv),
             "summary_csv_path": str(summary_csv),
             "save_summary": save_summary,
@@ -804,7 +1028,7 @@ class WorkflowStateMachine:
             "label": label,
             "mircat": None,
             "t660": None,
-            "arduino_mux": None,
+            "arduino_mux": "bypassed_inactive",
             "picoscope": None,
             "hf2li": None,
         }
@@ -832,12 +1056,21 @@ class WorkflowStateMachine:
 
         if self._mircat_service is not None:
             try:
-                self._mircat_service.stop_scan_if_needed()
-                self._mircat_service.turn_emission_off()
-                self._mircat_service.disarm()
-                state = self._mircat_service.read_state().to_dict()
-                self._mircat_service.deinitialize()
-                actions["mircat"] = {"safe_state": "emission_off_disarmed_deinitialized", "state": state}
+                stop_status = self._mircat_service.stop_scan_if_needed()
+                if stop_status == RET_NOT_INITIALIZED:
+                    actions["mircat"] = {
+                        "safe_state": "already_deinitialized",
+                        "stop_scan_return_code": stop_status,
+                    }
+                else:
+                    self._mircat_service.turn_emission_off()
+                    self._mircat_service.disarm()
+                    state = self._mircat_service.read_state().to_dict()
+                    self._mircat_service.deinitialize()
+                    actions["mircat"] = {
+                        "safe_state": "emission_off_disarmed_deinitialized",
+                        "state": state,
+                    }
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"MIRcat safe shutdown failed: {exc}")
             finally:
@@ -850,26 +1083,6 @@ class WorkflowStateMachine:
             self._remember_readback(output_path)
         except Exception as exc:  # noqa: BLE001
             errors.append(f"T660 safe_idle failed: {exc}")
-
-        mux_service = self._arduino_mux_service
-        try:
-            if mux_service is None:
-                mux_service = ArduinoMuxService.from_config(
-                    config_path=self.config_path,
-                    command_log=self.command_log,
-                )
-                mux_service.connect()
-            response = mux_service.safe_idle()
-            actions["arduino_mux"] = {"safe_idle_response": response}
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"Arduino MUX safe idle failed: {exc}")
-        finally:
-            if mux_service is not None:
-                try:
-                    mux_service.close()
-                except Exception as exc:  # noqa: BLE001
-                    errors.append(f"Arduino MUX close failed: {exc}")
-            self._arduino_mux_service = None
 
         readback_path = self._write_readback(f"day7_{label}_safe_actions.json", actions)
         actions["readback_path"] = str(readback_path)
@@ -884,11 +1097,11 @@ class WorkflowStateMachine:
         if not recipe_path.is_absolute():
             recipe_path = REPO_ROOT / recipe_path
         if not recipe_path.exists():
-            raise WorkflowStateMachineError(f"Myoglobin-CO recipe not found: {recipe_path}")
+            raise WorkflowStateMachineError(f"workflow recipe not found: {recipe_path}")
         with recipe_path.open("r", encoding="utf-8") as handle:
             recipe = yaml.safe_load(handle) or {}
         if not isinstance(recipe, dict):
-            raise WorkflowStateMachineError(f"Myoglobin-CO recipe must be a mapping: {recipe_path}")
+            raise WorkflowStateMachineError(f"workflow recipe must be a mapping: {recipe_path}")
         self.recipe = recipe
         self.recipe_path = recipe_path
         self._validate_recipe_shape(recipe)
@@ -913,19 +1126,23 @@ class WorkflowStateMachine:
         missing = sorted(key for key in required if key not in recipe)
         if missing:
             raise WorkflowStateMachineError(
-                "Myoglobin-CO recipe missing required keys: " + ", ".join(missing)
+                "workflow recipe missing required keys: " + ", ".join(missing)
             )
         if not isinstance(recipe.get("delay_list_ns"), list) or not recipe["delay_list_ns"]:
-            raise WorkflowStateMachineError("Myoglobin-CO recipe delay_list_ns must be a nonempty list")
-        if bool(recipe.get("approved_laser_safety_condition")):
+            raise WorkflowStateMachineError("workflow recipe delay_list_ns must be a nonempty list")
+        if _mircat_emission_requested(recipe) and not bool(recipe.get("approved_laser_safety_condition")):
             raise WorkflowStateMachineError(
-                "Day 7 Myoglobin-CO recipe must remain non-emitting until operator approval is recorded"
+                "MIRcat emission requires approved_laser_safety_condition in the acquisition recipe"
+            )
+        if _pump_enabled(recipe) and not bool(recipe.get("approved_laser_safety_condition")):
+            raise WorkflowStateMachineError(
+                "pump-enabled acquisition requires approved_laser_safety_condition in the acquisition recipe"
             )
 
     def _validate_mircat_request(self, recipe: dict[str, Any]) -> None:
         setpoint = _mircat_setpoint(recipe)
         values = [float(setpoint["wavenumber_cm1"])]
-        scan = setpoint.get("co_band_scan_cm1") or {}
+        scan = _scan_definition(recipe) or {}
         if isinstance(scan, dict):
             values.extend(float(scan[key]) for key in ("start", "stop") if key in scan)
         for value in values:
@@ -937,7 +1154,7 @@ class WorkflowStateMachine:
 
     def _validate_hf2li_preset(self, preset_name: Any) -> str:
         if not preset_name:
-            raise WorkflowStateMachineError("Myoglobin-CO recipe does not define hf2li_preset")
+            raise WorkflowStateMachineError("workflow recipe does not define hf2li_preset")
         presets_path = REPO_ROOT / "recipes" / "hf2li_presets.yaml"
         with presets_path.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
@@ -950,7 +1167,7 @@ class WorkflowStateMachine:
 
     def _validate_picoscope_recipe(self, recipe_path: Any) -> dict[str, Any]:
         if not recipe_path:
-            raise WorkflowStateMachineError("Myoglobin-CO recipe does not define picoscope_recipe")
+            raise WorkflowStateMachineError("workflow recipe does not define picoscope_recipe")
         recipe, resolved_path = load_picoscope_recipe(REPO_ROOT / str(recipe_path))
         settings = capture_settings_from_recipe(recipe)
         device_config = self.inventory.devices.get("picoscope")
@@ -1035,28 +1252,10 @@ def _command_path(device_key: str) -> list[str]:
     ]
 
 
-def _recipe_routes(recipe: dict[str, Any], inventory: ConfigInventory) -> dict[str, str]:
-    configured = recipe.get("mux_checkpoint_routes")
-    if isinstance(configured, dict):
-        return {
-            "output_a_route": str(configured.get("output_a_route") or ""),
-            "output_b_route": str(configured.get("output_b_route") or ""),
-            "output_ext_route": str(configured.get("output_ext_route") or ""),
-        }
-    diagnostic = inventory.mux_routes.get("diagnostic")
-    if not isinstance(diagnostic, dict):
-        raise WorkflowStateMachineError("mux_routes.diagnostic is not defined")
-    return {
-        "output_a_route": str(diagnostic.get("output_a_route") or ""),
-        "output_b_route": str(diagnostic.get("output_b_route") or ""),
-        "output_ext_route": str(diagnostic.get("output_ext_route") or ""),
-    }
-
-
 def _mircat_setpoint(recipe: dict[str, Any]) -> dict[str, Any]:
     probe = recipe.get("probe")
     if not isinstance(probe, dict):
-        raise WorkflowStateMachineError("Myoglobin-CO recipe probe section must be a mapping")
+        raise WorkflowStateMachineError("workflow recipe probe section must be a mapping")
     direct = probe.get("mircat")
     if isinstance(direct, dict):
         value = float(direct.get("wavenumber_cm1", 1858.0))
@@ -1064,24 +1263,39 @@ def _mircat_setpoint(recipe: dict[str, Any]) -> dict[str, Any]:
     else:
         value = float(probe.get("wavenumber_cm1", 1858.0))
         qcl = int(probe.get("qcl", 1))
+    scan = _scan_definition(recipe)
     return {
         "wavenumber_cm1": value,
         "units": "cm^-1",
         "qcl": qcl,
+        "scan_cm1": scan,
         "co_band_scan_cm1": probe.get("co_band_scan_cm1"),
     }
 
 
+def _scan_definition(recipe: dict[str, Any]) -> dict[str, Any] | None:
+    probe = recipe.get("probe")
+    if not isinstance(probe, dict):
+        return None
+    scan = probe.get("scan_cm1")
+    if isinstance(scan, dict):
+        return scan
+    legacy_scan = probe.get("co_band_scan_cm1")
+    if isinstance(legacy_scan, dict):
+        return legacy_scan
+    return None
+
+
 def _scan_points(recipe: dict[str, Any]) -> list[dict[str, Any]]:
-    probe = recipe.get("probe") or {}
-    scan = probe.get("co_band_scan_cm1") if isinstance(probe, dict) else {}
+    scan = _scan_definition(recipe) or {}
     if not isinstance(scan, dict):
         return [_first_scan_point(recipe)]
     start = float(scan.get("start", _mircat_setpoint(recipe)["wavenumber_cm1"]))
     stop = float(scan.get("stop", start))
     step = abs(float(scan.get("step", 1.0)))
     if step <= 0:
-        raise WorkflowStateMachineError("CO-band scan step must be positive")
+        raise WorkflowStateMachineError("scan_cm1 step must be positive")
+    dwell_s = float(scan.get("dwell_s_per_point", scan.get("dwell_s", 5.0)))
     points: list[dict[str, Any]] = []
     direction = 1.0 if stop >= start else -1.0
     current = start
@@ -1093,6 +1307,7 @@ def _scan_points(recipe: dict[str, Any]) -> list[dict[str, Any]]:
                 "wavenumber_cm1": round(current, 6),
                 "delay_ns": recipe["delay_list_ns"][0],
                 "hf2li_preset": recipe.get("hf2li_preset"),
+                "dwell_s": dwell_s,
             }
         )
         current += direction * step
@@ -1104,31 +1319,57 @@ def _first_scan_point(recipe: dict[str, Any]) -> dict[str, Any]:
         "wavenumber_cm1": _mircat_setpoint(recipe)["wavenumber_cm1"],
         "delay_ns": recipe["delay_list_ns"][0],
         "hf2li_preset": recipe.get("hf2li_preset"),
+        "dwell_s": _point_dwell_s(recipe),
     }
 
 
-def _assert_ok_route_response(output: str, response: str | None) -> None:
-    text = str(response or "")
-    if not text:
-        raise WorkflowStateMachineError(f"Arduino MUX {output} route command returned no response")
-    upper = text.upper()
-    if "ERROR" in upper:
-        raise WorkflowStateMachineError(f"Arduino MUX {output} route command failed: {text}")
-    if "OK ROUTE" not in upper:
-        raise WorkflowStateMachineError(
-            f"Arduino MUX {output} route command did not confirm OK ROUTE: {text}"
-        )
+def _point_dwell_s(recipe: dict[str, Any]) -> float:
+    scan = _scan_definition(recipe) or {}
+    if isinstance(scan, dict):
+        return float(scan.get("dwell_s_per_point", scan.get("dwell_s", 5.0)))
+    return 5.0
 
 
-def _assert_latched_routes(route_readback: dict[str, Any], requested: dict[str, str]) -> None:
-    latched = route_readback.get("latched_routes") if isinstance(route_readback, dict) else None
-    if not isinstance(latched, dict):
-        raise WorkflowStateMachineError("Arduino MUX route readback did not include latched_routes")
-    for output, route_name in requested.items():
-        if latched.get(output) != route_name:
-            raise WorkflowStateMachineError(
-                f"Arduino MUX latched {output}={latched.get(output)!r}, expected {route_name!r}"
-            )
+def _mircat_emission_requested(recipe: dict[str, Any]) -> bool:
+    probe = recipe.get("probe") if isinstance(recipe.get("probe"), dict) else {}
+    mircat = probe.get("mircat") if isinstance(probe.get("mircat"), dict) else {}
+    return bool(
+        mircat.get("emission_allowed")
+        or mircat.get("allow_emission_on")
+        or mircat.get("emission_on")
+    )
+
+
+def _pump_enabled(recipe: dict[str, Any]) -> bool:
+    pump = recipe.get("pump") if isinstance(recipe.get("pump"), dict) else {}
+    return bool(
+        pump.get("enabled")
+        or pump.get("enabled_for_day7")
+        or pump.get("emission_allowed")
+        or pump.get("fire_pump")
+    )
+
+
+def _configure_mircat_trigger_mode(
+    service: MircatService,
+    mircat: dict[str, Any],
+    *,
+    wavenumber_cm1: float,
+) -> dict[str, Any] | None:
+    pulse_mode = mircat.get("pulse_mode")
+    pulse_mode_value = _optional_int(mircat.get("pulse_mode_value"))
+    if str(pulse_mode).lower() == "external_trigger" or pulse_mode_value == 2:
+        return service.set_external_trigger_params(wavenumber_cm1=wavenumber_cm1)
+    return None
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _point_slug(point: dict[str, Any], point_index: int) -> str:

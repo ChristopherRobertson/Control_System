@@ -125,6 +125,11 @@ def build_config_inventory(
     if not isinstance(mux_settings, dict):
         mux_settings = {}
         warnings.append("arduino_mux_topology must be a mapping when present")
+    mux_device = devices.get("arduino_mux")
+    mux_disabled = (
+        isinstance(mux_device, dict)
+        and mux_device.get("enabled") is False
+    ) or mux_settings.get("enabled") is False
 
     mux_routes = (
         config.get("mux_routes")
@@ -135,10 +140,16 @@ def build_config_inventory(
     if not isinstance(mux_routes, dict):
         mux_routes = {}
     if not mux_routes:
-        warnings.append(
-            "No MUX routes are defined in hardware_configuration.yaml; "
-            "Arduino MUX diagnostics must remain BLOCKED."
-        )
+        if mux_disabled:
+            warnings.append(
+                "Arduino MUX is disabled and no MUX routes are active; "
+                "scope/HF2LI observations must use direct wiring."
+            )
+        else:
+            warnings.append(
+                "No MUX routes are defined in hardware_configuration.yaml; "
+                "Arduino MUX diagnostics must remain BLOCKED."
+            )
 
     picoscope_settings = dict(devices.get("picoscope") or {})
     capture_settings = (

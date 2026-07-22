@@ -8,6 +8,11 @@ source:
   - This file separates fixed wiring from hardware identity configuration.
   - Preferred routing uses the confirmed timing architecture where spreadsheet rows
     conflict.
+  - Legacy spreadsheet labels "RS232 7" and "RS232 6" mean the Surelite Nd:YAG
+    DB9 EXT TTL fire-command pin 7 and Q-switch-command pin 6. They are not
+    RS-232 electrical-level signals and must never be driven as an RS-232 port.
+  - Arduino MUX boards are bypassed/inactive until rewired; HF2LI DIO16-DIO22
+    inputs do not mirror to HF2LI DIO9-DIO15 outputs.
 global_buses:
   ground_bus:
     connected_devices:
@@ -39,9 +44,9 @@ critical_timing_chain:
   t660_1:
     clock_input: t660_2.clock_output
     trig_in: t660_2.CHD
-    CHA: surelite_ndyag.rs232_7_fire_command
-    CHB: surelite_ndyag.rs232_6_q_switch_command
-    CHC: mircat.db9_4_or_db9_5_USER_CONFIRM
+    CHA: surelite_ndyag.db9_ext_pin_7_fire_command
+    CHB: surelite_ndyag.db9_ext_pin_6_q_switch_command
+    CHC: mircat.db9_4_process_trigger
     CHD: null
 device_io:
   t660_2:
@@ -90,13 +95,13 @@ device_io:
     split_count: 1
   - signal: CHA
     direction: Output
-    connected_to: RS232 7 - Fire Command
+    connected_to: DB9 EXT pin 7 - TTL Fire Command
     connected_device: YAG
     bulkhead: null
     split_count: 1
   - signal: CHB
     direction: Output
-    connected_to: RS232 6 - Q-Switch Command
+    connected_to: DB9 EXT pin 6 - TTL Q-Switch Command
     connected_device: YAG
     bulkhead: null
     split_count: 1
@@ -106,20 +111,20 @@ device_io:
     connected_device: MIRcat
     bulkhead: Back BNC
     split_count: 1
-  - signal: CHC
+  - signal: CHD
     direction: Output
     connected_to: DB9 5
     connected_device: MIRcat
     bulkhead: Back BNC
     split_count: 1
   surelite_ndyag:
-  - signal: RS232 7 - Fire Command
+  - signal: DB9 EXT pin 7 - TTL Fire Command
     direction: Input
     connected_to: CHA
     connected_device: T660-1
     bulkhead: null
     split_count: 1
-  - signal: RS232 6 - Q-Switch Command
+  - signal: DB9 EXT pin 6 - TTL Q-Switch Command
     direction: Input
     connected_to: CHB
     connected_device: T660-1
@@ -146,8 +151,8 @@ device_io:
   mircat:
   - signal: TRIG IN
     direction: Input
-    connected_to: CHA
-    connected_device: T660-1
+    connected_to: CHB
+    connected_device: T660-2
     bulkhead: null
     split_count: 1
   - signal: TRIG OUT
@@ -162,7 +167,7 @@ device_io:
     connected_device: HF2LI
     bulkhead: null
     split_count: 1
-  - signal: DB9 2 - Tuned / Scan Firing
+  - signal: DB9 2 - Tuned / Sweep Active
     direction: Output
     connected_to: DIO 21
     connected_device: HF2LI
@@ -176,16 +181,16 @@ device_io:
     split_count: 1
   - signal: DB9 4 - Process Trigger
     direction: Input
-    connected_to: CHB
+    connected_to: CHC
     connected_device: T660-1
     bulkhead: Back Terminal
     split_count: 1
   - signal: DB9 5 - Laser Output On/Off
     direction: Input
-    connected_to: CHC
-    connected_device: T660-1
+    connected_to: DISCONNECTED
+    connected_device: UNUSED
     bulkhead: Back Terminal
-    split_count: 1
+    split_count: 0
   - signal: DB9 6 - Interlock
     direction: Output
     connected_to: UNUSED
@@ -386,8 +391,13 @@ device_io:
     connected_device: DMB3
     bulkhead: Front BNC
     split_count: 1
+mux_subsystem:
+  active: false
+  status: inactive_bypassed
+  disabled_reason: HF2LI DIO input pins cannot be mapped through the HF2LI to DIO output pins.
 mux_boards:
   dmb1:
+    active: false
     role: arduino_mux_output_a_digital
     mux_output: output_a
     enable: arduino.D2
@@ -406,6 +416,7 @@ mux_boards:
       C6: hf2li.DIO 15
     unused_channels: C7-C15
   dmb2:
+    active: false
     role: arduino_mux_output_b_digital
     mux_output: output_b
     enable: arduino.D3
@@ -424,6 +435,7 @@ mux_boards:
       C6: hf2li.DIO 15
     unused_channels: C7-C15
   dmb3:
+    active: false
     role: arduino_mux_output_ext_digital
     mux_output: output_ext
     enable: arduino.A0
@@ -442,6 +454,7 @@ mux_boards:
       C6: hf2li.DIO 15
     unused_channels: C7-C15
   amb1:
+    active: false
     role: arduino_mux_output_a_analog
     mux_output: output_a
     enable: arduino.D4
@@ -457,6 +470,7 @@ mux_boards:
       C3: hf2li.AUX4
     unused_channels: C4-C15
   amb2:
+    active: false
     role: arduino_mux_output_b_analog
     mux_output: output_b
     enable: arduino.D5
@@ -472,6 +486,9 @@ mux_boards:
       C3: hf2li.AUX4
     unused_channels: C4-C15
 arduino_mux_control:
+  active: false
+  status: inactive_bypassed
+  disabled_reason: Arduino MUX controls are disabled in software until the MUX is rewired and requalified.
   power:
     5V:
     - dmb1.VCC
@@ -516,16 +533,17 @@ arduino_mux_control:
   - A5
 breakouts:
   hf2li_dio_breakout:
+    note: Physical breakout labels are recorded below, but the corresponding complete-DIO-word bit indices for MIRcat DB9 pins 1-3 remain unverified and must be measured before calibrated sweep acquisition.
     inputs:
       DIO16: surelite_ndyag.fixed_sync_out
       DIO17: surelite_ndyag.variable_sync_out
       DIO18: surelite_ndyag.flashlamp_sync_out
       DIO19: mircat.trig_out
       DIO20: mircat.db9_1_scan_direction
-      DIO21: mircat.db9_2_tuned_scan_firing
+      DIO21: mircat.db9_2_tuned_sweep_active
       DIO22: mircat.db9_3_wavelength_trigger
       DIO23-DIO31: null
-    outputs_to_muxes:
+    inactive_outputs_to_muxes:
       DIO9: dmb1_dmb2_dmb3.C0
       DIO10: dmb1_dmb2_dmb3.C1
       DIO11: dmb1_dmb2_dmb3.C2
@@ -547,7 +565,7 @@ breakouts:
       direction: output
       destination: hf2li.DIO20
     pin_2:
-      signal: tuned_scan_firing
+      signal: tuned_sweep_active
       direction: output
       destination: hf2li.DIO21
     pin_3:
@@ -557,11 +575,12 @@ breakouts:
     pin_4:
       signal: process_trigger
       direction: input
-      source: USER_CONFIRM_T660_1_CHB_OR_CHC
+      source: t660_1.CHC
     pin_5:
-      signal: laser_output_on_off
+      signal: reserved
+      connection: DISCONNECTED
       direction: input
-      source: USER_CONFIRM_T660_1_CHC
+      source: t660_1.CHD
     pin_6:
       signal: interlock
       direction: output
@@ -602,11 +621,11 @@ generated_warnings:
   - AMB2 EN <- Arduino D5
   - Arduino D5 -> EN AMB1
   recommended_resolution: Use Arduino D5 -> AMB2 EN.
-- issue: MIRcat DB9 Process Trigger row may conflict with T660-1 CHC/CHD entries.
+- issue: MIRcat DB9 process-control rows conflict in the source spreadsheet.
   spreadsheet_rows:
   - T660-1 CHC -> MIRcat DB9 4
   - T660-1 CHC -> MIRcat DB9 5
   - MIRcat DB9 4 - Process Trigger <- T660-1 CHB
   - MIRcat DB9 5 - Laser Output On/Off <- T660-1 CHC
-  recommended_resolution: Confirm whether DB9 4 should be driven by T660-1 CHB or
-    CHC before implementation.
+  recommended_resolution: 'Use the confirmed architecture: T660-1 CHC -> MIRcat
+    DB9 4 Process Trigger; T660-1 CHD -> MIRcat DB9 5 Laser Output On/Off.'

@@ -1,0 +1,57 @@
+name: hf2li_extref_2mhz
+description: "Reference-only timing for fast MIRcat sweeps: T660-2 drives HF2LI DIO0 EXT REF and does not drive MIRcat TRIG IN."
+approved_laser_safety_condition: false
+workflow_entrypoint: "tests/hardware_checks/check_mircat_fast_sweep.py"
+duration:
+  mode: continuous
+  t660_shots: 0
+  stop_condition: "Apply recipes/safe_idle.yaml after the fast sweep completes."
+timing:
+  repetition_rate_hz: 2000000
+  period_ns: 500
+  pulse_width_ns: 150
+  duty_cycle_fraction: 0.30
+routes:
+  hf2li_extref: "T660-2 CHA -> HF2LI DIO0 external reference BNC"
+  plotter_trigger: "MIRcat TRIG OUT -> HF2LI DIO1 BNC; this is a physical rewire and is not driven by T660-2."
+  mircat_trig_in: "Disconnected from T660-2 CHB for this workflow."
+operator_prerequisites:
+  - "Rewire MIRcat TRIG OUT to HF2LI DIO1 before running the fast sweep."
+  - "Keep T660-2 CHA connected to HF2LI DIO0 so the HF2LI PLL can lock before MIRcat emission starts."
+  - "Disconnect T660-2 CHB from MIRcat TRIG IN for this workflow."
+  - "Set the LabOne Plotter trigger to DIO1 rising; demodulator data transfer remains continuous."
+t660:
+  t660_1:
+    stop_first: true
+    trigger_source: "OFF"
+    force_eod: true
+    channels:
+      A:
+        enabled: false
+      B:
+        enabled: false
+      C:
+        enabled: false
+      D:
+        enabled: false
+  t660_2:
+    stop_first: true
+    clock:
+      frequency: 2MHz
+      shots: 0
+    trigger_source: "SYN"
+    force_eod: true
+    start: true
+    signals:
+      hf2li_extref:
+        delay: 0
+        width: 150ns
+        polarity: positive
+        termination: 50OHM
+        enabled: true
+      mircat_trig_in:
+        enabled: false
+      hf2li_daq_trigger:
+        enabled: false
+      t660_1_trig_in:
+        enabled: false

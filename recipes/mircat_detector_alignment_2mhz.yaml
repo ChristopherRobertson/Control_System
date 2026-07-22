@@ -1,5 +1,5 @@
 name: mircat_detector_alignment_2mhz
-description: "Detector alignment timing: continuous 2 MHz HF2LI Ext Ref and MIRcat trigger from T660-2."
+description: "Detector alignment timing: continuous 2 MHz HF2LI Ext Ref, MIRcat trigger, and optional LabOne Plotter DIO1 display trigger from T660-2."
 approved_laser_safety_condition: true
 alignment_intent: "Align detectors with the MIRcat beam using the direct T660-2 timing routes."
 workflow_entrypoint: "tests/hardware_checks/check_mircat_detector_alignment.py"
@@ -21,14 +21,28 @@ mircat_pulse_setup:
   pulse_mode_value: 2
   process_trigger_mode: internal
   process_trigger_mode_value: 1
-  current_ma: preserve_existing
-  wavenumber_cm1: operator_selected
+  current_ma: 1000.0
+  wavenumber_cm1: 1850.0
   emission_gate_required_before_t660_start: true
+hf2li_setup:
+  preset: detector_alignment
+  external_reference:
+    input: DIO0
+    pll_adcselect: 4
+    frequency_hz: 2000000.0
+  plotter_trigger:
+    input: DIO1
+    role: "Optional LabOne Plotter UI display trigger, not a DAQ module trigger and not a demodulator data-transfer trigger."
+    demodulator_trigger_node: "demods/{0,3}/trigger"
+    demodulator_trigger_value: 0
+    trigger_mode: "continuous demodulator stream; set Plotter UI trigger to DIO1 rising manually if desired"
 routes:
   hf2li_extref: "T660-2 CHA -> HF2LI DIO 0 external reference BNC"
   mircat_trig_in: "T660-2 CHB -> MIRcat TRIG IN"
+  labone_plotter_trigger: "T660-2 CHC -> HF2LI DIO 1 BNC for optional LabOne Plotter UI trigger"
 operator_prerequisites:
   - "Use tests/hardware_checks/check_mircat_detector_alignment.py for the ordered MIRcat + T660 workflow."
+  - "Open LabOne Plotter and add detector demodulator R traces before or after starting alignment; the UI will not duplicate LabOne plotting."
   - "Do not apply this T660-only recipe standalone unless the MIRcat is already configured, armed, tuned, and intentionally emission-enabled."
   - "Apply recipes/safe_idle.yaml or otherwise stop T660-2 before leaving the alignment setup unattended."
 t660:
@@ -67,6 +81,11 @@ t660:
         termination: 50OHM
         enabled: true
       hf2li_daq_trigger:
-        enabled: false
+        delay: 0
+        width: 150ns
+        polarity: positive
+        termination: 50OHM
+        enabled: true
+        role: "HF2LI DIO1 route for optional LabOne Plotter UI trigger; demodulator transfer remains continuous."
       t660_1_trig_in:
         enabled: false

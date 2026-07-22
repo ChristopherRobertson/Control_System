@@ -51,9 +51,17 @@ class ArduinoMuxService:
         device_config = devices.get("arduino_mux")
         if not isinstance(device_config, dict):
             raise ArduinoMuxConfigurationError("arduino_mux missing from hardware configuration")
+        if device_config.get("enabled") is False:
+            raise ArduinoMuxConfigurationError(
+                "arduino_mux is disabled/bypassed in hardware_configuration.yaml"
+            )
         mux_topology = config.get("arduino_mux_topology") or {}
         if not isinstance(mux_topology, dict):
             mux_topology = {}
+        if mux_topology.get("enabled") is False:
+            raise ArduinoMuxConfigurationError(
+                "arduino_mux_topology is disabled/bypassed in hardware_configuration.yaml"
+            )
         routes = (
             config.get("mux_routes")
             or mux_topology.get("routes")

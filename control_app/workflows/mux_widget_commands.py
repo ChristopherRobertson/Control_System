@@ -20,26 +20,29 @@ MUX_TARGET_OUTPUTS = {
     "output_b": "output_b",
     "output_ext": "output_ext",
 }
-HF2LI_MUX_SIGNAL_LABELS = {
-    # Derived from docs/Wiring Table.xlsx rows 40-53:
-    # HF2LI DIO 9-15 outputs mirror HF2LI DIO 16-22 inputs into DMB C0-C6.
-    "DIO 9": "YAG Fixed Sync OUT",
-    "DIO 10": "YAG Variable Sync OUT",
-    "DIO 11": "YAG Flashlamp Sync OUT",
-    "DIO 12": "MIRcat TRIG OUT",
-    "DIO 13": "MIRcat Scan Direction",
-    "DIO 14": "MIRcat Tuned / Scan Firing",
-    "DIO 15": "MIRcat Wavelength Trigger",
-    "AUX 1": "HF2LI AUX 1",
-    "AUX 2": "HF2LI AUX 2",
-    "AUX 3": "HF2LI AUX 3",
-    "AUX 4": "HF2LI AUX 4",
-}
+MUX_DISABLED_MESSAGE = (
+    "Arduino MUX is disabled and bypassed. Use direct scope/HF2LI input wiring "
+    "until the MUX is rewired and requalified."
+)
+
+
+def mux_enabled(inventory: ConfigInventory) -> bool:
+    """Return whether the Arduino MUX is active in the loaded hardware config."""
+
+    device = inventory.devices.get("arduino_mux")
+    topology = inventory.mux_settings
+    if isinstance(device, dict) and device.get("enabled") is False:
+        return False
+    if isinstance(topology, dict) and topology.get("enabled") is False:
+        return False
+    return True
 
 
 def build_mux_route_options(inventory: ConfigInventory) -> dict[str, tuple[str, ...]]:
     """Return configured route names grouped by Arduino MUX output."""
 
+    if not mux_enabled(inventory):
+        return {target: () for target in MUX_TARGET_OUTPUTS}
     options: dict[str, list[str]] = {target: [] for target in MUX_TARGET_OUTPUTS}
     for route_name, route_config in inventory.mux_routes.items():
         if not isinstance(route_config, dict):
@@ -53,6 +56,8 @@ def build_mux_route_options(inventory: ConfigInventory) -> dict[str, tuple[str, 
 def build_mux_default_routes(inventory: ConfigInventory) -> dict[str, str]:
     """Return documented diagnostic route defaults when configured."""
 
+    if not mux_enabled(inventory):
+        return {}
     diagnostic = inventory.mux_routes.get("diagnostic")
     if not isinstance(diagnostic, dict):
         return {}
@@ -66,6 +71,8 @@ def build_mux_default_routes(inventory: ConfigInventory) -> dict[str, str]:
 def build_mux_route_labels(inventory: ConfigInventory) -> dict[str, str]:
     """Return operator-facing labels for configured MUX route names."""
 
+    if not mux_enabled(inventory):
+        return {}
     labels: dict[str, str] = {}
     for route_name, route_config in inventory.mux_routes.items():
         if not isinstance(route_config, dict):
@@ -94,6 +101,16 @@ class MuxWidgetCommandHandler:
 
         if command.device_key != "arduino_mux":
             return WorkflowResult(status="blocked", message=f"Unsupported device {command.device_key}")
+        if not mux_enabled(self.inventory):
+            return WorkflowResult(
+                status="blocked",
+                message=MUX_DISABLED_MESSAGE,
+                data={
+                    "state": {"connected": False, "disabled": True},
+                    "config_hash": self.inventory.config_hash,
+                    "command": command.to_dict(),
+                },
+            )
         log_path = self._command_log_path()
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("a", encoding="utf-8") as command_log:
@@ -260,7 +277,8 @@ class MuxWidgetCommandHandler:
 
 
 def _route_signal_label(route_config: dict[str, Any]) -> str:
+    source_device = str(route_config.get("source_device") or "").upper()
     source_signal = str(route_config.get("source_signal") or "")
-    if source_signal in HF2LI_MUX_SIGNAL_LABELS:
-        return HF2LI_MUX_SIGNAL_LABELS[source_signal]
+    if source_device and source_signal:
+        return f"{source_device} {source_signal}"
     return source_signal or "Configured signal"
