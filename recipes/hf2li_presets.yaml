@@ -52,7 +52,7 @@ presets:
       duration_s: 60.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "runs/YYYYMMDD_hf2li_60s_record"
+      expected_output: "calibration/YYYYMMDD_hf2li_60s_record"
 
   qcl_reference_baseline:
     purpose: "QCL-on reference baseline with pump blocked at the approved Myoglobin-CO probe region."
@@ -104,7 +104,7 @@ presets:
       duration_s: 60.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "runs/YYYYMMDD_detector_baseline"
+      expected_output: "calibration/YYYYMMDD_detector_baseline"
 
   detector_alignment:
     purpose: "Continuous MIRcat detector-alignment setup for LabOne Plotter visualization with DIO0 external reference. Demodulator streaming stays continuous; use DIO1 only as the LabOne Plotter UI trigger if needed."
@@ -177,7 +177,7 @@ presets:
       duration_s: 5.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "runs/YYYYMMDD_mircat_detector_alignment"
+      expected_output: "calibration/YYYYMMDD_mircat_detector_alignment"
 
   detector_alignment_internal:
     purpose: "MIRcat internal-pulse detector alignment for LabOne Plotter visualization without T660 timing."
@@ -241,7 +241,7 @@ presets:
       duration_s: 5.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "runs/YYYYMMDD_mircat_detector_alignment_internal"
+      expected_output: "calibration/YYYYMMDD_mircat_detector_alignment_internal"
 
   standard_spectral_validation:
     purpose: "Step-scan detector acquisition for workflow-based RSI spectral validation standards."
@@ -293,7 +293,7 @@ presets:
       duration_s: 5.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "runs/YYYYMMDD_standard_spectral_validation"
+      expected_output: "calibration/YYYYMMDD_standard_spectral_validation"
 
   myoglobin_co_spectrum:
     purpose: "Step-scan detector acquisition for Myoglobin-CO QCL/FTIR spectral validation."

@@ -116,7 +116,7 @@ a UI alignment run is active.
 UI alignment starts write a timestamped directory:
 
 ```text
-runs/YYYYMMDD_HHMMSS_mircat_detector_alignment_ui/
+calibration/YYYYMMDD_HHMMSS_mircat_detector_alignment_ui/
 ```
 
 Expected artifacts include:

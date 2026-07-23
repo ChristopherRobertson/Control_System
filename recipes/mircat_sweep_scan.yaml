@@ -10,7 +10,7 @@ wiring_contract:
   t660_2_c: "HF2LI DIO1 BNC; unused during this sweep recipe"
   t660_2_d: "T660-1 TRIG IN; disabled during this unpumped sweep"
   t660_1_c: "MIRcat DB9 pin 4 Process Trigger; held inactive pending GUI confirmation"
-  t660_1_d: "DISCONNECTED from MIRcat DB9 pin 5"
+  t660_1_d: "DISCONNECTED AND UNUSED"
   mircat_db9_pin_1: "HF2LI DIO input: Scan Direction"
   mircat_db9_pin_2: "HF2LI DIO input: Sweep Active; high only during each QCL channel sweep"
   mircat_db9_pin_3: "HF2LI DIO input: Wavelength Trigger calibration pulse"

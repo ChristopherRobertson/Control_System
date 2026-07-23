@@ -45,7 +45,7 @@ def main() -> int:
     recipe_path = _resolve_recipe(args.recipe)
     recipe = _load_recipe(recipe_path)
     recipe_name = str(recipe.get("name") or recipe_path.stem)
-    run_dir = REPO_ROOT / "runs" / f"{today_stamp()}_{recipe_name}"
+    run_dir = REPO_ROOT / "calibration" / f"{today_stamp()}_{recipe_name}"
     run_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = run_dir / "command_log.txt"
     summary_path = run_dir / "spectral_validation_summary.json"

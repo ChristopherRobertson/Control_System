@@ -16,11 +16,24 @@ Thumbs.db
 # Archived legacy artifacts kept outside active app path
 archive/
 
-# Generated hardware acquisition and calibration artifacts
+# Generated operational hardware artifacts
 runs/
 logs/
-calibration/
+
+# Campaign metadata under calibration/<campaign-id>/ is versionable. Existing
+# canonical outputs remain ignored until explicit promotion. Large raw
+# acquisition products remain local/archivable.
+calibration/timing_calibration.csv
+calibration/timing_offsets.yaml
+calibration/**/raw_pico_traces/**
+calibration/**/raw_hf2li/**
+calibration/**/raw_mircat/**
+!calibration/**/raw_pico_traces/.gitkeep
+!calibration/**/raw_hf2li/.gitkeep
+!calibration/**/raw_mircat/.gitkeep
 **/raw_pico_traces/
+!calibration/**/raw_pico_traces/
+!calibration/**/raw_pico_traces/.gitkeep
 
 #MIRcat SDK files
 /docs/MIRcat/SDK/docs/*

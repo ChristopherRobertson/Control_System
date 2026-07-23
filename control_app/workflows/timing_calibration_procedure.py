@@ -30,10 +30,10 @@ from control_app.config_loader import (
 )
 from control_app.devices.picoscope_service import PicoScopeService
 from control_app.devices.t660_service import T660Service
-from control_app.workflows.day8_timing_calibration import (
+from control_app.workflows.timing_trace_analysis import (
     DEFAULT_SEPARATIONS_NS,
     DEFAULT_SHOT_COUNT,
-    Day8TimingCalibrationError,
+    TimingCalibrationError,
     analyze_pico_trace,
 )
 from control_app.workflows.picoscope_settings_test import (
@@ -54,7 +54,7 @@ DEFAULT_OPTICAL_RECIPE = "recipes/ndyag_alignment_10hz.yaml"
 SAFE_IDLE_RECIPE = REPO_ROOT / "recipes" / "safe_idle.yaml"
 
 
-class SafeIdleVerificationError(Day8TimingCalibrationError):
+class SafeIdleVerificationError(TimingCalibrationError):
     """Raised when STOP/OFF application or readback cannot be verified."""
 
 
@@ -463,41 +463,6 @@ MEASUREMENT_STEPS: tuple[MeasurementStep, ...] = (
         requires_output_safety_confirmation=True,
         recipe_use_condition="conditional: yes only if T660-1 CHC is used to gate or mark MIRcat process timing",
     ),
-    MeasurementStep(
-        setup_id="step_9_fire_to_mircat_onoff",
-        step="9",
-        measurement_id="TC-09",
-        title="T660-1 FIRE to MIRcat laser on/off electrical arrival",
-        category="MIRcat DB9 process-control timing",
-        purpose="Measure T660-1 CHA/FIRE to CHD/laser-on-off channel-plus-route timing.",
-        reference_event="T660-1 CHA FIRE reference at disconnected Nd:YAG DB9 pin 7",
-        target_event="T660-1 CHD MIRcat Laser On/Off at disconnected DB9 pin 5",
-        pico_ch_a="T660-1 CHA final FIRE conductor at disconnected Nd:YAG DB9 pin 7 -> PicoScope CHA",
-        pico_ch_b="T660-1 CHD final MIRcat Laser On/Off conductor at disconnected MIRcat DB9 pin 5 -> PicoScope CHB",
-        disconnect=(
-            "Keep the Nd:YAG timing DB9 disconnected and FIRE pin 7 on PicoScope CHA from Step 8.",
-            "Move only PicoScope CHB from isolated MIRcat DB9 pin 4 to isolated pin 5; keep pin 4 disabled.",
-        ),
-        remains_connected=(
-            "T660-2 CHD final cable remains connected to T660-1 TRIG IN; T660-2 CHB/CHC final routes remain physically connected but disabled.",
-            "The full Nd:YAG timing DB9 and MIRcat DB9 connectors remain disconnected; neither device receives a measured T660-1 line.",
-        ),
-        uses_final_wiring=True,
-        splitter_used=False,
-        splitter_mapping="none",
-        correction_rule="subtract scope/cable B-A skew from measured B-A",
-        programmed_delay_mode="six_point_sweep",
-        trigger_rate_hz=T660_1_TRIGGER_RATE_HZ,
-        use_in_timing_recipe=True,
-        reporting_label="FIRE-to-MIRcat DB9 pin 5 laser-on/off timing",
-        notes="This combines T660-1 channel skew and the final DB9 route; master-relative timing is derived with TC-04.",
-        reference_signal="ndyag_fire",
-        target_signal="mircat_db9_pin_5_laser_output_on_off",
-        dependency_signals=("t660_1_trig_in",),
-        reference_edge="falling",
-        requires_output_safety_confirmation=True,
-        recipe_use_condition="conditional: yes only if T660-1 CHD is used to gate MIRcat laser output",
-    ),
 )
 
 
@@ -561,7 +526,7 @@ class RemoteShotController:
 
     def _require_open(self) -> None:
         if set(self._services) != {"t660_1", "t660_2"}:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "Remote optical shot controller is not connected to both T660 units"
             )
 
@@ -621,7 +586,7 @@ class TimingCalibrationProcedure:
         )
         hardware_config_sha256 = _sha256_file(self.inventory.config_path)
         if hardware_config_sha256 != self.inventory.config_hash:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "hardware_configuration.yaml changed after the in-memory inventory was loaded; reload configuration and create a new plan"
             )
         pico_recipe, resolved_pico_recipe, picoscope_recipe_sha256 = (
@@ -646,9 +611,9 @@ class TimingCalibrationProcedure:
             safe_idle_recipe
         )
         if photodetector_edge not in {"rising", "falling"}:
-            raise Day8TimingCalibrationError("photodetector edge must be rising or falling")
+            raise TimingCalibrationError("photodetector edge must be rising or falling")
         if not -32767 <= int(photodetector_threshold_adc) <= 32767:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "photodetector threshold must be within -32767..32767 ADC counts"
             )
         for name, value in (
@@ -666,23 +631,23 @@ class TimingCalibrationProcedure:
             ),
         ):
             if value is not None and not math.isfinite(float(value)):
-                raise Day8TimingCalibrationError(f"{name} must be finite")
+                raise TimingCalibrationError(f"{name} must be finite")
         if (
             photodetector_response_uncertainty_ns is not None
             and float(photodetector_response_uncertainty_ns) < 0
         ):
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "photodetector_response_uncertainty_ns must be non-negative"
             )
         if (
             photodetector_response_delay_ns is not None
             and float(photodetector_response_delay_ns) < 0
         ):
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "photodetector_response_delay_ns is a positive latency to subtract and must be non-negative"
             )
         if float(photodetector_minimum_latency_ns) < 0:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "photodetector_minimum_latency_ns must be non-negative"
             )
         if (
@@ -690,21 +655,21 @@ class TimingCalibrationProcedure:
             and float(photodetector_maximum_latency_ns)
             <= float(photodetector_minimum_latency_ns)
         ):
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "photodetector_maximum_latency_ns must be greater than the minimum latency"
             )
         if (
             sample_path_standard_uncertainty_ns is not None
             and float(sample_path_standard_uncertainty_ns) < 0
         ):
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "sample_path_standard_uncertainty_ns must be non-negative"
             )
         if (
             step7_load_match_standard_uncertainty_ns is not None
             and float(step7_load_match_standard_uncertainty_ns) < 0
         ):
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "step7_load_match_standard_uncertainty_ns must be non-negative"
             )
         if str(photodetector_characterization_date or "").strip():
@@ -714,7 +679,7 @@ class TimingCalibrationProcedure:
                     "%Y-%m-%d",
                 )
             except ValueError as exc:
-                raise Day8TimingCalibrationError(
+                raise TimingCalibrationError(
                     "photodetector_characterization_date must use YYYY-MM-DD"
                 ) from exc
         load_method = str(step7_load_match_method or "").strip()
@@ -935,7 +900,7 @@ class TimingCalibrationProcedure:
             "final_restoration": {
                 "safe_idle_readback_required_before_handling": True,
                 "instructions": [
-                    "Remove PicoScope probes from isolated Nd:YAG FIRE pin 7 and MIRcat DB9 pin 5.",
+                    "Remove PicoScope probes from isolated Nd:YAG FIRE pin 7 and MIRcat Process Trigger pin 4.",
                     "Restore all labeled final device cables/connectors only under the approved shutdown/restoration checklist.",
                     "Do not enable any T660 output during restoration; verify both units remain safe-idled.",
                 ],
@@ -1061,7 +1026,7 @@ class TimingCalibrationProcedure:
         )
         reviewed_plan = validate_reviewed_plan_artifacts(run_path, plan)
         if plan.get("prehardware_blockers"):
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "Reviewed plan still has prehardware blockers: "
                 + "; ".join(str(item) for item in plan["prehardware_blockers"])
             )
@@ -1073,14 +1038,14 @@ class TimingCalibrationProcedure:
             reviewed_plan["recipes"]["safe_idle"]["path"]
         )
         if safe_idle_sha256 != reviewed_plan["recipes"]["safe_idle"]["sha256"]:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "safe_idle.yaml changed after plan review; create and review a new plan"
             )
         safe_idle_resolved = TimingRecipeManager(self.inventory).validate_recipe(
             safe_idle_recipe
         )["resolved_settings"]
         if safe_idle_resolved != reviewed_plan["recipes"]["safe_idle"]["resolved_settings"]:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "Resolved safe-idle settings differ from the reviewed plan"
             )
 
@@ -1090,7 +1055,7 @@ class TimingCalibrationProcedure:
             )
         )
         if pico_recipe_sha256 != reviewed_plan["recipes"]["picoscope"]["sha256"]:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "PicoScope recipe changed after plan review; create and review a new plan"
             )
         base_capture_settings = _settings_with_channel_a_trigger(
@@ -1098,7 +1063,7 @@ class TimingCalibrationProcedure:
             edge="rising",
         )
         if base_capture_settings != reviewed_plan["recipes"]["picoscope"]["effective_capture_settings"]:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "Effective PicoScope settings differ from the reviewed plan"
             )
 
@@ -1118,7 +1083,7 @@ class TimingCalibrationProcedure:
             or optical_validation["resolved_settings"]
             != optical_plan["resolved_settings"]
         ):
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 "Effective optical recipe differs from the reviewed plan; create and review a new plan"
             )
 
@@ -1132,7 +1097,7 @@ class TimingCalibrationProcedure:
 
         device_config = self.inventory.devices.get("picoscope")
         if not isinstance(device_config, dict):
-            raise Day8TimingCalibrationError("picoscope missing from hardware_configuration.yaml")
+            raise TimingCalibrationError("picoscope missing from hardware_configuration.yaml")
         validate_capture_settings(base_capture_settings, device_config)
 
         raw_dir = run_path / "raw_pico_traces"
@@ -1289,7 +1254,7 @@ class TimingCalibrationProcedure:
                             generated_recipe
                         )["resolved_settings"]
                         if actual_resolved != expected_resolved:
-                            raise Day8TimingCalibrationError(
+                            raise TimingCalibrationError(
                                 f"Generated recipe for {step.setup_id} at {programmed_delay_ns} ns differs from the reviewed plan"
                             )
                         timing_manager.apply_recipe(generated_recipe, output_path=readback_path)
@@ -1376,12 +1341,12 @@ class TimingCalibrationProcedure:
                 raise execution_error
             if cleanup_errors:
                 detail = "; ".join(str(error) for error in cleanup_errors)
-                raise Day8TimingCalibrationError(
+                raise TimingCalibrationError(
                     f"PicoScope cleanup failed after verified final safe idle: {detail}"
                 )
 
         if not rows:
-            raise Day8TimingCalibrationError("No timing measurements were acquired")
+            raise TimingCalibrationError("No timing measurements were acquired")
         outputs = consolidate_results(
             rows,
             steps=[MeasurementStep(**item) for item in plan["operator_sequence"]],
@@ -1421,7 +1386,7 @@ class TimingCalibrationProcedure:
         """Build a fully specified, sparse-rate electrical recipe for one step."""
 
         if step.optical:
-            raise Day8TimingCalibrationError("TC-07 must use the approved optical recipe")
+            raise TimingCalibrationError("TC-07 must use the approved optical recipe")
         active: dict[str, int] = {}
         if step.reference_signal:
             active[step.reference_signal] = 0
@@ -1430,7 +1395,7 @@ class TimingCalibrationProcedure:
         for dependency in step.dependency_signals:
             active[dependency] = 0
         if not active:
-            raise Day8TimingCalibrationError(f"{step.setup_id} has no programmable timing signal")
+            raise TimingCalibrationError(f"{step.setup_id} has no programmable timing signal")
 
         involved_units = {
             self.inventory.signal_map[signal]["device"]
@@ -1655,7 +1620,7 @@ class TimingCalibrationProcedure:
                 raise error
             expected_counts = {"t660_1": int(count), "t660_2": int(count)}
             if counts != expected_counts or trigger_commands != count:
-                raise Day8TimingCalibrationError(
+                raise TimingCalibrationError(
                     f"Step 7 exposure audit mismatch for {label}: commands={trigger_commands}, counters={counts}, expected={expected_counts}"
                 )
 
@@ -1789,7 +1754,7 @@ class TimingCalibrationProcedure:
                 len(raw_paths) != expected_raw_count
                 or int(audit["accepted_measurement_traces"]) != int(shot_count)
             ):
-                raise Day8TimingCalibrationError(
+                raise TimingCalibrationError(
                     "Step 7 trace-budget closure failed: "
                     f"raw={len(raw_paths)}/{expected_raw_count}, "
                     f"accepted={audit['accepted_measurement_traces']}/{shot_count}"
@@ -1801,7 +1766,7 @@ class TimingCalibrationProcedure:
             if observed_intervals and min(observed_intervals) < (
                 minimum_remote_interval_s - 1e-6
             ):
-                raise Day8TimingCalibrationError(
+                raise TimingCalibrationError(
                     "Step 7 cross-phase remote-shot rate audit failed: "
                     f"minimum observed interval {min(observed_intervals):.6g} s is below "
                     f"{minimum_remote_interval_s:.6g} s"
@@ -1865,7 +1830,7 @@ class TimingCalibrationProcedure:
 
 def create_unique_run_directory(
     *,
-    run_parent: str | Path = REPO_ROOT / "runs",
+    run_parent: str | Path = REPO_ROOT / "calibration",
     requested_path: str | Path | None = None,
 ) -> Path:
     """Create an exclusive run directory; existing paths are never reused."""
@@ -1888,7 +1853,7 @@ def create_unique_run_directory(
             return candidate.resolve()
         except FileExistsError:
             continue
-    raise Day8TimingCalibrationError("Could not allocate a unique timing-calibration run directory")
+    raise TimingCalibrationError("Could not allocate a unique timing-calibration run directory")
 
 
 def render_plan_markdown(plan: dict[str, Any]) -> str:
@@ -2100,16 +2065,16 @@ def analyze_optical_trace(
 
     samples_a, samples_b = _read_trace_channels(raw_csv_path)
     if not samples_a or not samples_b:
-        raise Day8TimingCalibrationError(f"No samples found in {raw_csv_path}")
+        raise TimingCalibrationError(f"No samples found in {raw_csv_path}")
     if maximum_latency_ns is not None and float(maximum_latency_ns) <= float(
         minimum_latency_ns
     ):
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Optical maximum latency must be greater than the minimum latency"
         )
     peak_abs = max(abs(value) for value in samples_b)
     if peak_abs >= saturation_adc:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"Photodetector trace saturated ({peak_abs} ADC counts) in {raw_csv_path}; increase attenuation before continuing."
         )
     baseline_stop = max(10, min(pre_trigger_samples // 2, len(samples_b) // 10))
@@ -2119,7 +2084,7 @@ def analyze_optical_trace(
     signal_excursion = max(abs(value - baseline_mean) for value in samples_b)
     required_excursion = max(100.0, minimum_signal_to_noise * max(baseline_noise, 1.0))
     if signal_excursion < required_excursion:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"Photodetector signal-to-noise check failed in {raw_csv_path}: excursion {signal_excursion:.1f}, required {required_excursion:.1f} ADC counts."
         )
     if blocked_control is not None:
@@ -2135,7 +2100,7 @@ def analyze_optical_trace(
             1.0,
         )
         if signal_excursion <= control_like_limit:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 f"Photodetector trace is control-like in {raw_csv_path}: excursion "
                 f"{signal_excursion:.1f} ADC is not above the blocked-control limit "
                 f"{control_like_limit:.1f} ADC."
@@ -2160,11 +2125,11 @@ def analyze_optical_trace(
             if maximum_latency_ns is not None
             else f" by at least {minimum_latency_ns:g} ns"
         )
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"No {target_edge} photodetector edge followed the Q-switch{window_text} in {raw_csv_path}"
         )
     if len(target_candidates) != 1:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"Ambiguous photodetector trace in {raw_csv_path}: {len(target_candidates)} "
             "threshold edges fall inside the reviewed optical search window"
         )
@@ -2183,7 +2148,7 @@ def analyze_optical_trace(
             if minimum_target_index <= value <= maximum_target_index
         ]
         if len(varied_candidates) != 1:
-            raise Day8TimingCalibrationError(
+            raise TimingCalibrationError(
                 f"Photodetector threshold-sensitivity check found {len(varied_candidates)} in-window edges at {varied_threshold} ADC in {raw_csv_path}"
             )
         sensitivity_delays.append(
@@ -2233,23 +2198,23 @@ def analyze_beam_blocked_control(
 
     samples_a, samples_b = _read_trace_channels(raw_csv_path)
     if not samples_a or not samples_b:
-        raise Day8TimingCalibrationError(f"No samples found in {raw_csv_path}")
+        raise TimingCalibrationError(f"No samples found in {raw_csv_path}")
     if maximum_latency_ns is not None and float(maximum_latency_ns) <= float(
         minimum_latency_ns
     ):
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Optical maximum latency must be greater than the minimum latency"
         )
     peak_abs = max(abs(value) for value in samples_b)
     if peak_abs >= saturation_adc:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"Beam-blocked detector control saturated ({peak_abs} ADC counts) in {raw_csv_path}"
         )
     reference_edges = _edge_indices(samples_a, reference_threshold_adc, reference_edge)
     reference_index = min(reference_edges, key=lambda value: abs(value - pre_trigger_samples))
     try:
         target_edges = _edge_indices(samples_b, target_threshold_adc, target_edge)
-    except Day8TimingCalibrationError:
+    except TimingCalibrationError:
         target_edges = []
     minimum_target_index = reference_index + float(minimum_latency_ns) / sample_interval_ns
     maximum_target_index = (
@@ -2264,7 +2229,7 @@ def analyze_beam_blocked_control(
     ]
     if delayed_edges:
         first_delay_ns = (min(delayed_edges) - reference_index) * sample_interval_ns
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Beam-blocked control contains a delayed photodetector-threshold edge "
             f"at {first_delay_ns:.6g} ns; treat this as EMI/crosstalk and do not accept optical data"
         )
@@ -2311,7 +2276,7 @@ def derive_measurement_system_corrections(
         if row["measurement_id"] == "MS-00C"
     ]
     if not normal or not swapped or not installed:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Step 0 normal, swapped, and installed-geometry measurements are all required"
         )
     normal_mean = statistics.fmean(normal)
@@ -2366,7 +2331,7 @@ def fit_delay_sweep(points: list[dict[str, Any]]) -> dict[str, float]:
     """Weighted linear fit with resolution floors and full fit covariance."""
 
     if len(points) < 2:
-        raise Day8TimingCalibrationError("At least two programmed delays are required for a sweep fit")
+        raise TimingCalibrationError("At least two programmed delays are required for a sweep fit")
     x = [float(point["programmed_delay_ns"]) for point in points]
     y = [float(point["mean_corrected_measured_ns"]) for point in points]
     standard_uncertainties: list[float] = []
@@ -2383,7 +2348,7 @@ def fit_delay_sweep(points: list[dict[str, Any]]) -> dict[str, float]:
     sum_wxy = sum(weight * xi * yi for weight, xi, yi in zip(weights, x, y))
     determinant = sum_w * sum_wxx - sum_wx * sum_wx
     if determinant <= 0:
-        raise Day8TimingCalibrationError("Programmed delays do not span a fit range")
+        raise TimingCalibrationError("Programmed delays do not span a fit range")
     intercept = (sum_wxx * sum_wy - sum_wx * sum_wxy) / determinant
     slope = (sum_w * sum_wxy - sum_wx * sum_wy) / determinant
     residuals = [yi - (intercept + slope * xi) for xi, yi in zip(x, y)]
@@ -2403,7 +2368,7 @@ def fit_delay_sweep(points: list[dict[str, Any]]) -> dict[str, float]:
         PICOSCOPE_TIMEBASE_ACCURACY_PPM,
     )
     if abs(slope) < 1e-15:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Delay-sweep slope is effectively zero; recipe correction is undefined"
         )
     correction = -intercept / slope
@@ -2559,7 +2524,7 @@ def consolidate_results(
     for step in steps:
         step_points = [item for item in per_delay if item["measurement_id"] == step.measurement_id]
         if not step_points:
-            raise Day8TimingCalibrationError(f"No result rows for {step.measurement_id}")
+            raise TimingCalibrationError(f"No result rows for {step.measurement_id}")
         if step.measurement_id.startswith("MS-00"):
             continue
         if step.sweep_delays:
@@ -2861,7 +2826,6 @@ def _derive_recipe_corrections(
         slope_standard_error_ppm("TC-05"),
     )
     master_to_process = intercept("TC-04") + intercept("TC-08")
-    master_to_onoff = intercept("TC-04") + intercept("TC-09")
     master_to_q_zero = intercept("TC-04") + intercept("TC-05")
     master_to_chem_zero_programmed = master_to_q_zero + intercept("TC-07")
     direct_q_to_chem_zero_programmed = intercept("TC-06") + intercept("TC-07")
@@ -2912,10 +2876,6 @@ def _derive_recipe_corrections(
     master_to_process_uncertainty = include_timebase_scale(
         master_to_process,
         fit_variance("TC-04") + fit_variance("TC-08") + 4.0 * scope_variance,
-    )
-    master_to_onoff_uncertainty = include_timebase_scale(
-        master_to_onoff,
-        fit_variance("TC-04") + fit_variance("TC-09") + 4.0 * scope_variance,
     )
     master_to_chem_uncertainty = include_timebase_scale(
         master_to_chem_zero_programmed,
@@ -3003,8 +2963,6 @@ def _derive_recipe_corrections(
         "qswitch_validation_slope_difference_standard_error_ppm": closure_slope_standard_error_ppm,
         "hf2li_extref_arrival_to_mircat_process_zero_programmed_ns_TC04_plus_TC08": master_to_process,
         "hf2li_extref_arrival_to_mircat_process_zero_programmed_standard_uncertainty_ns": master_to_process_uncertainty,
-        "hf2li_extref_arrival_to_mircat_onoff_zero_programmed_ns_TC04_plus_TC09": master_to_onoff,
-        "hf2li_extref_arrival_to_mircat_onoff_zero_programmed_standard_uncertainty_ns": master_to_onoff_uncertainty,
         "hf2li_extref_arrival_to_t_chem_zero_programmed_ns_TC04_plus_TC05_plus_TC07": master_to_chem_zero_programmed,
         "hf2li_extref_arrival_to_t_chem_zero_programmed_standard_uncertainty_ns": master_to_chem_uncertainty,
         "hf2li_extref_arrival_to_t_chem_zero_programmed_ns_TC06_plus_TC07_direct_validation": direct_q_to_chem_zero_programmed,
@@ -3029,7 +2987,7 @@ def _derive_recipe_corrections(
         "optical_recipe_path": optical_recipe_path,
         "time_origin_note": "These combinations are referenced to physical HF2LI EXT REF cable-end arrival. t_master=0 remains recipe zero; converting to t_master requires a separately established programming-origin-to-EXT-REF-arrival term. t_chem=0 is the corrected optical arrival.",
         "drift_note": "Zero-programmed diagnostics use intercepts only. The selected-recipe t_chem anchor evaluates each fitted slope at the frozen FIRE/Q-switch program; long-delay residuals are never treated as fixed cable delay.",
-        "optical_closure_covariance_note": "The direct-minus-component optical closure is algebraically the selected-program Q-switch-chain closure; shared TC-07 detector, path, scope/splitter, and load-equivalence terms cancel and must not be RSS-added from DER-02 and DER-05.",
+        "optical_closure_covariance_note": "The direct-minus-component optical closure is algebraically the selected-program Q-switch-chain closure; shared TC-07 detector, path, scope/splitter, and load-equivalence terms cancel and must not be RSS-added from DER-02 and DER-04.",
     }
 
 
@@ -3093,19 +3051,8 @@ def _derived_table_rows(derived: dict[str, Any]) -> list[dict[str, Any]]:
             "TC-04 + TC-08; slope terms remain separate.",
         ),
         (
-            "derived timing",
-            "DER-04",
-            "HF2LI EXT REF arrival",
-            "MIRcat Laser On/Off DB9 pin 5 arrival",
-            "hf2li_extref_arrival_to_mircat_onoff_zero_programmed_ns_TC04_plus_TC09",
-            "hf2li_extref_arrival_to_mircat_onoff_zero_programmed_standard_uncertainty_ns",
-            "conditional: yes only if T660-1 CHD is used for MIRcat laser on/off",
-            "Derived HF2LI-EXT-REF-arrival-to-MIRcat-laser-on/off timing",
-            "TC-04 + TC-09; slope terms remain separate.",
-        ),
-        (
             "derived-chain validation",
-            "DER-05",
+            "DER-04",
             "HF2LI EXT REF arrival",
             "optical OPO pump arrival at sample (t_chem = 0)",
             "hf2li_extref_arrival_to_t_chem_selected_recipe_ns_TC06_plus_TC07_direct_validation",
@@ -3155,7 +3102,7 @@ def _derived_table_rows(derived: dict[str, Any]) -> list[dict[str, Any]]:
             row["slope_standard_error_ppm"] = derived[
                 "qswitch_validation_slope_difference_standard_error_ppm"
             ]
-        elif row["measurement_id"] in {"DER-02", "DER-03", "DER-04"}:
+        elif row["measurement_id"] in {"DER-02", "DER-03"}:
             row["recipe_correction_ns"] = -float(
                 row["fixed_offset_intercept_ns"]
             )
@@ -3165,7 +3112,7 @@ def _derived_table_rows(derived: dict[str, Any]) -> list[dict[str, Any]]:
             row["recipe_formula"] = (
                 "Signed zero-arrival shift shown as -physical_latency; apply component slopes/formulas rather than folding ppm into the fixed term"
             )
-        if row["measurement_id"] in {"DER-02", "DER-05"}:
+        if row["measurement_id"] in {"DER-02", "DER-04"}:
             selected = derived["selected_optical_recipe_programmed_delays_ns"]
             row["programmed_delay_range"] = (
                 f"selected optical recipe: FIRE={selected['fire']} ns, "
@@ -3439,7 +3386,7 @@ def _plan_capture_settings(
             timing_validation["workflow_sample_budget"] = int(max_samples_per_trace)
             return settings, timing_validation
     detail = f": {last_error}" if last_error is not None else ""
-    raise Day8TimingCalibrationError(
+    raise TimingCalibrationError(
         "PicoScope could not find a supported timebase/window covering "
         f"{programmed_delay_ns} ns in one capture within the {max_samples_per_trace}-sample raw-volume budget{detail}"
     )
@@ -3462,7 +3409,7 @@ def _load_and_validate_optical_recipe(
 ) -> dict[str, Any]:
     recipe, target, source_sha256 = _load_yaml_mapping_with_sha256(path)
     if recipe.get("approved_laser_safety_condition") is not True:
-        raise Day8TimingCalibrationError("Optical recipe lacks approved_laser_safety_condition: true")
+        raise TimingCalibrationError("Optical recipe lacks approved_laser_safety_condition: true")
     t660 = recipe.get("t660") or {}
     t660_1 = t660.get("t660_1") or {}
     t660_2 = t660.get("t660_2") or {}
@@ -3470,19 +3417,19 @@ def _load_and_validate_optical_recipe(
     fire_settings = deepcopy(signals.get("ndyag_fire") or {})
     qswitch_settings = deepcopy(signals.get("ndyag_q_switch") or {})
     if not (fire_settings.get("enabled") is True and qswitch_settings.get("enabled") is True):
-        raise Day8TimingCalibrationError("Optical recipe must enable both Nd:YAG FIRE and Q-switch")
+        raise TimingCalibrationError("Optical recipe must enable both Nd:YAG FIRE and Q-switch")
     _require_optical_channel_fields("ndyag_fire", fire_settings)
     _require_optical_channel_fields("ndyag_q_switch", qswitch_settings)
     master_channels = t660_2.get("channels") or {}
     master_drive = deepcopy(master_channels.get("D") or {})
     if master_drive.get("enabled") is not True:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Optical recipe must explicitly enable only T660-2 CHD as the T660-1 trigger drive"
         )
     _require_optical_channel_fields("t660_1_trig_in", master_drive)
     frequency = str((t660_2.get("clock") or {}).get("frequency", "")).lower().replace(" ", "")
     if frequency not in {f"{expected_rate_hz}hz", str(expected_rate_hz)}:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"Optical recipe must use exactly {expected_rate_hz} Hz, found {frequency!r}"
         )
     recipe = deepcopy(recipe)
@@ -3535,7 +3482,6 @@ def _load_and_validate_optical_recipe(
         "ndyag_fire": fire_settings,
         "ndyag_q_switch": qswitch_settings,
         "mircat_db9_pin_4_process_trigger": deepcopy(disabled_channel),
-        "mircat_db9_pin_5_laser_output_on_off": deepcopy(disabled_channel),
     }
     master.pop("signals", None)
     master["channels"] = {
@@ -3564,14 +3510,14 @@ def _load_yaml_mapping_with_sha256(
     try:
         raw = target.read_bytes()
     except OSError as exc:
-        raise Day8TimingCalibrationError(f"Could not read frozen YAML file {target}: {exc}") from exc
+        raise TimingCalibrationError(f"Could not read frozen YAML file {target}: {exc}") from exc
     digest = hashlib.sha256(raw).hexdigest()
     try:
         data = yaml.safe_load(raw) or {}
     except yaml.YAMLError as exc:
-        raise Day8TimingCalibrationError(f"Could not parse frozen YAML file {target}: {exc}") from exc
+        raise TimingCalibrationError(f"Could not parse frozen YAML file {target}: {exc}") from exc
     if not isinstance(data, dict):
-        raise Day8TimingCalibrationError(f"Frozen YAML file {target} is not a mapping")
+        raise TimingCalibrationError(f"Frozen YAML file {target} is not a mapping")
     return data, target, digest
 
 
@@ -3582,7 +3528,7 @@ def _require_optical_channel_fields(
     required = ("delay", "width", "polarity", "termination", "enabled")
     missing = [field for field in required if field not in settings]
     if missing:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"Optical recipe {signal} must explicitly define: {', '.join(missing)}"
         )
 
@@ -3605,11 +3551,11 @@ def _duration_ns(value: Any) -> float:
     try:
         number = float(text)
     except ValueError as exc:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"Unsupported optical-recipe duration {value!r}"
         ) from exc
     if not math.isfinite(number):
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"Unsupported optical-recipe duration {value!r}"
         )
     # Unitless T660 values are seconds in the documented P500 interface.
@@ -3692,7 +3638,6 @@ def _render_consolidated_markdown(
             "",
             f"- Direct-vs-derived Q-switch closure: {derived['hf2li_extref_arrival_to_qswitch_validation_closure_ns_TC06_minus_TC04_plus_TC05']:.6g} ns.",
             f"- HF2LI EXT REF arrival to MIRcat process control at zero programmed delay: {derived['hf2li_extref_arrival_to_mircat_process_zero_programmed_ns_TC04_plus_TC08']:.6g} ns.",
-            f"- HF2LI EXT REF arrival to MIRcat laser on/off at zero programmed delay: {derived['hf2li_extref_arrival_to_mircat_onoff_zero_programmed_ns_TC04_plus_TC09']:.6g} ns.",
             f"- Selected optical recipe EXT REF arrival to chemical zero (TC-04 evaluated at FIRE + TC-05 evaluated at Q-FIRE + TC-07): {derived['hf2li_extref_arrival_to_t_chem_selected_recipe_ns_TC04_plus_TC05_plus_TC07']:.6g} ns.",
             f"- Independent selected-recipe TC-06-at-Q + TC-07 derivation: {derived['hf2li_extref_arrival_to_t_chem_selected_recipe_ns_TC06_plus_TC07_direct_validation']:.6g} ns; direct-minus-component closure {derived['hf2li_extref_arrival_to_t_chem_selected_recipe_dual_derivation_closure_ns_direct_minus_component']:.6g} ± {derived['hf2li_extref_arrival_to_t_chem_selected_recipe_dual_derivation_closure_standard_uncertainty_ns']:.6g} ns. TC-07 detector/path/splitter terms cancel in this closure.",
             f"- Zero-programmed fixed-term optical diagnostic (not the selected operational anchor): {derived['hf2li_extref_arrival_to_t_chem_zero_programmed_ns_TC04_plus_TC05_plus_TC07']:.6g} ns; dual-derivation closure uncertainty {derived['hf2li_extref_arrival_to_t_chem_dual_derivation_closure_standard_uncertainty_ns']:.6g} ns.",
@@ -3718,7 +3663,7 @@ def _markdown_cell(value: Any) -> str:
 
 def _edge_indices(samples: list[int], threshold_adc: int, edge: str) -> list[float]:
     if edge not in {"rising", "falling"}:
-        raise Day8TimingCalibrationError(f"Unsupported edge {edge!r}")
+        raise TimingCalibrationError(f"Unsupported edge {edge!r}")
     output: list[float] = []
     for index in range(1, len(samples)):
         previous, current = samples[index - 1], samples[index]
@@ -3731,7 +3676,7 @@ def _edge_indices(samples: list[int], threshold_adc: int, edge: str) -> list[flo
             span = current - previous
             output.append(float(index) if span == 0 else (index - 1) + (threshold_adc - previous) / span)
     if not output:
-        raise Day8TimingCalibrationError(f"No {edge} edge crossed {threshold_adc} ADC counts")
+        raise TimingCalibrationError(f"No {edge} edge crossed {threshold_adc} ADC counts")
     return output
 
 
@@ -3739,9 +3684,9 @@ def _require_phrase(prompt: Callable[[str], str], message: str, expected: str) -
     try:
         response = prompt(message)
     except (EOFError, KeyboardInterrupt) as exc:
-        raise Day8TimingCalibrationError("Operator confirmation was not completed; outputs remain safe-idled") from exc
+        raise TimingCalibrationError("Operator confirmation was not completed; outputs remain safe-idled") from exc
     if response.strip() != expected:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"Operator confirmation did not exactly match {expected!r}; outputs remain safe-idled"
         )
 
@@ -3798,7 +3743,7 @@ def _validate_step7_corrections(
         name for name, value in text_values.items() if not str(value or "").strip()
     )
     if missing:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Step 7 corrections, provenance, path placement, and load equivalence must be supplied before hardware execution: "
             + ", ".join(missing)
         )
@@ -3813,28 +3758,28 @@ def _validate_step7_corrections(
         "step7_load_match_standard_uncertainty_ns",
     ):
         if converted[name] < 0:
-            raise Day8TimingCalibrationError(f"{name} must be non-negative")
+            raise TimingCalibrationError(f"{name} must be non-negative")
     if not all(
         math.isfinite(float(converted[name])) for name in numeric_values
     ):
-        raise Day8TimingCalibrationError("Step 7 corrections and uncertainties must be finite")
+        raise TimingCalibrationError("Step 7 corrections and uncertainties must be finite")
     return converted
 
 
 def _require_fresh_acquisition_directory(path: Path) -> None:
     if not path.exists() or not path.is_dir():
-        raise Day8TimingCalibrationError(f"Run directory does not exist: {path}")
-    allowed_root = (REPO_ROOT / "runs").resolve()
+        raise TimingCalibrationError(f"Run directory does not exist: {path}")
+    allowed_root = (REPO_ROOT / "calibration").resolve()
     try:
         path.resolve().relative_to(allowed_root)
     except ValueError as exc:
-        raise Day8TimingCalibrationError(
-            "Hardware acquisition directories must be inside repository runs/ so raw_pico_traces remain covered by the git-ignore policy"
+        raise TimingCalibrationError(
+            "Calibration acquisition directories must be inside repository calibration/"
         ) from exc
     forbidden = ["raw_pico_traces", "timing_readbacks", "results", "workflow_summary.json"]
     present = [name for name in forbidden if (path / name).exists()]
     if present:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Refusing to reuse a run directory containing acquisition data: " + ", ".join(present)
         )
     allowed_review_files = {
@@ -3846,7 +3791,7 @@ def _require_fresh_acquisition_directory(path: Path) -> None:
         child.name for child in path.iterdir() if child.name not in allowed_review_files
     )
     if unexpected:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Refusing hardware acquisition in a non-fresh run directory containing: "
             + ", ".join(unexpected)
         )
@@ -3862,7 +3807,7 @@ def validate_reviewed_plan_artifacts(
     json_path = run_path / "timing_calibration_plan.json"
     markdown_path = run_path / "timing_calibration_plan.md"
     if not json_path.is_file() or not markdown_path.is_file():
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Hardware execution requires an existing JSON and Markdown plan from a prior plan-only invocation"
         )
     with json_path.open("r", encoding="utf-8") as handle:
@@ -3870,7 +3815,7 @@ def validate_reviewed_plan_artifacts(
     _assert_reviewed_plan_matches(reviewed, requested_plan)
     expected_markdown = render_plan_markdown(reviewed)
     if markdown_path.read_text(encoding="utf-8") != expected_markdown:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "The human-reviewed Markdown cable plan is missing or differs from the frozen execution plan; create and review a new unique run plan"
         )
     return reviewed
@@ -3913,7 +3858,7 @@ def _assert_reviewed_plan_matches(
         if reviewed.get(field) != normalized_requested.get(field)
     ]
     if changed:
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "Hardware execution parameters differ from the frozen reviewed plan: "
             + ", ".join(changed)
             + ". Create a new unique run plan and review it."
@@ -3928,13 +3873,13 @@ def _validate_sweep(
 ) -> list[int]:
     values = [int(value) for value in separations_ns]
     if values != list(DEFAULT_SEPARATIONS_NS):
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             "The complete calibration requires exactly 0, 100, 1000, 10000, 100000, and 1000000 ns"
         )
     if shot_count <= 0:
-        raise Day8TimingCalibrationError("shot_count must be positive")
+        raise TimingCalibrationError("shot_count must be positive")
     if shot_count != DEFAULT_SHOT_COUNT and not str(reduced_set_rationale or "").strip():
-        raise Day8TimingCalibrationError(
+        raise TimingCalibrationError(
             f"A shot count other than the complete default ({DEFAULT_SHOT_COUNT}) requires a reduced-set rationale"
         )
     return values
@@ -4016,7 +3961,7 @@ def _write_text_new(path: Path, text: str) -> Path:
 
 def _write_rows_replace(path: Path, rows: list[dict[str, Any]]) -> Path:
     if not rows:
-        raise Day8TimingCalibrationError(f"No rows to write for {path}")
+        raise TimingCalibrationError(f"No rows to write for {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))

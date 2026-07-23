@@ -11,7 +11,7 @@ import unittest
 import yaml
 
 from control_app.config_loader import REPO_ROOT, load_config_inventory
-from control_app.workflows.day8_timing_calibration import DEFAULT_SEPARATIONS_NS
+from control_app.workflows.timing_trace_analysis import DEFAULT_SEPARATIONS_NS
 from control_app.workflows.timing_calibration_procedure import (
     MEASUREMENT_STEPS,
     MAX_SAMPLES_PER_TRACE,
@@ -33,14 +33,14 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.inventory = load_config_inventory(write_files=False)
-        (REPO_ROOT / "runs").mkdir(parents=True, exist_ok=True)
+        (REPO_ROOT / "calibration").mkdir(parents=True, exist_ok=True)
 
     def test_complete_plan_has_exact_sequence_time_origins_and_cables(self) -> None:
         workflow = TimingCalibrationProcedure(operator="Test", inventory=self.inventory)
         plan = workflow.build_plan(shot_count=1, reduced_set_rationale="unit-test speed")
         self.assertEqual(
             [item["step"] for item in plan["operator_sequence"]],
-            ["0a", "0b", "0c", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            ["0a", "0b", "0c", "1", "2", "3", "4", "5", "6", "7", "8"],
         )
         self.assertIn("first programmed T660-2", plan["time_origins"]["t_master"])
         self.assertIn("sample", plan["time_origins"]["t_chem"])
@@ -52,12 +52,28 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             self.assertTrue(item["pico_ch_b"])
             self.assertTrue(item["remains_connected"])
             self.assertTrue(item["disconnect"])
-            expected_rate = 10 if item["step"] in {"4", "5", "6", "7", "8", "9"} else 100
+            expected_rate = 10 if item["step"] in {"4", "5", "6", "7", "8"} else 100
             self.assertEqual(item["trigger_rate_hz"], expected_rate)
         optical = next(item for item in plan["operator_sequence"] if item["step"] == "7")
         self.assertTrue(optical["requires_laser_safety_confirmation"])
         self.assertIn("output 1", optical["splitter_mapping"])
         self.assertIn("output 2", optical["splitter_mapping"])
+
+    def test_t6601_channel_d_is_unmapped_and_absent_from_calibration_recipes(self) -> None:
+        self.assertIsNone(
+            self.inventory.devices["t660_1"]["channel_map"]["D"]
+        )
+        self.assertNotIn(
+            "mircat_db9_pin_5_laser_output_on_off",
+            self.inventory.signal_map,
+        )
+        for recipe_name in ("timing_calibration.yaml", "pump_probe_single_point.yaml"):
+            recipe = yaml.safe_load(
+                (REPO_ROOT / "recipes" / recipe_name).read_text(encoding="utf-8")
+            )
+            signals = recipe["t660"]["t660_1"]["signals"]
+            self.assertNotIn("mircat_db9_pin_5_laser_output_on_off", signals)
+        self.assertNotIn("9", {step.step for step in MEASUREMENT_STEPS})
 
     def test_unique_run_directory_never_reuses_existing_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -72,7 +88,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             self.assertEqual(marker.read_text(encoding="utf-8"), "preserve")
 
     def test_hardware_parameters_cannot_differ_from_frozen_plan(self) -> None:
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "runs") as temp:
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "calibration") as temp:
             run_dir = Path(temp) / "run"
             run_dir.mkdir()
             workflow = TimingCalibrationProcedure(operator="Test", inventory=self.inventory)
@@ -111,7 +127,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                 )
 
     def test_execution_requires_prior_json_and_markdown_plan(self) -> None:
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "runs") as temp:
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "calibration") as temp:
             workflow = TimingCalibrationProcedure(operator="Test", inventory=self.inventory)
             with self.assertRaisesRegex(Exception, "prior plan-only invocation"):
                 workflow.run(
@@ -126,7 +142,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
 
     def test_changed_file_backed_recipe_invalidates_reviewed_plan(self) -> None:
         with tempfile.TemporaryDirectory() as recipe_temp, tempfile.TemporaryDirectory(
-            dir=REPO_ROOT / "runs"
+            dir=REPO_ROOT / "calibration"
         ) as run_temp:
             pico_recipe = Path(recipe_temp) / "pico.yaml"
             pico_recipe.write_bytes(
@@ -174,7 +190,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
         self.assertIsInstance(caught.exception.__cause__, KeyboardInterrupt)
 
     def test_cli_consumes_reviewed_plan_into_explicit_blocked_status(self) -> None:
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "runs") as temp:
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "calibration") as temp:
             run_dir = Path(temp) / "cli_plan"
             command = [
                 sys.executable,
@@ -182,7 +198,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                     REPO_ROOT
                     / "tests"
                     / "hardware_checks"
-                    / "check_day8_timing_calibration.py"
+                    / "check_complete_timing_calibration.py"
                 ),
                 "--operator",
                 "CLI Test",
@@ -227,7 +243,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             units = recipe["t660"]
             for unit in units.values():
                 self.assertEqual(set(unit["channels"]), {"A", "B", "C", "D"})
-            if step.step in {"4", "5", "6", "8", "9"}:
+            if step.step in {"4", "5", "6", "8"}:
                 self.assertEqual(list(units), ["t660_1", "t660_2"])
                 self.assertEqual(units["t660_2"]["clock"]["frequency"], "10Hz")
                 for settings in units["t660_1"]["channels"].values():
@@ -441,7 +457,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             effective["timing_calibration_selected_program_ns"][
                 "q_switch_delay_ns"
             ],
-            179829.205,
+            179830.0,
         )
 
     def test_consolidated_table_has_all_required_categories_and_derivations(self) -> None:
@@ -456,10 +472,10 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             )
             with Path(outputs["consolidated_csv"]).open("r", newline="", encoding="utf-8") as handle:
                 consolidated = list(csv.DictReader(handle))
-            self.assertEqual(len(consolidated), 17)
+            self.assertEqual(len(consolidated), 15)
             ids = {row["measurement_id"] for row in consolidated}
-            self.assertTrue({f"TC-{index:02d}" for index in range(1, 10)}.issubset(ids))
-            self.assertTrue({f"DER-{index:02d}" for index in range(1, 6)}.issubset(ids))
+            self.assertTrue({f"TC-{index:02d}" for index in range(1, 9)}.issubset(ids))
+            self.assertTrue({f"DER-{index:02d}" for index in range(1, 5)}.issubset(ids))
             self.assertTrue({f"COR-{index:02d}" for index in range(1, 4)}.issubset(ids))
             required_columns = {
                 "category",
@@ -514,20 +530,20 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             )
             self.assertEqual(
                 derived["selected_optical_recipe_programmed_delays_ns"],
-                {"fire": 0.0, "q_switch": 179829.205, "fire_to_q_switch": 179829.205},
+                {"fire": 0.0, "q_switch": 179830.0, "fire_to_q_switch": 179830.0},
             )
             self.assertAlmostEqual(
                 derived[
                     "hf2li_extref_arrival_to_t_chem_selected_recipe_ns_TC04_plus_TC05_plus_TC07"
                 ],
-                179989.405,
+                179990.2,
                 places=6,
             )
             self.assertAlmostEqual(
                 derived[
                     "hf2li_extref_arrival_to_t_chem_selected_recipe_ns_TC06_plus_TC07_direct_validation"
                 ],
-                179959.355,
+                179960.15,
                 places=6,
             )
             self.assertAlmostEqual(
@@ -594,7 +610,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                 beam_blocked = "beam_blocked_control" in path.name
                 reference_falling = any(
                     token in str(path)
-                    for token in ("step_5_", "step_7_", "step_8_", "step_9_")
+                    for token in ("step_5_", "step_7_", "step_8_")
                 )
                 target_falling = any(
                     token in str(path)
@@ -661,7 +677,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             events.append(f"prompt:{answer}")
             return answer
 
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "runs") as temp:
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "calibration") as temp:
             run_dir = Path(temp) / "unique_run"
             run_dir.mkdir()
             workflow = TimingCalibrationProcedure(

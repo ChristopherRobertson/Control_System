@@ -61,7 +61,7 @@ controls:
   - "repeat_scan_without_changing_alignment"
 
 file_naming:
-  spectral_run_dir: "runs/YYYYMMDD_myoglobin_co_validation"
+  spectral_run_dir: "calibration/YYYYMMDD_myoglobin_co_validation"
   raw_hf2li_pattern: "hf2li_raw_scan_{point_index}.csv"
   manifest_name: "run_manifest.json"
   command_log_name: "command_log.txt"

@@ -5,7 +5,7 @@ Usage:
     python tests/hardware_checks/check_timing_recipes.py --operator "Name" --confirm-real-hardware
 
 If a T660 handshake fails or a readback mismatch occurs, the script writes
-runs/YYYYMMDD_timing_recipe_readbacks/BLOCKED.md and exits nonzero.
+calibration/YYYYMMDD_timing_recipe_readbacks/BLOCKED.md and exits nonzero.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "runs" / f"{today_stamp()}_timing_recipe_readbacks"
+    run_dir = REPO_ROOT / "calibration" / f"{today_stamp()}_timing_recipe_readbacks"
     run_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = run_dir / "command_log.txt"
     manifest_path = run_dir / "run_manifest.json"

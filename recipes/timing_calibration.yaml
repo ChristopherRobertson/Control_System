@@ -123,10 +123,3 @@ t660:
         polarity: positive
         termination: 50OHM
         enabled: false
-      mircat_db9_pin_5_laser_output_on_off:
-        timing_mode: delay_width
-        delay: 0ns
-        width: 150ns
-        polarity: positive
-        termination: 50OHM
-        enabled: false

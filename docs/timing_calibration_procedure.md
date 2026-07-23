@@ -17,7 +17,7 @@ The procedure uses this final-system topology:
 | T660-1 CHA | Nd:YAG FIRE, DB9 EXT pin 7 |
 | T660-1 CHB | Nd:YAG Q-switch, DB9 EXT pin 6 |
 | T660-1 CHC | MIRcat Process Trigger, DB9 pin 4 |
-| T660-1 CHD | MIRcat Laser On/Off, DB9 pin 5 |
+| T660-1 CHD | Disconnected and unused |
 
 The PicoScope uses CHA as the recorded reference channel and CHB as the recorded target channel. The measured sign is always
 
@@ -111,8 +111,7 @@ Every operator prompt must be standalone: it must describe both the final setup 
 | 5 -> 6 | Park/cap FIRE pin 7. Route the disconnected EXT REF destination back to Pico CHA; keep disconnected Q-switch pin 6 on Pico CHB. CHD remains connected to T660-1. |
 | 6 -> 7 | Remove all electrical-only DB9 scope connections. Restore FIRE to Nd:YAG pin 7, insert the characterized splitter between T660-1 CHB and the final Q-switch cable, connect output 1 to actual pin 6 and output 2 through `E_A` to Pico CHA, and connect the attenuated sample-plane detector through `E_B` to Pico CHB. |
 | 7 -> 8 | Verify safe idle, remove the splitter and photodetector acquisition leads, disconnect the Nd:YAG and MIRcat timing connectors for electrical probing, route FIRE pin 7 to Pico CHA, and route MIRcat Process Trigger pin 4 to Pico CHB. No splitter branch remains connected. |
-| 8 -> 9 | Keep FIRE pin 7 on Pico CHA and move Pico CHB from Process Trigger pin 4 to Laser On/Off pin 5; both device connectors remain disconnected. |
-| 9 -> final state | Apply and verify final safe idle before removing scope leads. Restore final device cables only under the approved shutdown/restoration checklist; do not enable any output as part of restoration. |
+| 8 -> final state | Apply and verify final safe idle before removing scope leads. Restore final device cables only under the approved shutdown/restoration checklist; do not enable any output as part of restoration. T660-1 CHD remains disconnected and unused. |
 
 If the physical harness does not permit one of these actions exactly as written, stop during review and replace it with an equally explicit, pin-verified breakout procedure before hardware execution.
 
@@ -361,7 +360,7 @@ The `+S_installed` sign is intentional: CHA observes splitter output 2, while th
 
 ## 8. MIRcat DB9 process-control measurements
 
-Return to safe idle after Step 7 and remove the splitter and optical detector setup. Steps 8 and 9 return to an electrical-only, non-emitting configuration, use 10 Hz, and use the complete six-point sweep.
+Return to safe idle after Step 7 and remove the splitter and optical detector setup. Step 8 returns to an electrical-only, non-emitting configuration, uses 10 Hz, and uses the complete six-point sweep. T660-1 CHD is not part of the installed topology and remains disconnected and unused.
 
 ### Step 8 — T660-1 FIRE to MIRcat Process Trigger electrical arrival
 
@@ -370,24 +369,11 @@ Return to safe idle after Step 7 and remove the splitter and optical detector se
 - PicoScope CHA: destination end/approved breakout for T660-1 CHA -> Nd:YAG FIRE DB9 pin 7.
 - PicoScope CHB: destination end/approved breakout for T660-1 CHC -> MIRcat Process Trigger DB9 pin 4.
 - Remains connected to actual devices: T660-2 CHD final cable remains connected to T660-1 TRIG IN.
-- Disconnected: FIRE pin 7 is disconnected from the Nd:YAG; MIRcat Process Trigger pin 4 is disconnected from MIRcat. Q-switch pin 6 and MIRcat Laser On/Off pin 5 remain disconnected/capped.
+- Disconnected: FIRE pin 7 is disconnected from the Nd:YAG; MIRcat Process Trigger pin 4 is disconnected from MIRcat. Q-switch pin 6 remains disconnected/capped; T660-1 CHD remains disconnected and unused.
 - Enabled: T660-2 CHD at 10 Hz, T660-1 CHA at programmed delay 0, and T660-1 CHC at the swept delay. All other outputs are disabled.
 - Operator confirmation: verify FIRE pin 7 and Process Trigger pin 4, both destination disconnections, and MIRcat non-emitting state.
 
 Use the corrected FIRE-to-CHC intercept in the process-control recipe when CHC gates or marks MIRcat process timing. Derive an HF2LI-EXT-REF-arrival-relative value only through the combination in Section 10; a true `t_master` value additionally needs the separately known programming-origin-to-EXT-REF-arrival term.
-
-### Step 9 — T660-1 FIRE to MIRcat Laser On/Off electrical arrival
-
-**Category:** MIRcat DB9 process-control timing.
-
-- PicoScope CHA: destination end/approved breakout for T660-1 CHA -> Nd:YAG FIRE DB9 pin 7.
-- PicoScope CHB: destination end/approved breakout for T660-1 CHD -> MIRcat Laser On/Off DB9 pin 5.
-- Remains connected to actual devices: T660-2 CHD final cable remains connected to T660-1 TRIG IN.
-- Disconnected: FIRE pin 7 is disconnected from the Nd:YAG; MIRcat Laser On/Off pin 5 is disconnected from MIRcat. Q-switch pin 6 and MIRcat Process Trigger pin 4 remain disconnected/capped.
-- Enabled: T660-2 CHD at 10 Hz, T660-1 CHA at programmed delay 0, and T660-1 CHD at the swept delay. All other outputs are disabled.
-- Operator confirmation: verify FIRE pin 7 and Laser On/Off pin 5, both destination disconnections, and MIRcat non-emitting state.
-
-Use the corrected FIRE-to-CHD intercept only when the Laser On/Off route participates in the experimental recipe.
 
 ## 9. Per-shot processing and fitted results
 
@@ -441,7 +427,6 @@ a5 = FIRE pin 7 arrival -> Q-switch pin 6 arrival      (Step 5)
 a6 = EXT REF arrival -> Q-switch pin 6 arrival, direct (Step 6)
 d7 = Q-switch pin 6 arrival -> optical sample arrival  (Step 7)
 a8 = FIRE reference -> MIRcat Process pin 4 arrival    (Step 8)
-a9 = FIRE reference -> MIRcat Laser On/Off pin 5       (Step 9)
 ```
 
 First calculate the following zero-programmed diagnostics, without hiding the directly measured terms:
@@ -454,7 +439,6 @@ EXT REF -> optical sample, via derived Q = a4 + a5 + d7
 EXT REF -> optical sample, via direct Q  = a6 + d7
 
 EXT REF -> MIRcat Process pin 4          = a4 + a8
-EXT REF -> MIRcat Laser On/Off pin 5     = a4 + a9
 ```
 
 These intercept-only combinations are diagnostics at zero programmed delay. They are not the operational optical anchor when the selected laser recipe programs nonzero FIRE and Q-switch delays.
@@ -506,10 +490,10 @@ This equation connects recipe time to `t_chem = 0`. It does not redefine `t_mast
 Each hardware execution must create a unique directory such as
 
 ```text
-runs/YYYYMMDDTHHMMSSffffffZ_timing_calibration_<unique-id>/
+calibration/YYYYMMDDTHHMMSSffffffZ_timing_calibration_<unique-id>/
 ```
 
-using exclusive creation. If the path exists, abort; never reuse or overwrite it. Raw traces remain under this ignored `runs/` tree. An arbitrary output directory outside the ignored run root is not permitted for raw acquisition.
+using exclusive creation. If the path exists, abort; never reuse or overwrite it. Raw traces remain ignored within this campaign directory while plans, manifests, analyses, and reports are Git-visible. An arbitrary output directory outside `calibration/` is not permitted for calibration acquisition.
 
 The run-local outputs must include:
 
@@ -547,7 +531,7 @@ Include three measurement-system correction rows derived from Steps 0a/0b/0c (`C
 
 The `fixed offset/intercept` field always reports the fitted or derived physical arrival term with the CHB-minus-CHA sign. It is not itself the signed recipe command. A row categorized as a derived recipe correction must show the actual command-side sign/formula in the separate recipe-correction field; for example, a positive fixed intercept generally produces a negative zero-arrival correction. Steps 8 and 9 must say `conditional` rather than unconditional `yes` when their DB9 controls are not enabled in the selected experimental recipe.
 
-Acquisition must not rewrite shared `calibration/timing_calibration.csv`, `calibration/timing_offsets.yaml`, an earlier run directory, or an RSI/thesis directory. Promotion of an approved run into shared calibration and later RSI/thesis reporting is a separate, explicit review action.
+Acquisition must not create or update canonical `calibration/timing_calibration.csv` or `calibration/timing_offsets.yaml`, rewrite an earlier campaign directory, or write into an RSI/thesis directory. Promotion of an approved campaign into canonical calibration and later RSI/thesis reporting is a separate, explicit review action.
 
 Only a run with a verified final safe-idle readback may have status `PASS`. If final safe idle fails, preserve the partial artifacts, mark the run `BLOCKED_UNSAFE_STATE_UNVERIFIED`, omit publishable recipe corrections, and require manual output-state verification. A later successful manual check may be appended as a signed recovery record; it must not rewrite the original failure status or acquisition data.
 
@@ -581,7 +565,7 @@ Only after this checklist is approved should the workflow implementation be auth
 Generate a new review package without opening hardware. Supply every detector, path, load-equivalence, assembly, recipe, sweep, and shot-count value intended for execution so those values are frozen in the package:
 
 ```text
-python tests/hardware_checks/check_day8_timing_calibration.py --operator "Operator Name" \
+python tests/hardware_checks/check_complete_timing_calibration.py --operator "Operator Name" \
   --photodetector-response-delay-ns <value> \
   --photodetector-response-uncertainty-ns <value> \
   --photodetector-response-source <record> \
@@ -596,13 +580,13 @@ python tests/hardware_checks/check_day8_timing_calibration.py --operator "Operat
   --measurement-assembly-record <identifiers>
 ```
 
-This first invocation exclusively creates a timestamp-and-UUID run directory under `runs/`, writes the Markdown/JSON plan and a `hardware_opened: false` status, lists unresolved detector/cable/load inputs as prehardware blockers, and exits without applying a recipe. An invocation containing `--execute` but no prior `--reviewed-plan-dir` also only creates a new blocked plan; it cannot open hardware.
+This first invocation exclusively creates a timestamp-and-UUID campaign directory under `calibration/`, writes the Markdown/JSON plan and a `hardware_opened: false` status, lists unresolved detector/cable/load inputs as prehardware blockers, and exits without applying a recipe. An invocation containing `--execute` but no prior `--reviewed-plan-dir` also only creates a new blocked plan; it cannot open hardware.
 
 After the checklist and both plan files have been reviewed, execute that unchanged directory in a second invocation:
 
 ```text
-python tests/hardware_checks/check_day8_timing_calibration.py --operator "Operator Name" \
-  --execute --reviewed-plan-dir runs/<reviewed-plan-directory> \
+python tests/hardware_checks/check_complete_timing_calibration.py --operator "Operator Name" \
+  --execute --reviewed-plan-dir calibration/<reviewed-plan-directory> \
   --confirm-real-hardware --confirm-plan-reviewed \
   --confirm-safe-electrical-routing \
   <repeat every frozen option from the plan-only invocation exactly>
