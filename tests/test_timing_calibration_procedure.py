@@ -662,8 +662,8 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                 answer = message.split("Type ", 1)[1].split(" when", 1)[0]
             elif message.startswith("Type OUTPUTS") or message.startswith("Type OUTPUT ROUTING"):
                 answer = message.split("Type ", 1)[1].split(" to confirm", 1)[0]
-            elif message.startswith("Type LASER"):
-                answer = "LASER SAFE STEP 7"
+            elif message.startswith("Laser-area preflight:"):
+                answer = ""
             elif message.startswith("Type BEAM BLOCKED"):
                 answer = "BEAM BLOCKED CONTROL READY STEP 7"
             elif message.startswith("Type BEAM UNBLOCKED"):
@@ -742,7 +742,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                     ]
                 self.assertTrue(recipe_events)
                 self.assertLess(prompt_index, recipe_events[0])
-            laser_prompt = events.index("prompt:LASER SAFE STEP 7")
+            laser_prompt = events.index("prompt:")
             optical_apply = events.index("apply:ndyag_alignment_10hz")
             self.assertLess(laser_prompt, optical_apply)
             self.assertEqual(events[-2:], ["pico:stop", "pico:close"])

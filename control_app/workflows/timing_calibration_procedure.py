@@ -1160,12 +1160,14 @@ class TimingCalibrationProcedure:
                         f"operator_confirmation={output_phrase}",
                     )
                 if step.requires_laser_safety_confirmation:
-                    _require_phrase(
+                    _require_enter_confirmation(
                         prompt,
-                        "Type LASER SAFE STEP 7 to confirm approved enclosure/PPE, attenuation, detector placement, beam-block/dump, and readiness for one controlled remote-shot check: ",
-                        "LASER SAFE STEP 7",
+                        "Laser-area preflight: confirm the room interlock is ready and required protective eyewear is in use. Press Enter to continue, or Ctrl+C to abort: ",
                     )
-                    _log(self.command_log, "operator_confirmation=LASER SAFE STEP 7")
+                    _log(
+                        self.command_log,
+                        "operator_confirmation=LASER_AREA_PREFLIGHT_ENTER",
+                    )
 
                 delays = separations if step.sweep_delays else [0]
                 for programmed_delay_ns in delays:
@@ -3688,6 +3690,19 @@ def _require_phrase(prompt: Callable[[str], str], message: str, expected: str) -
     if response.strip() != expected:
         raise TimingCalibrationError(
             f"Operator confirmation did not exactly match {expected!r}; outputs remain safe-idled"
+        )
+
+
+def _require_enter_confirmation(prompt: Callable[[str], str], message: str) -> None:
+    try:
+        response = prompt(message)
+    except (EOFError, KeyboardInterrupt) as exc:
+        raise TimingCalibrationError(
+            "Operator confirmation was not completed; outputs remain safe-idled"
+        ) from exc
+    if response != "":
+        raise TimingCalibrationError(
+            "Operator confirmation requires Enter with no typed response; outputs remain safe-idled"
         )
 
 

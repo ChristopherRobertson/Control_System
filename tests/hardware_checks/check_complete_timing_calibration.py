@@ -250,13 +250,13 @@ def main() -> int:
     blockers = _execution_blockers(args)
     if blockers:
         next_actions = [
-            "Review timing_calibration_plan.md with the operator and laser-safety owner.",
+            "Review timing_calibration_plan.md with the operator.",
             (
                 f"Re-run with --execute --reviewed-plan-dir {run_dir} and all three --confirm-* flags after review."
                 if not reviewed_plan_mode
                 else "If any frozen value is incomplete or wrong, generate and review a new unique plan-only directory; never edit or reuse this plan."
             ),
-            "Expect exact interactive cable and safety phrases before each output is enabled.",
+            "Expect exact interactive cable/electrical-routing phrases and the Step 7 Enter-key laser-area preflight before outputs are enabled.",
         ]
         write_blocked(
             run_dir / "BLOCKED.md",

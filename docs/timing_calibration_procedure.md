@@ -2,7 +2,7 @@
 
 Status: **review plan only — not approved for hardware execution**
 
-This document defines the complete, rerunnable timing-calibration procedure for the pump-probe control system. Creating or reviewing this document does not open hardware, enable a T660 output, move a cable, acquire a trace, update shared calibration files, or update an RSI paper/thesis draft. Hardware execution must remain blocked until the wiring, pinout, trigger-rate, laser-safety, and correction-model review checklist at the end of this document is approved.
+This document defines the complete, rerunnable timing-calibration procedure for the pump-probe control system. Creating or reviewing this document does not open hardware, enable a T660 output, move a cable, acquire a trace, update shared calibration files, or update an RSI paper/thesis draft. Hardware execution must remain blocked until the wiring, pinout, trigger-rate, and correction-model review checklist at the end of this document is approved. The optical step additionally uses the Enter-key laser-area preflight in Section 7.2.
 
 ## 1. System timing topology
 
@@ -295,7 +295,7 @@ Compare this direct corrected result with Step 4 plus Step 5; do not silently re
 
 **Category:** optical pump-arrival delay connecting electrical timing to `t_chem = 0`.
 
-This is the only step in this procedure that intentionally drives the Nd:YAG/OPO optical system. It requires a separate, immediate laser-safety confirmation after the cables are installed and before any laser-driving output is enabled.
+This is the only step in this procedure that intentionally drives the Nd:YAG/OPO optical system. After the cables are installed and before any laser-driving output is enabled, the workflow presents one immediate Enter-key laser-area preflight.
 
 ### 7.1 Exact connection arrangement
 
@@ -313,20 +313,15 @@ This is the only step in this procedure that intentionally drives the Nd:YAG/OPO
 
 The splitter is measurement apparatus and is not part of final wiring. Its installed branch skew must be removed algebraically; it must not be folded into the reported optical delay.
 
-### 7.2 Mandatory laser-safety confirmation
+### 7.2 Laser-area Enter-key preflight
 
-Before enabling T660-1 CHA or CHB, the workflow must stop and require the operator to confirm and record all of the following:
+Before enabling T660-1 CHA or CHB, the workflow stops and displays:
 
-- The operator is authorized under the applicable Nd:YAG/OPO laser SOP.
-- Required eyewear, beam enclosures, interlocks, warning indicators, beam dumps, and controlled-area procedures are in place.
-- The photodetector is rated for the OPO wavelength being measured (rated range: 200–1100 nm).
-- The beam is strongly attenuated before the detector, the detector is at the sample/sample-equivalent plane, and no uncontained beam can leave the intended path.
-- PicoScope input range, detector polarity, trigger threshold, and detector bias/power are correct.
-- The frozen attenuation and detector settings are suitable for a bounded one-shot preview. No claim of an unsaturated preview is made before that preview is actually acquired under Section 7.3.
-- The splitter orientation is output 1 to Q-switch pin 6 and output 2 to Pico CHA, matching the recorded correction sign.
-- MIRcat laser-driving/process-control outputs remain disabled.
+`Laser-area preflight: confirm the room interlock is ready and required protective eyewear is in use. Press Enter to continue, or Ctrl+C to abort.`
 
-This first confirmation authorizes only the bounded beam-blocked control and preview sequence, not the 100-shot measurement set. It must be step-specific and timestamped, for example `LASER SAFETY READY STEP 7`, and recorded in the run manifest. If any item is not confirmed, apply safe idle and block the step.
+Pressing Enter records a timestamped `LASER_AREA_PREFLIGHT_ENTER` event and permits only the bounded beam-blocked control and preview sequence, not the 100-shot measurement set. Ctrl+C, EOF, or any typed response applies safe idle and blocks the step. The laboratory room interlock remains the physical emission interlock; this workflow adds no separate authorization phrase or secondary interlock.
+
+Detector suitability, attenuation, beam-block/dump placement, PicoScope settings, splitter orientation, and disabled MIRcat outputs remain part of the frozen Step 7 wiring and acquisition plan. They are verified through the normal reviewed-plan, wiring, output-routing, blocked-control, and preview gates rather than repeated in the Enter prompt.
 
 ### 7.3 Bounded REM control, preview, and measurement sequence
 
@@ -334,7 +329,7 @@ Step 7 must not run the optical recipe as a free-running 10 Hz train. Configure 
 
 Perform the following phases in order:
 
-1. **Pre-emission safety gate.** Apply/verify safe idle, install the Step 7 wiring, place the beam block/dump in the reviewed control position, and record `LASER SAFETY READY STEP 7`. Configure the fully specified optical recipe in `REM`; all unused T660 channels remain explicitly off.
+1. **Pre-emission safety gate.** Apply/verify safe idle, install the Step 7 wiring, place the beam block/dump in the reviewed control position, display the laser-area preflight, and record `LASER_AREA_PREFLIGHT_ENTER` when the operator presses Enter. Configure the fully specified optical recipe in `REM`; all unused T660 channels remain explicitly off.
 2. **Beam-blocked control: one emitted shot.** Reset/read the T660 elapsed-shot counters, arm one PicoScope block, issue exactly one remote trigger, and read the counters again. Preserve the trace as a control, separate from measurement statistics. The CHB waveform must establish the electrical-pickup/background envelope in the optical search window. If it crosses the proposed optical threshold or resembles the claimed optical edge, apply safe idle and block the run; do not relabel that edge as optical or automatically fire another shot.
 3. **Transition to preview.** Apply and verify safe idle before moving the beam block. Put the strongly attenuated optical path into the reviewed sample/sample-equivalent configuration and obtain a second operator confirmation that the block position, attenuation, detector, and beam dump now match the preview setup.
 4. **Real optical preview: one emitted shot.** Reconfigure the recipe in `REM`, arm one Pico block, issue one remote trigger, and verify both T660 shot counters. The preview must pass the saturation limit, signal-to-noise requirement, configured edge/polarity, optical search-window rule, and comparison against the beam-blocked control. Preserve the preview trace separately.
@@ -592,4 +587,4 @@ python tests/hardware_checks/check_complete_timing_calibration.py --operator "Op
   <repeat every frozen option from the plan-only invocation exactly>
 ```
 
-The second invocation rebuilds the requested plan, verifies it against the prior JSON and human-reviewed Markdown, verifies the prior `hardware_opened: false` status, and refuses to proceed if any frozen value, source file hash, effective T660 setting, or plan text differs. It loads the reviewed PicoScope, safe-idle, optical, and hardware settings into immutable in-memory snapshots before access; later file edits cannot alter a running calibration. `workflow_status.json` changes from plan-only to execution-start/open-attempt/opened and finally `PASS`, `BLOCKED`, or `BLOCKED_UNSAFE_STATE_UNVERIFIED`. An operator interrupt still runs final safe-idle/cleanup, records the final status and manifest, and returns exit code 130; an interrupt during STOP/readback is treated as an unverified unsafe state. The reviewed plan files themselves are never rewritten. Exact per-step cable, electrical-safety, and laser-safety phrases remain mandatory after this gate. Use `--help` to see every frozen input.
+The second invocation rebuilds the requested plan, verifies it against the prior JSON and human-reviewed Markdown, verifies the prior `hardware_opened: false` status, and refuses to proceed if any frozen value, source file hash, effective T660 setting, or plan text differs. It loads the reviewed PicoScope, safe-idle, optical, and hardware settings into immutable in-memory snapshots before access; later file edits cannot alter a running calibration. `workflow_status.json` changes from plan-only to execution-start/open-attempt/opened and finally `PASS`, `BLOCKED`, or `BLOCKED_UNSAFE_STATE_UNVERIFIED`. An operator interrupt still runs final safe-idle/cleanup, records the final status and manifest, and returns exit code 130; an interrupt during STOP/readback is treated as an unverified unsafe state. The reviewed plan files themselves are never rewritten. Exact per-step cable and electrical-routing phrases remain mandatory; the Step 7 laser-area preflight requires only Enter. Use `--help` to see every frozen input.
