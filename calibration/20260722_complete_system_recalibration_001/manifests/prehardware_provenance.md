@@ -2,6 +2,12 @@
 
 Captured: 2026-07-22 (America/Los_Angeles; exact operator timestamp pending)
 
+Historical snapshot: the worktree and branch below record the environment at
+capture time. They were superseded after the calibration work was merged into
+`C:\Users\Chris\Documents\GitHub\Control_System` on `main`; they must not be
+used as active execution paths. See `post_merge_provenance.md` and freeze a new
+execution snapshot immediately before hardware access.
+
 ## Repository
 
 - Working tree: `C:\Users\Chris\Documents\GitHub\Control_System_timing`
