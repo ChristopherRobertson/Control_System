@@ -10,6 +10,7 @@ from control_app.ui.widgets.mircat_widget import MircatWidget
 from control_app.ui.widgets.ndyag_widget import NdYagWidget
 from control_app.ui.widgets.scan_plotter_widget import ScanPlotterWidget
 from control_app.ui.widgets.t660_widget import T660Widget
+from control_app.ui.widgets.experiment_builder_widget import ExperimentBuilderWidget
 from control_app.ui.widgets.workflow_selector_widget import WorkflowSelectorWidget
 
 
@@ -41,8 +42,10 @@ class ControlSystemMainWindow(QMainWindow):
         self.safe_shutdown_completed_callback: Callable[[], None] | None = None
 
         tabs = QTabWidget()
+        self.experiment_builder_widget = ExperimentBuilderWidget()
+        tabs.addTab(self.experiment_builder_widget, "Experiment Builder")
         self.workflow_selector_widget = WorkflowSelectorWidget(handler)
-        tabs.addTab(self.workflow_selector_widget, "Workflows")
+        tabs.addTab(self.workflow_selector_widget, "Legacy Workflows")
         self.mircat_widget = MircatWidget(handler)
         tabs.addTab(self.mircat_widget, "MIRcat")
         self.t660_widget = T660Widget(handler)
@@ -115,6 +118,7 @@ class ControlSystemMainWindow(QMainWindow):
     def _close_blockers(self) -> list[str]:
         blockers: list[str] = []
         candidates = (
+            ("Experiment Builder", getattr(self, "experiment_builder_widget", None)),
             ("Workflow", getattr(self, "workflow_selector_widget", None)),
             ("MIRcat", self.mircat_widget),
             ("T660-2", self.t660_widget),
