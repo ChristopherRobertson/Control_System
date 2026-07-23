@@ -45,7 +45,7 @@ delay_list_ns:
   - 1000
   - 10000
   - 100000
-delay_strategy: "Use the fixed list relative to configured T0; after Day 8 calibration, apply timing_offsets.yaml rather than editing the recipe from observed kinetics."
+delay_strategy: "Use the fixed list relative to configured T0; apply only explicitly promoted outputs from the complete system recalibration."
 
 timing_recipe: "recipes/pump_probe_single_point.yaml"
 hf2li_preset: "myoglobin_co_pump_probe"

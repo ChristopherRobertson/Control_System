@@ -5,8 +5,6 @@ from __future__ import annotations
 
 from _common import REPO_ROOT
 
-import math
-
 import yaml
 
 from control_app.ui.contracts import WorkflowCommand
@@ -21,8 +19,6 @@ from control_app.workflows.ndyag_alignment import (
     SURELITE_DAT_MODE2_Q_SWITCH_DELAY_MAX_US,
     SURELITE_DAT_MODE2_Q_SWITCH_DELAY_MIN_US,
     SURELITE_DAT_MODE2_FIRE_TO_Q_SWITCH_TARGET_NS,
-    load_timing_offsets,
-    programmed_q_switch_delay_ns,
     recipe_with_q_switch_delay_us,
     recipe_with_ui_parameters,
 )
@@ -44,12 +40,12 @@ def main() -> int:
     assert recipe["timing"]["target_fire_to_q_switch_delay_ns"] == int(
         SURELITE_DAT_MODE2_FIRE_TO_Q_SWITCH_TARGET_NS
     )
-    expected_q_switch_delay = programmed_q_switch_delay_ns(load_timing_offsets())
-    assert math.isclose(
-        float(recipe["timing"]["programmed_q_switch_delay_ns"]),
-        expected_q_switch_delay,
-        abs_tol=0.001,
+    assert (
+        float(recipe["timing"]["programmed_q_switch_delay_ns"])
+        == SURELITE_DAT_MODE2_FIRE_TO_Q_SWITCH_TARGET_NS
     )
+    assert recipe["timing"]["timing_calibration_status"] == "UNCALIBRATED_NOMINAL_TARGET"
+    assert recipe["timing"]["timing_correction_source"] is None
 
     t660 = recipe["t660"]
     assert set(t660["t660_2"].get("channels", {})) == {"D"}

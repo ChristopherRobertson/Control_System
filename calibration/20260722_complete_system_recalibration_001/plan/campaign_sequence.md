@@ -1,0 +1,36 @@
+# Proposed complete calibration sequence
+
+Status: **NOT APPROVED FOR HARDWARE EXECUTION**
+
+## Global execution gates
+
+Every physical setup is performed one step at a time. Before every rewire: apply and verify safe idle; stop both T660s; disable all eight T660 outputs and verify disabled readback; turn MIRcat emission off if SDK ownership is available; disarm/deinitialize when appropriate; positively inhibit Nd:YAG/OPO firing; state that no cable may be handled while any output is enabled; issue one exact connection table; and wait for `REWIRE CONFIRMED <step-id>`. After confirmation, read back against the frozen plan, acquire only the planned dataset, restore safe idle, preserve/hash raw data, and pass the analysis gate before advancing.
+
+No hardware execution begins until the user approves this sequence. Approval authorizes only preparation of the first step; it does not confirm any rewire.
+
+## Proposed sequence and dependencies
+
+1. **P0 — provenance and traceability closure.** Inventory serials, firmware, SDK/driver versions, calibration certificates, cables, splitters, adapters, detectors, spectral references, environmental instruments, operator, and laser-safety authority. Resolve the WSL Git-pointer limitation read-only. Freeze hashes and acceptance-limit sources. No hardware connection.
+2. **S0 — safe-idle and interlock verification.** With normal wiring untouched, establish device ownership, inhibit both lasers, apply/read back safe idle, verify T660-1 CHD disabled, and visually confirm DB9 pins 5, 6, and 8 are not driven. This safety step cannot be bypassed.
+3. **MS-01 — PicoScope differential channel/path skew.** Same electrical pulse to both channel-assigned measurement paths, then exchange only the scope channel inputs in a controlled repeated setup to separate channel/path effects where the adapter geometry permits.
+4. **MS-02 — splitter branch skew.** Measure normal and swapped splitter outputs with fixed channel-assigned leads; characterize reconnection repeatability, pulse fidelity, threshold sensitivity, interpolation sensitivity, timebase/sample interval, and trigger threshold.
+5. **MS-03 — installed optical-monitor geometry and load equivalence.** Electrical-only characterization of the exact splitter, Q-switch cable, monitor lead, adapters, and a justified Nd:YAG pin-6 equivalent load. If equivalence cannot be demonstrated, optical correction remains provisional.
+6. **T2-01 — direct T660-2 routes.** In separate setups measure EXT REF arrival to DAQ trigger, MIRcat TRIG IN, and T660-1 TRIG IN over 0 ns, 100 ns, 1 us, 10 us, 100 us, and 1 ms, initially 100 accepted shots each. Include amplitude, width, polarity, jitter, scale/intercept, and controlled reconnection where practical.
+7. **T1-01 — T660-1 trigger-to-output routes.** Separately measure trigger input to FIRE and trigger input to Q-switch over the six-point sweep; measure FIRE-to-Q-switch; direct EXT REF-to-FIRE and EXT REF-to-Q-switch; perform direct-versus-derived closure and trigger-count agreement.
+8. **PT-01 — MIRcat Process Trigger electrical timing.** Measure approved reference to T660-1 CHC/DB9 pin 4, including its required idle-high/active-low behavior. T660-1 CHD and MIRcat DB9 pins 5, 6, and 8 remain disabled/disconnected and are never measurement targets.
+9. **MC-01 — MIRcat GUI process-trigger qualification.** Under manufacturer-GUI ownership, verify external laser/process trigger modes, first and subsequent channel behavior, pulse count, and permitted delay after Sweep Active falls. No SDK connection and no automation until this passes.
+10. **MD-01 — MIRcat/HF2LI DIO mapping.** Empirically identify full captured-word bits for DB9 pins 1–3 using repeated scans and both directions; do not assume the legacy DIO labels are bit numbers.
+11. **MSW-01 — MIRcat sweep timing.** At 5 cm^-1 trigger spacing, 500 us pulse width, and 40 cm^-1/s, measure wavelength-trigger spacing (~125 ms expectation), pulse counts/jitter, Sweep Active segments, gaps, direction, channel transitions, scan repeatability, and host-independent correlation.
+12. **HF-01 — HF2LI acquisition timing/configuration.** Verify external-reference lock/readback, demodulator assignments/rates/time constants/filter orders/phase, complete DIO capture, cross-stream timestamp alignment, dropped samples, and full-scan endurance.
+13. **DET-01 — detector/electronics performance.** With non-emitting or separately authorized illumination states as applicable, determine dark noise, drift, Allan-style stability, cross-talk, relative gain, linear range, saturation, SNR, and ratio uncertainty. Absolute responsivity remains unavailable without a traceable power reference.
+14. **SP-01 — spectral reference provenance.** Identify polystyrene/Mylar or other reference identity, source, lot, path/thickness, temperature, accepted features, and uncertainty. If traceability is absent, absolute wavenumber accuracy is explicitly not traceably evaluated.
+15. **SP-02 — spectral calibration.** Measure internal-readback accuracy, trigger-derived axis, per-channel behavior, direction hysteresis, crossovers, effective sampling/interpolation, reference agreement, and scan-to-scan repeatability.
+16. **OP-01 — optical pump timing.** Separate laser-safety authorization; actual pin-6 electrical reference and sample/sample-equivalent detector plane; blocked control, one attenuated preview, then at most 100 planned measurement shots (default total 102); corrections, saturation/SNR, rejected-shot accounting, counter closure, placement uncertainty, and restoration repeatability. No free running and no automatic replacement shots.
+17. **CL-01 — complete timing-chain closure.** Calculate direct and derived timing chains only between compatible reference planes, quantify closure residuals, and establish operational nonzero-delay corrections and the pump–probe equation while keeping programmed, cable-end, device-pin, detector, optical, and chemical origins distinct.
+18. **E2E-01 — normal-wiring validation.** Two bounded normal experimental runs covering startup, ownership, T660s, MIRcat/reference lock, Sample/Reference/DIO capture, pump if authorized, axes, processing, safe stop, repeatability, artifact completeness, and recovery from a simulated software failure without unintended firing.
+19. **RPT-01 — uncertainty and article package.** Complete GUM-style budgets, raw index/hashes, machine-readable outputs, figure CSVs, hardware/wiring/method/electrical/optical/spectral/detector/closure/bypass tables, and only evidence-supported RSI text.
+20. **PROM-01 — promotion gate.** Present values, uncertainties, bypasses, unresolved terms, closure and E2E results, and proposed canonical diff. Make no canonical change absent exact user approval. After promotion and retention review, the entire campaign directory can be archived independently of the completed UI.
+
+## Advancement rules
+
+A failed step blocks dependent work. Bypasses are recorded under `bypasses/` with consequences; safety, interlocks, prohibited pins, raw preservation, shot accounting, and cleanup cannot be bypassed. Independent work may continue only if scientifically valid. Final status uses the mission’s five permitted classifications.

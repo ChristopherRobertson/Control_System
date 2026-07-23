@@ -36,7 +36,7 @@ devices:
       A: "ndyag_fire"
       B: "ndyag_q_switch"
       C: "mircat_db9_pin_4_process_trigger"
-      D: "mircat_db9_pin_5_laser_output_on_off_DISCONNECTED"
+      D: null
 
   arduino_mux:
     display_name: "Arduino MUX Controller"
@@ -164,7 +164,7 @@ timing_routes:
     t660_1_channel_a: "Nd:YAG FIRE"
     t660_1_channel_b: "Nd:YAG Q-SWITCH"
     t660_1_channel_c: "MIRcat DB9 pin 4 Process Trigger"
-    t660_1_channel_d: "DISCONNECTED: MIRcat DB9 pin 5 Laser Output On/Off is intentionally isolated; emission is controlled by the control application/SDK."
+    t660_1_channel_d: "DISCONNECTED AND UNUSED"
 
 arduino_mux_topology:
   enabled: false

@@ -3,16 +3,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from pathlib import Path
 from typing import Any
 
-import yaml
-
-from control_app.config_loader import REPO_ROOT
-
-
 NDYAG_ALIGNMENT_TIMING_RECIPE = "recipes/ndyag_alignment_10hz.yaml"
-TIMING_OFFSETS_PATH = REPO_ROOT / "calibration" / "timing_offsets.yaml"
 SURELITE_DAT_MODE2_FIRE_TO_Q_SWITCH_TARGET_NS = 179_830.0
 SURELITE_DAT_MODE2_Q_SWITCH_DELAY_DEFAULT_US = 250.0
 SURELITE_DAT_MODE2_Q_SWITCH_DELAY_MIN_US = 100.0
@@ -22,59 +15,6 @@ NDYAG_FINITE_SHOT_COUNT_MIN = 1
 NDYAG_SHOT_COUNT_MAX = 100
 NDYAG_SHOT_COUNT_DEFAULT = 0
 NDYAG_CONTINUOUS_DEFAULT = True
-
-
-def load_timing_offsets(path: str | Path = TIMING_OFFSETS_PATH) -> dict[str, Any]:
-    """Load the Day 8 timing offsets used by the Nd:YAG recipe."""
-
-    target = Path(path)
-    if not target.is_absolute():
-        target = REPO_ROOT / target
-    with target.open("r", encoding="utf-8") as handle:
-        data = yaml.safe_load(handle) or {}
-    if not isinstance(data, dict):
-        raise ValueError(f"{target} did not parse as a YAML mapping")
-    return data
-
-
-def interpolate_pair_residual_ns(
-    offsets: dict[str, Any],
-    pair_id: str,
-    separation_ns: float,
-) -> float:
-    """Return the measured residual at a requested separation using linear interpolation."""
-
-    pair = (offsets.get("pairs") or {}).get(pair_id) or {}
-    separations = pair.get("separations") or {}
-    points = sorted(
-        (float(programmed), float(values["mean_residual_ns"]))
-        for programmed, values in separations.items()
-        if isinstance(values, dict) and "mean_residual_ns" in values
-    )
-    if not points:
-        raise ValueError(f"timing offsets do not contain residuals for {pair_id!r}")
-    if separation_ns <= points[0][0]:
-        return points[0][1]
-    if separation_ns >= points[-1][0]:
-        return points[-1][1]
-    for (x0, y0), (x1, y1) in zip(points, points[1:]):
-        if x0 <= separation_ns <= x1:
-            fraction = (separation_ns - x0) / (x1 - x0)
-            return y0 + (y1 - y0) * fraction
-    return points[-1][1]
-
-
-def programmed_q_switch_delay_ns(offsets: dict[str, Any] | None = None) -> float:
-    """Return the Fire-to-Q-switch T660 delay corrected by Day 8 residual timing."""
-
-    offset_data = offsets or load_timing_offsets()
-    residual = interpolate_pair_residual_ns(
-        offset_data,
-        "pump_fire_to_q_switch",
-        SURELITE_DAT_MODE2_FIRE_TO_Q_SWITCH_TARGET_NS,
-    )
-    return SURELITE_DAT_MODE2_FIRE_TO_Q_SWITCH_TARGET_NS - residual
-
 
 def validate_q_switch_delay_us(value: Any) -> float:
     """Return a validated Surelite DAT Mode 2 Q-switch delay in microseconds."""

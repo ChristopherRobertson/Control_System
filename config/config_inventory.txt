@@ -1,6 +1,6 @@
 Hardware Configuration Inventory
-config_path: /mnt/c/Users/Chris/Documents/GitHub/Control_System/hardware_configuration.yaml
-config_hash_sha256: 137ab9ca25dd87dd2a4bc103f9e53937848e91320bc9c2a56fd703ac9a662313
+config_path: /mnt/c/Users/Chris/Documents/GitHub/Control_System_timing/hardware_configuration.yaml
+config_hash_sha256: 88c4d3bdc6280ac9bfe57d294d3c0403cd4cbb9174bb88068e46777195829cf2
 schema_version: 0.1
 
 Devices:
@@ -16,7 +16,6 @@ T660 signal map:
 - hf2li_daq_trigger: t660_2 channel C
 - hf2li_extref: t660_2 channel A
 - mircat_db9_pin_4_process_trigger: t660_1 channel C
-- mircat_db9_pin_5_laser_output_on_off_DISCONNECTED: t660_1 channel D
 - mircat_trig_in: t660_2 channel B
 - ndyag_fire: t660_1 channel A
 - ndyag_q_switch: t660_1 channel B
@@ -28,7 +27,7 @@ Timing routes:
     "t660_1_channel_a": "Nd:YAG FIRE",
     "t660_1_channel_b": "Nd:YAG Q-SWITCH",
     "t660_1_channel_c": "MIRcat DB9 pin 4 Process Trigger",
-    "t660_1_channel_d": "DISCONNECTED: MIRcat DB9 pin 5 Laser Output On/Off is intentionally isolated; emission is controlled by the control application/SDK.",
+    "t660_1_channel_d": "DISCONNECTED AND UNUSED",
     "t660_2_channel_a": "HF2LI DIO 0 external reference BNC",
     "t660_2_channel_b": "MIRcat TRIG IN",
     "t660_2_channel_c": "HF2LI DIO 1 DAQ trigger BNC",

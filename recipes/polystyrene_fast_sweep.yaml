@@ -65,7 +65,7 @@ controls:
   - "repeat_fast_sweep_if_baseline_or_detector_response_is_unstable"
 
 file_naming:
-  spectral_run_dir: "runs/YYYYMMDD_HHMMSS_polystyrene_fast_sweep"
+  spectral_run_dir: "calibration/YYYYMMDD_HHMMSS_polystyrene_fast_sweep"
   raw_hf2li_file: "hf2li_raw_fast_sweep.csv"
   manifest_name: "run_manifest.json"
   command_log_name: "command_log.txt"

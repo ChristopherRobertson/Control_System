@@ -49,7 +49,7 @@ controls:
   - "repeat_scan_if_baseline_or_detector_response_is_unstable"
 
 file_naming:
-  spectral_run_dir: "runs/YYYYMMDD_mylar_validation"
+  spectral_run_dir: "calibration/YYYYMMDD_mylar_validation"
   raw_hf2li_pattern: "hf2li_raw_scan_{point_index}.csv"
   manifest_name: "run_manifest.json"
   command_log_name: "command_log.txt"

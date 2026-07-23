@@ -580,7 +580,7 @@ breakouts:
       signal: reserved
       connection: DISCONNECTED
       direction: input
-      source: t660_1.CHD
+      source: null
     pin_6:
       signal: interlock
       direction: output

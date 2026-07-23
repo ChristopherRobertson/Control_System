@@ -56,8 +56,6 @@ t660:
         enabled: false
       mircat_db9_pin_4_process_trigger:
         enabled: false
-      mircat_db9_pin_5_laser_output_on_off:
-        enabled: false
 hf2li_preset: pump_probe_acquisition
 pico_capture_settings:
   source: workflow_recipe

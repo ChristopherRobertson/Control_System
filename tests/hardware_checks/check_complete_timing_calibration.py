@@ -2,12 +2,12 @@
 """Plan or execute the complete operator-guided timing calibration.
 
 Plan review (default; never opens hardware):
-    python check_day8_timing_calibration.py --operator "Name"
+    python check_complete_timing_calibration.py --operator "Name"
 
 Hardware execution of the previously reviewed, unchanged package (still requires
 the same frozen options and exact interactive phrases at every setup):
-    python check_day8_timing_calibration.py --operator "Name" --execute \
-      --reviewed-plan-dir runs/<reviewed-plan-directory> \
+    python check_complete_timing_calibration.py --operator "Name" --execute \
+      --reviewed-plan-dir calibration/<reviewed-plan-directory> \
       --confirm-real-hardware --confirm-plan-reviewed \
       --confirm-safe-electrical-routing \
       --photodetector-response-delay-ns <value> \
@@ -38,7 +38,7 @@ from pathlib import Path
 
 from control_app.config_loader import load_config_inventory
 from control_app.manifest import new_manifest, write_manifest
-from control_app.workflows.day8_timing_calibration import (
+from control_app.workflows.timing_trace_analysis import (
     DEFAULT_SEPARATIONS_NS,
     DEFAULT_SHOT_COUNT,
 )
@@ -158,12 +158,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--run-dir",
         default="",
-        help="Optional new path. It must not already exist. Default is a timestamp+UUID directory under runs/.",
+        help="Optional new path. It must not already exist. Default is a timestamp+UUID directory under calibration/.",
     )
     parser.add_argument(
         "--reviewed-plan-dir",
         default="",
-        help="Existing plan-only directory under runs/ to execute. Required with --execute; it is never rewritten.",
+        help="Existing plan-only directory under calibration/ to execute. Required with --execute; it is never rewritten.",
     )
     return parser.parse_args()
 
@@ -182,7 +182,7 @@ def main() -> int:
             if not run_dir.is_absolute():
                 run_dir = REPO_ROOT / run_dir
             run_dir = run_dir.resolve()
-            allowed_root = (REPO_ROOT / "runs").resolve()
+            allowed_root = (REPO_ROOT / "calibration").resolve()
             run_dir.relative_to(allowed_root)
             if not run_dir.is_dir():
                 raise ValueError(f"reviewed plan directory does not exist: {run_dir}")
@@ -500,12 +500,12 @@ def _execution_blockers(args: argparse.Namespace) -> list[str]:
         requested = Path(args.run_dir)
         if not requested.is_absolute():
             requested = REPO_ROOT / requested
-        allowed_root = (REPO_ROOT / "runs").resolve()
+        allowed_root = (REPO_ROOT / "calibration").resolve()
         try:
             requested.resolve().relative_to(allowed_root)
         except ValueError:
             blockers.append(
-                "Hardware acquisition --run-dir must be inside the repository runs/ directory so raw traces remain ignored by git."
+                "Hardware acquisition --run-dir must be inside repository calibration/."
             )
     if not args.confirm_real_hardware:
         blockers.append("Real hardware execution was not confirmed.")

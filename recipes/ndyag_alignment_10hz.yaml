@@ -16,12 +16,9 @@ timing:
   surelite_q_switch_to_lasing_ns: 170
   target_fire_to_q_switch_delay_ns: 179830
   programmed_fire_delay_ns: 0
-  programmed_q_switch_delay_ns: 179829.205
-  timing_offsets_source: "calibration/timing_offsets.yaml"
-  timing_offsets_applied:
-    t660_1_trigger_to_pump_fire_zero_residual_ns: 25.301131306136377
-    pump_fire_to_q_switch_interpolated_residual_ns: 0.794687226210168
-    pump_fire_to_q_switch_interpolation_ns: [100000, 1000000]
+  programmed_q_switch_delay_ns: 179830
+  timing_calibration_status: "UNCALIBRATED_NOMINAL_TARGET"
+  timing_correction_source: null
 routes:
   t660_2_drive: "T660-2 CHD -> T660-1 TRIG IN"
   ndyag_fire: "T660-1 CHA -> Nd:YAG Fire command"
@@ -45,7 +42,7 @@ t660:
         termination: 50OHM
         enabled: true
       ndyag_q_switch:
-        delay: 179829.205ns
+        delay: 179830ns
         width: 10us
         polarity: negative
         termination: 50OHM

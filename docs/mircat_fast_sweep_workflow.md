@@ -76,7 +76,7 @@ should use the MIRcat `TRIG OUT` marker captured/exported from LabOne.
 Expected run folder:
 
 ```text
-runs/YYYYMMDD_HHMMSS_polystyrene_fast_sweep/
+calibration/YYYYMMDD_HHMMSS_polystyrene_fast_sweep/
 ```
 
 Expected files include:

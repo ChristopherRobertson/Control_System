@@ -85,7 +85,7 @@ def main() -> int:
     )
 
     safe_name = "".join(ch if ch.isalnum() else "_" for ch in request.sample_name.lower()).strip("_")
-    run_dir = REPO_ROOT / "runs" / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_name}_fast_sweep"
+    run_dir = REPO_ROOT / "calibration" / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_name}_fast_sweep"
     run_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = run_dir / "command_log.txt"
     summary_path = run_dir / "fast_sweep_check_summary.json"

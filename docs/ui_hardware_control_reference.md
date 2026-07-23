@@ -27,7 +27,7 @@ The confirmed T660-1 usage is:
 | `A` | Nd:YAG Fire input | Surelite fire TTL |
 | `B` | Nd:YAG Q-switch input | Surelite Q-switch TTL |
 | `C` | MIRcat DB9 pin 4 | Process Trigger control |
-| `D` | MIRcat DB9 pin 5 | Laser Output On/Off control |
+| `D` | Disconnected | Unused; no configured signal or destination |
 
 These T660 TTL timing lines are direct point-to-point routes. They are not routed through the Arduino MUX. In `hardware_configuration.yaml`, this route truth belongs under `timing_routes`, not under the PicoScope device identity.
 
