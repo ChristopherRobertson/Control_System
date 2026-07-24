@@ -55,6 +55,11 @@ t660:
         termination: 50OHM
         enabled: false
       mircat_db9_pin_4_process_trigger:
+        delay: 0
+        # Daylight Solutions specifies normally high with a 1-100 ms low pulse.
+        width: 10ms
+        polarity: negative
+        termination: 50OHM
         enabled: false
 hf2li_preset: pump_probe_acquisition
 pico_capture_settings:

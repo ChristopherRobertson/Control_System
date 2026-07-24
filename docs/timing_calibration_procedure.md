@@ -69,6 +69,7 @@ Steps 1 through 6, 8, and 9 use the complete six-point electrical sweep.
 ### 3.3 Cable and safe-state conventions
 
 - `Final cable destination end` means the device-end connector is unplugged from its normal destination and connected to the stated PicoScope channel. Its T660 source end remains on the normal T660 output.
+- Every fixed 12-inch DDG SMB-to-BNC bulkhead assembly remains connected to its T660 output throughout calibration. A reference to moving a T660 route means moving only the downstream BNC cable at its destination end, except that the downstream Q-switch BNC cable may be removed from its labeled CHB bulkhead when Step 0c explicitly requires it.
 - The same channel-assigned PicoScope patch leads/adapters used in Step 0 must be retained for later electrical steps so the measured scope-path correction remains applicable.
 - Every cable removed from a device must be labeled, capped or insulated as appropriate, and recorded in the run manifest.
 - Before cable handling, both T660 units must be stopped, all channels disabled, and the disabled state read back.
@@ -100,10 +101,10 @@ Every operator prompt must be standalone: it must describe both the final setup 
 
 | Transition | Required cable action while safe-idled |
 |---|---|
-| Initial state -> 0a | Remove the final EXT REF cable from T660-2 CHA at the source, park/cap it, and install the dedicated CHA-to-splitter test lead. Leave T660-2 CHB/CHC/CHD final device cables connected but verified disabled. |
+| Initial state -> 0a | Leave the fixed T660-2 CHA 12-inch SMB-to-BNC bulkhead assembly installed. Disconnect the installed 1-foot EXT REF downstream BNC cable only at HF2LI and connect that free destination end to `CLOCK-SPLITTER-01` input. Temporarily remove the splitter from T660-2 CLOCK, label/park its two installed 1.5-foot CLOCK branches for exact restoration, and leave T660-2 CHB/CHC/CHD final device cables connected but verified disabled. |
 | 0a -> 0b | Swap only splitter outputs 1 and 2; keep `E_A` assigned to Pico CHA and `E_B` assigned to Pico CHB. |
 | 0b -> 0c | Keep the test-pulse splitter input. Install the final Q-switch cable and exact Step 7 monitor lead in the load-equivalent 0c arrangement; neither branch may reach an enabled laser input. |
-| 0c -> 1 | Remove the splitter and test lead, restore the final EXT REF cable to T660-2 CHA at its source, route its disconnected HF2LI destination end to Pico CHA, route the final DAQ destination end to Pico CHB, and park/cap the Q-switch cable away from the laser. |
+| 0c -> 1 | Disconnect the EXT REF downstream BNC destination end from the splitter and route it to Pico CHA; do not disturb its fixed T660-2 CHA bulkhead assembly. Restore `CLOCK-SPLITTER-01` input to T660-2 CLOCK and restore the same 1.5-foot branches and splitter output ports to T660-1 CLOCK and HF2LI CLOCK. Verify this normal CLOCK distribution before any clock-dependent recipe. Route only the final DAQ downstream BNC destination end to Pico CHB and park/cap the Q-switch cable away from the laser. |
 | 1 -> 2 | Reconnect the final DAQ cable to HF2LI DIO1 with CHC disabled. Keep the EXT REF destination on Pico CHA and move Pico CHB to the disconnected MIRcat TRIG IN destination cable. |
 | 2 -> 3 | Reconnect the MIRcat trigger destination with CHB disabled. Keep EXT REF on Pico CHA; disconnect the T660-1 TRIG IN destination and move that final CHD cable end to Pico CHB. |
 | 3 -> 4 | Remove CHD from Pico CHB and reconnect it to T660-1 TRIG IN. Keep EXT REF on Pico CHA; disconnect the Nd:YAG timing connector and route FIRE pin 7 to Pico CHB through the approved breakout. |
@@ -119,7 +120,7 @@ If the physical harness does not permit one of these actions exactly as written,
 
 Steps 0a, 0b, and 0c characterize the differential PicoScope acquisition path, bare splitter branch skew, and installed Step 7 splitter/lead geometry. These are measurement-system corrections, not system route delays.
 
-For all three Step 0 setups, disconnect the final HF2LI EXT REF cable from T660-2 CHA and park/cap it. Connect T660-2 CHA to the splitter input with a dedicated short test lead. Program only T660-2 CHA at 100 Hz; T660-2 CHB, CHC, and CHD and every T660-1 channel remain disabled. The final T660-2 CHB, CHC, and CHD cables may remain physically connected to their devices only because their source channels are disabled and verified off.
+For all three Step 0 setups, leave the fixed 12-inch T660-2 CHA SMB-to-BNC bulkhead assembly installed. Disconnect the installed 1-foot EXT REF downstream BNC cable only at the HF2LI destination and connect that free destination end to `CLOCK-SPLITTER-01` input. The splitter is temporarily removed from T660-2 CLOCK; its installed 1.5-foot branches to T660-1 CLOCK and HF2LI CLOCK must be labeled and parked without substitution. Program only T660-2 CHA at 100 Hz; T660-2 CHB, CHC, and CHD and every T660-1 channel remain disabled. The final T660-2 CHB, CHC, and CHD cables may remain physically connected to their devices only because their source channels are disabled and verified off.
 
 Use two known short/nominally equal, labeled scope measurement assemblies, `E_A` assigned permanently to Pico CHA and `E_B` assigned permanently to Pico CHB. Each assembly includes every measurement-only adapter/probe between the stated event reference plane and its Pico input; in particular, the approved pin-6 adapter used in Step 0c belongs to `E_A` and must also be present in the 0a/0b characterization through the matching test adapter arrangement. Do not exchange these channel-assigned assemblies between setups.
 
@@ -127,11 +128,11 @@ Use two known short/nominally equal, labeled scope measurement assemblies, `E_A`
 
 **Purpose:** first observation needed to separate channel/path skew from splitter branch skew.
 
-- Splitter input: T660-2 CHA test pulse.
+- Splitter input: T660-2 CHA test pulse through the fixed bulkhead assembly and installed 1-foot EXT REF downstream BNC cable.
 - Splitter output 1 -> cable `E_A` -> PicoScope CHA.
 - Splitter output 2 -> cable `E_B` -> PicoScope CHB.
 - Remains connected to actual devices: T660-2 CHB -> MIRcat TRIG IN, T660-2 CHC -> HF2LI DAQ, and T660-2 CHD -> T660-1 TRIG IN may remain physically connected, but all three outputs are explicitly disabled. No T660-1 output is enabled.
-- Disconnected: T660-2 CHA final EXT REF cable; no splitter output is connected to a final-system device.
+- Disconnected: only the final EXT REF downstream BNC destination end at HF2LI; the fixed T660-2 CHA bulkhead assembly remains installed. No splitter output is connected to a final-system device.
 - Operator confirmation: verify the branch labels, `E_A`/`E_B` labels, 100 Hz readback, scope ranges/termination, and that no laser-driving output is enabled.
 
 Record the mean corrected-edge observation as `M_0a`, using the raw CHB-minus-CHA sign.
@@ -140,7 +141,7 @@ Record the mean corrected-edge observation as `M_0a`, using the raw CHB-minus-CH
 
 **Purpose:** isolate the two correction terms without changing the PicoScope channel-assigned paths.
 
-- Splitter input: unchanged T660-2 CHA test pulse.
+- Splitter input: unchanged T660-2 CHA path through the fixed bulkhead assembly and installed EXT REF downstream BNC cable.
 - Splitter output 2 -> cable `E_A` -> PicoScope CHA.
 - Splitter output 1 -> cable `E_B` -> PicoScope CHB.
 - Remains connected and disabled: identical to Step 0a.
@@ -165,8 +166,8 @@ where:
 
 **Purpose:** measure the splitter together with the unequal, temporary branch leads that will actually be installed during Step 7.
 
-- Splitter input: unchanged T660-2 CHA test pulse.
-- Disconnect the final Q-switch cable from T660-1 CHB and from Nd:YAG DB9 pin 6. Connect splitter output 1 -> the source end of that final Q-switch cable -> the same approved pin-6/`E_A` measurement assembly used during the Step 0 scope-path characterization -> PicoScope CHA.
+- Splitter input: unchanged T660-2 CHA path through the fixed bulkhead assembly and installed EXT REF downstream BNC cable.
+- Leave the fixed 12-inch T660-1 CHB SMB-to-BNC bulkhead assembly installed. Disconnect the downstream Q-switch BNC cable at the labeled CHB bulkhead and from Nd:YAG DB9 pin 6. Connect splitter output 1 -> that downstream Q-switch cable -> the same approved pin-6/`E_A` measurement assembly used during the Step 0 scope-path characterization -> PicoScope CHA.
 - Splitter output 2 -> the exact Step 7 monitor adapter/lead -> cable `E_B` -> PicoScope CHB.
 - The Q-switch cable is disconnected from Nd:YAG; no laser-driving output is enabled.
 - Operator confirmation: verify the final Q-switch cable and exact monitor lead are installed, the reviewed load-equivalence method/source ID matches the frozen plan, and no test pulse can produce laser emission.
@@ -178,6 +179,11 @@ The output-1 load in Step 0c must be electrically equivalent, over the edge band
 - Provide authoritative impedance/bandwidth data showing that the Step 0c Pico/adapter substitution is equivalent within a stated timing uncertainty.
 
 Record the selected method, Nd:YAG input-load source, nominal impedance/capacitance, Pico/probe input impedance, adapter and cable identifiers, setup photograph or connection record, and the assigned load-equivalence timing uncertainty. If equivalence is not demonstrated, `S_installed` is provisional and Step 7 must not be reported as a corrected Q-switch-pin-6-to-optical delay.
+
+After Step 0c, restore `CLOCK-SPLITTER-01` to its normal distribution before
+any clock-dependent recipe: input from T660-2 CLOCK, with the same recorded
+splitter output ports and installed 1.5-foot branches returned to T660-1 CLOCK
+and HF2LI CLOCK. Record the restoration check in the run manifest.
 
 Record the raw CHB-minus-CHA mean as `M_0c`. Define the installed branch geometry
 
@@ -250,7 +256,7 @@ This is a final-cable relative route measurement, not merely a bare T660-2 chann
 
 Steps 4, 5, 6, 8, and 9 are electrical-only measurements. Use 10 Hz and the complete six-point sweep. The Nd:YAG must be incapable of firing: its FIRE and Q-switch destination connections are removed whenever those lines are measured or could otherwise be energized. MIRcat DB9 destination lines under measurement are likewise removed from the MIRcat. A disabled-channel readback alone does not replace the required physical disconnection of a laser-driving destination during these electrical-only steps.
 
-Use the proven operational active-negative 10 us polarity/width for Nd:YAG FIRE and Q-switch outputs and analyze their falling edges. Use positive diagnostic pulses for the MIRcat DB9 process-control outputs unless the approved final MIRcat recipe specifies another polarity; record the selected polarity in every readback. This keeps the measured Nd:YAG electrical paths representative of the actual laser recipe without connecting them to the laser during Steps 4–6, 8, and 9.
+Use the proven operational active-negative 10 us polarity/width for Nd:YAG FIRE and Q-switch outputs and analyze their falling edges. For MIRcat DB9 pin 4, use the manufacturer-confirmed inactive-high, active-low pulse with a nominal 10 ms low duration (within the permitted 1–100 ms range), and analyze its falling edge. T660-1 CHD and reserved MIRcat DB9 pin 5 (Laser Output On/Off) remain disconnected; MIRcat DB9 pins 6 and 8 remain unused and unwired. Record polarity and width in every readback. This keeps the measured electrical paths representative of the final recipes without connecting them to a laser during Steps 4–6, 8, and 9.
 
 ### Step 4 — HF2LI EXT REF to Nd:YAG FIRE electrical arrival
 

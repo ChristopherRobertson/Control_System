@@ -1,12 +1,13 @@
 Hardware Configuration Inventory
 config_path: /mnt/c/Users/Chris/Documents/GitHub/Control_System/hardware_configuration.yaml
-config_hash_sha256: 9b47320c0db8fd7fb74e53021ebe55e3864ce4ed1a6144bc1dfe13050acd3ee2
+config_hash_sha256: 32b9a32e33004fcd69f5212a18e74ff34ace4922612786ff3de82b7c341a71a6
 schema_version: 0.1
 
 Devices:
 - arduino_mux: Arduino MUX Controller (mux_controller)
 - hf2li: Zurich Instruments HF2LI (lockin_amplifier)
 - mircat: Daylight MIRcat (probe_laser)
+- ndyag: Surelite EX Nd:YAG (pump_laser)
 - picoscope: PicoScope 5000 Series (oscilloscope)
 - slopo: SLOPO / Horizon OPO (opo_controller)
 - t660_1: T660-1 (pump_timing)

@@ -108,15 +108,16 @@ MEASUREMENT_STEPS: tuple[MeasurementStep, ...] = (
         purpose="Measure the combined PicoScope channel/cable skew and splitter branch skew.",
         reference_event="Splitter output 1 arrival",
         target_event="Splitter output 2 arrival",
-        pico_ch_a="T660-2 CHA test pulse -> splitter output 1 -> complete labeled CHA measurement assembly (including planned adapters) -> PicoScope CHA",
-        pico_ch_b="T660-2 CHA test pulse -> splitter output 2 -> complete labeled CHB measurement assembly (including planned adapters) -> PicoScope CHB",
+        pico_ch_a="T660-2 CHA fixed 12-inch SMB-to-BNC bulkhead assembly -> installed EXT REF downstream BNC cable -> CLOCK-SPLITTER-01 input -> output 1 -> complete labeled CHA measurement assembly (including planned adapters) -> PicoScope CHA",
+        pico_ch_b="T660-2 CHA fixed 12-inch SMB-to-BNC bulkhead assembly -> installed EXT REF downstream BNC cable -> CLOCK-SPLITTER-01 input -> output 2 -> complete labeled CHB measurement assembly (including planned adapters) -> PicoScope CHB",
         disconnect=(
-            "Disconnect and park the final HF2LI EXT REF cable at the T660-2 CHA source, then connect the dedicated T660-2 CHA test lead to the splitter input.",
+            "Temporarily remove CLOCK-SPLITTER-01 from the T660-2 CLOCK distribution and label/park its installed 1.5-foot branches to T660-1 CLOCK and HF2LI CLOCK for exact restoration.",
+            "Leave the fixed 12-inch T660-2 CHA SMB-to-BNC bulkhead assembly installed. Disconnect the installed 1-foot EXT REF downstream BNC cable only at the HF2LI destination and connect that free destination end to CLOCK-SPLITTER-01 input.",
             "No laser or MIRcat DB9 timing input may be driven by this setup.",
         ),
         remains_connected=(
             "T660-2 CHB remains physically connected to MIRcat TRIG IN, CHC to HF2LI DIO1 DAQ, and CHD to T660-1 TRIG IN; all three source channels are disabled.",
-            "The Nd:YAG timing DB9 and MIRcat DB9 connectors remain physically installed; all four T660-1 channels and its trigger source are read back OFF.",
+            "The Nd:YAG timing DB9 and MIRcat DB9 connectors remain physically installed; all four T660-1 channels and its trigger source are read back OFF. T660-1 and HF2LI CLOCK inputs are temporarily disconnected only while CLOCK-SPLITTER-01 is used for Step 0.",
         ),
         uses_final_wiring=False,
         splitter_used=True,
@@ -138,10 +139,10 @@ MEASUREMENT_STEPS: tuple[MeasurementStep, ...] = (
         purpose="Separate PicoScope channel/cable skew from splitter branch skew.",
         reference_event="Splitter output 2 arrival",
         target_event="Splitter output 1 arrival",
-        pico_ch_a="T660-2 CHA test pulse -> splitter output 2 -> the same CHA lead -> PicoScope CHA",
-        pico_ch_b="T660-2 CHA test pulse -> splitter output 1 -> the same CHB lead -> PicoScope CHB",
+        pico_ch_a="T660-2 CHA fixed bulkhead and installed EXT REF downstream BNC cable -> CLOCK-SPLITTER-01 output 2 -> the same CHA lead -> PicoScope CHA",
+        pico_ch_b="T660-2 CHA fixed bulkhead and installed EXT REF downstream BNC cable -> CLOCK-SPLITTER-01 output 1 -> the same CHB lead -> PicoScope CHB",
         disconnect=(
-            "Leave the T660-2 CHA final HF2LI EXT REF destination disconnected.",
+            "Leave the installed EXT REF downstream BNC cable disconnected only at HF2LI and connected to CLOCK-SPLITTER-01 input; do not disturb the fixed T660-2 CHA bulkhead assembly.",
             "Swap only the splitter branches; do not swap the two scope leads at the PicoScope.",
         ),
         remains_connected=(
@@ -168,10 +169,10 @@ MEASUREMENT_STEPS: tuple[MeasurementStep, ...] = (
         purpose="Measure the temporary splitter plus the exact unequal branch leads that will be installed for the optical measurement.",
         reference_event="Splitter output 1 arrival through the final Q-switch cable/DB9 adapter",
         target_event="Splitter output 2 arrival through the exact Step 7 monitor lead",
-        pico_ch_a="T660-2 CHA test pulse -> splitter output 1 -> final Q-switch cable and approved pin-6 adapter -> same CHA lead -> PicoScope CHA",
-        pico_ch_b="T660-2 CHA test pulse -> splitter output 2 -> exact Step 7 monitor adapter/lead -> same CHB lead -> PicoScope CHB",
+        pico_ch_a="T660-2 CHA fixed bulkhead and installed EXT REF downstream BNC cable -> CLOCK-SPLITTER-01 output 1 -> final Q-switch cable and approved pin-6 adapter -> same CHA lead -> PicoScope CHA",
+        pico_ch_b="T660-2 CHA fixed bulkhead and installed EXT REF downstream BNC cable -> CLOCK-SPLITTER-01 output 2 -> exact Step 7 monitor adapter/lead -> same CHB lead -> PicoScope CHB",
         disconnect=(
-            "Disconnect the final Q-switch cable from T660-1 CHB and from Nd:YAG DB9 pin 6; connect its source end to splitter output 1 and its pin-6 end to the same complete CHA measurement assembly used in Steps 0a/0b.",
+            "Leave the fixed 12-inch T660-1 CHB SMB-to-BNC bulkhead assembly installed. Disconnect the downstream Q-switch BNC cable at the CHB bulkhead and disconnect its other end from Nd:YAG DB9 pin 6; connect that downstream cable to splitter output 1 and the same complete CHA measurement assembly used in Steps 0a/0b.",
             "Use the exact branch cables/adapters planned for Step 7; do not substitute equal test leads.",
             "At the final Q-switch-cable endpoint, reproduce the documented Nd:YAG pin-6 input loading with the reviewed matched-load/tee/high-impedance probing method.",
         ),
@@ -202,8 +203,9 @@ MEASUREMENT_STEPS: tuple[MeasurementStep, ...] = (
         pico_ch_a="T660-2 CHA final EXT REF cable, disconnected at HF2LI destination end -> PicoScope CHA",
         pico_ch_b="T660-2 CHC final DAQ cable, disconnected at HF2LI destination end -> PicoScope CHB",
         disconnect=(
-            "Remove the Step 0 splitter, restore T660-2 CHA as the source of the final EXT REF cable, and park the labeled Q-switch/monitor assembly before reconnecting any laser timing harness.",
-            "Disconnect only the two destination ends from HF2LI DIO0 EXT REF and DIO1 DAQ.",
+            "Disconnect the EXT REF downstream BNC destination end from the Step 0 splitter input and route it to PicoScope CHA; leave its fixed T660-2 CHA bulkhead assembly installed. Park the labeled Q-switch/monitor assembly before reconnecting any laser timing harness.",
+            "Restore CLOCK-SPLITTER-01 to T660-2 CLOCK and restore the same installed 1.5-foot branches and splitter output ports to T660-1 CLOCK and HF2LI CLOCK. Verify this normal CLOCK distribution before any clock-dependent recipe.",
+            "Disconnect only the final DAQ downstream BNC destination end from HF2LI DIO1 and route it to PicoScope CHB; do not disturb the fixed T660-2 CHC bulkhead assembly.",
         ),
         remains_connected=(
             "T660-2 CHB remains connected to MIRcat TRIG IN but disabled; T660-2 CHD remains connected to T660-1 TRIG IN but disabled.",
@@ -441,7 +443,7 @@ MEASUREMENT_STEPS: tuple[MeasurementStep, ...] = (
         pico_ch_b="T660-1 CHC final MIRcat Process Trigger conductor at disconnected MIRcat DB9 pin 4 -> PicoScope CHB",
         disconnect=(
             "Safe-idle and remove the temporary Step 7 splitter completely; restore the Q-switch source cable to T660-1 CHB, then disconnect the Nd:YAG timing DB9 before probing FIRE pin 7.",
-            "Disconnect the MIRcat DB9 connector before exposing pin 4 to PicoScope CHB; keep pin 5 isolated and disabled.",
+            "Disconnect the MIRcat DB9 connector before exposing pin 4 to PicoScope CHB; keep reserved pin 5 (Laser Output On/Off) disconnected.",
         ),
         remains_connected=(
             "T660-2 CHD final cable remains connected to T660-1 TRIG IN; T660-2 CHB/CHC final routes remain physically connected but disabled.",
@@ -460,6 +462,7 @@ MEASUREMENT_STEPS: tuple[MeasurementStep, ...] = (
         target_signal="mircat_db9_pin_4_process_trigger",
         dependency_signals=("t660_1_trig_in",),
         reference_edge="falling",
+        target_edge="falling",
         requires_output_safety_confirmation=True,
         recipe_use_condition="conditional: yes only if T660-1 CHC is used to gate or mark MIRcat process timing",
     ),
@@ -504,10 +507,14 @@ class RemoteShotController:
 
     def fire_once(self) -> None:
         self._require_open()
-        now = time.monotonic()
         if self._last_fire_monotonic is not None:
-            remaining = self.minimum_interval_s - (now - self._last_fire_monotonic)
-            if remaining > 0:
+            while True:
+                now = time.monotonic()
+                remaining = self.minimum_interval_s - (
+                    now - self._last_fire_monotonic
+                )
+                if remaining <= 0:
+                    break
                 time.sleep(remaining)
         self._services["t660_2"].fire_remote_trigger()
         self._last_fire_monotonic = time.monotonic()
@@ -1448,22 +1455,34 @@ class TimingCalibrationProcedure:
                 )
                 if signal in active:
                     ndyag_signal = signal in {"ndyag_fire", "ndyag_q_switch"}
-                    width = "10us" if signal == "t660_1_trig_in" or ndyag_signal else "150ns"
+                    process_trigger = signal == "mircat_db9_pin_4_process_trigger"
+                    width = (
+                        "10ms"
+                        if process_trigger
+                        else "10us"
+                        if signal == "t660_1_trig_in" or ndyag_signal
+                        else "150ns"
+                    )
                     unit_recipe["channels"][channel] = {
                         "timing_mode": "delay_width",
                         "delay": f"{active[signal]}ns",
                         "width": width,
-                        "polarity": "negative" if ndyag_signal else "positive",
+                        "polarity": (
+                            "negative"
+                            if ndyag_signal or process_trigger
+                            else "positive"
+                        ),
                         "termination": "50OHM",
                         "enabled": True,
                         "signal": signal,
                     }
                 else:
+                    process_trigger = signal == "mircat_db9_pin_4_process_trigger"
                     unit_recipe["channels"][channel] = {
                         "timing_mode": "delay_width",
                         "delay": "0ns",
-                        "width": "150ns",
-                        "polarity": "positive",
+                        "width": "10ms" if process_trigger else "150ns",
+                        "polarity": "negative" if process_trigger else "positive",
                         "termination": "50OHM",
                         "enabled": False,
                         "signal": signal,
@@ -1569,12 +1588,14 @@ class TimingCalibrationProcedure:
 
                     def fire() -> None:
                         nonlocal trigger_commands, last_remote_fire_monotonic
-                        now = time.monotonic()
                         if last_remote_fire_monotonic is not None:
-                            remaining = minimum_remote_interval_s - (
-                                now - last_remote_fire_monotonic
-                            )
-                            if remaining > 0:
+                            while True:
+                                now = time.monotonic()
+                                remaining = minimum_remote_interval_s - (
+                                    now - last_remote_fire_monotonic
+                                )
+                                if remaining <= 0:
+                                    break
                                 time.sleep(remaining)
                         controller.fire_once()
                         fired_at = time.monotonic()
@@ -3483,7 +3504,11 @@ def _load_and_validate_optical_recipe(
     trigger_input["signals"] = {
         "ndyag_fire": fire_settings,
         "ndyag_q_switch": qswitch_settings,
-        "mircat_db9_pin_4_process_trigger": deepcopy(disabled_channel),
+        "mircat_db9_pin_4_process_trigger": {
+            **deepcopy(disabled_channel),
+            "width": "10ms",
+            "polarity": "negative",
+        },
     }
     master.pop("signals", None)
     master["channels"] = {

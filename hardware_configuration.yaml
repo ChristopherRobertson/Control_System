@@ -77,7 +77,16 @@ devices:
     role: "opo_controller"
     preferred_port: "COM4"
     baudrate: 9600
-    serial_number: "USER INPUT REQUIRED"
+    model_number: "SLOPO PLUS"
+    serial_number: "24366-2"
+    procurement_identity: "Surelite OPO Plus Blue"
+
+  ndyag:
+    display_name: "Surelite EX Nd:YAG"
+    role: "pump_laser"
+    model_number: "SL EX"
+    serial_number: "24366-1"
+    procurement_identity: "Surelite EX"
 
   hf2li:
     display_name: "Zurich Instruments HF2LI"

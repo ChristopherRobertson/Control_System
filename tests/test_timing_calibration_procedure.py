@@ -59,6 +59,35 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
         self.assertIn("output 1", optical["splitter_mapping"])
         self.assertIn("output 2", optical["splitter_mapping"])
 
+    def test_step_zero_preserves_fixed_bulkheads_and_restores_clock_splitter(self) -> None:
+        step_0a = next(step for step in MEASUREMENT_STEPS if step.step == "0a")
+        step_0b = next(step for step in MEASUREMENT_STEPS if step.step == "0b")
+        step_0c = next(step for step in MEASUREMENT_STEPS if step.step == "0c")
+        step_1 = next(step for step in MEASUREMENT_STEPS if step.step == "1")
+
+        step_zero_text = " ".join(
+            (
+                step_0a.pico_ch_a,
+                step_0a.pico_ch_b,
+                *step_0a.disconnect,
+                step_0b.pico_ch_a,
+                step_0b.pico_ch_b,
+                *step_0b.disconnect,
+                step_0c.pico_ch_a,
+                step_0c.pico_ch_b,
+                *step_0c.disconnect,
+            )
+        )
+        self.assertIn("fixed 12-inch", step_zero_text)
+        self.assertIn("only at the HF2LI destination", step_zero_text)
+        self.assertNotIn("dedicated T660-2 CHA test lead", step_zero_text)
+        self.assertNotIn("at the T660-2 CHA source", step_zero_text)
+
+        step_1_transition = " ".join(step_1.disconnect)
+        self.assertIn("Restore CLOCK-SPLITTER-01 to T660-2 CLOCK", step_1_transition)
+        self.assertIn("T660-1 CLOCK and HF2LI CLOCK", step_1_transition)
+        self.assertIn("before any clock-dependent recipe", step_1_transition)
+
     def test_t6601_channel_d_is_unmapped_and_absent_from_calibration_recipes(self) -> None:
         self.assertIsNone(
             self.inventory.devices["t660_1"]["channel_map"]["D"]
@@ -235,6 +264,8 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
     def test_generated_recipes_are_sparse_and_explicit(self) -> None:
         workflow = TimingCalibrationProcedure(operator="Test", inventory=self.inventory)
         for step in MEASUREMENT_STEPS:
+            if step.target_signal == "mircat_db9_pin_4_process_trigger":
+                self.assertEqual(step.target_edge, "falling")
             if step.optical:
                 continue
             recipe = workflow.build_step_recipe(step, programmed_delay_ns=1_000_000)
@@ -250,6 +281,9 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                     if settings.get("signal") in {"ndyag_fire", "ndyag_q_switch"} and settings.get("enabled"):
                         self.assertEqual(settings["polarity"], "negative")
                         self.assertEqual(settings["width"], "10us")
+                    if settings.get("signal") == "mircat_db9_pin_4_process_trigger":
+                        self.assertEqual(settings["polarity"], "negative")
+                        self.assertEqual(settings["width"], "10ms")
             else:
                 self.assertEqual(units["t660_2"]["clock"]["frequency"], "100Hz")
         optical = next(step for step in MEASUREMENT_STEPS if step.optical)
@@ -614,7 +648,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                 )
                 target_falling = any(
                     token in str(path)
-                    for token in ("step_4_", "step_5_", "step_6_")
+                    for token in ("step_4_", "step_5_", "step_6_", "step_8_")
                 )
                 _write_fake_capture(
                     path,

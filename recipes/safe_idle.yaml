@@ -72,8 +72,9 @@ t660:
       C:
         timing_mode: "delay_width"
         delay: 0ns
-        width: 150ns
-        polarity: "positive"
+        width: 10ms
+        # Preserve the Process Trigger's inactive (high) polarity while disabled.
+        polarity: "negative"
         termination: "50OHM"
         enabled: false
       D:

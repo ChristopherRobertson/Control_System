@@ -42,7 +42,7 @@ opening the panel, loading files, validating, and configuring never access hardw
 ## Safety boundaries
 
 MIRcat SDK ownership is explicit. External Process Trigger is registered but
-unavailable until experimentally confirmed. T660-1 CHD and MIRcat DB9 pins 5,
+unavailable until experimentally confirmed. T660-1 CHD and reserved MIRcat DB9 pin 5 (Laser Output On/Off),
 6, and 8 cannot be selected. MIRcat DB9 1-3 DIO mapping is unavailable until
 confirmed. Every valid definition supplies stop, abort-to-safe, and failure
 cleanup actions. Tests use recording adapters only and never open hardware.

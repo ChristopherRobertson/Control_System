@@ -119,7 +119,8 @@ t660:
       mircat_db9_pin_4_process_trigger:
         timing_mode: delay_width
         delay: 0ns
-        width: 150ns
-        polarity: positive
+        # Daylight Solutions specifies normally high with a 1-100 ms low pulse.
+        width: 10ms
+        polarity: negative
         termination: 50OHM
         enabled: false

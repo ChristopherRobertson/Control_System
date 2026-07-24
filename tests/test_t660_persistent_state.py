@@ -323,8 +323,12 @@ class T660PersistentStateTests(unittest.TestCase):
                     self.assertIs(channel_settings["enabled"], False)
                     self.assertEqual(channel_settings["timing_mode"], "delay_width")
                     self.assertEqual(channel_settings["delay"], "0ns")
-                    self.assertEqual(channel_settings["width"], "150ns")
-                    self.assertEqual(channel_settings["polarity"], "positive")
+                    if unit == "t660_1" and channel == "C":
+                        self.assertEqual(channel_settings["width"], "10ms")
+                        self.assertEqual(channel_settings["polarity"], "negative")
+                    else:
+                        self.assertEqual(channel_settings["width"], "150ns")
+                        self.assertEqual(channel_settings["polarity"], "positive")
                     self.assertEqual(channel_settings["termination"], "50OHM")
         self.assertEqual(resolved["t660_2"]["frames_engine"], "OFF")
         self.assertNotIn("frames_engine", resolved["t660_1"])
