@@ -1,9 +1,11 @@
 # P0 execution-baseline record
 
 Campaign: `20260722_complete_system_recalibration_001`  
-P0 classification at capture: **BLOCKED — CLEAN COMMIT REQUIRED BEFORE S0**  
+P0 classification: **COMPLETE — AWAITING EXPLICIT USER APPROVAL FOR S0**
 Captured: `2026-07-24T11:11:14.7654318-07:00`  
 Connection-instruction amendment validated: `2026-07-24T11:25:32.1567102-07:00`  
+Clean candidate baseline committed: `2026-07-24T11:27:58-07:00`
+P0 bookkeeping closed: `2026-07-24T11:31:54.4873062-07:00`
 Timezone: `America/Los_Angeles` (`Pacific Standard Time`, UTC-07:00 at capture)  
 Operator: `Christopher Robertson`  
 Absolute campaign path:
@@ -20,12 +22,13 @@ document review. T660 firmware readback remains deferred to S0.
 ## Git and repository state
 
 - Branch: `main`
-- Full local commit: `6d267fcdc10331de0e12aeec5028049be0a97182`
+- Clean P0 candidate commit: `1574f1720c09b1db1ac89ab903130aa80eaf8e8a`
 - `origin/main`: `06f1c83cf6cf9e633558c599b339974aacbe2a61`
-- Local `main` relationship to `origin/main`: `2 ahead, 0 behind`
-- Working tree: **DIRTY**
-- Dirty state at capture: 16 modified tracked files and 3 untracked files
-  before creation of this baseline/blocker pair.
+- Local `main` relationship to `origin/main` after the candidate commit:
+  `3 ahead, 0 behind`
+- Working tree immediately after candidate commit: **CLEAN**
+- The small P0 closure-record changes containing this statement are intended
+  for a follow-up bookkeeping commit before push.
 - Git whitespace/diff validation: **PASS**
 - `calibration/timing_calibration.csv`: absent
 - `calibration/timing_offsets.yaml`: absent
@@ -35,9 +38,10 @@ document review. T660 firmware readback remains deferred to S0.
 - Arduino MUX configuration: disabled and excluded; direct wiring remains
   mandatory.
 
-The dirty candidate state is identified by the hashes below, but it is not an
-acceptable S0 execution revision until reviewed and committed as a clean local
-baseline. No push is required or authorized by this record.
+Commit `1574f1720c09b1db1ac89ab903130aa80eaf8e8a` identifies the reviewed P0
+candidate state represented by the hashes below. The commit completed
+successfully; a subsequent automatic geometric-repack warning did not alter the
+commit or working tree. No hardware execution is authorized by this record.
 
 ## Required file hashes
 
@@ -76,7 +80,7 @@ Selected optical recipe:
 | `8a4d9dfe1a3772e9b77fe8c9a63e568910709c5aef9bd0ce3be2bf5764362bdb` | `docs/MIRcat/daylight_db9_process_trigger_correspondence.md` |
 | `67be029444a19fb539132c812b8d3dfa9aac9ad93112ed233ea8f13435d0e72e` | `docs/timing_calibration_procedure.md` |
 | `39bab7d5b00b5fee56375dd45d52ae08d05c45323ad56a8b5f55044271497ed0` | `calibration/20260722_complete_system_recalibration_001/manifests/p0_physical_inventory.md` |
-| `4e52e247a11f4e0eff4ebf195edc8562f17aa3af6e688d5f3cd76fb9436b6748` | `calibration/20260722_complete_system_recalibration_001/manifests/p0_blocker_table.md` |
+| `077d36018d9134c5c82a2b0f1d5bed9cb42068460839be86eadd436d60899ed2` | `calibration/20260722_complete_system_recalibration_001/manifests/p0_blocker_table.md` |
 | `788c956e04c7251492ff9a36308ade0c95d1c1c40e9b0613b7c609fc33b0f8fe` | `calibration/20260722_complete_system_recalibration_001/manifests/p0_python_environment.txt` |
 
 The source, procedure, test, correspondence, inventory, and blocker hashes
@@ -164,7 +168,6 @@ inventory/hash updates for the confirmed Nd:YAG/OPO devices were retained.
 
 ## Exact requirement before S0
 
-Review the complete working diff, resolve any remaining P0 issues, create a
-clean local commit identifying this candidate state, rerun the P0 software
-checks, and capture a new clean-commit hash manifest. Do not begin S0 until the
-user explicitly approves continuing.
+Commit this P0 closure-record update and push the resulting clean `main`
+history if desired. Do not begin S0 until the user explicitly approves
+continuing.

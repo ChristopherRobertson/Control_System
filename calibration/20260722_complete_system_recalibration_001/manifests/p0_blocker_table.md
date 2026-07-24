@@ -6,8 +6,8 @@ Operator: `Christopher Robertson`
 
 | ID | Missing item or unresolved condition | Affected future phase | Execution blocker or claim limitation | Permitted resolution | Safely deferrable? |
 |---|---|---|---|---|---|
-| P0-B01 | Working tree contains reviewed but uncommitted topology, recipe, test, configuration, documentation, and P0-record changes. Commit `6d267fcdc10331de0e12aeec5028049be0a97182` does not by itself identify the complete candidate state. | S0 and every later phase | **Execution blocker before S0** because the software baseline is not a clean immutable revision. | Review the complete local diff, correct any remaining issues, and create an intentional local commit on `main` or otherwise establish a reviewed clean commit. Do not push unless explicitly requested. Recapture hashes after the clean revision is established. | **No, not beyond P0/S0 gate.** |
-| P0-B02 | **RESOLVED in the current uncommitted candidate state:** Step 0 leaves every fixed 12-inch SMB-to-BNC bulkhead assembly installed, moves only the explicitly identified downstream BNC connection, and requires exact restoration of `CLOCK-SPLITTER-01` before clock-dependent recipes. Step 0c load-equivalence evidence remains tracked separately by P0-B10. | MS-01, MS-02, MS-03, dependent timing and OP-01 | No remaining connection-instruction blocker after validation and inclusion in the clean baseline commit. | Preserve the corrected procedure code, reviewed Markdown, and regression test in the clean baseline commit. | Resolved; commit/hash closure remains under P0-B01. |
+| P0-B01 | **RESOLVED:** the reviewed P0 candidate state was committed on `main` as `1574f1720c09b1db1ac89ab903130aa80eaf8e8a`; the working tree was clean immediately after the commit. | S0 and every later phase | No remaining execution blocker from repository-state provenance. | Preserve the candidate commit and this closure record in the pushed history. | Resolved. |
+| P0-B02 | **RESOLVED:** Step 0 leaves every fixed 12-inch SMB-to-BNC bulkhead assembly installed, moves only the explicitly identified downstream BNC connection, and requires exact restoration of `CLOCK-SPLITTER-01` before clock-dependent recipes. Step 0c load-equivalence evidence remains tracked separately by P0-B10. | MS-01, MS-02, MS-03, dependent timing and OP-01 | No remaining connection-instruction blocker after validation and inclusion in the clean baseline commit. | Preserve the corrected procedure code, reviewed Markdown, and regression test in the controlled history. | Resolved. |
 | P0-B03 | Replacement reference detector is still in shipment; SIP and detector serial numbers are unknown. | DET-01/DET-02, SP-02, OP-01, E2E-01 | **Execution blocker for reference-detector-dependent work.** | Inspect and record the replacement physical labels after arrival; update configuration/manifest and associated certificate mapping. | Yes through S0 and independent electrical phases. |
 | P0-B04 | Calibration certificates are reported available for PicoScope, T660s, MIRcat, HF2LI, Nd:YAG/OPO, and detector equipment, but certificate identifiers, issuers, dates, recalibration dates, uncertainties, and exact equipment associations are unavailable. | Measurement uncertainty budgets, RPT-01, PROM-01; equipment-specific claims | Does not block S0; **limits traceability and may block final uncertainty/traceability claims**. | Retrieve each certificate and transcribe the required metadata without claiming traceability until association is verified. | Yes, but not beyond the associated final claim gate. |
 | P0-B05 | T660 firmware versions are unknown. | S0, T2-01, T1-01, PT-01 | Not a P0 hardware-readback requirement; must be obtained only after safe ownership and safe-idle verification. | Perform bounded read-only identity/firmware readback during S0 after outputs are verified disabled. | Yes, specifically to S0. |
@@ -19,7 +19,7 @@ Operator: `Christopher Robertson`
 
 ## Gate conclusion
 
-`P0-B01` is the only current blocker to preparing S0. `P0-B02` is resolved in
-the current candidate state and becomes part of the controlled baseline when
-P0-B01 is closed. All other entries are explicitly phase-scoped; none may be
-silently assigned zero uncertainty or represented as resolved without evidence.
+`P0-B01` and `P0-B02` are resolved. No remaining table entry blocks preparation
+of S0. The other entries are explicitly phase-scoped; none may be silently
+assigned zero uncertainty or represented as resolved without evidence. S0
+still requires explicit user approval before any hardware access.
