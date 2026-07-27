@@ -13,6 +13,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Local planning document maintained outside repository history
+/docs/RSI_Two_Week_Workplan.docx
+
 # Archived legacy artifacts kept outside active app path
 archive/
 
