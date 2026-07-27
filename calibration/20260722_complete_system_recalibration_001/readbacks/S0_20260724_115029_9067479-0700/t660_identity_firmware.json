@@ -1,0 +1,24 @@
+{
+  "t660_1": {
+    "expected": {
+      "model_family": "T660",
+      "serial_number": "00369"
+    },
+    "firmware_readback": "28E660-1-1.7",
+    "identity_matches_expected": true,
+    "identity_response": "HTI,T660-1,00369,28E660-1-1.7",
+    "missing_expected_tokens": [],
+    "timestamp_utc": "2026-07-24T18:52:34+00:00"
+  },
+  "t660_2": {
+    "expected": {
+      "model_family": "T660",
+      "serial_number": "00431"
+    },
+    "firmware_readback": "28E660-1-1.7",
+    "identity_matches_expected": true,
+    "identity_response": "HTI,T660-2,00431,28E660-1-1.7",
+    "missing_expected_tokens": [],
+    "timestamp_utc": "2026-07-24T18:52:34+00:00"
+  }
+}

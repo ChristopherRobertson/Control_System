@@ -1,0 +1,50 @@
+{
+  "t660_1": {
+    "A": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "B": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "C": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "D": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "all_disabled": true,
+    "trigger_source": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "trigger_source_off": true
+  },
+  "t660_2": {
+    "A": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "B": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "C": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "D": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "all_disabled": true,
+    "trigger_source": {
+      "ok": true,
+      "response": "OFF"
+    },
+    "trigger_source_off": true
+  }
+}
