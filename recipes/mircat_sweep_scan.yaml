@@ -36,13 +36,15 @@ hf2li:
     timing_demodulator_api_index: 2
     timing_demodulator_labone_label: 3
     trigger_signal: "Demod 3 DIO (API index 2)"
-    # Fill these only from the empirical complete-DIO-word test. The workflow
-    # fails preflight while experimentally_confirmed is false or any bit is null.
+    # Mapping confirmed in an operator-reported side experiment. This enables
+    # the software mapping but does not complete campaign MD-01 measurements.
     confirmed_dio_mapping:
-      experimentally_confirmed: false
-      scan_direction_bit: null
-      sweep_active_bit: null
-      wavelength_trigger_bit: null
+      experimentally_confirmed: true
+      scan_direction_bit: 20
+      sweep_active_bit: 21
+      wavelength_trigger_bit: 22
+      confirmation_source: "calibration/20260722_complete_system_recalibration_001/manifests/mircat_dio_mapping_side_experiment.md"
+      campaign_measurement_status: "MD-01 MEASUREMENTS NOT STARTED"
     wavelength_trigger_interval_cm1: 5.0
     wavelength_trigger_pulse_width_us: 500
     pre_padding_s: 0.10
