@@ -79,7 +79,9 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             )
         )
         self.assertIn("fixed 12-inch", step_zero_text)
-        self.assertIn("only at the HF2LI destination", step_zero_text)
+        self.assertIn("directly to that BNC bulkhead", step_zero_text)
+        self.assertIn("park it for restoration", step_zero_text)
+        self.assertNotIn("installed EXT REF downstream BNC cable -> CLOCK-SPLITTER-01", step_zero_text)
         self.assertNotIn("dedicated T660-2 CHA test lead", step_zero_text)
         self.assertNotIn("at the T660-2 CHA source", step_zero_text)
 
@@ -87,6 +89,19 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
         self.assertIn("Restore CLOCK-SPLITTER-01 to T660-2 CLOCK", step_1_transition)
         self.assertIn("T660-1 CLOCK and HF2LI CLOCK", step_1_transition)
         self.assertIn("before any clock-dependent recipe", step_1_transition)
+
+    def test_step_zero_uses_integral_splitter_branches_directly(self) -> None:
+        step_0a = next(step for step in MEASUREMENT_STEPS if step.step == "0a")
+        step_0b = next(step for step in MEASUREMENT_STEPS if step.step == "0b")
+
+        self.assertIn("S1 -> directly to CHA", step_0a.splitter_mapping)
+        self.assertIn("S2 -> directly to CHB", step_0a.splitter_mapping)
+        self.assertIn("S2 -> directly to CHA", step_0b.splitter_mapping)
+        self.assertIn("S1 -> directly to CHB", step_0b.splitter_mapping)
+        self.assertIn("third integral branch -> open and unconnected", step_0a.splitter_mapping)
+        self.assertIn("third integral branch -> open and unconnected", step_0b.splitter_mapping)
+        self.assertNotIn("measurement assembly", step_0a.pico_ch_a)
+        self.assertNotIn("measurement assembly", step_0a.pico_ch_b)
 
     def test_t6601_channel_d_is_unmapped_and_absent_from_calibration_recipes(self) -> None:
         self.assertIsNone(
