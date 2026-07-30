@@ -33,7 +33,6 @@ These T660 TTL timing lines are direct point-to-point routes. They are not route
 
 The Arduino MUX is disabled and bypassed until the MUX inputs are rewired and requalified. The old MUX route table is intentionally empty because HF2LI `DIO16-DIO22` inputs do not mirror to HF2LI `DIO9-DIO15` outputs. The PicoScope owns only Pico identity, driver/API paths, supported capture capabilities, editable capture recipes, and `picoscope_connectors` metadata. PicoScope settings/capture checks must use direct wiring and must not require MUX route selection.
 
-The PicoScope device configuration contains Pico identity, driver/API paths, supported capture capabilities, and recipe references only. Scenario-specific capture settings are stored in editable `recipes/picoscope_*.yaml` files and recorded in run manifests with the hardware configuration hash.
 
 ## Runtime Environment
 

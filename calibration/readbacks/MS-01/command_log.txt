@@ -1,0 +1,4 @@
+2026-07-29T21:17:42+00:00 complete timing calibration start operator=CLI Test run_dir=C:\Users\Chris\Documents\GitHub\Control_System\calibration\readbacks\MS-01
+2026-07-29T21:17:42+00:00 timing calibration stopped: photodetector_characterization_date must use YYYY-MM-DD
+2026-07-29T21:18:45+00:00 complete timing calibration start operator=CLI Test run_dir=C:\Users\Chris\Documents\GitHub\Control_System\calibration\readbacks\MS-01
+2026-07-29T21:18:45+00:00 timing calibration stopped: Refusing hardware acquisition in a non-fresh run directory containing: BLOCKED.md, run_manifest.json

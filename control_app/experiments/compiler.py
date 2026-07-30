@@ -1,4 +1,4 @@
-"""Compile validated definitions into immutable, content-addressed plans."""
+"""Compile validated definitions into immutable execution plans."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping
-import hashlib
 import json
 
 from .capabilities import CapabilityRegistry, default_capability_registry
@@ -27,7 +26,6 @@ class PlanStep:
 class ExecutionPlan:
     plan_version: str
     experiment_id: str
-    definition_hash: str
     compiled_at_utc: str
     resource_ownership: Mapping[str, str]
     steps: tuple[PlanStep, ...]
@@ -42,7 +40,7 @@ class ExecutionPlan:
     def to_dict(self) -> dict[str, Any]:
         return {
             "plan_version": self.plan_version, "experiment_id": self.experiment_id,
-            "definition_hash": self.definition_hash, "compiled_at_utc": self.compiled_at_utc,
+            "compiled_at_utc": self.compiled_at_utc,
             "resource_ownership": dict(self.resource_ownership),
             "steps": [asdict(step) for step in self.steps], "acquisition": dict(self.acquisition),
             "processing": dict(self.processing), "export": dict(self.export),
@@ -60,8 +58,6 @@ class ExecutionPlan:
 def compile_experiment(definition: ExperimentDefinition, registry: CapabilityRegistry | None = None) -> ExecutionPlan:
     registry = registry or default_capability_registry()
     require_valid(definition, registry)
-    source = definition.to_dict()
-    digest = hashlib.sha256(json.dumps(source, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     steps: list[PlanStep] = []
     for configuration in definition.devices:
         for name, value in configuration.capabilities.items():
@@ -70,7 +66,7 @@ def compile_experiment(definition: ExperimentDefinition, registry: CapabilityReg
     order = {name: index for index, name in enumerate(("configure", "verify", "arm", "run", "acquire"))}
     steps.sort(key=lambda item: order.get(item.phase, 99))
     return ExecutionPlan(
-        "1.0", definition.experiment_id, digest, datetime.now(UTC).isoformat(timespec="seconds"),
+        "1.0", definition.experiment_id, datetime.now(UTC).isoformat(timespec="seconds"),
         MappingProxyType(dict(definition.resource_ownership)), tuple(steps),
         MappingProxyType(dict(definition.acquisition)), MappingProxyType(dict(definition.processing)),
         MappingProxyType(dict(definition.export)), definition.safety_prerequisites,

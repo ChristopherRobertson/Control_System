@@ -404,7 +404,6 @@ class MircatWidgetCommandHandler:
                 "alignment_summary": summary,
                 "used_existing_mircat_session": existing_service is not None,
                 "command_log": str(self._command_log_path()),
-                "config_hash": self.inventory.config_hash,
             },
         )
 
@@ -464,7 +463,6 @@ class MircatWidgetCommandHandler:
                 "manifest": str(manifest_path),
                 "alignment_stop_summary": stop_summary,
                 "command_log": str(self._command_log_path()),
-                "config_hash": self.inventory.config_hash,
             },
         )
 
@@ -489,7 +487,6 @@ class MircatWidgetCommandHandler:
         data = {
             "state": service.read_state().to_dict(),
             "command_log": str(self._command_log_path()),
-            "config_hash": self.inventory.config_hash,
         }
         if extra_data:
             data.update(extra_data)

@@ -1,0 +1,11 @@
+{
+  "status": "SAFE_IDLE_VERIFICATION_FAILED",
+  "output_state": "UNKNOWN_PENDING_MANUAL_VERIFICATION",
+  "failed_device": "t660_2",
+  "error": "T660-2 could not enter P500 command mode; ZM P500 and ZMode P500 returned no response",
+  "actions_after_failure": [
+    "no further device command sent",
+    "MS-02 and later phases not started"
+  ],
+  "required_action": "Perform laboratory manual STOP/output-off verification on both T660s and report the observed trigger-source and channel-output states."
+}

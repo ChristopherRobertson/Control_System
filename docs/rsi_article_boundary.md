@@ -12,7 +12,6 @@ Files required to run, reproduce, or audit hardware acquisition belong here:
 - timing offsets and canonical calibration CSV/YAML outputs under `calibration/`
 - calibration campaign plans, manifests, readbacks, raw data, analyses, and reports under uniquely named `calibration/<campaign-id>/` directories
 - operational command logs and non-calibration hardware runs under `logs/` or `runs/`
-- `hardware_configuration.yaml`, `config/config_inventory.txt`, and `config/config_hash.txt`
 - hardware-operation notes needed by the UI, timing recipes, workflows, or reproducibility checks
 - hardware-check scripts under `tests/hardware_checks/`
 

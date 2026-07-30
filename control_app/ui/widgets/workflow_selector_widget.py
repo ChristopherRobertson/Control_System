@@ -65,7 +65,7 @@ class WorkflowSelectorWidget(QWidget):
         self.catalog = public_workflow_catalog()
         self.parameter_inputs: dict[str, Any] = {}
         self.current_definition: dict[str, Any] | None = None
-        self.configured_fingerprint: str | None = None
+        self.configured_workflow_id: str | None = None
         self._active_thread = None
         self._active_worker = None
         self._active_action: str | None = None
@@ -177,7 +177,7 @@ class WorkflowSelectorWidget(QWidget):
             widget.valueChanged.connect(lambda _value: self._invalidate_configuration())
 
     def _invalidate_configuration(self, message: str | None = None) -> None:
-        self.configured_fingerprint = None
+        self.configured_workflow_id = None
         self.run_button.setEnabled(False)
         if message:
             self.status.append(f"PENDING: {message}")
@@ -207,15 +207,13 @@ class WorkflowSelectorWidget(QWidget):
         self._dispatch(command, "configure")
 
     def _run(self) -> None:
-        if self.configured_fingerprint is None:
+        if self.configured_workflow_id is None:
             return
         command = WorkflowCommand(
             device_key="workflow",
             command="workflow.run_selected",
             parameters={
-                "fingerprint": self.configured_fingerprint,
                 "workflow_id": self.current_definition["id"],
-                "workflow_parameters": self._values(),
             },
             safety_approval=self.safety_approval.isChecked(),
         )
@@ -250,7 +248,7 @@ class WorkflowSelectorWidget(QWidget):
     def _finished(self, result: WorkflowResult) -> None:
         self.status.append(f"{result.status.upper()}: {result.message}")
         if self._active_action == "configure" and result.status == "complete":
-            self.configured_fingerprint = str(result.data["fingerprint"])
+            self.configured_workflow_id = str(result.data["workflow_id"])
         if self._active_action == "run" and result.status == "complete":
             self._workflow_active = True
         if self._active_action == "stop" and result.status == "complete":
@@ -268,7 +266,7 @@ class WorkflowSelectorWidget(QWidget):
         self.run_button.setEnabled(
             self._active_thread is None
             and not self._workflow_active
-            and self.configured_fingerprint is not None
+            and self.configured_workflow_id is not None
             and approved
         )
 

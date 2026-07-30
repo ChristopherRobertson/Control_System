@@ -1,0 +1,2 @@
+2026-07-29T21:15:38+00:00 complete timing calibration start operator=Christopher Robertson run_dir=C:\Users\Chris\Documents\GitHub\Control_System\calibration\system_recalibration_001\plans\complete_timing
+2026-07-29T21:15:38+00:00 timing calibration stopped: photodetector_characterization_date must use YYYY-MM-DD

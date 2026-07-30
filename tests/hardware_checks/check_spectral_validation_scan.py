@@ -98,7 +98,6 @@ def main() -> int:
     summary = {
         "timestamp_utc": utc_now(),
         "operator": args.operator,
-        "config_hash": inventory.config_hash,
         "recipe_path": str(recipe_path),
         "hardware_access_confirmed": args.confirm_real_hardware,
         "command_results": results,
@@ -147,7 +146,6 @@ def main() -> int:
             blockers=blockers,
             next_actions=manifest["blocker_status"]["next_actions"],
             context={
-                "config_hash": inventory.config_hash,
                 "recipe": str(recipe_path),
                 "manifest": str(manifest_path),
                 "command_log": str(command_log_path),

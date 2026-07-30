@@ -307,7 +307,6 @@ class MircatFastSweepWorkflow:
         startup = {
             "timestamp_utc": _utc_now(),
             "operator": self.operator,
-            "config_hash": self.inventory.config_hash,
             "initial_state": initial_state,
             "state_before_record": state_before_record,
             "clear_system_error_result": clear_result,
@@ -409,7 +408,6 @@ class MircatFastSweepWorkflow:
         acquisition = {
             "timestamp_utc": _utc_now(),
             "operator": self.operator,
-            "config_hash": self.inventory.config_hash,
             "sample_name": request.sample_name,
             "timing": {
                 "record_duration_s": request.record_duration_s,
@@ -520,7 +518,6 @@ class MircatFastSweepWorkflow:
         summary = {
             "timestamp_utc": _utc_now(),
             "operator": self.operator,
-            "config_hash": self.inventory.config_hash,
             "status": "PASS" if not errors else "ERROR",
             "sample_name": request.sample_name,
             "request": request.to_dict(),

@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
-import hashlib
 import json
 
 import yaml
@@ -25,7 +24,6 @@ class ConfigInventory:
     """Structured summary of the exact hardware configuration file used."""
 
     config_path: str
-    config_hash: str
     schema_version: str | None
     devices: dict[str, dict[str, Any]]
     t660_devices: dict[str, dict[str, Any]]
@@ -62,31 +60,20 @@ def find_hardware_config(path: str | Path | None = None) -> Path:
     )
 
 
-def sha256_file(path: str | Path) -> str:
-    """Compute SHA-256 over the exact file bytes."""
-
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def load_hardware_config(path: str | Path | None = None) -> tuple[dict[str, Any], Path, str]:
-    """Load hardware_configuration.yaml and return data, path, and byte hash."""
+def load_hardware_config(path: str | Path | None = None) -> tuple[dict[str, Any], Path, None]:
+    """Load hardware_configuration.yaml and return its data and path."""
 
     config_path = find_hardware_config(path)
     with config_path.open("rb") as handle:
         raw = handle.read()
-    config_hash = hashlib.sha256(raw).hexdigest()
     data = yaml.safe_load(raw) or {}
     if not isinstance(data, dict):
         raise HardwareConfigError(f"{config_path} did not parse as a YAML mapping")
-    return data, config_path, config_hash
+    return data, config_path, None
 
 
 def build_config_inventory(
-    config: dict[str, Any], config_path: str | Path, config_hash: str
+    config: dict[str, Any], config_path: str | Path, _legacy_identifier: Any = None
 ) -> ConfigInventory:
     """Build a flexible inventory from the available configuration sections."""
 
@@ -192,7 +179,6 @@ def build_config_inventory(
 
     return ConfigInventory(
         config_path=str(Path(config_path).resolve()),
-        config_hash=config_hash,
         schema_version=config.get("schema_version"),
         devices={name: dict(value or {}) for name, value in devices.items()},
         t660_devices={name: dict(value or {}) for name, value in t660_devices.items()},
@@ -207,8 +193,8 @@ def build_config_inventory(
 
 def write_inventory_files(
     inventory: ConfigInventory, output_dir: str | Path | None = None
-) -> tuple[Path, Path]:
-    """Write config_inventory.txt and config_hash.txt beside config outputs."""
+) -> Path:
+    """Write the human-readable configuration inventory."""
 
     target = Path(output_dir) if output_dir is not None else REPO_ROOT / "config"
     if not target.is_absolute():
@@ -216,12 +202,10 @@ def write_inventory_files(
     target.mkdir(parents=True, exist_ok=True)
 
     inventory_path = target / "config_inventory.txt"
-    hash_path = target / "config_hash.txt"
 
     lines = [
         "Hardware Configuration Inventory",
         f"config_path: {inventory.config_path}",
-        f"config_hash_sha256: {inventory.config_hash}",
         f"schema_version: {inventory.schema_version}",
         "",
         "Devices:",
@@ -251,19 +235,16 @@ def write_inventory_files(
     else:
         lines.append("- none")
     inventory_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    hash_path.write_text(
-        f"{inventory.config_hash}  {inventory.config_path}\n", encoding="utf-8"
-    )
-    return inventory_path, hash_path
+    return inventory_path
 
 
 def load_config_inventory(
     path: str | Path | None = None, *, write_files: bool = False
 ) -> ConfigInventory:
-    """Load, hash, validate, and optionally persist the configuration inventory."""
+    """Load, validate, and optionally persist the configuration inventory."""
 
-    config, config_path, config_hash = load_hardware_config(path)
-    inventory = build_config_inventory(config, config_path, config_hash)
+    config, config_path, _ = load_hardware_config(path)
+    inventory = build_config_inventory(config, config_path)
     if write_files:
         write_inventory_files(inventory)
     return inventory

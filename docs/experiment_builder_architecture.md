@@ -3,7 +3,7 @@
 The new `control_app.experiments` package is the migration target for UI and
 backend orchestration. It accepts a versioned data definition, validates it
 against a device capability registry and cross-device constraints, compiles a
-content-addressed immutable plan, and executes that plan through adapters.
+validated immutable plan, and executes that plan through adapters.
 
 The builder lifecycle is create/load, validate, save, configure, run/stop,
 process, and export. The Qt panel renders `fields` generically; adding a valid

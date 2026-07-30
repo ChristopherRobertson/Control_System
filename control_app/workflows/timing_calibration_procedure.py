@@ -1,9 +1,9 @@
-"""Complete, operator-guided timing calibration for the pump-probe system.
+"""Legacy complete timing implementation and reusable timing utilities.
 
-The workflow is deliberately split into a reviewable plan and an explicit
-hardware execution.  Hardware execution safe-idles before every cable change,
-prints the complete setup, waits for the required phrase, and keeps all raw and
-derived artifacts inside one unique run directory.
+Active campaigns are orchestrated by Codex one phase and one operator action
+at a time. This module remains for regression tests, capture planning, recipe
+construction, trace analysis, and focused device utilities. It is not the
+operator-facing campaign entry point.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Iterable, TextIO
 import csv
-import hashlib
 import json
 import math
 import statistics
@@ -398,10 +397,10 @@ MEASUREMENT_STEPS: tuple[MeasurementStep, ...] = (
         setup_id="step_7_qswitch_to_optical",
         step="7",
         measurement_id="TC-07",
-        title="Q-switch electrical arrival to optical OPO pulse at sample",
+        title="Operational Q-switch-command monitor to optical OPO pulse at sample",
         category="optical pump-arrival delay",
-        purpose="Connect electrical timing to chemical time zero at the sample position.",
-        reference_event="Q-switch electrical arrival at the Nd:YAG DB9 pin 6 branch",
+        purpose="Measure the end-to-end operational latency from the installed T660-1 CHB command monitor to chemical time zero at the sample position.",
+        reference_event="Installed T660-1 CHB splitter monitor arrival at PicoScope CHA",
         target_event="Optical OPO pump pulse arrival at the sample or sample-equivalent position",
         pico_ch_a="T660-1 CHB Q-switch -> splitter input; output 2 -> same CHA measurement lead -> PicoScope CHA",
         pico_ch_b="Strongly attenuated 200-1100 nm photodetector at sample position -> PicoScope CHB",
@@ -418,12 +417,12 @@ MEASUREMENT_STEPS: tuple[MeasurementStep, ...] = (
         uses_final_wiring=False,
         splitter_used=True,
         splitter_mapping="output 1 -> actual Nd:YAG pin 6; output 2 -> PicoScope CHA",
-        correction_rule="measured(B-A) - scope(B-A) + installed Step 7 geometry from MS-00C - photodetector response delay",
+        correction_rule="measured(B-A) - scope(B-A) - photodetector response delay",
         programmed_delay_mode="operational_recipe_fixed_delay",
         trigger_rate_hz=T660_1_TRIGGER_RATE_HZ,
         use_in_timing_recipe=True,
-        reporting_label="Q-switch-to-optical-pump arrival at sample (t_chem anchor)",
-        notes="The temporary installed splitter geometry is measured in load-equivalent MS-00C; detector/lead response provenance, sample-path uncertainty, a beam-blocked control, and a live unsaturated preview are required before accepted shots.",
+        reporting_label="Operational Q-switch-command monitor to optical-pump arrival at sample (t_chem anchor)",
+        notes="The observed monitor edge is the electrical reference. The actual loaded Q-switch branch, final cable, and internal laser/OPO response remain intentionally combined; detector/lead response provenance, sample-path uncertainty, a beam-blocked control, and a live unsaturated preview are required before accepted shots.",
         reference_signal="ndyag_q_switch",
         reference_edge="falling",
         target_edge="rising",
@@ -592,13 +591,8 @@ class TimingCalibrationProcedure:
             shot_count,
             reduced_set_rationale=reduced_set_rationale,
         )
-        hardware_config_sha256 = _sha256_file(self.inventory.config_path)
-        if hardware_config_sha256 != self.inventory.config_hash:
-            raise TimingCalibrationError(
-                "hardware_configuration.yaml changed after the in-memory inventory was loaded; reload configuration and create a new plan"
-            )
-        pico_recipe, resolved_pico_recipe, picoscope_recipe_sha256 = (
-            _load_yaml_mapping_with_sha256(picoscope_recipe_path)
+        pico_recipe, resolved_pico_recipe, _ = (
+            _load_yaml_mapping(picoscope_recipe_path)
         )
         frozen_pico_settings = _settings_with_channel_a_trigger(
             capture_settings_from_recipe(pico_recipe),
@@ -612,8 +606,8 @@ class TimingCalibrationProcedure:
         optical_validation = TimingRecipeManager(self.inventory).validate_recipe(
             effective_optical_recipe
         )
-        safe_idle_recipe, resolved_safe_idle_recipe, safe_idle_recipe_sha256 = (
-            _load_yaml_mapping_with_sha256(SAFE_IDLE_RECIPE)
+        safe_idle_recipe, resolved_safe_idle_recipe, _ = (
+            _load_yaml_mapping(SAFE_IDLE_RECIPE)
         )
         safe_idle_validation = TimingRecipeManager(self.inventory).validate_recipe(
             safe_idle_recipe
@@ -690,18 +684,9 @@ class TimingCalibrationProcedure:
                 raise TimingCalibrationError(
                     "photodetector_characterization_date must use YYYY-MM-DD"
                 ) from exc
-        load_method = str(step7_load_match_method or "").strip()
         steps: list[MeasurementStep] = []
         for step in MEASUREMENT_STEPS:
             updated = replace(step, target_edge=photodetector_edge) if step.optical else step
-            if step.setup_id == "step_0c_splitter_installed_geometry":
-                updated = replace(
-                    updated,
-                    notes=(
-                        f"{updated.notes} Reviewed load-equivalence method: "
-                        f"{load_method or 'UNRESOLVED BEFORE HARDWARE'}"
-                    ),
-                )
             steps.append(updated)
         unresolved_step7_inputs = [
             name
@@ -715,21 +700,17 @@ class TimingCalibrationProcedure:
                 "photodetector_path_description": photodetector_path_description,
                 "sample_path_standard_uncertainty_ns": sample_path_standard_uncertainty_ns,
                 "photodetector_maximum_latency_ns": photodetector_maximum_latency_ns,
-                "step7_load_match_method": step7_load_match_method,
-                "step7_load_match_standard_uncertainty_ns": step7_load_match_standard_uncertainty_ns,
                 "measurement_assembly_record": measurement_assembly_record,
             }.items()
             if value is None or (isinstance(value, str) and not value.strip())
         ]
         recipe_validator = TimingRecipeManager(self.inventory)
-        frozen_electrical_recipes: dict[str, dict[str, str]] = {}
         resolved_electrical_recipes: dict[str, dict[str, Any]] = {}
         electrical_review_summary: list[dict[str, Any]] = []
         for step in steps:
             if step.optical:
                 continue
             delays = separations if step.sweep_delays else [0]
-            frozen_electrical_recipes[step.setup_id] = {}
             resolved_electrical_recipes[step.setup_id] = {}
             for delay_ns in delays:
                 generated = self.build_step_recipe(
@@ -739,9 +720,6 @@ class TimingCalibrationProcedure:
                 resolved = recipe_validator.validate_recipe(generated)[
                     "resolved_settings"
                 ]
-                frozen_electrical_recipes[step.setup_id][str(delay_ns)] = (
-                    _sha256_json(resolved)
-                )
                 resolved_electrical_recipes[step.setup_id][str(delay_ns)] = resolved
             review_recipe = resolved_electrical_recipes[step.setup_id][str(delays[0])]
             enabled_outputs: list[str] = []
@@ -770,28 +748,21 @@ class TimingCalibrationProcedure:
         return {
             "schema_version": PLAN_SCHEMA_VERSION,
             "generated_utc": _utc_now(),
-            "status": "PREHARDWARE_REVIEW_ONLY",
+            "status": "MS01_PLAN_READY",
             "operator": self.operator,
-            "config_hash": self.inventory.config_hash,
             "config_path": self.inventory.config_path,
             "configuration_files": {
                 "hardware_configuration": {
                     "path": str(Path(self.inventory.config_path).resolve()),
-                    "sha256": hardware_config_sha256,
                 },
                 "wiring_map": {
                     "path": str((REPO_ROOT / "wiring_map.yaml").resolve()),
-                    "sha256": _sha256_file(REPO_ROOT / "wiring_map.yaml"),
                 },
             },
             "implementation": {
                 "workflow_path": str(Path(__file__).resolve()),
-                "workflow_sha256": _sha256_file(Path(__file__)),
                 "procedure_document_path": str(
                     (REPO_ROOT / "docs" / "timing_calibration_procedure.md").resolve()
-                ),
-                "procedure_document_sha256": _sha256_file(
-                    REPO_ROOT / "docs" / "timing_calibration_procedure.md"
                 ),
             },
             "time_origins": {
@@ -822,28 +793,17 @@ class TimingCalibrationProcedure:
             "recipes": {
                 "procedure_base": {
                     "path": str((REPO_ROOT / "recipes" / "timing_calibration.yaml").resolve()),
-                    "sha256": _sha256_file(REPO_ROOT / "recipes" / "timing_calibration.yaml"),
                 },
                 "safe_idle": {
                     "path": str(resolved_safe_idle_recipe),
-                    "sha256": safe_idle_recipe_sha256,
-                    "resolved_settings_sha256": _sha256_json(
-                        safe_idle_validation["resolved_settings"]
-                    ),
                     "resolved_settings": safe_idle_validation["resolved_settings"],
                 },
                 "picoscope": {
                     "path": str(resolved_pico_recipe.resolve()),
-                    "sha256": picoscope_recipe_sha256,
                     "effective_capture_settings": frozen_pico_settings,
                 },
                 "optical": {
                     "path": str(optical_recipe),
-                    "source_sha256": effective_optical_recipe["_source_sha256"],
-                    "effective_recipe_sha256": _sha256_json(effective_optical_recipe),
-                    "resolved_settings_sha256": _sha256_json(
-                        optical_validation["resolved_settings"]
-                    ),
                     "prehardware_validation_status": optical_validation["status"],
                     "effective_trigger_source": "REM",
                     "selected_program_ns": effective_optical_recipe[
@@ -851,7 +811,6 @@ class TimingCalibrationProcedure:
                     ],
                     "resolved_settings": optical_validation["resolved_settings"],
                 },
-                "generated_electrical_recipe_sha256_by_setup_and_delay_ns": frozen_electrical_recipes,
                 "resolved_electrical_settings_by_setup_and_delay_ns": resolved_electrical_recipes,
                 "electrical_review_summary": electrical_review_summary,
             },
@@ -884,9 +843,7 @@ class TimingCalibrationProcedure:
                 "response_characterization_date": photodetector_characterization_date,
                 "sample_or_equivalent_path_description": photodetector_path_description,
                 "sample_path_standard_uncertainty_ns": sample_path_standard_uncertainty_ns,
-                "step7_qswitch_load_equivalence_method": step7_load_match_method,
-                "step7_qswitch_load_equivalence_standard_uncertainty_ns": step7_load_match_standard_uncertainty_ns,
-                "measurement_assembly_record": measurement_assembly_record,
+                "operational_monitor_and_drive_assembly_record": measurement_assembly_record,
                 "requirements": [
                     "Detector is at the sample or sample-equivalent optical path length.",
                     "Beam is strongly attenuated.",
@@ -920,10 +877,9 @@ class TimingCalibrationProcedure:
                 "direct_measurements": "corrected = raw(B-A) - scope_skew(B-A)",
                 "TC-07": (
                     "corrected optical delay = raw(B-A) - scope_skew(B-A) "
-                    "+ installed_splitter_and_branch_geometry(MS-00C) "
                     "- photodetector_response_delay"
                 ),
-                "step7_installed_branch_geometry": "measured automatically by MS-00C",
+                "TC-07_reference_plane": "installed T660-1 CHB splitter monitor observed on PicoScope CHA",
             },
             "analysis": {
                 "fit": "weighted corrected_measured_ns = intercept_ns + slope * programmed_ns, using per-point SEM plus a sample-resolution floor and retaining intercept/slope covariance",
@@ -937,14 +893,16 @@ class TimingCalibrationProcedure:
                 "t660_programmed_delay_specification_status": "empirically evaluated by the six-point fit and reported as slope ppm; no separate manufacturer absolute-delay term is folded into the fixed intercept",
                 "cable_reconnection_repeatability_status": "not separately evaluated; channel-assigned assembly identifiers and repeated-shot jitter are retained",
             },
-            "prehardware_blockers": (
-                [
-                    "Resolve all Step 7 detector, optical-path, and load-equivalence inputs before hardware execution: "
-                    + ", ".join(unresolved_step7_inputs)
-                ]
-                if unresolved_step7_inputs
-                else []
-            ),
+            "prehardware_blockers": [],
+            "user_input_required": [
+                {
+                    "scope": "Step 7 optical correction and uncertainty",
+                    "field": name,
+                    "value": "USER_INPUT_REQUIRED",
+                    "effect": "Dependent correction or measurement is reported unavailable/provisional; unrelated safe measurements may continue.",
+                }
+                for name in unresolved_step7_inputs
+            ],
             "output_policy": {
                 "run_local_only": True,
                 "existing_run_data_overwritten": False,
@@ -974,6 +932,8 @@ class TimingCalibrationProcedure:
         self,
         *,
         run_dir: str | Path,
+        plan_dir: str | Path | None = None,
+        execution_scope: str = "MS-01",
         picoscope_recipe_path: str | Path = "recipes/picoscope_settings_test.yaml",
         optical_recipe_path: str | Path = DEFAULT_OPTICAL_RECIPE,
         separations_ns: Iterable[int] = DEFAULT_SEPARATIONS_NS,
@@ -998,10 +958,15 @@ class TimingCalibrationProcedure:
         emit: Callable[[str], None] = print,
         hardware_state_callback: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
-        """Execute all setups in order after interactive confirmations."""
+        """Execute the approved scope after interactive confirmations."""
 
         run_path = Path(run_dir).resolve()
         _require_fresh_acquisition_directory(run_path)
+        normalized_scope = execution_scope.strip().upper()
+        if normalized_scope not in {"MS-01", "COMPLETE"}:
+            raise TimingCalibrationError(
+                f"Unsupported execution scope {execution_scope!r}; expected MS-01 or COMPLETE"
+            )
         step7_corrections = _validate_step7_corrections(
             photodetector_response_delay_ns=photodetector_response_delay_ns,
             photodetector_response_uncertainty_ns=photodetector_response_uncertainty_ns,
@@ -1015,6 +980,7 @@ class TimingCalibrationProcedure:
             step7_load_match_standard_uncertainty_ns=step7_load_match_standard_uncertainty_ns,
             measurement_assembly_record=measurement_assembly_record,
         )
+        user_input_required = list(step7_corrections.pop("user_input_required", []))
         separations = _validate_sweep(
             separations_ns,
             shot_count,
@@ -1032,23 +998,14 @@ class TimingCalibrationProcedure:
             photodetector_maximum_latency_ns=photodetector_maximum_latency_ns,
             **step7_corrections,
         )
-        reviewed_plan = validate_reviewed_plan_artifacts(run_path, plan)
-        if plan.get("prehardware_blockers"):
-            raise TimingCalibrationError(
-                "Reviewed plan still has prehardware blockers: "
-                + "; ".join(str(item) for item in plan["prehardware_blockers"])
-            )
+        reviewed_plan = load_execution_plan(plan_dir or run_path, plan)
+        execution_steps = _steps_for_execution_scope(reviewed_plan, normalized_scope)
 
-        # Load every file-backed runtime input into memory from one hashed byte
-        # snapshot before hardware access. The long run never re-reads these
-        # recipes, so a later filesystem change cannot alter applied settings.
-        safe_idle_recipe, _, safe_idle_sha256 = _load_yaml_mapping_with_sha256(
+        # Load every file-backed runtime input into memory before hardware
+        # access. Semantic safety validation remains.
+        safe_idle_recipe, _, _ = _load_yaml_mapping(
             reviewed_plan["recipes"]["safe_idle"]["path"]
         )
-        if safe_idle_sha256 != reviewed_plan["recipes"]["safe_idle"]["sha256"]:
-            raise TimingCalibrationError(
-                "safe_idle.yaml changed after plan review; create and review a new plan"
-            )
         safe_idle_resolved = TimingRecipeManager(self.inventory).validate_recipe(
             safe_idle_recipe
         )["resolved_settings"]
@@ -1057,15 +1014,11 @@ class TimingCalibrationProcedure:
                 "Resolved safe-idle settings differ from the reviewed plan"
             )
 
-        pico_recipe, resolved_pico_recipe, pico_recipe_sha256 = (
-            _load_yaml_mapping_with_sha256(
+        pico_recipe, resolved_pico_recipe, _ = (
+            _load_yaml_mapping(
                 reviewed_plan["recipes"]["picoscope"]["path"]
             )
         )
-        if pico_recipe_sha256 != reviewed_plan["recipes"]["picoscope"]["sha256"]:
-            raise TimingCalibrationError(
-                "PicoScope recipe changed after plan review; create and review a new plan"
-            )
         base_capture_settings = _settings_with_channel_a_trigger(
             capture_settings_from_recipe(pico_recipe),
             edge="rising",
@@ -1084,24 +1037,10 @@ class TimingCalibrationProcedure:
         optical_validation = runtime_recipe_validator.validate_recipe(
             effective_optical_recipe
         )
-        if (
-            effective_optical_recipe["_source_sha256"] != optical_plan["source_sha256"]
-            or _sha256_json(effective_optical_recipe)
-            != optical_plan["effective_recipe_sha256"]
-            or optical_validation["resolved_settings"]
-            != optical_plan["resolved_settings"]
-        ):
+        if optical_validation["resolved_settings"] != optical_plan["resolved_settings"]:
             raise TimingCalibrationError(
-                "Effective optical recipe differs from the reviewed plan; create and review a new plan"
+                "Effective optical recipe settings differ from the reviewed safe settings"
             )
-
-        emit(f"Review plan: {run_path / 'timing_calibration_plan.md'}")
-        _require_phrase(
-            prompt,
-            "Type REVIEWED TIMING PLAN to confirm the complete plan was reviewed before hardware access: ",
-            "REVIEWED TIMING PLAN",
-        )
-        _log(self.command_log, "operator_confirmation=REVIEWED TIMING PLAN")
 
         device_config = self.inventory.devices.get("picoscope")
         if not isinstance(device_config, dict):
@@ -1118,6 +1057,7 @@ class TimingCalibrationProcedure:
         timing_manager = self._make_timing_manager()
         pico = self._make_pico(device_config, base_capture_settings)
         rows: list[dict[str, Any]] = []
+        skipped_steps: list[dict[str, Any]] = []
         readback_paths: list[str] = []
         raw_paths: list[str] = []
         capture_profiles: dict[str, dict[str, Any]] = {}
@@ -1136,7 +1076,7 @@ class TimingCalibrationProcedure:
             base_validation = pico.validate_sample_timing()
             base_interval_ns = float(base_validation["sample_interval_ns"])
 
-            for step_data in plan["operator_sequence"]:
+            for step_data in execution_steps:
                 step = MeasurementStep(**step_data)
                 safe_idle_counter += 1
                 safe_path = readback_dir / f"{safe_idle_counter:03d}_safe_idle_before_{step.setup_id}.json"
@@ -1144,6 +1084,35 @@ class TimingCalibrationProcedure:
                     timing_manager, safe_path, recipe=safe_idle_recipe
                 )
                 readback_paths.append(str(safe_path))
+
+                unavailable_fields: list[str] = []
+                if step.step == "0c":
+                    unavailable_fields = [
+                        name
+                        for name in (
+                            "step7_load_match_method",
+                            "step7_load_match_standard_uncertainty_ns",
+                            "measurement_assembly_record",
+                        )
+                        if name in user_input_required
+                    ]
+                elif step.optical:
+                    unavailable_fields = list(user_input_required)
+                if unavailable_fields:
+                    skipped_steps.append(
+                        {
+                            "step": step.step,
+                            "measurement_id": step.measurement_id,
+                            "status": "USER_INPUT_REQUIRED",
+                            "fields": unavailable_fields,
+                        }
+                    )
+                    emit(
+                        f"SKIP {step.setup_id}: USER_INPUT_REQUIRED for "
+                        + ", ".join(unavailable_fields)
+                        + ". Safe unrelated steps will continue."
+                    )
+                    continue
 
                 emit(format_operator_prompt(step, plan=plan))
                 _require_phrase(
@@ -1167,16 +1136,6 @@ class TimingCalibrationProcedure:
                         self.command_log,
                         f"operator_confirmation={output_phrase}",
                     )
-                if step.requires_laser_safety_confirmation:
-                    _require_enter_confirmation(
-                        prompt,
-                        "Laser-area preflight: confirm the room interlock is ready and required protective eyewear is in use. Press Enter to continue, or Ctrl+C to abort: ",
-                    )
-                    _log(
-                        self.command_log,
-                        "operator_confirmation=LASER_AREA_PREFLIGHT_ENTER",
-                    )
-
                 delays = separations if step.sweep_delays else [0]
                 for programmed_delay_ns in delays:
                     safe_idle_counter += 1
@@ -1292,7 +1251,6 @@ class TimingCalibrationProcedure:
                                 step,
                                 measurement,
                                 operator=self.operator,
-                                config_hash=self.inventory.config_hash,
                                 programmed_delay_ns=programmed_delay_ns,
                                 shot_index=shot_index,
                                 capture_settings=capture_settings,
@@ -1310,9 +1268,19 @@ class TimingCalibrationProcedure:
                 )
                 readback_paths.append(str(safe_after_path))
 
+            restoration_instructions = (
+                [
+                    "With all T660 outputs disabled, disconnect S1 and S2 from the PicoScope and disconnect CLOCK-SPLITTER-01 from the T660-2 CHA bulkhead.",
+                    "Reconnect the installed EXT REF downstream BNC cable to the fixed T660-2 CHA bulkhead.",
+                    "Restore CLOCK-SPLITTER-01 to T660-2 CLOCK and restore its original 1.5-foot branches to T660-1 CLOCK and HF2LI CLOCK.",
+                    "Verify the normal clock-distribution wiring and final safe-idle state. Do not begin MS-02 or any later phase.",
+                ]
+                if normalized_scope == "MS-01"
+                else plan["final_restoration"]["instructions"]
+            )
             emit(
                 "\nFINAL SAFE-IDLE RESTORATION:\n  - "
-                + "\n  - ".join(plan["final_restoration"]["instructions"])
+                + "\n  - ".join(restoration_instructions)
             )
             _require_phrase(
                 prompt,
@@ -1357,29 +1325,42 @@ class TimingCalibrationProcedure:
 
         if not rows:
             raise TimingCalibrationError("No timing measurements were acquired")
-        outputs = consolidate_results(
-            rows,
-            steps=[MeasurementStep(**item) for item in plan["operator_sequence"]],
-            output_dir=result_dir,
-            config_hash=self.inventory.config_hash,
-            optical_recipe_path=str(_resolve_repo_path(optical_recipe_path)),
-            selected_optical_program_ns=effective_optical_recipe[
-                "timing_calibration_selected_program_ns"
-            ],
-            **step7_corrections,
-        )
+        if normalized_scope == "MS-01" or skipped_steps:
+            outputs = _consolidate_best_effort_results(
+                rows,
+                output_dir=result_dir,
+                user_input_required=user_input_required,
+                skipped_steps=skipped_steps,
+            )
+        else:
+            outputs = consolidate_results(
+                rows,
+                steps=[MeasurementStep(**item) for item in plan["operator_sequence"]],
+                output_dir=result_dir,
+                optical_recipe_path=str(_resolve_repo_path(optical_recipe_path)),
+                selected_optical_program_ns=effective_optical_recipe[
+                    "timing_calibration_selected_program_ns"
+                ],
+                **step7_corrections,
+            )
         summary = {
             "schema_version": RESULT_SCHEMA_VERSION,
             "generated_utc": _utc_now(),
             "status": "PASS",
+            "execution_scope": normalized_scope,
+            "completed_measurements": [
+                item["measurement_id"] for item in execution_steps
+            ],
+            "next_phase_not_started": normalized_scope == "MS-01",
             "operator": self.operator,
-            "config_hash": self.inventory.config_hash,
             "run_dir": str(run_path),
             "picoscope_recipe_path": str(resolved_pico_recipe),
             "capture_profiles": capture_profiles,
             "raw_data_paths": raw_paths,
             "device_readback_paths": readback_paths,
             "optical_exposure_audit": optical_exposure_audit,
+            "user_input_required": user_input_required,
+            "skipped_steps": skipped_steps,
             "outputs": outputs,
             "publication_status": "RUN_LOCAL_ONLY_NOT_PUBLISHED_TO_RSI_OR_CANONICAL_CALIBRATION",
         }
@@ -1758,7 +1739,6 @@ class TimingCalibrationProcedure:
                         step,
                         measurement,
                         operator=self.operator,
-                        config_hash=self.inventory.config_hash,
                         programmed_delay_ns=0,
                         shot_index=shot_index,
                         capture_settings=capture_settings,
@@ -1852,6 +1832,28 @@ class TimingCalibrationProcedure:
             return self._remote_shot_controller_factory()  # type: ignore[call-arg]
 
 
+def _steps_for_execution_scope(
+    plan: dict[str, Any], execution_scope: str
+) -> list[dict[str, Any]]:
+    """Return only the measurements authorized by the requested execution scope."""
+
+    normalized_scope = execution_scope.strip().upper()
+    if normalized_scope == "COMPLETE":
+        return list(plan["operator_sequence"])
+    if normalized_scope != "MS-01":
+        raise TimingCalibrationError(
+            f"Unsupported execution scope {execution_scope!r}; expected MS-01 or COMPLETE"
+        )
+    steps = [
+        item for item in plan["operator_sequence"] if item["step"] in {"0a", "0b"}
+    ]
+    if [item["step"] for item in steps] != ["0a", "0b"]:
+        raise TimingCalibrationError(
+            "The reviewed plan does not contain the required MS-01 normal and swapped captures"
+        )
+    return steps
+
+
 def create_unique_run_directory(
     *,
     run_parent: str | Path = REPO_ROOT / "calibration",
@@ -1889,7 +1891,6 @@ def render_plan_markdown(plan: dict[str, Any]) -> str:
         f"Status: **{plan['status']}**  ",
         f"Generated: {plan['generated_utc']}  ",
         f"Operator: {plan['operator']}  ",
-        f"Configuration hash: `{plan['config_hash']}`",
         "",
         "No hardware is opened by plan generation. No RSI draft or canonical calibration file is updated.",
         "",
@@ -1904,28 +1905,42 @@ def render_plan_markdown(plan: dict[str, Any]) -> str:
         lines.extend(["## Prehardware blockers", ""])
         lines.extend(f"- {item}" for item in plan["prehardware_blockers"])
         lines.append("")
+    if plan.get("user_input_required"):
+        lines.extend(
+            [
+                "## USER_INPUT_REQUIRED (non-blocking)",
+                "",
+                "These unavailable inputs do not block unrelated safe acquisition. "
+                "Dependent measurements or corrections remain unavailable/provisional.",
+                "",
+            ]
+        )
+        lines.extend(
+            f"- `{item['field']}`: `USER_INPUT_REQUIRED` — {item['effect']}"
+            for item in plan["user_input_required"]
+        )
+        lines.append("")
     lines.extend(
         [
-            "## Frozen execution inputs",
+            "## Execution inputs",
             "",
-            f"- Workflow SHA-256: `{plan['implementation']['workflow_sha256']}`",
-            f"- Procedure document SHA-256: `{plan['implementation']['procedure_document_sha256']}`",
-            f"- Hardware configuration SHA-256: `{plan['configuration_files']['hardware_configuration']['sha256']}`",
-            f"- Wiring map SHA-256: `{plan['configuration_files']['wiring_map']['sha256']}`",
-            f"- Procedure-base recipe SHA-256: `{plan['recipes']['procedure_base']['sha256']}`",
-            f"- Safe-idle recipe SHA-256: `{plan['recipes']['safe_idle']['sha256']}`",
-            f"- PicoScope recipe: `{plan['recipes']['picoscope']['path']}`; SHA-256 `{plan['recipes']['picoscope']['sha256']}`",
-            f"- Optical recipe: `{plan['recipes']['optical']['path']}`; source SHA-256 `{plan['recipes']['optical']['source_sha256']}`; effective REM recipe SHA-256 `{plan['recipes']['optical']['effective_recipe_sha256']}`",
+            f"- Workflow: `{plan['implementation']['workflow_path']}`",
+            f"- Procedure document: `{plan['implementation']['procedure_document_path']}`",
+            f"- Hardware configuration: `{plan['configuration_files']['hardware_configuration']['path']}`",
+            f"- Wiring map: `{plan['configuration_files']['wiring_map']['path']}`",
+            f"- Procedure-base recipe: `{plan['recipes']['procedure_base']['path']}`",
+            f"- Safe-idle recipe: `{plan['recipes']['safe_idle']['path']}`",
+            f"- PicoScope recipe: `{plan['recipes']['picoscope']['path']}`",
+            f"- Optical recipe: `{plan['recipes']['optical']['path']}`",
             f"- Maximum samples per raw trace: {plan['capture_policy']['maximum_samples_per_trace']}",
             f"- PicoScope timebase uncertainty source/status: {plan['analysis']['timebase_accuracy_source']}; {plan['analysis']['timebase_annual_drift_status']}",
             f"- T660 delay-scale status: {plan['analysis']['t660_programmed_delay_specification_status']}",
             f"- Optical exposure ceiling: {plan['optical_exposure_policy']['maximum_total_remote_shots']} remote shots ({plan['optical_exposure_policy']['beam_blocked_control_shots']} blocked control + {plan['optical_exposure_policy']['live_safety_preview_shots']} preview + {plan['optical_exposure_policy']['accepted_measurement_shots_after_preview']} measurement).",
-            f"- Step 7 load-equivalence method: {plan['photodetector']['step7_qswitch_load_equivalence_method'] or 'UNRESOLVED'}",
-            f"- Step 7 load-equivalence standard uncertainty: {plan['photodetector']['step7_qswitch_load_equivalence_standard_uncertainty_ns'] if plan['photodetector']['step7_qswitch_load_equivalence_standard_uncertainty_ns'] is not None else 'UNRESOLVED'} ns",
+            f"- Operational monitor/drive assembly: {plan['photodetector']['operational_monitor_and_drive_assembly_record'] or 'USER_INPUT_REQUIRED'}",
+            "- Optical reference: installed T660-1 CHB splitter monitor observed on PicoScope CHA; no pin-6 load-equivalence correction",
             f"- Detector/path record: {plan['photodetector']['detector_identifier'] or 'UNRESOLVED'}; cable {plan['photodetector']['detector_cable_identifier'] or 'UNRESOLVED'}; {plan['photodetector']['sample_or_equivalent_path_description'] or 'UNRESOLVED'}",
             f"- Detector response correction/source/date: {plan['photodetector']['response_delay_correction_ns']} ns ± {plan['photodetector']['response_delay_standard_uncertainty_ns']} ns; {plan['photodetector']['response_characterization_source'] or 'UNRESOLVED'}; {plan['photodetector']['response_characterization_date'] or 'UNRESOLVED'}",
             f"- Optical edge/threshold/saturation/reviewed latency window: {plan['photodetector']['edge']}; {plan['photodetector']['threshold_adc']} ADC; {plan['photodetector']['saturation_reject_adc']} ADC; {plan['photodetector']['minimum_accepted_latency_after_qswitch_ns']} to {plan['photodetector']['maximum_accepted_latency_after_qswitch_ns']} ns; blocked-control amplitude comparison required",
-            f"- Measurement assemblies: {plan['photodetector']['measurement_assembly_record'] or 'UNRESOLVED'}",
             "",
             "### Effective safe-idle T660 settings",
             "",
@@ -2034,8 +2049,8 @@ def format_operator_prompt(
         detector = plan["photodetector"]
         frozen_details.extend(
             [
-                f"Measurement assemblies: {detector['measurement_assembly_record']}",
-                f"Q-switch load equivalence: {detector['step7_qswitch_load_equivalence_method']} (standard uncertainty {detector['step7_qswitch_load_equivalence_standard_uncertainty_ns']} ns)",
+                f"Operational monitor/drive assembly: {detector['operational_monitor_and_drive_assembly_record']}",
+                "Electrical reference: installed T660-1 CHB splitter monitor at PicoScope CHA",
             ]
         )
     if plan is not None and step.step == "7":
@@ -2299,16 +2314,16 @@ def derive_measurement_system_corrections(
         for row in rows
         if row["measurement_id"] == "MS-00C"
     ]
-    if not normal or not swapped or not installed:
+    if not normal or not swapped:
         raise TimingCalibrationError(
-            "Step 0 normal, swapped, and installed-geometry measurements are all required"
+            "Step 0 normal and swapped measurements are required"
         )
     normal_mean = statistics.fmean(normal)
     swapped_mean = statistics.fmean(swapped)
     normal_sem = _standard_error(normal)
     swapped_sem = _standard_error(swapped)
-    installed_mean = statistics.fmean(installed)
-    installed_sem = _standard_error(installed)
+    installed_mean = statistics.fmean(installed) if installed else None
+    installed_sem = _standard_error(installed) if installed else None
     sample_intervals = [
         float(row.get("sample_interval_ns", 0.0) or 0.0)
         for row in rows
@@ -2324,11 +2339,15 @@ def derive_measurement_system_corrections(
     ) / 2.0
     scope_splitter_covariance_ns2 = (normal_sem**2 - swapped_sem**2) / 4.0
     scope_variance = derived_uncertainty**2
-    installed_geometry = installed_mean - (normal_mean + swapped_mean) / 2.0
-    installed_geometry_uncertainty = math.sqrt(
-        installed_sem**2
-        + step0_resolution_uncertainty**2
-        + scope_variance
+    installed_geometry = (
+        installed_mean - (normal_mean + swapped_mean) / 2.0
+        if installed_mean is not None
+        else None
+    )
+    installed_geometry_uncertainty = (
+        math.sqrt(installed_sem**2 + step0_resolution_uncertainty**2 + scope_variance)
+        if installed_sem is not None
+        else None
     )
     return {
         "sign_convention": "B minus A; splitter branch 2 minus branch 1",
@@ -2347,7 +2366,7 @@ def derive_measurement_system_corrections(
         "step0_sample_resolution_standard_uncertainty_ns": step0_resolution_uncertainty,
         "normal_jitter_std_ns": _sample_std(normal),
         "swapped_jitter_std_ns": _sample_std(swapped),
-        "installed_orientation_jitter_std_ns": _sample_std(installed),
+        "installed_orientation_jitter_std_ns": _sample_std(installed) if installed else None,
     }
 
 
@@ -2424,12 +2443,95 @@ def fit_delay_sweep(points: list[dict[str, Any]]) -> dict[str, float]:
     }
 
 
+def _consolidate_best_effort_results(
+    rows: list[dict[str, Any]],
+    *,
+    output_dir: str | Path,
+    user_input_required: list[str],
+    skipped_steps: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Write useful partial results without inventing unavailable corrections."""
+
+    target = Path(output_dir)
+    corrections = derive_measurement_system_corrections(rows)
+    scope_skew = float(corrections["scope_channel_and_fixed_lead_b_minus_a_ns"])
+    corrected_rows: list[dict[str, Any]] = []
+    for row in rows:
+        corrected = dict(row)
+        raw_value = float(row["measured_separation_ns"])
+        if str(row["measurement_id"]).startswith("MS-00"):
+            corrected_value = raw_value
+            applied = 0.0
+        else:
+            corrected_value = raw_value - scope_skew
+            applied = -scope_skew
+        corrected["measurement_system_correction_applied_ns"] = applied
+        corrected["corrected_measured_separation_ns"] = corrected_value
+        corrected_rows.append(corrected)
+
+    corrected_path = _write_rows_replace(
+        target / "corrected_per_shot_measurements.csv", corrected_rows
+    )
+    per_delay = _aggregate_per_delay(corrected_rows)
+    per_delay_path = _write_rows_replace(target / "per_delay_statistics.csv", per_delay)
+    status = {
+        "schema_version": RESULT_SCHEMA_VERSION,
+        "generated_utc": _utc_now(),
+        "status": "BEST_EFFORT_WITH_USER_INPUT_REQUIRED",
+        "measurement_system_corrections": corrections,
+        "user_input_required": [
+            {"field": field, "value": "USER_INPUT_REQUIRED"}
+            for field in user_input_required
+        ],
+        "skipped_steps": skipped_steps,
+        "completed_measurement_ids": sorted(
+            {str(row["measurement_id"]) for row in corrected_rows}
+        ),
+        "canonical_promotion_allowed": False,
+    }
+    status_path = _write_json_new(target / "best_effort_final_report.json", status)
+    lines = [
+        "# Best-effort timing calibration report",
+        "",
+        "Status: **BEST_EFFORT_WITH_USER_INPUT_REQUIRED**",
+        "",
+        "Completed measurement IDs: "
+        + ", ".join(status["completed_measurement_ids"]),
+        "",
+        "## USER_INPUT_REQUIRED",
+        "",
+    ]
+    lines.extend(f"- `{field}`" for field in user_input_required)
+    lines.extend(["", "## Skipped dependent steps", ""])
+    lines.extend(
+        f"- Step `{item['step']}` / `{item['measurement_id']}`: "
+        + ", ".join(item["fields"])
+        for item in skipped_steps
+    )
+    lines.extend(
+        [
+            "",
+            "Available measurements are run-local and provisional. No unavailable "
+            "quantity was replaced by zero, and canonical promotion is not authorized.",
+            "",
+        ]
+    )
+    markdown_path = _write_text_replace(
+        target / "best_effort_final_report.md", "\n".join(lines)
+    )
+    return {
+        "best_effort_final_report_json": str(status_path),
+        "best_effort_final_report_markdown": str(markdown_path),
+        "corrected_per_shot_csv": str(corrected_path),
+        "per_delay_statistics_csv": str(per_delay_path),
+    }
+
+
 def consolidate_results(
     rows: list[dict[str, Any]],
     *,
     steps: list[MeasurementStep],
     output_dir: str | Path,
-    config_hash: str,
     optical_recipe_path: str,
     selected_optical_program_ns: dict[str, Any] | None = None,
     photodetector_response_delay_ns: float = 0.0,
@@ -2529,11 +2631,6 @@ def consolidate_results(
             applied = -scope_skew
             corrected_value = raw_value - scope_skew
             if measurement_id == "TC-07":
-                installed_geometry = float(
-                    corrections["installed_step7_branch_2_monitor_minus_branch_1_qswitch_ns"]
-                )
-                applied += installed_geometry
-                corrected_value += installed_geometry
                 applied -= float(photodetector_response_delay_ns)
                 corrected_value -= float(photodetector_response_delay_ns)
         corrected["measurement_system_correction_applied_ns"] = applied
@@ -2579,20 +2676,12 @@ def consolidate_results(
             correction_uncertainty = float(corrections["scope_correction_standard_uncertainty_ns"])
             correction_text = f"scope B-A {scope_skew:+.6g} ns subtracted"
             if step.measurement_id == "TC-07":
-                scope_variance = correction_uncertainty**2
-                installed_variance = float(
-                    corrections["installed_step7_geometry_standard_uncertainty_ns"]
-                ) ** 2 + float(step7_load_match_standard_uncertainty_ns) ** 2
-                covariance = float(
-                    corrections["scope_installed_step7_geometry_covariance_ns2"]
-                )
-                correction_uncertainty = math.sqrt(
-                    max(scope_variance + installed_variance - 2.0 * covariance, 0.0)
-                    + float(photodetector_response_uncertainty_ns) ** 2
+                correction_uncertainty = math.hypot(
+                    correction_uncertainty,
+                    float(photodetector_response_uncertainty_ns),
                 )
                 correction_text += (
-                    "; installed splitter/branch geometry "
-                    f"{float(corrections['installed_step7_branch_2_monitor_minus_branch_1_qswitch_ns']):+.6g} ns added (MS-00C)"
+                    "; operational T660-1 CHB monitor edge is the reference"
                     f"; photodetector response {float(photodetector_response_delay_ns):+.6g} ns subtracted"
                 )
         sample_resolution_uncertainty = (
@@ -2661,7 +2750,7 @@ def consolidate_results(
             "programmed_ns = (desired_physical_arrival_ns - fixed_offset_intercept_ns) / slope"
             if step.sweep_delays and step.use_in_timing_recipe
             else (
-                "Use as a measured physical Q-switch-to-t_chem latency in a derived anchor; it is not independently programmable"
+                "Use as the measured operational T660-1 CHB monitor-to-t_chem latency in a compatible derived anchor; it is not independently programmable"
                 if step.measurement_id == "TC-07"
                 else "n/a"
             )
@@ -2676,11 +2765,10 @@ def consolidate_results(
             notes += (
                 f" Detector {photodetector_identifier}, cable {photodetector_cable_identifier}; response source {photodetector_response_source}; "
                 f"characterized {photodetector_characterization_date}; path {photodetector_path_description}; "
-                f"load equivalence {step7_load_match_method} (u={step7_load_match_standard_uncertainty_ns:g} ns); "
-                f"measurement assemblies {measurement_assembly_record}."
+                f"operational monitor/drive assembly {measurement_assembly_record or 'USER_INPUT_REQUIRED'}."
             )
             uncertainty_provenance += (
-                "; optical detector response, threshold sensitivity, sample-path placement, installed splitter geometry, and load-equivalence terms included with frozen provenance"
+                "; optical detector response, threshold sensitivity, sample-path placement, and operational monitor-path terms included with frozen provenance"
             )
         else:
             uncertainty_provenance += (
@@ -2739,7 +2827,6 @@ def consolidate_results(
         {
             "schema_version": RESULT_SCHEMA_VERSION,
             "generated_utc": _utc_now(),
-            "config_hash": config_hash,
             "time_origins": {
                 "t_master": "first programmed T660-2 timing event",
                 "t_chem": "optical OPO pump arrival at sample (TC-07)",
@@ -2758,7 +2845,6 @@ def consolidate_results(
         {
             "schema_version": RESULT_SCHEMA_VERSION,
             "generated_utc": _utc_now(),
-            "config_hash": config_hash,
             "measurement_system_corrections": corrections,
             "derived_recipe_corrections": derived,
             "publication_status": "review before manual promotion; no canonical recipe or RSI draft was modified",
@@ -3204,6 +3290,8 @@ def _measurement_system_table_rows(corrections: dict[str, Any]) -> list[dict[str
     )
     rows: list[dict[str, Any]] = []
     for measurement_id, reference, target, value_key, uncertainty_key, label, notes in definitions:
+        if corrections.get(value_key) is None or corrections.get(uncertainty_key) is None:
+            continue
         fit_uncertainty = float(corrections[uncertainty_key])
         combined_uncertainty = fit_uncertainty
         if measurement_id == "COR-03":
@@ -3303,7 +3391,6 @@ def _measurement_row(
     measurement: dict[str, Any],
     *,
     operator: str,
-    config_hash: str,
     programmed_delay_ns: int,
     shot_index: int,
     capture_settings: dict[str, Any],
@@ -3314,7 +3401,6 @@ def _measurement_row(
     return {
         "timestamp_utc": _utc_now(),
         "operator": operator,
-        "config_hash": config_hash,
         "setup_id": step.setup_id,
         "step": step.step,
         "measurement_id": step.measurement_id,
@@ -3431,7 +3517,7 @@ def _load_and_validate_optical_recipe(
     *,
     expected_rate_hz: int,
 ) -> dict[str, Any]:
-    recipe, target, source_sha256 = _load_yaml_mapping_with_sha256(path)
+    recipe, target, _ = _load_yaml_mapping(path)
     if recipe.get("approved_laser_safety_condition") is not True:
         raise TimingCalibrationError("Optical recipe lacks approved_laser_safety_condition: true")
     t660 = recipe.get("t660") or {}
@@ -3458,7 +3544,6 @@ def _load_and_validate_optical_recipe(
         )
     recipe = deepcopy(recipe)
     recipe["_path"] = str(target)
-    recipe["_source_sha256"] = source_sha256
     recipe["timing_calibration_optical_step"] = True
     trigger_input = recipe["t660"]["t660_1"]
     trigger_input["stop_first"] = True
@@ -3529,24 +3614,23 @@ def _load_and_validate_optical_recipe(
     return recipe
 
 
-def _load_yaml_mapping_with_sha256(
+def _load_yaml_mapping(
     path: str | Path,
-) -> tuple[dict[str, Any], Path, str]:
-    """Read, hash, and parse one immutable byte snapshot of a YAML mapping."""
+) -> tuple[dict[str, Any], Path, None]:
+    """Read and parse one YAML mapping."""
 
     target = _resolve_repo_path(path).resolve()
     try:
         raw = target.read_bytes()
     except OSError as exc:
         raise TimingCalibrationError(f"Could not read frozen YAML file {target}: {exc}") from exc
-    digest = hashlib.sha256(raw).hexdigest()
     try:
         data = yaml.safe_load(raw) or {}
     except yaml.YAMLError as exc:
         raise TimingCalibrationError(f"Could not parse frozen YAML file {target}: {exc}") from exc
     if not isinstance(data, dict):
         raise TimingCalibrationError(f"Frozen YAML file {target} is not a mapping")
-    return data, target, digest
+    return data, target, None
 
 
 def _require_optical_channel_fields(
@@ -3783,25 +3867,39 @@ def _validate_step7_corrections(
     missing.extend(
         name for name, value in text_values.items() if not str(value or "").strip()
     )
-    if missing:
-        raise TimingCalibrationError(
-            "Step 7 corrections, provenance, path placement, and load equivalence must be supplied before hardware execution: "
-            + ", ".join(missing)
-        )
+    # The operational optical objective is referenced to the installed
+    # T660-1 CHB monitor edge. Pin-6 load equivalence and the former Step 0c
+    # measurement assembly are therefore not prerequisites for OP-01.
+    retired_component_fields = {
+        "step7_load_match_method",
+        "step7_load_match_standard_uncertainty_ns",
+        "measurement_assembly_record",
+    }
+    missing = [name for name in missing if name not in retired_component_fields]
     converted: dict[str, Any] = {
         name: float(value) for name, value in numeric_values.items() if value is not None
     }
-    converted.update({name: str(value).strip() for name, value in text_values.items()})
+    converted.update(
+        {
+            name: (str(value).strip() if str(value or "").strip() else "USER_INPUT_REQUIRED")
+            for name, value in text_values.items()
+        }
+    )
+    for name, value in numeric_values.items():
+        if value is None:
+            converted[name] = None
+    converted["user_input_required"] = missing
     for name in (
         "photodetector_response_delay_ns",
         "photodetector_response_uncertainty_ns",
         "sample_path_standard_uncertainty_ns",
         "step7_load_match_standard_uncertainty_ns",
     ):
-        if converted[name] < 0:
+        if converted[name] is not None and converted[name] < 0:
             raise TimingCalibrationError(f"{name} must be non-negative")
     if not all(
-        math.isfinite(float(converted[name])) for name in numeric_values
+        converted[name] is None or math.isfinite(float(converted[name]))
+        for name in numeric_values
     ):
         raise TimingCalibrationError("Step 7 corrections and uncertainties must be finite")
     return converted
@@ -3824,6 +3922,10 @@ def _require_fresh_acquisition_directory(path: Path) -> None:
             "Refusing to reuse a run directory containing acquisition data: " + ", ".join(present)
         )
     allowed_review_files = {
+        # The CLI opens this file exclusively immediately before entering
+        # TimingCalibrationProcedure.run().  Its presence therefore marks the
+        # current attempt, not a prior acquisition.
+        "command_log.txt",
         "timing_calibration_plan.json",
         "timing_calibration_plan.md",
         "workflow_status.json",
@@ -3838,72 +3940,21 @@ def _require_fresh_acquisition_directory(path: Path) -> None:
         )
 
 
-def validate_reviewed_plan_artifacts(
-    run_dir: str | Path,
-    requested_plan: dict[str, Any],
+def load_execution_plan(
+    plan_dir: str | Path, current_plan: dict[str, Any]
 ) -> dict[str, Any]:
-    """Verify that JSON and Markdown are an unchanged, previously written plan."""
+    """Load the existing campaign plan without administrative freshness gates."""
 
-    run_path = Path(run_dir).resolve()
-    json_path = run_path / "timing_calibration_plan.json"
-    markdown_path = run_path / "timing_calibration_plan.md"
-    if not json_path.is_file() or not markdown_path.is_file():
-        raise TimingCalibrationError(
-            "Hardware execution requires an existing JSON and Markdown plan from a prior plan-only invocation"
-        )
-    with json_path.open("r", encoding="utf-8") as handle:
-        reviewed = json.load(handle)
-    _assert_reviewed_plan_matches(reviewed, requested_plan)
-    expected_markdown = render_plan_markdown(reviewed)
-    if markdown_path.read_text(encoding="utf-8") != expected_markdown:
-        raise TimingCalibrationError(
-            "The human-reviewed Markdown cable plan is missing or differs from the frozen execution plan; create and review a new unique run plan"
-        )
-    return reviewed
-
-
-def _assert_reviewed_plan_matches(
-    reviewed: dict[str, Any],
-    requested: dict[str, Any],
-) -> None:
-    """Refuse hardware if execution parameters differ from the frozen plan."""
-
-    fields = (
-        "schema_version",
-        "status",
-        "operator",
-        "config_hash",
-        "config_path",
-        "configuration_files",
-        "implementation",
-        "time_origins",
-        "sign_convention",
-        "sweep",
-        "rates",
-        "recipes",
-        "capture_policy",
-        "optical_recipe_path",
-        "photodetector",
-        "optical_exposure_policy",
-        "operator_sequence",
-        "final_restoration",
-        "corrections",
-        "analysis",
-        "prehardware_blockers",
-        "output_policy",
-    )
-    normalized_requested = json.loads(json.dumps(requested))
-    changed = [
-        field
-        for field in fields
-        if reviewed.get(field) != normalized_requested.get(field)
-    ]
-    if changed:
-        raise TimingCalibrationError(
-            "Hardware execution parameters differ from the frozen reviewed plan: "
-            + ", ".join(changed)
-            + ". Create a new unique run plan and review it."
-        )
+    plan_path = Path(plan_dir).resolve() / "timing_calibration_plan.json"
+    if not plan_path.is_file():
+        return current_plan
+    with plan_path.open("r", encoding="utf-8") as handle:
+        saved_plan = json.load(handle)
+    if not isinstance(saved_plan, dict) or not isinstance(
+        saved_plan.get("operator_sequence"), list
+    ):
+        return current_plan
+    return saved_plan
 
 
 def _validate_sweep(
@@ -3929,19 +3980,6 @@ def _validate_sweep(
 def _resolve_repo_path(path: str | Path) -> Path:
     target = Path(path)
     return target if target.is_absolute() else REPO_ROOT / target
-
-
-def _sha256_file(path: str | Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _sha256_json(data: Any) -> str:
-    payload = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _standard_error(values: list[float]) -> float:

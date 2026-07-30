@@ -94,7 +94,6 @@ class ArduinoMuxDiagnostic:
         summary = {
             "timestamp_utc": timestamp,
             "operator": self.operator,
-            "config_hash": self.inventory.config_hash,
             "identity": identity,
             "firmware_version": firmware_version,
             "protocol_version": protocol_version,
@@ -212,7 +211,6 @@ class ArduinoMuxDiagnostic:
                 fieldnames=[
                     "timestamp_utc",
                     "operator",
-                    "config_hash",
                     "requested_output_a_route",
                     "returned_or_echoed_output_a_route",
                     "requested_output_b_route",
@@ -230,7 +228,6 @@ class ArduinoMuxDiagnostic:
                 {
                     "timestamp_utc": summary["timestamp_utc"],
                     "operator": self.operator,
-                    "config_hash": self.inventory.config_hash,
                     "requested_output_a_route": requested["output_a"],
                     "returned_or_echoed_output_a_route": latched.get("output_a"),
                     "requested_output_b_route": requested["output_b"],

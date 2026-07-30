@@ -68,7 +68,6 @@ file_naming:
 
 go_no_go_criteria:
   go:
-    - "hardware_configuration.yaml hash is present in the run manifest."
     - "MIRcat manufacturer UI is closed and single-client SDK ownership is available."
     - "Sample preparation, path length, CO handling, and FTIR source metadata are recorded."
     - "MIRcat setpoint and actual wavelength are recorded for every point."

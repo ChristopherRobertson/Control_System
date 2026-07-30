@@ -86,7 +86,6 @@ def main() -> int:
             blockers=errors,
             next_actions=next_actions,
             context={
-                "config_hash": inventory.config_hash,
                 "config_path": inventory.config_path,
                 "preset": args.preset,
                 "duration_s": args.duration_s,

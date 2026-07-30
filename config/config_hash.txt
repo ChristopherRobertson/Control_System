@@ -1,1 +1,0 @@
-32b9a32e33004fcd69f5212a18e74ff34ace4922612786ff3de82b7c341a71a6  /mnt/c/Users/Chris/Documents/GitHub/Control_System/hardware_configuration.yaml

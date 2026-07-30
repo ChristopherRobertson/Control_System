@@ -69,7 +69,6 @@ file_naming:
 
 go_no_go_criteria:
   go:
-    - "hardware_configuration.yaml hash is present in the run manifest."
     - "Workflow state machine logs startup_check, route_scope_signal, program_timing_recipe, arm_measurement, acquire_point, acquire_scan, abort_to_safe, and safe_shutdown."
     - "MIRcat manufacturer UI is closed and single-client SDK ownership is available."
     - "T660 timing recipe validates with laser-driving outputs disabled unless explicit laser-safety approval is recorded."

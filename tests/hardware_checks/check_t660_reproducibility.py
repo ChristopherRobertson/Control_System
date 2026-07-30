@@ -74,7 +74,7 @@ def main() -> int:
         except Exception as exc:
             errors.append(str(exc))
 
-    write_json(readback_path, {"config_hash": inventory.config_hash, "cycles": results})
+    write_json(readback_path, {"cycles": results})
     blocked = bool(errors)
     error_flags = {
         "timestamp_utc": utc_now(),
@@ -109,7 +109,7 @@ def main() -> int:
             title="T660 Reproducibility BLOCKED",
             blockers=errors,
             next_actions=manifest["blocker_status"]["next_actions"],
-            context={"config_hash": inventory.config_hash, "run_dir": str(run_dir)},
+            context={"run_dir": str(run_dir)},
         )
         print(f"BLOCKED see {run_dir / 'BLOCKED.md'}")
         return 2

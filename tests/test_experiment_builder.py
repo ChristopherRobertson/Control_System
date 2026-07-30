@@ -28,7 +28,6 @@ class ExperimentBuilderTests(unittest.TestCase):
             saved = builder.save(root / "definition.json")
             self.assertEqual(ExperimentDefinition.load(saved).experiment_id, definition.experiment_id)
             plan = builder.configure(root / "plan.json")
-            self.assertEqual(len(plan.definition_hash), 64)
             self.assertTrue(json.loads((root / "plan.json").read_text())["stop_actions"])
             with self.assertRaises(TypeError):
                 plan.resource_ownership["mircat"] = "other"

@@ -1,0 +1,41 @@
+{
+  "accepted_counts": {
+    "normal": 100,
+    "swapped": 100
+  },
+  "measurement_system_corrections": {
+    "installed_orientation_jitter_std_ns": null,
+    "installed_orientation_mean_b_minus_a_ns": null,
+    "installed_orientation_standard_error_ns": null,
+    "installed_step7_branch_2_monitor_minus_branch_1_qswitch_ns": null,
+    "installed_step7_geometry_standard_uncertainty_ns": null,
+    "normal_jitter_std_ns": 0.07666245370885404,
+    "normal_mean_b_minus_a_ns": 0.12925052890004282,
+    "scope_channel_and_fixed_lead_b_minus_a_ns": 0.11997652233357373,
+    "scope_correction_standard_uncertainty_ns": 0.5773728129844988,
+    "scope_installed_step7_geometry_covariance_ns2": -0.33335936517363307,
+    "scope_splitter_covariance_ns2": 3.353818743644945e-06,
+    "sign_convention": "B minus A; splitter branch 2 minus branch 1",
+    "splitter_branch_2_minus_1_ns": 0.009274006566469102,
+    "splitter_correction_standard_uncertainty_ns": 0.5773728129844988,
+    "step0_sample_resolution_standard_uncertainty_ns": 0.8164965809277261,
+    "swapped_jitter_std_ns": 0.06734689533456023,
+    "swapped_mean_b_minus_a_ns": 0.11070251576710462
+  },
+  "rejected_counts": {
+    "normal": 0,
+    "swapped": 0
+  },
+  "repeatability": {
+    "normal_sample_standard_deviation_ns": 0.07666245370885404,
+    "pooled_within_orientation_standard_deviation_ns": 0.07215516655051944,
+    "swapped_sample_standard_deviation_ns": 0.06734689533456023
+  },
+  "status": "PASS",
+  "uncertainty_note": "Repository swap analysis combines each orientation's standard error with a sample-resolution standard-uncertainty term. Cable reconnection repeatability was not separately evaluated.",
+  "user_input_required": [
+    "PicoScope calibration-certificate uncertainty and association",
+    "CLOCK-SPLITTER-01 manufacturer specifications",
+    "separate cable-reconnection repeatability"
+  ]
+}

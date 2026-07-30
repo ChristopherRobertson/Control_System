@@ -33,8 +33,6 @@ from control_app.workflows.selectable_workflows import (
     SelectableWorkflowError,
     configure_workflow,
     load_workflow_catalog,
-    validate_workflow_parameters,
-    workflow_fingerprint,
 )
 
 
@@ -159,7 +157,7 @@ class WorkflowStateMachine:
         result = WorkflowResult(
             status="blocked",
             message=f"Unsupported workflow command {command.command!r}",
-            data={"state": self.state, "config_hash": self.inventory.config_hash},
+            data={"state": self.state},
         )
         self._record(name, self.state, "blocked", result.message, result.data)
         return result
@@ -197,7 +195,6 @@ class WorkflowStateMachine:
             ),
             data={
                 "workflow_id": configured.workflow_id,
-                "fingerprint": configured.fingerprint,
                 "configured_workflow_path": str(configured.saved_path),
                 "parameters": configured.parameters,
             },
@@ -207,30 +204,11 @@ class WorkflowStateMachine:
         """Run only the exact configuration most recently validated and saved."""
 
         configured = self._configured_ui_workflow
-        fingerprint = str(command.parameters.get("fingerprint", ""))
         workflow_id = str(command.parameters.get("workflow_id", ""))
-        current_values = command.parameters.get("workflow_parameters")
-        try:
-            definition = load_workflow_catalog().get(workflow_id)
-            validated = (
-                validate_workflow_parameters(definition, current_values)
-                if definition is not None and isinstance(current_values, dict)
-                else None
-            )
-            current_fingerprint = (
-                workflow_fingerprint(workflow_id, validated) if validated is not None else None
-            )
-        except SelectableWorkflowError:
-            current_fingerprint = None
-        if (
-            configured is None
-            or not fingerprint
-            or fingerprint != configured.fingerprint
-            or current_fingerprint != configured.fingerprint
-        ):
+        if configured is None or workflow_id != configured.workflow_id:
             return WorkflowResult(
                 status="blocked",
-                message="Workflow settings are not configured and saved, or have changed. Configure & Save again.",
+                message="Workflow settings are not configured and saved. Configure & Save first.",
             )
         if configured.safety_approval_required and not command.safety_approval:
             return WorkflowResult(
@@ -248,7 +226,6 @@ class WorkflowStateMachine:
             self._active_ui_workflow = configured
         result.data.setdefault("configured_workflow_path", str(configured.saved_path))
         result.data.setdefault("workflow_id", configured.workflow_id)
-        result.data.setdefault("fingerprint", configured.fingerprint)
         return result
 
     def _stop_selected_workflow(self) -> WorkflowResult:
@@ -362,7 +339,6 @@ class WorkflowStateMachine:
             message=message,
             data={
                 "state": self.state,
-                "config_hash": self.inventory.config_hash,
                 "actions": actions,
                 "errors": errors,
             },
@@ -423,7 +399,6 @@ class WorkflowStateMachine:
             self.blockers.append(message)
             data = {
                 "state": self.state,
-                "config_hash": self.inventory.config_hash,
                 "command": command.to_dict(),
             }
             self._record(name, self.state, "failed", message, data)
@@ -441,7 +416,6 @@ class WorkflowStateMachine:
                 message=message,
                 data={
                     "state": self.state,
-                    "config_hash": self.inventory.config_hash,
                     "command_path": _command_path(command.device_key),
                 },
             )
@@ -476,7 +450,6 @@ class WorkflowStateMachine:
                 message=message,
                 data={
                     "state": self.state,
-                    "config_hash": self.inventory.config_hash,
                     "command_path": _command_path(command.device_key),
                 },
             )
@@ -496,7 +469,6 @@ class WorkflowStateMachine:
             )
         data = {
             "state": "STARTUP_CHECKED",
-            "config_hash": self.inventory.config_hash,
             "config_path": self.inventory.config_path,
             "recipe_path": str(self.recipe_path) if self.recipe_path else None,
             "required_commands": list(REQUIRED_WORKFLOW_COMMANDS),
@@ -534,7 +506,6 @@ class WorkflowStateMachine:
             "Safe-shutdown commands were sent to real hardware services and readbacks were recorded.",
             {
                 "state": "SAFE_SHUTDOWN_SENT",
-                "config_hash": self.inventory.config_hash,
                 "hardware_action_sent": True,
                 "safe_actions": safe_actions,
             },
@@ -546,7 +517,6 @@ class WorkflowStateMachine:
         pico_settings = self._validate_picoscope_recipe(pico_recipe_path)
         data = {
             "state": "SCOPE_ROUTE_VALIDATED",
-            "config_hash": self.inventory.config_hash,
             "mux_routes": {},
             "mux_bypassed": True,
             "scope_routing": "Direct wiring only; Arduino MUX is inactive.",
@@ -588,7 +558,6 @@ class WorkflowStateMachine:
         self.recipe_validation["timing_recipe"] = validation
         data = {
             "state": "TIMING_RECIPE_VALIDATED",
-            "config_hash": self.inventory.config_hash,
             "timing_recipe": str(timing_recipe),
             "timing_validation": validation,
         }
@@ -625,7 +594,6 @@ class WorkflowStateMachine:
         hf2li_preset = self._validate_hf2li_preset(recipe.get("hf2li_preset"))
         data = {
             "state": "MEASUREMENT_ARM_VALIDATED",
-            "config_hash": self.inventory.config_hash,
             "mircat_setpoint": _mircat_setpoint(recipe),
             "mircat_parameter_change": {
                 "validated": True,
@@ -669,7 +637,6 @@ class WorkflowStateMachine:
         point = command.parameters.get("point") or _first_scan_point(recipe)
         data = {
             "state": "ACQUIRE_POINT_VALIDATED",
-            "config_hash": self.inventory.config_hash,
             "point": point,
             "raw_data_created": False,
         }
@@ -709,7 +676,6 @@ class WorkflowStateMachine:
         scan_points = _scan_points(recipe)
         data = {
             "state": "ACQUIRE_SCAN_VALIDATED",
-            "config_hash": self.inventory.config_hash,
             "planned_point_count": len(scan_points),
             "first_point": scan_points[0] if scan_points else None,
             "last_point": scan_points[-1] if scan_points else None,
@@ -758,7 +724,6 @@ class WorkflowStateMachine:
         }
         data = {
             "state": "ABORT_LOGGED",
-            "config_hash": self.inventory.config_hash,
             "abort_state": self.abort_state,
             "safe_actions_required": [
                 "Stop acquisition",
@@ -809,7 +774,6 @@ class WorkflowStateMachine:
 
         readback = {
             "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "config_hash": self.inventory.config_hash,
             "recipe_path": picoscope_recipe["recipe_path"],
             "settings": settings,
             "sample_timing_validation": timing_validation,
@@ -872,7 +836,6 @@ class WorkflowStateMachine:
         self.mircat_actual_wavelength = actual
         readback = {
             "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "config_hash": self.inventory.config_hash,
             "setpoint": setpoint,
             "actual_wavelength": actual,
             "pulse_settings": pulse_settings,
@@ -926,7 +889,6 @@ class WorkflowStateMachine:
         state_after = service.read_state().to_dict()
         readback = {
             "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "config_hash": self.inventory.config_hash,
             "point_index": point_index,
             "setpoint": {
                 "wavenumber_cm1": wavenumber_cm1,
@@ -1002,7 +964,6 @@ class WorkflowStateMachine:
         )
         metadata = {
             "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "config_hash": self.inventory.config_hash,
             "point_index": point_index,
             "point": point,
             "preset": preset.name,
@@ -1024,7 +985,6 @@ class WorkflowStateMachine:
     def _send_safe_actions(self, label: str) -> dict[str, Any]:
         actions: dict[str, Any] = {
             "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "config_hash": self.inventory.config_hash,
             "label": label,
             "mircat": None,
             "t660": None,
@@ -1187,7 +1147,6 @@ class WorkflowStateMachine:
         self.state = to_state
         data = dict(data)
         data.setdefault("state", self.state)
-        data.setdefault("config_hash", self.inventory.config_hash)
         self._record(command_name, from_state, "complete", message, data)
         return WorkflowResult(status="complete", message=message, data=data)
 
@@ -1203,7 +1162,6 @@ class WorkflowStateMachine:
         hardware_message = f"{message} Blocker: {self.hardware_blocker}"
         data = dict(data)
         data.setdefault("state", self.state)
-        data.setdefault("config_hash", self.inventory.config_hash)
         data["hardware_blocker"] = self.hardware_blocker
         data["hardware_action_sent"] = False
         if to_state in HARDWARE_REQUIRED_STATES or "not sent" in message.lower():

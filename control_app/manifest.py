@@ -6,15 +6,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 import json
-import subprocess
 
 from .config_loader import ConfigInventory, REPO_ROOT, load_config_inventory
 
 
 REQUIRED_FIELDS = [
-    "config_hash",
     "config_path",
-    "git_commit",
     "operator",
     "timestamp_utc",
     "device_ids",
@@ -32,24 +29,6 @@ REQUIRED_FIELDS = [
     "abort_state",
     "blocker_status",
 ]
-
-
-def current_git_commit(cwd: str | Path | None = None) -> str:
-    """Return the current git commit hash, or a sentinel for an unborn repo."""
-
-    repo = Path(cwd) if cwd is not None else REPO_ROOT
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=repo,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return "NO_GIT_COMMIT"
-    commit = result.stdout.strip()
-    return commit or "NO_GIT_COMMIT"
 
 
 def _device_ids(inventory: ConfigInventory) -> dict[str, Any]:
@@ -94,9 +73,7 @@ def new_manifest(
 
     inv = inventory or load_config_inventory(write_files=False)
     return {
-        "config_hash": inv.config_hash,
         "config_path": inv.config_path,
-        "git_commit": current_git_commit(),
         "operator": operator,
         "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
         "device_ids": device_ids if device_ids is not None else _device_ids(inv),
@@ -150,4 +127,3 @@ def write_manifest(path: str | Path, data: dict[str, Any]) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return target
-

@@ -13,7 +13,6 @@ from control_app.ui.contracts import WorkflowCommand
 from control_app.workflows.selectable_workflows import (
     configure_workflow,
     load_workflow_catalog,
-    workflow_fingerprint,
 )
 from control_app.workflows.state_machine import WorkflowStateMachine
 
@@ -42,9 +41,6 @@ def main() -> int:
         snapshot = json.loads(configured.saved_path.read_text(encoding="utf-8"))
         assert snapshot["parameters"] == configured.parameters
         assert snapshot["fixed_settings"]["mircat_gui_must_be_closed"] is True
-        assert configured.fingerprint == workflow_fingerprint(
-            configured.workflow_id, configured.parameters
-        )
 
     machine = WorkflowStateMachine(
         operator="TEST",
@@ -56,9 +52,7 @@ def main() -> int:
             device_key="workflow",
             command="workflow.run_selected",
             parameters={
-                "fingerprint": "not-configured",
                 "workflow_id": "mircat_detector_alignment",
-                "workflow_parameters": {},
             },
             safety_approval=True,
         )
@@ -83,9 +77,7 @@ def main() -> int:
             device_key="workflow",
             command="workflow.run_selected",
             parameters={
-                "fingerprint": saved.data["fingerprint"],
                 "workflow_id": "mircat_detector_alignment",
-                "workflow_parameters": {},
             },
             safety_approval=False,
         )

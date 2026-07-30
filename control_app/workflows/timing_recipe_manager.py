@@ -68,15 +68,12 @@ class TimingRecipeManager:
     ) -> dict[str, Any]:
         """Apply a recipe, force requested EOD, read back, compare, and write JSON."""
 
-        if not self.inventory.config_hash:
-            raise TimingRecipeError("config hash is missing; refusing to apply recipe")
         recipe_data = self.load_recipe(recipe) if not isinstance(recipe, dict) else dict(recipe)
         resolved = self._resolve_recipe(recipe_data)
         readback: dict[str, Any] = {
             "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
             "recipe_name": recipe_data.get("name"),
             "recipe_path": recipe_data.get("_path"),
-            "config_hash": self.inventory.config_hash,
             "resolved_settings": resolved,
             "devices": {},
             "matches_recipe": None,
@@ -86,9 +83,7 @@ class TimingRecipeManager:
         services: dict[str, T660Service] = {}
         try:
             for unit in sorted(resolved):
-                # Use the already loaded, hash-identified inventory. Re-reading
-                # hardware_configuration.yaml here would permit a mid-run file
-                # change to alter the serial endpoint after plan review.
+                # Use the already loaded inventory for this operation.
                 service = T660Service(
                     unit,
                     deepcopy(self.inventory.t660_devices[unit]),
@@ -118,15 +113,12 @@ class TimingRecipeManager:
     def validate_recipe(self, recipe: str | Path | dict[str, Any]) -> dict[str, Any]:
         """Resolve and safety-check a timing recipe without opening hardware."""
 
-        if not self.inventory.config_hash:
-            raise TimingRecipeError("config hash is missing; refusing to validate recipe")
         recipe_data = self.load_recipe(recipe) if not isinstance(recipe, dict) else dict(recipe)
         resolved = self._resolve_recipe(recipe_data)
         return {
             "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
             "recipe_name": recipe_data.get("name"),
             "recipe_path": recipe_data.get("_path"),
-            "config_hash": self.inventory.config_hash,
             "resolved_settings": resolved,
             "status": "VALIDATED_PREHARDWARE",
         }

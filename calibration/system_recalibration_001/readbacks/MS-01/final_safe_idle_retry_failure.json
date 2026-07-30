@@ -1,0 +1,9 @@
+{
+  "status": "SAFE_IDLE_RETRY_COMMUNICATION_FAILED",
+  "failed_device": "t660_2",
+  "error": "T660-2 again returned no response to both ZM P500 and ZMode P500",
+  "output_state_basis": "last successful safe-idle readback after swapped acquisition",
+  "final_software_verification": "UNAVAILABLE",
+  "further_device_commands": "STOPPED",
+  "ms02_or_later_started": false
+}

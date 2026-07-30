@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -29,7 +28,6 @@ class ConfiguredWorkflow:
     stop_command: str | None
     parameters: dict[str, Any]
     safety_approval_required: bool
-    fingerprint: str
     saved_path: Path
 
 
@@ -88,15 +86,6 @@ def validate_workflow_parameters(definition: dict[str, Any], values: dict[str, A
     return result
 
 
-def workflow_fingerprint(workflow_id: str, parameters: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        {"workflow_id": workflow_id, "parameters": parameters},
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
 def configure_workflow(
     workflow_id: str,
     parameters: dict[str, Any],
@@ -109,7 +98,6 @@ def configure_workflow(
         raise SelectableWorkflowError(f"Unknown or non-viable workflow {workflow_id!r}")
     definition = catalog[workflow_id]
     validated = validate_workflow_parameters(definition, parameters)
-    fingerprint = workflow_fingerprint(workflow_id, validated)
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / "configured_workflow.json"
@@ -124,7 +112,6 @@ def configure_workflow(
         "fixed_settings": definition.get("fixed_settings", {}),
         "parameters": validated,
         "safety_approval_required": bool(definition.get("safety_approval_required", False)),
-        "fingerprint": fingerprint,
     }
     target.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return ConfiguredWorkflow(
@@ -134,6 +121,5 @@ def configure_workflow(
         stop_command=(str(definition["stop_command"]) if definition.get("stop_command") else None),
         parameters=validated,
         safety_approval_required=bool(definition.get("safety_approval_required", False)),
-        fingerprint=fingerprint,
         saved_path=target,
     )

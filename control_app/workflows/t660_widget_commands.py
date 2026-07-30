@@ -49,7 +49,7 @@ class T660WidgetCommandHandler:
                 return WorkflowResult(
                     status="failed",
                     message=str(exc),
-                    data={"command_log": str(log_path), "config_hash": self.inventory.config_hash},
+                    data={"command_log": str(log_path)},
                 )
 
     def _handle(self, command: WorkflowCommand, command_log: TextIO) -> WorkflowResult:
@@ -179,7 +179,6 @@ class T660WidgetCommandHandler:
                 "state": state,
                 "readback": readback,
                 "command_log": str(self._command_log_path()),
-                "config_hash": self.inventory.config_hash,
             },
         )
 

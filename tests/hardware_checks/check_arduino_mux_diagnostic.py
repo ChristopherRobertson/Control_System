@@ -110,7 +110,7 @@ def main() -> int:
             title="Arduino MUX Diagnostic BLOCKED",
             blockers=blockers,
             next_actions=manifest["blocker_status"]["next_actions"],
-            context={"config_hash": inventory.config_hash},
+            context={},
         )
         command_log_path.write_text(
             f"{utc_now()} BLOCKED before hardware open: {'; '.join(blockers)}\n",
@@ -162,7 +162,7 @@ def main() -> int:
             title="Arduino MUX Diagnostic BLOCKED",
             blockers=errors,
             next_actions=next_actions,
-            context={"config_hash": inventory.config_hash},
+            context={},
         )
         print(f"BLOCKED see {run_dir / 'BLOCKED.md'}")
         return 2

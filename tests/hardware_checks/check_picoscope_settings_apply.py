@@ -78,7 +78,7 @@ def main() -> int:
             title="PicoScope Settings Test BLOCKED",
             blockers=errors,
             next_actions=next_actions,
-            context={"config_hash": inventory.config_hash, "recipe": args.recipe},
+            context={"recipe": args.recipe},
         )
         print(f"BLOCKED see {run_dir / 'BLOCKED.md'}")
         return 2

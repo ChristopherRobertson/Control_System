@@ -10,9 +10,8 @@ procedure:
   electrical_programmed_delays_ns: [0, 100, 1000, 10000, 100000, 1000000]
   default_shots_per_point: 100
   measurement_system_setups:
-    - "MS-00A splitter normal"
-    - "MS-00B splitter branches swapped"
-    - "MS-00C exact installed Step 7 splitter/Q-switch-cable/monitor-lead geometry"
+    - "MS-01 PicoScope differential channel/path skew from normal and swapped S1/S2 captures"
+    - "MS-02 bare splitter S1/S2 branch skew from the same captures"
   optical_corrections_required_before_execution:
     - "photodetector response plus upstream detector-lead delay"
     - "standard uncertainty of that response-delay correction"
@@ -20,9 +19,8 @@ procedure:
     - "detector output-cable identifier"
     - "sample or sample-equivalent path description and path-placement standard uncertainty"
     - "reviewed maximum Q-switch-to-OPO latency defining the optical search window"
-    - "documented MS-00C load-equivalence method for the Nd:YAG Q-switch input"
-    - "standard uncertainty assigned to load equivalence"
-    - "identifiers for splitter, channel-assigned scope assemblies, final Q-switch cable, and Step 7 monitor lead"
+    - "OP-01 adapter identifier and engineering correction 0.125 ns with 0.0722 ns rectangular standard uncertainty from a 0 to 0.25 ns one-way bound"
+    - "OP-01 S1/S2 assignments and detector lead identifier"
   picoscope_capture_policy:
     automatic_timebase_and_window: true
     maximum_samples_per_trace: 150000

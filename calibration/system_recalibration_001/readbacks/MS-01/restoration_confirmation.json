@@ -1,0 +1,15 @@
+{
+  "operator_confirmation": "completed",
+  "status": "OPERATOR_CONFIRMED",
+  "confirmed_conditions": [
+    "S1 and S2 disconnected from PicoScope",
+    "CLOCK-SPLITTER-01 disconnected from T660-2 CHA bulkhead",
+    "installed EXT REF downstream BNC cable restored to fixed T660-2 CHA bulkhead",
+    "CLOCK-SPLITTER-01 input restored to T660-2 CLOCK",
+    "labeled 1.5-foot branch restored to T660-1 CLOCK",
+    "labeled 1.5-foot branch restored to HF2LI CLOCK",
+    "splitter branches left unconnected after restoration",
+    "normal clock distribution visually matched original labeled arrangement"
+  ],
+  "verification_basis": "operator confirmation; not an electrical clock-distribution measurement"
+}

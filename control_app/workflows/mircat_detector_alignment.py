@@ -174,7 +174,6 @@ class MircatDetectorAlignmentWorkflow:
                 {
                     "timestamp_utc": _utc_now(),
                     "operator": self.operator,
-                    "config_hash": self.inventory.config_hash,
                     "requested_operation": {
                         "wavenumber_cm1": request.wavenumber_cm1,
                         "qcl": request.qcl,
@@ -213,7 +212,6 @@ class MircatDetectorAlignmentWorkflow:
                 {
                     "timestamp_utc": _utc_now(),
                     "operator": self.operator,
-                    "config_hash": self.inventory.config_hash,
                     "arm_attempts_before_tec_wait": arm_before_tec,
                     "arm_attempts_before_tune": arm_before_tune,
                     "state_before_tune": state_before_tune,
@@ -299,7 +297,6 @@ class MircatDetectorAlignmentWorkflow:
             summary = {
                 "timestamp_utc": _utc_now(),
                 "operator": self.operator,
-                "config_hash": self.inventory.config_hash,
                 "status": "RUNNING_FOR_ALIGNMENT",
                 "request": request.to_dict(),
                 "timing_mode": "external_t660" if request.use_t660_timing else "mircat_internal",

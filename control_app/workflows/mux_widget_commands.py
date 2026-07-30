@@ -107,7 +107,6 @@ class MuxWidgetCommandHandler:
                 message=MUX_DISABLED_MESSAGE,
                 data={
                     "state": {"connected": False, "disabled": True},
-                    "config_hash": self.inventory.config_hash,
                     "command": command.to_dict(),
                 },
             )
@@ -124,7 +123,7 @@ class MuxWidgetCommandHandler:
                 return WorkflowResult(
                     status="failed",
                     message=str(exc),
-                    data={"command_log": str(log_path), "config_hash": self.inventory.config_hash},
+                    data={"command_log": str(log_path)},
                 )
 
     def _handle(self, command: WorkflowCommand, command_log: TextIO) -> WorkflowResult:
@@ -178,7 +177,6 @@ class MuxWidgetCommandHandler:
                 data={
                     "state": self._read_state(),
                     "command_log": str(self._command_log_path()),
-                    "config_hash": self.inventory.config_hash,
                 },
             )
         return WorkflowResult(status="blocked", message=f"Unsupported command {name}")
@@ -203,7 +201,6 @@ class MuxWidgetCommandHandler:
         data: dict[str, object] = {
             "state": self._read_state(),
             "command_log": str(self._command_log_path()),
-            "config_hash": self.inventory.config_hash,
         }
         if extra_data:
             data.update(extra_data)
@@ -213,7 +210,6 @@ class MuxWidgetCommandHandler:
         state: dict[str, Any] = {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "connected": self.connected,
-            "config_hash": self.inventory.config_hash,
             "identity": None,
             "firmware_version": None,
             "status_response": None,

@@ -1,0 +1,201 @@
+{
+  "interpolation_sensitivity": {
+    "linear_scope_b_minus_a_ns": 0.11997652233357373,
+    "linear_splitter_s2_minus_s1_ns": 0.009274006566469102,
+    "method_comparison": "linear threshold interpolation versus nearest sample",
+    "nearest_scope_b_minus_a_ns": 0.05,
+    "nearest_splitter_s2_minus_s1_ns": 0.009999999999999998,
+    "scope_absolute_difference_ns": 0.06997652233357372,
+    "splitter_absolute_difference_ns": 0.0007259934335308964
+  },
+  "pulse_fidelity": {
+    "normal_A": {
+      "amplitude_adc": {
+        "maximum": 16501.0,
+        "mean": 16501.0,
+        "minimum": 16501.0,
+        "sample_standard_deviation": 0.0
+      },
+      "baseline_adc": {
+        "maximum": 289.0,
+        "mean": 289.0,
+        "minimum": 289.0,
+        "sample_standard_deviation": 0.0
+      },
+      "peak_adc": {
+        "maximum": 16790.0,
+        "mean": 16790.0,
+        "minimum": 16790.0,
+        "sample_standard_deviation": 0.0
+      },
+      "rise_10_90_ns": {
+        "maximum": 7.599257631106411,
+        "mean": 7.026107804655769,
+        "minimum": 6.77504317789294,
+        "sample_standard_deviation": 0.10808758067201263
+      },
+      "width_50_percent_ns": {
+        "maximum": 150.1261480783446,
+        "mean": 149.94878755573404,
+        "minimum": 149.78949281948735,
+        "sample_standard_deviation": 0.08096681885916981
+      }
+    },
+    "normal_B": {
+      "amplitude_adc": {
+        "maximum": 16628.0,
+        "mean": 16412.75,
+        "minimum": 16341.0,
+        "sample_standard_deviation": 124.9007181482132
+      },
+      "baseline_adc": {
+        "maximum": 286.0,
+        "mean": 286.0,
+        "minimum": 286.0,
+        "sample_standard_deviation": 0.0
+      },
+      "peak_adc": {
+        "maximum": 16914.0,
+        "mean": 16698.75,
+        "minimum": 16627.0,
+        "sample_standard_deviation": 124.9007181482132
+      },
+      "rise_10_90_ns": {
+        "maximum": 7.83372093023263,
+        "mean": 7.027290781694362,
+        "minimum": 6.712473496359053,
+        "sample_standard_deviation": 0.18345593914074618
+      },
+      "width_50_percent_ns": {
+        "maximum": 150.12873280726785,
+        "mean": 149.93101080733507,
+        "minimum": 149.7648748461222,
+        "sample_standard_deviation": 0.07907696855296935
+      }
+    },
+    "swapped_A": {
+      "amplitude_adc": {
+        "maximum": 16501.0,
+        "mean": 16501.0,
+        "minimum": 16501.0,
+        "sample_standard_deviation": 0.0
+      },
+      "baseline_adc": {
+        "maximum": 289.0,
+        "mean": 289.0,
+        "minimum": 289.0,
+        "sample_standard_deviation": 0.0
+      },
+      "peak_adc": {
+        "maximum": 16790.0,
+        "mean": 16790.0,
+        "minimum": 16790.0,
+        "sample_standard_deviation": 0.0
+      },
+      "rise_10_90_ns": {
+        "maximum": 7.135496384342559,
+        "mean": 6.991612690172442,
+        "minimum": 6.5577399978121775,
+        "sample_standard_deviation": 0.10504286599925332
+      },
+      "width_50_percent_ns": {
+        "maximum": 150.1376086545015,
+        "mean": 149.94289329893104,
+        "minimum": 149.81366539275405,
+        "sample_standard_deviation": 0.06924894996030452
+      }
+    },
+    "swapped_B": {
+      "amplitude_adc": {
+        "maximum": 16628.0,
+        "mean": 16432.84,
+        "minimum": 16341.0,
+        "sample_standard_deviation": 134.55311143923726
+      },
+      "baseline_adc": {
+        "maximum": 286.0,
+        "mean": 286.0,
+        "minimum": 286.0,
+        "sample_standard_deviation": 0.0
+      },
+      "peak_adc": {
+        "maximum": 16914.0,
+        "mean": 16718.84,
+        "minimum": 16627.0,
+        "sample_standard_deviation": 134.55311143923726
+      },
+      "rise_10_90_ns": {
+        "maximum": 7.746058014186474,
+        "mean": 7.024458944751805,
+        "minimum": 6.811905967963867,
+        "sample_standard_deviation": 0.19157217847737332
+      },
+      "width_50_percent_ns": {
+        "maximum": 150.10974368779034,
+        "mean": 149.9292226132821,
+        "minimum": 149.74299950174372,
+        "sample_standard_deviation": 0.07751751996980052
+      }
+    }
+  },
+  "remaining_required_hardware_evidence": [
+    "controlled splitter disconnection/reconnection repeatability"
+  ],
+  "sample_interval_ns": 2.0,
+  "source": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\MS-01",
+  "status": "OFFLINE_ANALYSIS_PASS",
+  "threshold_results": {
+    "3000": {
+      "normal_mean_b_minus_a_ns": 0.12175785973048278,
+      "scope_b_minus_a_ns": 0.11044739013220578,
+      "splitter_s2_minus_s1_ns": 0.011310469598276994,
+      "swapped_mean_b_minus_a_ns": 0.0991369205339288
+    },
+    "4000": {
+      "normal_mean_b_minus_a_ns": 0.12716748379816636,
+      "scope_b_minus_a_ns": 0.11787626142181012,
+      "splitter_s2_minus_s1_ns": 0.009291222376356247,
+      "swapped_mean_b_minus_a_ns": 0.10858503904545387
+    },
+    "5000": {
+      "normal_mean_b_minus_a_ns": 0.12925052890004282,
+      "scope_b_minus_a_ns": 0.11997652233357373,
+      "splitter_s2_minus_s1_ns": 0.009274006566469102,
+      "swapped_mean_b_minus_a_ns": 0.11070251576710462
+    },
+    "6000": {
+      "normal_mean_b_minus_a_ns": 0.12835333204651306,
+      "scope_b_minus_a_ns": 0.12085016676910754,
+      "splitter_s2_minus_s1_ns": 0.007503165277405514,
+      "swapped_mean_b_minus_a_ns": 0.11334700149170203
+    },
+    "7000": {
+      "normal_mean_b_minus_a_ns": 0.12730480319126172,
+      "scope_b_minus_a_ns": 0.12165788631558826,
+      "splitter_s2_minus_s1_ns": 0.005646916875673466,
+      "swapped_mean_b_minus_a_ns": 0.11601096943991479
+    }
+  },
+  "threshold_sensitivity": {
+    "scope_half_range_ns": 0.005605248091691238,
+    "splitter_half_range_ns": 0.002831776361301764
+  },
+  "thresholds_adc": [
+    3000,
+    4000,
+    5000,
+    6000,
+    7000
+  ],
+  "timebase": 1,
+  "timebase_accuracy": {
+    "calibration_age_status": "USER_INPUT_REQUIRED",
+    "data_sheet_bound_ppm": 2.0,
+    "drift_ppm_per_year": 1.0
+  },
+  "trigger_threshold_adc": 5000,
+  "user_input_required": [
+    "PicoScope calibration certificate and calibration age",
+    "CLOCK-SPLITTER-01 manufacturer bandwidth/insertion-loss/impedance specifications"
+  ]
+}

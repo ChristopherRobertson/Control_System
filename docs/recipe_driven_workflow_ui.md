@@ -14,9 +14,8 @@ experiments.
    `runs/configured_workflows/`.
 4. Confirm the laser-safety condition when required. **Run Configured
    Workflow** remains disabled until configuration succeeds.
-5. Press **Run Configured Workflow**. The backend recomputes the configuration
-   fingerprint and refuses to run if the selection or any parameter differs
-   from the saved plan.
+5. Press **Run Configured Workflow**. The backend runs the validated settings
+   saved by **Configure & Save**.
 6. For a continuous workflow, use the catalog-defined **Stop / Safe Idle**
    action in the same tab.
 

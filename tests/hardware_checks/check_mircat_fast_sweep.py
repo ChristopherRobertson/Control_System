@@ -107,7 +107,6 @@ def main() -> int:
             summary = {
                 "timestamp_utc": utc_now(),
                 "operator": args.operator,
-                "config_hash": inventory.config_hash,
                 "recipe_path": str(recipe_path),
                 "request": request.to_dict(),
                 "status": "BLOCKED",
@@ -137,7 +136,6 @@ def main() -> int:
             summary = {
                 "timestamp_utc": utc_now(),
                 "operator": args.operator,
-                "config_hash": inventory.config_hash,
                 "recipe_path": str(recipe_path),
                 "request": request.to_dict(),
                 "status": "FAILED",

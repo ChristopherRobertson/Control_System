@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load and hash hardware_configuration.yaml.
+"""Load and validate hardware_configuration.yaml.
 
 Usage:
     python tests/hardware_checks/check_config_inventory.py
@@ -37,7 +37,7 @@ def main() -> int:
         print(f"BLOCKED: {exc}")
         return 2
     print(f"PASS config_path={inventory.config_path}")
-    print(f"PASS config_hash={inventory.config_hash}")
+    print("PASS configuration inventory loaded")
     for warning in inventory.warnings:
         print(f"WARNING {warning}")
     return 0

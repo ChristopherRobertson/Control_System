@@ -184,7 +184,6 @@ class PicoScopeSettingsTest:
         summary = {
             "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
             "operator": self.operator,
-            "config_hash": self.inventory.config_hash,
             "recipe_path": str(resolved_recipe_path),
             "picoscope_model": device_config.get("model"),
             "picoscope_serial": device_config.get("serial_number"),

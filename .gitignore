@@ -13,9 +13,6 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Local planning document maintained outside repository history
-/docs/RSI_Two_Week_Workplan.docx
-
 # Archived legacy artifacts kept outside active app path
 archive/
 
@@ -23,20 +20,19 @@ archive/
 runs/
 logs/
 
-# Campaign metadata under calibration/<campaign-id>/ is versionable. Existing
-# canonical outputs remain ignored until explicit promotion. Large raw
-# acquisition products remain local/archivable.
+# Campaign metadata and analyzed results are versionable. Canonical outputs
+# remain local until explicit promotion, and large raw acquisitions remain
+# local for campaign archival rather than Git history.
 calibration/timing_calibration.csv
 calibration/timing_offsets.yaml
 calibration/**/raw_pico_traces/**
 calibration/**/raw_hf2li/**
 calibration/**/raw_mircat/**
+calibration/**/readbacks/**/raw/**
 !calibration/**/raw_pico_traces/.gitkeep
 !calibration/**/raw_hf2li/.gitkeep
 !calibration/**/raw_mircat/.gitkeep
-**/raw_pico_traces/
-!calibration/**/raw_pico_traces/
-!calibration/**/raw_pico_traces/.gitkeep
+!calibration/**/readbacks/**/raw/.gitkeep
 
 #MIRcat SDK files
 /docs/MIRcat/SDK/docs/*

@@ -169,7 +169,7 @@ def main() -> int:
             title="T660-2 CHB Signal Verification BLOCKED",
             blockers=errors,
             next_actions=manifest["blocker_status"]["next_actions"],
-            context={"config_hash": inventory.config_hash, "run_dir": str(run_dir)},
+            context={"run_dir": str(run_dir)},
         )
         print(f"BLOCKED see {run_dir / 'BLOCKED.md'}")
         return 2

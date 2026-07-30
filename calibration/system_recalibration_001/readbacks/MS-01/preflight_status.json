@@ -1,0 +1,21 @@
+{
+  "finished_utc": "2026-07-29T21:25:20.745496+00:00",
+  "picoscope": {
+    "configured_model": "5244D",
+    "configured_serial_number": "10261",
+    "ownership": "PASS",
+    "sdk_serial_number": "10261/0071"
+  },
+  "previous_process_check": {
+    "device_control_process_found": false,
+    "windows_serial_inventory": "USER_INPUT_REQUIRED"
+  },
+  "purpose": "MS-01 direct ownership and safe-idle/readback preflight",
+  "started_utc": "2026-07-29T21:25:13.532422+00:00",
+  "t660_safe_idle": {
+    "matches_recipe": true,
+    "mismatches": [],
+    "readback_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\MS-01\\safe_idle_initial_readback.json",
+    "status": "PASS"
+  }
+}

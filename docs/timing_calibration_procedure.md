@@ -2,7 +2,7 @@
 
 Status: **review plan only — not approved for hardware execution**
 
-This document defines the complete, rerunnable timing-calibration procedure for the pump-probe control system. Creating or reviewing this document does not open hardware, enable a T660 output, move a cable, acquire a trace, update shared calibration files, or update an RSI paper/thesis draft. Hardware execution must remain blocked until the wiring, pinout, trigger-rate, and correction-model review checklist at the end of this document is approved. The optical step additionally uses the Enter-key laser-area preflight in Section 7.2.
+This document defines the complete, rerunnable timing-calibration procedure for the pump-probe control system. Creating or reviewing this document does not open hardware, enable a T660 output, move a cable, acquire a trace, update shared calibration files, or update an RSI paper/thesis draft. The room and door interlocks are hardwired external infrastructure and are not duplicated as software or operator-confirmation gates.
 
 ## 1. System timing topology
 
@@ -24,7 +24,6 @@ The PicoScope uses CHA as the recorded reference channel and CHB as the recorded
 ```text
 d_raw = t_Pico_CHB - t_Pico_CHA
 ```
-
 so a positive value means that the CHB event was recorded later than the CHA event.
 
 The Arduino MUX is not part of this procedure. All timing measurements use direct cables, an approved DB9 breakout/adapter where needed, and the splitter only where this document explicitly calls for it.
@@ -69,7 +68,7 @@ Steps 1 through 6, 8, and 9 use the complete six-point electrical sweep.
 ### 3.3 Cable and safe-state conventions
 
 - `Final cable destination end` means the device-end connector is unplugged from its normal destination and connected to the stated PicoScope channel. Its T660 source end remains on the normal T660 output.
-- Every fixed 12-inch DDG SMB-to-BNC bulkhead assembly remains connected to its T660 output throughout calibration. A reference to moving a T660 route means moving only the downstream BNC cable at its destination end, except that the downstream Q-switch BNC cable may be removed from its labeled CHB bulkhead when Step 0c explicitly requires it.
+- Every fixed 12-inch DDG SMB-to-BNC bulkhead assembly remains connected to its T660 output throughout calibration. A reference to moving a T660 route means moving only the downstream BNC cable at its destination end.
 - The same channel-assigned PicoScope patch leads/adapters used in Step 0 must be retained for later electrical steps so the measured scope-path correction remains applicable.
 - Every cable removed from a device must be labeled, capped or insulated as appropriate, and recorded in the run manifest.
 - Before cable handling, both T660 units must be stopped, all channels disabled, and the disabled state read back.
@@ -84,16 +83,12 @@ Steps 1 through 6, 8, and 9 use the complete six-point electrical sweep.
 
 The generated run plan is the executable review record. Before the first hardware connection, it must freeze the following inputs and refuse execution if any content or setting changes:
 
-- Absolute path and SHA-256 digest for `recipes/timing_calibration.yaml`, `recipes/safe_idle.yaml`, the selected PicoScope recipe, and the selected Step 7 optical recipe.
-- Hardware-configuration hash, procedure schema version, source revision when available, and the SHA-256 digest of this review document.
 - Parsed PicoScope resolution; CHA/CHB enabled state, range, coupling, and offset; trigger source, edge, and threshold; base timebase/sample count; electrical threshold; Step 7 photodetector edge, threshold, saturation limit, and signal-to-noise criterion.
 - Exact optical FIRE and Q-switch delays, widths, polarities, terminations, T660-1 external-trigger settings, T660-2 `REM` source, explicitly disabled unused channels, the minimum interval between every pair of remote shots, and the reviewed minimum/maximum Q-switch-to-OPO edge-search window.
-- Resolved electrical step-recipe settings for every unit/channel (enabled state, signal, delay rule, width, polarity, termination, trigger source/rate, predivider/gate/burst/frames state). Store a deterministic digest of the resolved recipe template in the plan and a digest of each generated per-delay recipe in the run record.
 - Photodetector response-delay correction, standard uncertainty, calibration source/identifier/date, detector and cable identifiers, and the sample or sample-equivalent placement record.
-- Step 0 cable/adapter identifiers, the Step 0c load-equivalence method and evidence, and any independently supplied cable or path-length uncertainty.
+- MS-01/MS-02 cable and splitter identifiers, the exact OP-01 S1/S2 drive and monitor assignments, the OP-01 adapter identifier and engineering-bound assumptions, and any independently supplied cable or path-length uncertainty.
 - Requested electrical shots per delay, Step 7 control/preview/measurement counts, permitted retry count, and the resulting maximum emitted-shot budget.
 
-A path without a content digest is not frozen. Numeric detector corrections such as `0 ns` or `0 ns uncertainty` require the same traceable calibration provenance as any nonzero value; entering zero is not evidence that the term is negligible. Inputs that the workflow cannot measure—such as detector calibration, sample-equivalent path uncertainty, connector/load equivalence, and manufacturer timing specifications—must be supplied before execution or carried explicitly as unresolved terms. The final table must say `not evaluated` or `not available` for an unresolved contribution rather than implying it is included in a combined uncertainty.
 
 ### 3.5 Mandatory safe-idle cable transitions
 
@@ -103,8 +98,7 @@ Every operator prompt must be standalone: it must describe both the final setup 
 |---|---|
 | Initial state -> 0a | Leave the fixed T660-2 CHA 12-inch SMB-to-BNC bulkhead assembly installed. Disconnect the installed 1-foot EXT REF downstream BNC cable at the CHA bulkhead and park it for restoration. Temporarily remove `CLOCK-SPLITTER-01` from T660-2 CLOCK, label/park its normal clock connections, and connect the splitter's single-ended input directly to the CHA BNC bulkhead. Leave T660-2 CHB/CHC/CHD final device cables connected but verified disabled. |
 | 0a -> 0b | At the PicoScope, exchange the two integral splitter branch connectors: move `S1` from CHA to CHB and `S2` from CHB to CHA. The splitter input and open third branch remain unchanged. |
-| 0b -> 0c | Keep the test-pulse splitter input. Install the final Q-switch cable and exact Step 7 monitor lead in the load-equivalent 0c arrangement; neither branch may reach an enabled laser input. |
-| 0c -> 1 | Remove the splitter input from the T660-2 CHA bulkhead, reconnect the installed 1-foot EXT REF downstream BNC cable to that bulkhead, and route its free HF2LI destination end to Pico CHA. Restore `CLOCK-SPLITTER-01` to T660-2 CLOCK and restore its normal branches to T660-1 CLOCK and HF2LI CLOCK. Verify normal CLOCK distribution before any clock-dependent recipe. Route only the final DAQ downstream BNC destination end to Pico CHB and park/cap the Q-switch cable away from the laser. |
+| 0b -> 1 | Reconnect the installed 1-foot EXT REF downstream BNC cable to the T660-2 CHA bulkhead and route its free HF2LI destination end to Pico CHA. Restore `CLOCK-SPLITTER-01` to T660-2 CLOCK and restore its normal branches to T660-1 CLOCK and HF2LI CLOCK before any clock-dependent recipe. |
 | 1 -> 2 | Reconnect the final DAQ cable to HF2LI DIO1 with CHC disabled. Keep the EXT REF destination on Pico CHA and move Pico CHB to the disconnected MIRcat TRIG IN destination cable. |
 | 2 -> 3 | Reconnect the MIRcat trigger destination with CHB disabled. Keep EXT REF on Pico CHA; disconnect the T660-1 TRIG IN destination and move that final CHD cable end to Pico CHB. |
 | 3 -> 4 | Remove CHD from Pico CHB and reconnect it to T660-1 TRIG IN. Keep EXT REF on Pico CHA; disconnect the Nd:YAG timing connector and route FIRE pin 7 to Pico CHB through the approved breakout. |
@@ -118,9 +112,10 @@ If the physical harness does not permit one of these actions exactly as written,
 
 ## 4. Measurement-system correction
 
-Steps 0a, 0b, and 0c characterize the differential PicoScope acquisition path, bare splitter branch skew, and installed Step 7 splitter/lead geometry. These are measurement-system corrections, not system route delays.
+MS-01 and MS-02 characterize the differential PicoScope acquisition path and
+bare splitter branch skew.
 
-For all three Step 0 setups, leave the fixed 12-inch T660-2 CHA SMB-to-BNC bulkhead assembly installed. Disconnect the installed 1-foot EXT REF downstream BNC cable at the CHA bulkhead and park it for restoration. Connect the single-ended input of `CLOCK-SPLITTER-01` directly to that BNC bulkhead. The splitter is temporarily removed from T660-2 CLOCK; its normal clock connections must be labeled and parked without substitution. Program only T660-2 CHA at 100 Hz; T660-2 CHB, CHC, and CHD and every T660-1 channel remain disabled. The final T660-2 CHB, CHC, and CHD cables may remain physically connected to their devices only because their source channels are disabled and verified off.
+For MS-01/MS-02, leave the fixed 12-inch T660-2 CHA SMB-to-BNC bulkhead assembly installed. Disconnect the installed 1-foot EXT REF downstream BNC cable at the CHA bulkhead and park it for restoration. Connect the single-ended input of `CLOCK-SPLITTER-01` directly to that BNC bulkhead. The splitter is temporarily removed from T660-2 CLOCK; its normal clock connections must be labeled and parked without substitution. Program only T660-2 CHA at 100 Hz; T660-2 CHB, CHC, and CHD and every T660-1 channel remain disabled.
 
 `CLOCK-SPLITTER-01` is a one-input/three-branch BNC splitter. For Steps 0a and
 0b, its integral branches labeled `S1` and `S2` connect directly to PicoScope
@@ -128,8 +123,8 @@ CHA and CHB; there are no intervening `E_A`/`E_B` cables or adapters. The third
 integral branch remains open and connected to nothing. Exchanging `S1` and
 `S2` at the PicoScope is therefore both a splitter-branch exchange and a
 scope-channel-input exchange. Any separate measurement leads or adapters
-required by Step 0c or later steps must be identified and characterized for
-those setups; they are not part of the direct Step 0a/0b paths.
+required by later steps must be identified and treated in those steps; they
+are not part of the direct Step 0a/0b paths.
 
 ### Step 0a — normal splitter orientation
 
@@ -171,37 +166,6 @@ where:
 
 - `C_scope` is the CHB-minus-CHA differential acquisition-path delay, including Pico channel skew and any residual skew in the fixed channel-assigned equal patch leads. A positive `C_scope` means the measurement system records CHB late.
 - `S_21 = delay(splitter output 2) - delay(splitter output 1)`. A positive `S_21` means splitter output 2 is later.
-
-### Step 0c — exact installed Step 7 splitter geometry
-
-**Purpose:** measure the splitter together with the unequal, temporary branch leads that will actually be installed during Step 7.
-
-- Splitter input: unchanged direct connection to the fixed T660-2 CHA BNC bulkhead.
-- Leave the fixed 12-inch T660-1 CHB SMB-to-BNC bulkhead assembly installed. Disconnect the downstream Q-switch BNC cable at the labeled CHB bulkhead and from Nd:YAG DB9 pin 6. Connect splitter output 1 -> that downstream Q-switch cable -> the same approved pin-6/`E_A` measurement assembly used during the Step 0 scope-path characterization -> PicoScope CHA.
-- Splitter output 2 -> the exact Step 7 monitor adapter/lead -> cable `E_B` -> PicoScope CHB.
-- The Q-switch cable is disconnected from Nd:YAG; no laser-driving output is enabled.
-- Operator confirmation: verify the final Q-switch cable and exact monitor lead are installed, the reviewed load-equivalence method/source ID matches the frozen plan, and no test pulse can produce laser emission.
-
-The output-1 load in Step 0c must be electrically equivalent, over the edge bandwidth used for timing, to the actual Nd:YAG pin-6 input load present in Step 7. A PicoScope input is not assumed equivalent merely because both inputs are described as high impedance. Before approval, choose and document one of these methods:
-
-- Use a characterized dummy termination/network whose impedance and connector geometry reproduce the Nd:YAG Q-switch input, and probe the pin-6 reference plane with an approved high-impedance timing probe; or
-- Use an approved DB9 breakout that leaves the real pin-6 load connected while the laser is positively inhibited from emission, and observe the reference plane with a probe whose added loading is demonstrated negligible; or
-- Provide authoritative impedance/bandwidth data showing that the Step 0c Pico/adapter substitution is equivalent within a stated timing uncertainty.
-
-Record the selected method, Nd:YAG input-load source, nominal impedance/capacitance, Pico/probe input impedance, adapter and cable identifiers, setup photograph or connection record, and the assigned load-equivalence timing uncertainty. If equivalence is not demonstrated, `S_installed` is provisional and Step 7 must not be reported as a corrected Q-switch-pin-6-to-optical delay.
-
-After Step 0c, restore `CLOCK-SPLITTER-01` to its normal distribution before
-any clock-dependent recipe: input from T660-2 CLOCK, with the same recorded
-splitter output ports and installed 1.5-foot branches returned to T660-1 CLOCK
-and HF2LI CLOCK. Record the restoration check in the run manifest.
-
-Record the raw CHB-minus-CHA mean as `M_0c`. Define the installed branch geometry
-
-```text
-S_installed = M_0c - C_scope
-```
-
-where `S_installed` is delay(splitter output 2 plus the Step 7 monitor lead) minus delay(splitter output 1 plus the final Q-switch cable to the DB9 pin-6 reference plane), under the documented load-equivalent condition. This run-local measurement replaces any visual cable-length assumption. Keep `S_21` as the separately reported bare-splitter diagnostic required to identify whether the splitter itself or the unequal installed leads dominate the temporary geometry.
 
 For a direct two-channel measurement with no splitter in either measured route, apply
 
@@ -307,35 +271,34 @@ The corrected intercept is the fixed FIRE-to-Q-switch electrical timing term. Th
 
 Compare this direct corrected result with Step 4 plus Step 5; do not silently replace either result if the closure test fails.
 
-## 7. Step 7 — Q-switch electrical arrival to optical OPO pulse at the sample
+## 7. Step 7 — operational Q-switch-command monitor to optical OPO pulse at the sample
 
-**Category:** optical pump-arrival delay connecting electrical timing to `t_chem = 0`.
+**Category:** end-to-end operational pump-arrival latency connecting the
+observed T660-1 CHB command monitor to `t_chem = 0`.
 
-This is the only step in this procedure that intentionally drives the Nd:YAG/OPO optical system. After the cables are installed and before any laser-driving output is enabled, the workflow presents one immediate Enter-key laser-area preflight.
+This is the only step in this procedure that intentionally drives the Nd:YAG/OPO optical system. The hardwired room and door interlocks remain external to this workflow.
 
 ### 7.1 Exact connection arrangement
 
 - T660-2 CHD final cable remains connected to T660-1 TRIG IN.
 - T660-1 CHA FIRE final cable remains connected to Nd:YAG FIRE DB9 pin 7.
-- Insert the characterized splitter in the Q-switch path:
+- Insert the characterized splitter and adapter in the Q-switch path:
   - T660-1 CHB -> splitter input.
-  - Splitter output 1 -> the final Q-switch cable -> Nd:YAG Q-switch DB9 pin 6. This branch remains connected to and drives the actual device.
-  - Splitter output 2 -> any characterized extra adapter/lead -> the channel-assigned Step 0 cable `E_A` -> PicoScope CHA.
+  - The identified drive branch (`S1` or `S2`) -> the identified straight BNC female-to-female barrel adapter -> the final Q-switch cable -> Nd:YAG Q-switch DB9 pin 6. This branch remains connected to and drives the actual device.
+  - The other identified branch -> PicoScope CHA as the electrical monitor. Record whether this is `S1` or `S2`.
 - Place the photodetector at the sample position or a documented sample-equivalent optical path length.
 - Photodetector output -> its characterized detector cable/adapter -> the channel-assigned Step 0 cable `E_B` -> PicoScope CHB.
 - T660-1 CHC and CHD are disabled; their MIRcat DB9 destination lines remain disconnected/capped.
 - T660-2 CHA, CHB, and CHC are disabled unless an approved optical operating SOP explicitly requires an additional non-emitting reference. Any exception must be listed in the run plan and reviewed before execution.
 - Use the approved operating FIRE/Q-switch widths and separation, not the generic 150 ns electrical-test pulse settings. During Step 7, each T660-2 remote shot sends one CHD trigger to T660-1; the controller enforces an effective rate of 10 Hz or lower.
 
-The splitter is measurement apparatus and is not part of final wiring. Its installed branch skew must be removed algebraically; it must not be folded into the reported optical delay.
+The splitter and female-to-female adapter are measurement apparatus and are not part of final wiring. Their measured delays must be removed algebraically; they must not be folded into the reported optical delay.
 
 ### 7.2 Laser-area Enter-key preflight
 
 Before enabling T660-1 CHA or CHB, the workflow stops and displays:
 
-`Laser-area preflight: confirm the room interlock is ready and required protective eyewear is in use. Press Enter to continue, or Ctrl+C to abort.`
-
-Pressing Enter records a timestamped `LASER_AREA_PREFLIGHT_ENTER` event and permits only the bounded beam-blocked control and preview sequence, not the 100-shot measurement set. Ctrl+C, EOF, or any typed response applies safe idle and blocks the step. The laboratory room interlock remains the physical emission interlock; this workflow adds no separate authorization phrase or secondary interlock.
+No user confirmation of the hardwired room or door interlock is requested by the workflow.
 
 Detector suitability, attenuation, beam-block/dump placement, PicoScope settings, splitter orientation, and disabled MIRcat outputs remain part of the frozen Step 7 wiring and acquisition plan. They are verified through the normal reviewed-plan, wiring, output-routing, blocked-control, and preview gates rather than repeated in the Enter prompt.
 
@@ -345,7 +308,7 @@ Step 7 must not run the optical recipe as a free-running 10 Hz train. Configure 
 
 Perform the following phases in order:
 
-1. **Pre-emission safety gate.** Apply/verify safe idle, install the Step 7 wiring, place the beam block/dump in the reviewed control position, display the laser-area preflight, and record `LASER_AREA_PREFLIGHT_ENTER` when the operator presses Enter. Configure the fully specified optical recipe in `REM`; all unused T660 channels remain explicitly off.
+1. Apply/verify safe idle, install the Step 7 wiring, place the beam block/dump in the control position, and configure the optical recipe in `REM`; all unused T660 channels remain explicitly off.
 2. **Beam-blocked control: one emitted shot.** Reset/read the T660 elapsed-shot counters, arm one PicoScope block, issue exactly one remote trigger, and read the counters again. Preserve the trace as a control, separate from measurement statistics. The CHB waveform must establish the electrical-pickup/background envelope in the optical search window. If it crosses the proposed optical threshold or resembles the claimed optical edge, apply safe idle and block the run; do not relabel that edge as optical or automatically fire another shot.
 3. **Transition to preview.** Apply and verify safe idle before moving the beam block. Put the strongly attenuated optical path into the reviewed sample/sample-equivalent configuration and obtain a second operator confirmation that the block position, attenuation, detector, and beam dump now match the preview setup.
 4. **Real optical preview: one emitted shot.** Reconfigure the recipe in `REM`, arm one Pico block, issue one remote trigger, and verify both T660 shot counters. The preview must pass the saturation limit, signal-to-noise requirement, configured edge/polarity, optical search-window rule, and comparison against the beam-blocked control. Preserve the preview trace separately.
@@ -357,17 +320,38 @@ The beam-blocked control demonstrates whether the first CHB threshold edge could
 
 ### 7.4 Step 7 correction
 
-Step 0c determines the installed splitter/lead geometry `S_installed` using the exact output-1 Q-switch cable and output-2 monitor lead. The fixed downstream `E_A`/`E_B` acquisition paths are isolated by `C_scope`. Do not replace `S_installed` with the bare splitter skew `S_21`; the unequal installed leads are part of the temporary measurement geometry and must also be removed.
+MS-02 supplies the signed delay difference between the splitter drive and
+monitor branches. At OP-01 setup, record the straight BNC female-to-female
+barrel adapter and assign its engineering correction directly in the OP-01
+record. Use the conservative one-way interval `0 to 0.25 ns`, based on a
+maximum 45 mm electrical path at a minimum propagation velocity of `0.6 c`.
+Represent that interval by a rectangular distribution:
+
+```text
+D_adapter = 0.125 ns
+u_adapter = 0.25 ns / sqrt(12) = 0.0722 ns
+classification = engineering bound, not measured
+```
+
+The final Q-switch cable, loaded Nd:YAG input, internal laser/OPO response, and
+optical propagation are part of the desired end-to-end latency and are not
+separately subtracted.
 
 Define `C_PD` as the positive delay from optical pulse arrival at the detector plane to the electrical event presented at the calibrated `E_B` reference plane, including photodetector response latency and any measurement-only detector cable/adapter upstream of `E_B`. The downstream `E_B`/CHB acquisition path is already handled by `C_scope`. Then
 
 ```text
-d_Q_to_optical = d_raw - C_scope - C_PD + S_installed
+d_end_to_end = d_raw - C_scope - D_split - D_adapter - C_PD
 ```
 
-The `+S_installed` sign is intentional: CHA observes splitter output 2, while the desired reference is the Q-switch arrival on output 1 at DB9 pin 6. If output 2 arrives later than output 1, CHA is a late proxy and that lateness must be added back after the scope correction.
+where `d_raw` is the observed CHB optical edge minus the CHA monitor edge,
+`D_split = delay(drive branch) - delay(monitor branch)`, and `D_adapter` is the
+OP-01 engineering correction above. If MS-02 reports
+`S_21 = delay(S2) - delay(S1)`, then `D_split = -S_21` when S1 drives and S2
+monitors, and `D_split = +S_21` when S2 drives and S1 monitors.
 
-`C_PD`, its standard uncertainty, detector/cable identifiers, characterization source, and characterization date are mandatory frozen inputs. If any is unavailable, the complete workflow remains blocked before opening hardware; it must not acquire an optical run or emit a `t_chem` correction.
+The result is referenced to the T660-1 CHB output plane before the temporary
+splitter and adapter. It includes the final Q-switch cable and the complete
+loaded optical system through light arrival at the sample plane.
 
 ## 8. MIRcat DB9 process-control measurements
 
@@ -415,7 +399,7 @@ Report:
 - Delay-scale slope error: `(b - 1) * 1e6 = k * 1e6`, in ppm.
 - Shot-to-shot jitter at each programmed delay and a clearly defined pooled/summary jitter.
 - Fit uncertainty for `a` and `b`, sample/interpolation contribution, Step 0 correction uncertainty, and every supplied step-specific cable/detector term.
-- Separately listed PicoScope timebase specification, T660 programmed-delay/readback specification, threshold sensitivity, connector/load equivalence, cable-reconnection repeatability, detector calibration, and sample-equivalent path-placement contributions. Each must cite its source and state whether it is included numerically, bounded separately, or not evaluated.
+- Separately listed PicoScope timebase specification, T660 programmed-delay/readback specification, threshold and input-loading sensitivity, cable-reconnection repeatability, detector calibration, and sample-equivalent path-placement contributions. Each must cite its source and state whether it is included numerically, bounded separately, or not evaluated.
 
 For the configured PicoScope 5244D, include the initial ±2 ppm timebase-accuracy term from `docs/PicoScope/PicoScope 5000D Series Data Sheet.pdf`, page 17, as a fixed-scale standard-uncertainty contribution. The same page lists ±1 ppm/year drift; record the instrument calibration/age status and include an additional drift term only when that reviewed record requires it. The six-point route fits empirically expose T660 delay-scale error as slope ppm; do not invent a separate absolute T660-delay uncertainty without a cited specification.
 
@@ -509,11 +493,13 @@ using exclusive creation. If the path exists, abort; never reuse or overwrite it
 The run-local outputs must include:
 
 - Frozen measurement plan and cable instructions used for that run.
-- Run manifest with operator, timestamps, configuration/source/recipe/document hashes, parsed frozen settings, correction revision, confirmation log references, and step completion/safe-state status.
 - Raw PicoScope traces and per-shot analysis rows.
 - T660 recipe/readback and PicoScope settings/readback for every programmed delay.
 - Per-delay statistical summary and fit diagnostics.
-- Measurement-system correction file containing `M_0a`, `M_0b`, `M_0c`, `C_scope`, `S_21`, `S_installed`, uncertainties, cable/adapter/probe/load IDs, and the Step 0c load-equivalence evidence/source.
+- Measurement-system correction file containing `M_0a`, `M_0b`, `C_scope`,
+  `S_21`, their uncertainties, and the recorded OP-01 S1/S2 drive/monitor
+  assignments. The OP-01 record separately contains the adapter engineering
+  correction and uncertainty.
 - Step 7 exposure audit containing the frozen emitted-shot budget, beam-blocked control, real preview, measurement-shot records, both T660 counter deltas, accepted/rejected counts, and every safe-idle result.
 - One consolidated human-readable CSV and YAML/JSON table.
 - Derived recipe-correction and chain-closure report.
@@ -538,7 +524,14 @@ The consolidated table must contain at least these columns:
 - RSI/thesis reporting label
 - Notes
 
-Include three measurement-system correction rows derived from Steps 0a/0b/0c (`C_scope`, bare splitter skew, and installed Step 7 geometry), all nine requested system measurements in Steps 1–9, the Step 6 chain-closure result, both EXT-REF-to-optical derivations, and recipe corrections derived from them. The categories must make relative route offsets, measurement-system corrections, cross-device electrical latency, FIRE-to-Q-switch timing, MIRcat DB9 process-control timing, optical delay, validation, and derived recipe corrections visibly distinct.
+Include two measurement-system correction rows (`C_scope` from MS-01 and
+`S_21` from MS-02), the OP-01 adapter engineering-bound term, all nine
+requested system measurements in Steps 1–9, the Step 6 chain-closure result, both
+EXT-REF-to-optical derivations, and recipe corrections derived from them. The
+categories must make relative route offsets, measurement-system corrections,
+cross-device electrical latency, FIRE-to-Q-switch timing, MIRcat DB9
+process-control timing, optical delay, validation, and derived recipe
+corrections visibly distinct.
 
 The `fixed offset/intercept` field always reports the fitted or derived physical arrival term with the CHB-minus-CHA sign. It is not itself the signed recipe command. A row categorized as a derived recipe correction must show the actual command-side sign/formula in the separate recipe-correction field; for example, a positive fixed intercept generally produces a negative zero-arrival correction. Steps 8 and 9 must say `conditional` rather than unconditional `yes` when their DB9 controls are not enabled in the selected experimental recipe.
 
@@ -557,9 +550,12 @@ Hardware execution remains blocked until reviewers approve all of the following:
 - [ ] Complete six-point electrical sweeps and the documented Step 0/Step 7 exceptions.
 - [ ] Per-step safe-idle, cable prompt, operator confirmation, output enable list, and readback behavior.
 - [ ] Step 0 swap protocol and correction signs verified with a synthetic or known-delay test.
-- [ ] Step 0c load equivalence to the actual Nd:YAG pin-6 input demonstrated and its impedance/probe/cable provenance frozen.
-- [ ] PicoScope, optical, safe-idle, and timing-calibration recipe paths, SHA-256 digests, and parsed safety-critical settings frozen in the reviewed plan.
-- [ ] Step 7 splitter orientation, installed lead-delay correction, detector latency correction/provenance, reviewed minimum/maximum edge-search window, blocked-control amplitude comparison, attenuation, saturation rejection, and approved laser SOP.
+- [ ] Step 7 S1/S2 drive and monitor assignments, signed MS-02 branch
+  correction, OP-01 adapter identifier and engineering-bound correction,
+  detector latency
+  correction/provenance, reviewed minimum/maximum edge-search window,
+  blocked-control amplitude comparison, attenuation, saturation rejection,
+  and approved laser SOP.
 - [ ] Step 7 `REM` one-shot controller, beam-blocked control, real preview, two-stage operator gate, cross-phase minimum shot interval, T660 counter audit, and total emitted-shot budget verified with fake hardware before laser use.
 - [ ] Automatic PicoScope windows validated for the 1 ms point without a separate run.
 - [ ] Fit implementation verified to separate intercept from ppm slope; uncertainty inputs are identified as included, separately bounded, or not evaluated without overclaiming a combined value.
@@ -569,38 +565,25 @@ Hardware execution remains blocked until reviewers approve all of the following:
 - [ ] Consolidated table schema, derived-chain equations, correction signs, and `t_master`/`t_chem` labels.
 - [ ] Confirmation that review/plan generation performs no hardware I/O and no RSI/thesis draft update.
 
-Only after this checklist is approved should the workflow implementation be authorized for mocked-device verification and then one reviewed complete hardware run. The complete run remains electrical/non-emitting through Step 6; Step 7 has its own bounded one-shot optical gates; Steps 8–9 return to a physically disconnected electrical-only state. If a staged electrical-only commissioning run is desired, it requires a separately reviewed workflow mode rather than silently skipping Step 7 in this command.
+The checklist defines evidence to collect. Missing items are recorded as
+`USER_INPUT_REQUIRED`; Codex continues unrelated valid work and reports the
+effect on later corrections or claims.
 
-## 13. Two-invocation review and execution gate
+## 13. Codex orchestration
 
-Generate a new review package without opening hardware. Supply every detector, path, load-equivalence, assembly, recipe, sweep, and shot-count value intended for execution so those values are frozen in the package:
+This document defines the technical procedure, not a monolithic executable
+workflow. During a campaign, Codex reads the applicable phase, guides one
+physical action at a time, waits for the operator's observation, and invokes
+focused utilities only for ownership, readback, acquisition, or analysis.
 
-```text
-python tests/hardware_checks/check_complete_timing_calibration.py --operator "Operator Name" \
-  --photodetector-response-delay-ns <value> \
-  --photodetector-response-uncertainty-ns <value> \
-  --photodetector-response-source <record> \
-  --photodetector-identifier <id> \
-  --photodetector-cable-identifier <id> \
-  --photodetector-characterization-date <YYYY-MM-DD> \
-  --photodetector-path-description <description> \
-  --photodetector-maximum-latency-ns <reviewed-upper-bound> \
-  --sample-path-standard-uncertainty-ns <value> \
-  --step7-load-match-method <description> \
-  --step7-load-match-standard-uncertainty-ns <value> \
-  --measurement-assembly-record <identifiers>
-```
+Evidence accumulates in the stable directory
+`calibration/<campaign-id>/readbacks/<phase>/`. A phase may span multiple days;
+Codex updates the same phase record rather than creating another plan.
 
-This first invocation exclusively creates a timestamp-and-UUID campaign directory under `calibration/`, writes the Markdown/JSON plan and a `hardware_opened: false` status, lists unresolved detector/cable/load inputs as prehardware blockers, and exits without applying a recipe. An invocation containing `--execute` but no prior `--reviewed-plan-dir` also only creates a new blocked plan; it cannot open hardware.
+MS-01 consists of the normal and swapped S1/S2 acquisitions described above.
+MS-02 uses those captures for swap-algebra analysis and adds measurements only
+where this procedure calls for sensitivity or reconnection evidence. Codex
+stops at each approved phase boundary.
 
-After the checklist and both plan files have been reviewed, execute that unchanged directory in a second invocation:
-
-```text
-python tests/hardware_checks/check_complete_timing_calibration.py --operator "Operator Name" \
-  --execute --reviewed-plan-dir calibration/<reviewed-plan-directory> \
-  --confirm-real-hardware --confirm-plan-reviewed \
-  --confirm-safe-electrical-routing \
-  <repeat every frozen option from the plan-only invocation exactly>
-```
-
-The second invocation rebuilds the requested plan, verifies it against the prior JSON and human-reviewed Markdown, verifies the prior `hardware_opened: false` status, and refuses to proceed if any frozen value, source file hash, effective T660 setting, or plan text differs. It loads the reviewed PicoScope, safe-idle, optical, and hardware settings into immutable in-memory snapshots before access; later file edits cannot alter a running calibration. `workflow_status.json` changes from plan-only to execution-start/open-attempt/opened and finally `PASS`, `BLOCKED`, or `BLOCKED_UNSAFE_STATE_UNVERIFIED`. An operator interrupt still runs final safe-idle/cleanup, records the final status and manifest, and returns exit code 130; an interrupt during STOP/readback is treated as an unverified unsafe state. The reviewed plan files themselves are never rewritten. Exact per-step cable and electrical-routing phrases remain mandatory; the Step 7 laser-area preflight requires only Enter. Use `--help` to see every frozen input.
+The legacy `check_complete_timing_calibration.py` command is not used to
+conduct campaign phases.

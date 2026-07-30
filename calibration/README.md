@@ -12,6 +12,23 @@ directory only after the comprehensive campaign dependencies and closure tests
 pass, uncertainties are reviewed, and the user explicitly approves promotion
 with `APPROVE CALIBRATION PROMOTION`.
 
-Git tracks campaign plans, manifests, analyses, tables, reports, and directory structure. Large `raw_pico_traces`, `raw_hf2li`, and `raw_mircat` contents remain ignored for local storage and later archival; raw-data indexes and hashes remain trackable.
 
 Operational UI runs that are not calibration evidence continue to use `runs/`.
+
+## Calibration orchestration
+
+Calibration campaigns are conducted as Codex-guided operator sessions. The
+technical procedure remains authoritative, but it is not executed as one
+monolithic command.
+
+For each approved phase, Codex reads the applicable procedure, presents one
+physical action at a time, waits for the operator's actual observation, and
+uses small utilities only for direct ownership, readback, acquisition, or
+analysis. Evidence is accumulated under
+`calibration/<campaign-id>/readbacks/<phase>/`. Unavailable information is
+recorded as `USER_INPUT_REQUIRED`, and Codex stops at the approved phase
+boundary after guiding restoration.
+
+`tests/hardware_checks/check_complete_timing_calibration.py` is retained only
+as legacy/internal implementation and test support. Codex must not invoke it
+to conduct a campaign phase.

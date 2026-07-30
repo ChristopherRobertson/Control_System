@@ -80,7 +80,7 @@ class NdYagWidgetCommandHandler:
                 return WorkflowResult(
                     status="failed",
                     message=str(exc),
-                    data={"command_log": str(log_path), "config_hash": self.inventory.config_hash},
+                    data={"command_log": str(log_path)},
                 )
 
     def _handle(self, command: WorkflowCommand, command_log: TextIO) -> WorkflowResult:
@@ -130,7 +130,6 @@ class NdYagWidgetCommandHandler:
                             "readback": safe_after_failure,
                             "extra_readbacks": {"safe_idle_before": safe_before},
                             "command_log": str(self._command_log_path()),
-                            "config_hash": self.inventory.config_hash,
                         },
                     )
                 except Exception as cleanup_exc:  # noqa: BLE001 - report failed recovery explicitly
@@ -144,7 +143,6 @@ class NdYagWidgetCommandHandler:
                             "state": self._state_from_readback(safe_before),
                             "readback": safe_before,
                             "command_log": str(self._command_log_path()),
-                            "config_hash": self.inventory.config_hash,
                         },
                     )
             return self._complete(
@@ -223,7 +221,6 @@ class NdYagWidgetCommandHandler:
             "state": state,
             "readback": readback,
             "command_log": str(self._command_log_path()),
-            "config_hash": self.inventory.config_hash,
         }
         if extra_readbacks:
             data["extra_readbacks"] = extra_readbacks

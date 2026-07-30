@@ -363,7 +363,7 @@ class ExperimentBuilderWidget(QWidget):
         try:
             plan = self.builder.configure(path)
             self.plan_path = Path(path)
-            self._append(f"CONFIGURED: {self.plan_path}\nDefinition SHA-256: {plan.definition_hash}")
+            self._append(f"CONFIGURED: {self.plan_path}")
             self._set_action_state()
         except Exception as exc:  # noqa: BLE001
             self._show_error(str(exc))

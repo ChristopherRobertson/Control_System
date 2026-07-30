@@ -1,0 +1,78 @@
+{
+  "limitation": "Reconnection evidence contains two complete connection realizations; the half-range is used because a multi-cycle reconnection distribution was not measured.",
+  "ms02_result": {
+    "estimate_basis": "midpoint of two complete connection realizations",
+    "scope_b_minus_a_ns": 0.10994707329952519,
+    "scope_combined_standard_uncertainty_ns": 0.5817073941913165,
+    "splitter_combined_standard_uncertainty_ns": 0.5773908555757891,
+    "splitter_s2_minus_s1_ns": 0.01338301543832188
+  },
+  "realization_1_ms01": {
+    "installed_orientation_jitter_std_ns": null,
+    "installed_orientation_mean_b_minus_a_ns": null,
+    "installed_orientation_standard_error_ns": null,
+    "installed_step7_branch_2_monitor_minus_branch_1_qswitch_ns": null,
+    "installed_step7_geometry_standard_uncertainty_ns": null,
+    "normal_jitter_std_ns": 0.07666245370885404,
+    "normal_mean_b_minus_a_ns": 0.12925052890004282,
+    "scope_channel_and_fixed_lead_b_minus_a_ns": 0.11997652233357373,
+    "scope_correction_standard_uncertainty_ns": 0.5773728129844988,
+    "scope_installed_step7_geometry_covariance_ns2": -0.33335936517363307,
+    "scope_splitter_covariance_ns2": 3.353818743644945e-06,
+    "sign_convention": "B minus A; splitter branch 2 minus branch 1",
+    "splitter_branch_2_minus_1_ns": 0.009274006566469102,
+    "splitter_correction_standard_uncertainty_ns": 0.5773728129844988,
+    "step0_sample_resolution_standard_uncertainty_ns": 0.8164965809277261,
+    "swapped_jitter_std_ns": 0.06734689533456023,
+    "swapped_mean_b_minus_a_ns": 0.11070251576710462
+  },
+  "realization_2_ms02": {
+    "installed_orientation_jitter_std_ns": null,
+    "installed_orientation_mean_b_minus_a_ns": null,
+    "installed_orientation_standard_error_ns": null,
+    "installed_step7_branch_2_monitor_minus_branch_1_qswitch_ns": null,
+    "installed_step7_geometry_standard_uncertainty_ns": null,
+    "normal_jitter_std_ns": 0.07400007634922623,
+    "normal_mean_b_minus_a_ns": 0.11740964857565132,
+    "scope_channel_and_fixed_lead_b_minus_a_ns": 0.09991762426547666,
+    "scope_correction_standard_uncertainty_ns": 0.577368833697149,
+    "scope_installed_step7_geometry_covariance_ns2": -0.3333547701248061,
+    "scope_splitter_covariance_ns2": 5.943265025771232e-06,
+    "sign_convention": "B minus A; splitter branch 2 minus branch 1",
+    "splitter_branch_2_minus_1_ns": 0.01749202431017466,
+    "splitter_correction_standard_uncertainty_ns": 0.577368833697149,
+    "step0_sample_resolution_standard_uncertainty_ns": 0.8164965809277261,
+    "swapped_jitter_std_ns": 0.055666015569491044,
+    "swapped_mean_b_minus_a_ns": 0.082425599955302
+  },
+  "reconnection_difference_ns": {
+    "scope_b_minus_a": -0.02005889806809706,
+    "splitter_s2_minus_s1": 0.008218017743705557
+  },
+  "reconnection_half_range_standard_uncertainty_ns": {
+    "scope_b_minus_a": 0.01002944903404853,
+    "splitter_s2_minus_s1": 0.004109008871852778
+  },
+  "sign_convention": "B minus A; splitter S2 minus S1",
+  "status": "PASS",
+  "uncertainty_components_ns": {
+    "scope": {
+      "interpolation_method_difference": 0.06997652233357372,
+      "reconnection_half_range": 0.01002944903404853,
+      "repeat_statistics_and_sample_resolution": 0.577368833697149,
+      "threshold_half_range": 0.005605248091691238,
+      "timebase_2ppm": 2.1989414659905036e-07
+    },
+    "splitter": {
+      "interpolation_method_difference": 0.0007259934335308964,
+      "reconnection_half_range": 0.004109008871852778,
+      "repeat_statistics_and_sample_resolution": 0.577368833697149,
+      "threshold_half_range": 0.002831776361301764,
+      "timebase_2ppm": 2.676603087664376e-08
+    }
+  },
+  "user_input_required": [
+    "PicoScope calibration certificate and calibration age",
+    "CLOCK-SPLITTER-01 manufacturer bandwidth/insertion-loss/impedance specifications"
+  ]
+}

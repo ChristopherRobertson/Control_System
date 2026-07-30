@@ -157,7 +157,6 @@ class MircatStatusTune:
             summary = {
                 "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
                 "operator": self.operator,
-                "config_hash": self.inventory.config_hash,
                 "request": request.to_dict(),
                 "status": "PASS",
                 "manual_tune_cancel_return_code": cancel_status,
