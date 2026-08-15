@@ -1,8 +1,15 @@
 schema_version: "0.1"
 name: "mircat_sweep_scan"
-description: "Segmented MIRcat spectral sweep calibrated from Sweep Active and Wavelength Trigger DIO inputs."
+description: "Calibration-phase candidate for segmented MIRcat sweep qualification from Sweep Active and Wavelength Trigger DIO inputs."
 approved_laser_safety_condition: true
 workflow_entrypoint: "control_app.workflows.mircat_widget_commands:mircat.start_sweep_scan"
+campaign_gate:
+  campaign_id: system_recalibration_001
+  allowed_phases: [MD-01, MSW-01]
+  phase_id: USER_INPUT_REQUIRED
+  phase_run_id: USER_INPUT_REQUIRED
+  approved_phase_directory: USER_INPUT_REQUIRED
+  status: "CANDIDATE_NOT_APPROVED_FOR_EXECUTION"
 
 wiring_contract:
   t660_2_a: "HF2LI EXT REF / DIO0 BNC"
@@ -29,7 +36,7 @@ mircat:
   emission_control: "control_application_sdk"
 
 hf2li:
-  preset: myoglobin_co_spectrum
+  preset: campaign_sweep_qualification_candidate
   external_reference: "T660-2 CHA at 2 MHz"
   acquisition:
     mode: "labone_streaming_dio_segmented"
@@ -43,7 +50,7 @@ hf2li:
       scan_direction_bit: 20
       sweep_active_bit: 21
       wavelength_trigger_bit: 22
-      confirmation_source: "calibration/20260722_complete_system_recalibration_001/manifests/mircat_dio_mapping_side_experiment.md"
+      confirmation_source: "calibration/system_recalibration_001/manifests/mircat_dio_mapping_side_experiment.md"
       campaign_measurement_status: "MD-01 MEASUREMENTS NOT STARTED"
     wavelength_trigger_interval_cm1: 5.0
     wavelength_trigger_pulse_width_us: 500

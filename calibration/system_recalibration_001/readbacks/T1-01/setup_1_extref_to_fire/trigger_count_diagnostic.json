@@ -1,0 +1,20 @@
+{
+  "active_recipe_matches": true,
+  "final_safe_idle_matches": true,
+  "finished_utc": "2026-08-08T21:44:39.590689+00:00",
+  "observation_interval_s": 2.0,
+  "shot_count_changes": {
+    "t660_1": 20,
+    "t660_2": 21
+  },
+  "shot_counts_after": {
+    "t660_1": 103923074,
+    "t660_2": 39
+  },
+  "shot_counts_before": {
+    "t660_1": 103923054,
+    "t660_2": 18
+  },
+  "started_utc": "2026-08-08T21:44:24.999343+00:00",
+  "status": "PASS"
+}

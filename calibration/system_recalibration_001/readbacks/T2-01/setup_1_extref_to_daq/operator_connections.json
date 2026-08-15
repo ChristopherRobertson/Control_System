@@ -1,0 +1,22 @@
+{
+  "operator": "Christopher Robertson",
+  "setup": "Setup 1 - HF2LI EXT REF arrival to HF2LI DAQ trigger arrival",
+  "status": "IN_PROGRESS",
+  "confirmations": [
+    {
+      "action": "T660-2 CHA final EXT REF cable destination end disconnected from HF2LI DIO0 EXT REF and connected to PicoScope CHA",
+      "operator_observation": "T660-2 CHA is now connected to CHA of the PicoScope",
+      "recorded_date_local": "2026-07-30",
+      "basis": "operator confirmation"
+    },
+    {
+      "action": "T660-2 CHC final DAQ-trigger cable destination end disconnected from HF2LI DIO1 DAQ and connected to PicoScope CHB",
+      "operator_observation": "done",
+      "recorded_date_local": "2026-07-30",
+      "basis": "operator confirmation"
+    }
+  ],
+  "not_yet_confirmed": [
+    "complete Setup 1 connection identity"
+  ]
+}

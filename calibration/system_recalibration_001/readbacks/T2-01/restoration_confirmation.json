@@ -1,0 +1,15 @@
+{
+  "operator": "Christopher Robertson",
+  "status": "OPERATOR_CONFIRMED",
+  "operator_observation": "The cables have been restored to their designated location.",
+  "recorded_date_local": "2026-08-08",
+  "confirmed_requested_configuration": [
+    "T660-2 CHA final EXT REF cable restored to HF2LI DIO0 EXT REF",
+    "T660-2 CHB final trigger cable connected to MIRcat TRIG IN",
+    "T660-2 CHC final DAQ cable connected to HF2LI DIO1 DAQ",
+    "T660-2 CHD final trigger cable restored to T660-1 TRIG IN",
+    "CLOCK-SPLITTER-01 remains in normal clock distribution",
+    "fixed 12-inch DDG SMB-to-BNC bulkhead assemblies were not disturbed"
+  ],
+  "verification_basis": "operator completion confirmation"
+}

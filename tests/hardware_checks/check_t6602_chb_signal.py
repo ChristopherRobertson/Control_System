@@ -88,7 +88,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "calibration" / f"{today_stamp()}_t6602_chb_signal_verification"
+    run_dir = REPO_ROOT / "runs" / f"{today_stamp()}_t6602_chb_signal_verification"
     run_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = run_dir / "command_log.txt"
     manifest_path = run_dir / "run_manifest.json"

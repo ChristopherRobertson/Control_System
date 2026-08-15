@@ -1,8 +1,8 @@
-# Timing Calibration Prehardware Review Procedure
+# Electrical timing calibration technical reference
 
 Status: **review plan only — not approved for hardware execution**
 
-This document defines the complete, rerunnable timing-calibration procedure for the pump-probe control system. Creating or reviewing this document does not open hardware, enable a T660 output, move a cable, acquire a trace, update shared calibration files, or update an RSI paper/thesis draft. The room and door interlocks are hardwired external infrastructure and are not duplicated as software or operator-confirmation gates.
+This document is a technical measurement reference for the electrical and optical timing phases in `calibration/system_recalibration_001/plans/campaign_sequence.md`. The campaign plan and stable phase records govern execution. Creating or reviewing this document does not open hardware, enable a T660 output, move a cable, acquire a trace, or update shared calibration files or a thesis draft. The room and door interlocks are hardwired external infrastructure and are not duplicated as software or operator-confirmation gates.
 
 ## 1. System timing topology
 
@@ -374,7 +374,7 @@ Use the corrected FIRE-to-CHC intercept in the process-control recipe when CHC g
 
 For every accepted shot:
 
-1. Preserve the raw trace in the unique run directory.
+1. Preserve the raw trace in the approved stable phase directory.
 2. Record the programmed delays, measured sample interval, trigger mode/rate, thresholds, edge polarity, PicoScope settings, T660 readback path, cable setup ID, frozen-plan/revision ID, and applicable operator-confirmation timestamps. If a field is only available at run or setup level, reference that immutable record rather than duplicating an invented per-shot value.
 3. Find the configured CHA and CHB edges with interpolation and retain edge-selection diagnostics.
 4. Reject missing, ambiguous, clipped, saturated, control-like, or out-of-window edges with an explicit reason. Electrical-only rejected traces do not authorize silent replacement; Step 7 obeys the emitted-shot budget in Section 7.3.
@@ -482,15 +482,20 @@ This equation connects recipe time to `t_chem = 0`. It does not redefine `t_mast
 
 ## 11. Consolidated outputs and provenance
 
-Each hardware execution must create a unique directory such as
+Each hardware execution must use the approved stable phase directory
 
 ```text
-calibration/YYYYMMDDTHHMMSSffffffZ_timing_calibration_<unique-id>/
+calibration/system_recalibration_001/readbacks/<phase-id>/
 ```
 
-using exclusive creation. If the path exists, abort; never reuse or overwrite it. Raw traces remain ignored within this campaign directory while plans, manifests, analyses, and reports are Git-visible. An arbitrary output directory outside `calibration/` is not permitted for calibration acquisition.
+The phase directory is continuation-safe across days. New acquisition IDs and
+artifact paths must be unique; existing raw or derived products are never
+reused or overwritten. Raw traces remain ignored within the campaign directory
+while plans, manifests, analyses, and reports are Git-visible. An arbitrary
+output directory outside the approved campaign phase is not calibration
+evidence.
 
-The run-local outputs must include:
+The phase outputs must include:
 
 - Frozen measurement plan and cable instructions used for that run.
 - Raw PicoScope traces and per-shot analysis rows.
@@ -521,7 +526,7 @@ The consolidated table must contain at least these columns:
 - Uncertainty terms included; unresolved/not-evaluated terms and provenance
 - Use in timing recipe? yes/no
 - Signed recipe correction or explicit recipe formula (distinct from the positive physical latency)
-- RSI/thesis reporting label
+- Thesis/experimental-handoff reporting label
 - Notes
 
 Include two measurement-system correction rows (`C_scope` from MS-01 and
@@ -535,7 +540,7 @@ corrections visibly distinct.
 
 The `fixed offset/intercept` field always reports the fitted or derived physical arrival term with the CHB-minus-CHA sign. It is not itself the signed recipe command. A row categorized as a derived recipe correction must show the actual command-side sign/formula in the separate recipe-correction field; for example, a positive fixed intercept generally produces a negative zero-arrival correction. Steps 8 and 9 must say `conditional` rather than unconditional `yes` when their DB9 controls are not enabled in the selected experimental recipe.
 
-Acquisition must not create or update canonical `calibration/timing_calibration.csv` or `calibration/timing_offsets.yaml`, rewrite an earlier campaign directory, or write into an RSI/thesis directory. Promotion of an approved campaign into canonical calibration and later RSI/thesis reporting is a separate, explicit review action.
+Acquisition must not create or update canonical `calibration/timing_calibration.csv` or `calibration/timing_offsets.yaml`, rewrite an earlier campaign directory, or write into a thesis-output directory. Promotion of an approved campaign into canonical calibration and later thesis or experimental reporting is a separate, explicit review action.
 
 Only a run with a verified final safe-idle readback may have status `PASS`. If final safe idle fails, preserve the partial artifacts, mark the run `BLOCKED_UNSAFE_STATE_UNVERIFIED`, omit publishable recipe corrections, and require manual output-state verification. A later successful manual check may be appended as a signed recovery record; it must not rewrite the original failure status or acquisition data.
 
@@ -559,11 +564,12 @@ Hardware execution remains blocked until reviewers approve all of the following:
 - [ ] Step 7 `REM` one-shot controller, beam-blocked control, real preview, two-stage operator gate, cross-phase minimum shot interval, T660 counter audit, and total emitted-shot budget verified with fake hardware before laser use.
 - [ ] Automatic PicoScope windows validated for the 1 ms point without a separate run.
 - [ ] Fit implementation verified to separate intercept from ppm slope; uncertainty inputs are identified as included, separately bounded, or not evaluated without overclaiming a combined value.
-- [ ] Unique, exclusive run-directory creation and no-overwrite behavior.
+- [ ] Stable phase-directory use with unique acquisition/artifact IDs and
+      no-overwrite behavior.
 - [ ] Every transition prompt independently states what to disconnect, restore, park/cap, and leave connected after safe idle.
 - [ ] Any safe-idle application/readback failure blocks PASS and triggers manual safe-state intervention.
 - [ ] Consolidated table schema, derived-chain equations, correction signs, and `t_master`/`t_chem` labels.
-- [ ] Confirmation that review/plan generation performs no hardware I/O and no RSI/thesis draft update.
+- [ ] Confirmation that review/plan generation performs no hardware I/O and no thesis draft update.
 
 The checklist defines evidence to collect. Missing items are recorded as
 `USER_INPUT_REQUIRED`; Codex continues unrelated valid work and reports the
@@ -585,5 +591,5 @@ MS-02 uses those captures for swap-algebra analysis and adds measurements only
 where this procedure calls for sensitivity or reconnection evidence. Codex
 stops at each approved phase boundary.
 
-The legacy `check_complete_timing_calibration.py` command is not used to
-conduct campaign phases.
+The retired monolithic runner is not part of the active repository. Campaign
+phases use the technical reference through focused phase utilities only.

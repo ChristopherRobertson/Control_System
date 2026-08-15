@@ -12,7 +12,7 @@ from control_app.manifest import new_manifest, write_manifest
 
 
 class HF2LIRecordWorkflow:
-    """Run one real HF2LI acquisition and write Day 6 artifacts."""
+    """Run one real HF2LI acquisition and write operational artifacts."""
 
     def __init__(
         self,

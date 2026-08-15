@@ -1,0 +1,213 @@
+{
+  "fit": {
+    "fit_residual_rms_ns": 0.05671489407163999,
+    "fixed_offset_intercept_ns": 11.350148333032129,
+    "intercept_slope_covariance_ns": -3.445762618917981e-07,
+    "intercept_standard_error_ns": 0.3790700428075487,
+    "intercept_variance_ns2": 0.1436940973541168,
+    "maximum_point_standard_uncertainty_ns": 3.275745703235135,
+    "minimum_point_standard_uncertainty_ns": 0.8165326259149717,
+    "slope": 1.0000065419048407,
+    "slope_fit_standard_error_ppm": 3.171167719980666,
+    "slope_ppm": 6.541904840728918,
+    "slope_standard_error_ppm": 3.749173870100902,
+    "slope_variance": 1.0056304708247373e-11,
+    "weighted_reduced_chi_squared": 0.0055510549593072115,
+    "zero_arrival_recipe_correction_ns": -11.35007408192755,
+    "zero_arrival_recipe_correction_standard_uncertainty_ns": 0.3790778817494905
+  },
+  "fit_residuals_ns": {
+    "0": -0.05946938322706785,
+    "100": -0.06732321109693373,
+    "1000": 0.06461283720761912,
+    "10000": 0.026725446028649458,
+    "100000": 0.03965950716519728,
+    "1000000": -0.0690543862292543
+  },
+  "interpolation_sensitivity": {
+    "absolute_difference_ns": {
+      "maximum": 6.260664274916053,
+      "mean": 0.6856488350923451,
+      "minimum": 0.02371178870089352,
+      "sample_standard_deviation": 0.7767053978752597
+    },
+    "comparison": "linear threshold interpolation versus nearest sample per trace"
+  },
+  "per_delay": [
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.35913519393588644,
+      "mean_corrected_measured_ns": 11.290678949805061,
+      "mean_corrected_residual_ns": 11.290678949805061,
+      "mean_raw_measured_ns": 11.400626023104586,
+      "programmed_delay_ns": 0,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.035913519393588646
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.3607329885041865,
+      "mean_corrected_measured_ns": 111.28347931241926,
+      "mean_corrected_residual_ns": 11.28347931241926,
+      "mean_raw_measured_ns": 111.39342638571878,
+      "programmed_delay_ns": 100,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.03607329885041865
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.34673164610037205,
+      "mean_corrected_measured_ns": 1011.4213030750805,
+      "mean_corrected_residual_ns": 11.42130307508046,
+      "mean_raw_measured_ns": 1011.53125014838,
+      "programmed_delay_ns": 1000,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.03467316461003721
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.3206346916660871,
+      "mean_corrected_measured_ns": 10011.442292827469,
+      "mean_corrected_residual_ns": 11.442292827468918,
+      "mean_raw_measured_ns": 10011.552239900768,
+      "programmed_delay_ns": 10000,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.03206346916660871
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.076721911428317,
+      "mean_corrected_measured_ns": 100012.04399832427,
+      "mean_corrected_residual_ns": 12.043998324268614,
+      "mean_raw_measured_ns": 100012.15394539757,
+      "programmed_delay_ns": 100000,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.0076721911428317
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 2.5267220978330958,
+      "mean_corrected_measured_ns": 1000017.8229987875,
+      "mean_corrected_residual_ns": 17.822998787509277,
+      "mean_raw_measured_ns": 1000017.9329458608,
+      "programmed_delay_ns": 1000000,
+      "sample_interval_ns": 8.0,
+      "standard_error_ns": 0.25267220978330956
+    }
+  ],
+  "pulse_fidelity": {
+    "A": {
+      "amplitude_v": {
+        "maximum": 5.075356791338582,
+        "mean": 5.066912217027559,
+        "minimum": 4.986466535433071,
+        "sample_standard_deviation": 0.026085698041188852
+      },
+      "polarity": [
+        "positive"
+      ],
+      "rise_10_90_ns": {
+        "maximum": 15.069855951783211,
+        "mean": 4.096694903780741,
+        "minimum": 1.6888377150899032,
+        "sample_standard_deviation": 2.368240257595739
+      },
+      "width_50_percent_ns": {
+        "maximum": 152.2348371387434,
+        "mean": 149.86640209285252,
+        "minimum": 144.23951285766634,
+        "sample_standard_deviation": 1.197704617164739
+      }
+    },
+    "B": {
+      "amplitude_v": {
+        "maximum": 5.2906619094488185,
+        "mean": 5.198713808234908,
+        "minimum": 5.114419291338582,
+        "sample_standard_deviation": 0.026056535562328325
+      },
+      "polarity": [
+        "positive"
+      ],
+      "rise_10_90_ns": {
+        "maximum": 13.255834189825691,
+        "mean": 6.029904416567447,
+        "minimum": 4.873446368914301,
+        "sample_standard_deviation": 1.6973163601786019
+      },
+      "width_50_percent_ns": {
+        "maximum": 151.78027199360076,
+        "mean": 149.76583505955315,
+        "minimum": 144.32599134219345,
+        "sample_standard_deviation": 0.9729092495180992
+      }
+    }
+  },
+  "scope_correction": {
+    "application": "corrected = raw CHB-minus-CHA - scope correction",
+    "chb_minus_cha_ns": 0.10994707329952519,
+    "combined_standard_uncertainty_ns": 0.5817073941913165,
+    "source": "MS-02 midpoint of two complete connection realizations"
+  },
+  "setup": "2",
+  "sign_convention": "physical target arrival minus physical EXT REF arrival",
+  "status": "PASS",
+  "threshold_sensitivity": {
+    "corrected_means_by_delay_ns": {
+      "0": {
+        "3000": 11.222297601483904,
+        "4000": 11.267627006030574,
+        "5000": 11.290678949805061,
+        "6000": 11.31015616263405,
+        "7000": 11.329299806292607
+      },
+      "100": {
+        "3000": 111.25825292786205,
+        "4000": 111.26221186914808,
+        "5000": 111.28347931241926,
+        "6000": 111.30511438176508,
+        "7000": 111.32363996056478
+      },
+      "1000": {
+        "3000": 1011.3853965995949,
+        "4000": 1011.4002550759776,
+        "5000": 1011.4213030750805,
+        "6000": 1011.4349282581458,
+        "7000": 1011.4498386771213
+      },
+      "10000": {
+        "3000": 10011.371702402945,
+        "4000": 10011.411680092613,
+        "5000": 10011.442292827469,
+        "6000": 10011.469419830402,
+        "7000": 10011.488928302304
+      },
+      "100000": {
+        "3000": 100012.00163894452,
+        "4000": 100012.02867001391,
+        "5000": 100012.04399832427,
+        "6000": 100012.05991327345,
+        "7000": 100012.07179664091
+      },
+      "1000000": {
+        "3000": 1000017.8455498606,
+        "4000": 1000017.8449036658,
+        "5000": 1000017.8229987875,
+        "6000": 1000017.809929843,
+        "7000": 1000017.7949410866
+      }
+    },
+    "maximum_half_range_ns": 0.05861294967962749,
+    "thresholds_adc": [
+      3000,
+      4000,
+      5000,
+      6000,
+      7000
+    ]
+  },
+  "uncertainty_note": "MS-02 scope correction uncertainty is recorded separately and is common to all points; fit_delay_sweep includes repeatability, sample-resolution, and 2 ppm timebase terms.",
+  "user_input_required": [
+    "PicoScope calibration certificate and calibration age"
+  ]
+}

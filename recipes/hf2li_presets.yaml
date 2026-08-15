@@ -1,5 +1,5 @@
 schema_version: "0.1"
-description: "Real HF2LI LabOne presets for detector evidence and Myoglobin-CO acquisition. These presets do not create simulated data."
+description: "Real HF2LI LabOne presets for calibration and characterization qualification. These presets do not create simulated data."
 source_reference: "docs/ui_hardware_control_reference.md HF2LI LabOne Configuration"
 presets:
   dark_baseline:
@@ -52,10 +52,10 @@ presets:
       duration_s: 60.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "calibration/YYYYMMDD_hf2li_60s_record"
+      expected_output: "runs/YYYYMMDD_hf2li_60s_record"
 
   qcl_reference_baseline:
-    purpose: "QCL-on reference baseline with pump blocked at the approved Myoglobin-CO probe region."
+    purpose: "QCL-on reference baseline with pump blocked at the phase-approved probe condition."
     operator_checks:
       - "Confirm pump beam is blocked."
       - "Confirm MIRcat setpoint/actual wavelength is logged in the run manifest."
@@ -104,7 +104,7 @@ presets:
       duration_s: 60.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "calibration/YYYYMMDD_detector_baseline"
+      expected_output: "USER_INPUT_REQUIRED_APPROVED_PHASE_DIRECTORY"
 
   detector_alignment:
     purpose: "Continuous MIRcat detector-alignment setup for LabOne Plotter visualization with DIO0 external reference. Demodulator streaming stays continuous; use DIO1 only as the LabOne Plotter UI trigger if needed."
@@ -177,7 +177,7 @@ presets:
       duration_s: 5.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "calibration/YYYYMMDD_mircat_detector_alignment"
+      expected_output: "runs/YYYYMMDD_mircat_detector_alignment"
 
   detector_alignment_internal:
     purpose: "MIRcat internal-pulse detector alignment for LabOne Plotter visualization without T660 timing."
@@ -241,14 +241,14 @@ presets:
       duration_s: 5.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "calibration/YYYYMMDD_mircat_detector_alignment_internal"
+      expected_output: "runs/YYYYMMDD_mircat_detector_alignment_internal"
 
-  standard_spectral_validation:
-    purpose: "Step-scan detector acquisition for workflow-based RSI spectral validation standards."
+  campaign_step_scan_candidate:
+    purpose: "Provisional engineering settings for HF-01 and AR-01 qualification; not approved for SV-02 or biological acquisition."
     operator_checks:
-      - "Confirm sample identity, presentation geometry, and FTIR reference metadata before acquisition."
-      - "Confirm MIRcat setpoint/actual wavelength is saved for every scan point."
-      - "Confirm detector response remains within approved dynamic range before continuing."
+      - "Confirm the approved calibration or characterization phase ID before acquisition."
+      - "Confirm MIRcat setpoint/actual wavelength and full configuration are saved for every point."
+      - "Do not use this candidate after HF-01/AR-01 without replacing it with the accepted configuration ID."
     signal_inputs:
       ch1:
         index: 0
@@ -293,14 +293,14 @@ presets:
       duration_s: 5.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "calibration/YYYYMMDD_standard_spectral_validation"
+      expected_output: "USER_INPUT_REQUIRED_APPROVED_PHASE_DIRECTORY"
 
-  myoglobin_co_spectrum:
-    purpose: "Step-scan detector acquisition for Myoglobin-CO QCL/FTIR spectral validation."
+  campaign_sweep_qualification_candidate:
+    purpose: "Provisional full-DIO sweep settings for HF-01, MD-01, and MSW-01 qualification; not approved for SV-02 or biological acquisition."
     operator_checks:
-      - "Confirm sample preparation, path length, and CO handling notes are present in Article Tables before acquisition."
-      - "Confirm MIRcat actual wavelength/readback is saved for every step."
-      - "Confirm FTIR reference source or blocker is recorded."
+      - "Confirm the approved calibration phase and stable readback directory."
+      - "Confirm MIRcat actual wavelength/readback and the complete DIO word are retained."
+      - "Replace this candidate with the accepted HF-01 configuration ID before downstream use."
     signal_inputs:
       ch1:
         index: 0
@@ -358,56 +358,4 @@ presets:
       duration_s: 5.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "runs/YYYYMMDD_myoglobin_co_qcl_spectrum"
-
-  myoglobin_co_pump_probe:
-    purpose: "Detector acquisition preset for the Myoglobin-CO pump-probe proof-of-concept workflow."
-    operator_checks:
-      - "Confirm run starts in SAFE_IDLE."
-      - "Confirm approved pump/probe/sample readiness and laser-safety approval before emission."
-      - "Confirm timing recipe, delay list, and Pico route or direct-route fallback are documented."
-    signal_inputs:
-      ch1:
-        index: 0
-        ac: false
-        impedance_50ohm: false
-        differential: false
-        range_v: 1.0
-      ch2:
-        index: 1
-        ac: false
-        impedance_50ohm: false
-        differential: false
-        range_v: 1.0
-    pll:
-      index: 0
-      enable: true
-      adcselect: 4
-      freqcenter_hz: 2000000.0
-      harmonic: 1
-      order: 4
-      adcthreshold: 0
-    demodulators:
-      - index: 0
-        adcselect: 0
-        oscselect: 0
-        harmonic: 1
-        order: 4
-        timeconstant_s: 0.001
-        rate_sps: 2000.0
-        trigger: 0
-        enable: true
-      - index: 3
-        adcselect: 1
-        oscselect: 0
-        harmonic: 1
-        order: 4
-        timeconstant_s: 0.001
-        rate_sps: 2000.0
-        trigger: 0
-        enable: true
-    acquisition:
-      duration_s: 5.0
-      demodulators: [0, 3]
-      fields: ["x", "y", "r"]
-      expected_output: "runs/YYYYMMDD_myoglobin_co_pump_probe_scan"
+      expected_output: "USER_INPUT_REQUIRED_APPROVED_PHASE_DIRECTORY"

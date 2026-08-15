@@ -14,8 +14,8 @@ def test_codex_is_the_campaign_operator_interface() -> None:
 
     assert "one physical action at a time" in instructions
     assert "USER_INPUT_REQUIRED" in instructions
-    assert "do not invoke" in instructions.lower()
-    assert "The complete timing runner is not a campaign entry point" in campaign
+    assert "monolithic complete-calibration runner" in instructions.lower()
+    assert "The retired monolithic timing runner is not a campaign entry point" in campaign
 
 
 def test_ms01_continues_from_stable_phase_record() -> None:

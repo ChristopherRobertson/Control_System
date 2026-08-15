@@ -2,7 +2,7 @@
 
 Campaign: `system_recalibration_001`
 
-Status: **S0 COMPLETE — MS-01 READY; LATER PHASES NOT APPROVED**
+Status: **T1-01 COMPLETE — PT-01 IN PROGRESS; SETUP 1 OPERATOR ACTION REQUIRED**
 
 P0 completed without hardware access. S0 then passed on 2026-07-24 with
 exclusive T660/MIRcat ownership, all eight T660 outputs verified disabled
@@ -36,7 +36,30 @@ information is recorded as `USER_INPUT_REQUIRED`. The same phase record is
 updated across days, followed by guided restoration and a stop at the approved
 phase boundary.
 
-The complete timing runner is not a campaign entry point.
+The retired monolithic timing runner is not a campaign entry point.
+
+## Expanded scope and downstream characterization
+
+`plans/campaign_sequence.md` now preserves every completed phase as an
+immutable dependency and adds only the retained identity/reference basis, optical-metrology,
+attenuation/transfer, detector-latency, reporting, and retention work needed
+before quantitative pump/probe characterization. ATT-01 and DET-04 explicitly
+measure the non-50/50 sample/reference optical balance, separate it from the
+two detector/electronics responses, and produce the normalization correction.
+The non-duplication mapping is in `analysis/expansion_gap_map.md`.
+
+The definitive P0 decision record is
+`manifests/p0_requirement_decisions.md`. All 21 decisions were resolved on
+2026-08-15. Discarded certificate and accessory research cannot reappear as a
+phase gate without a new user-approved claim requirement.
+The dated P0 blocker table remains historical evidence rather than a second
+active requirements list.
+
+Pump/probe beam performance is measured separately in
+`characterization/system_characterization_001/`. That campaign imports
+promoted calibration quantities through stable bundle/artifact identifiers and
+must not reacquire completed calibration work merely to change format or make
+plots.
 
 ## Phase implementation map
 
@@ -49,9 +72,10 @@ The complete timing runner is not a campaign entry point.
 | PT-01 | Guide the MIRcat Process Trigger electrical setup and polarity/timing acquisition. |
 | MC-01 onward | Follow the existing phase procedure interactively using focused utilities and the same stable phase-record pattern. |
 
-## Active MS-01 record
+## Current phase boundary
 
-MS-01 evidence belongs in `readbacks/MS-01/`. Direct preflight has already
-confirmed PicoScope ownership and a matching T660 safe-idle readback. Codex
-continues from that evidence instead of restarting the campaign or launching
-`check_complete_timing_calibration.py`.
+MS-01, MS-02, T2-01, and T1-01 are complete. T1-01 default wiring restoration
+and final safe idle passed on 2026-08-13. PT-01 was authorized on 2026-08-13;
+later phases require separate authorization. Codex resumes from the stable
+phase evidence rather than restarting the campaign or launching a monolithic
+timing runner.

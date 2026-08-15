@@ -45,7 +45,7 @@ class ControlSystemMainWindow(QMainWindow):
         self.experiment_builder_widget = ExperimentBuilderWidget()
         tabs.addTab(self.experiment_builder_widget, "Experiment Builder")
         self.workflow_selector_widget = WorkflowSelectorWidget(handler)
-        tabs.addTab(self.workflow_selector_widget, "Legacy Workflows")
+        tabs.addTab(self.workflow_selector_widget, "Configured Workflows")
         self.mircat_widget = MircatWidget(handler)
         tabs.addTab(self.mircat_widget, "MIRcat")
         self.t660_widget = T660Widget(handler)

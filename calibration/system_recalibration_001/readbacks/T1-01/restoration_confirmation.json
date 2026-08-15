@@ -1,0 +1,15 @@
+{
+  "operator": "Christopher Robertson",
+  "operator_observation": "Default wiring has been restored",
+  "confirmed_date": "2026-08-13",
+  "restored_state": [
+    "T660-2 CHA restored to HF2LI EXT REF through its fixed bulkhead assembly",
+    "CLOCK-SPLITTER-01 restored to T660-2 CLOCK distribution feeding T660-1 CLOCK and HF2LI CLOCK",
+    "T660-2 CHD restored to T660-1 TRIG IN",
+    "Nd:YAG FIRE/Q-SWITCH DB9 harness restored to the laser",
+    "MIRcat DB9 restored to its designated connector",
+    "temporary PicoScope, barrel, and BNC-to-two-wire adapter paths removed"
+  ],
+  "final_safe_idle_matches_recipe": true,
+  "final_safe_idle_readback": "final_restoration_safe_idle_readback.json"
+}

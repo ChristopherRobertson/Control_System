@@ -1,0 +1,18 @@
+{
+  "finished_utc": "2026-08-08T21:41:28.874802+00:00",
+  "operator": "Christopher Robertson",
+  "phase": "T1-01",
+  "picoscope": {
+    "configured_model": "5244D",
+    "configured_serial_number": "10261",
+    "ownership": "PASS",
+    "sdk_serial_number": "10261/0071"
+  },
+  "purpose": "exclusive PicoScope ownership and T660 safe-idle/readback before T1-01 cable handling",
+  "started_utc": "2026-08-08T21:41:21.643487+00:00",
+  "t660_safe_idle": {
+    "matches_recipe": true,
+    "mismatches": [],
+    "status": "PASS"
+  }
+}

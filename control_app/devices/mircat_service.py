@@ -728,7 +728,7 @@ class MircatService:
         return status
 
     def read_state(self) -> MircatState:
-        """Read the status fields required by the Day 5 MIRcat widget."""
+        """Read the status fields required by the MIRcat control widget."""
 
         errors: list[str] = []
         connected = self._safe_value(self.is_connected, errors)

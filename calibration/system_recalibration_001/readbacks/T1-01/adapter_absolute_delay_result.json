@@ -1,0 +1,55 @@
+{
+  "status": "PASS",
+  "measurement": "Series absolute-delay characterization of BNC-to-two-wire clip-terminal Adapter A and Adapter B",
+  "sign_convention": "PicoScope CHB minus CHA; positive means the series path arrived later",
+  "apparatus": {
+    "reference_path": "CLOCK-SPLITTER-01 branch directly to PicoScope CHA",
+    "series_path": "CLOCK-SPLITTER-01 branch through straight female-to-female BNC barrel, Adapter A, signal-to-signal and shield-to-shield clip junctions, Adapter B, then PicoScope CHB",
+    "barrel_delay_ns": 0.125,
+    "barrel_delay_standard_uncertainty_ns": 0.0722,
+    "scope_chb_minus_cha_correction_ns": 0.10994707329952519,
+    "scope_correction_standard_uncertainty_ns": 0.5817073941913165
+  },
+  "normal_orientation": {
+    "accepted": 100,
+    "rejected": 0,
+    "splitter_branch_to_cha": "S1",
+    "splitter_branch_to_series_path_chb": "S2",
+    "mean_chb_minus_cha_ns": 13.007333709952754,
+    "sample_standard_deviation_ns": 0.3202401248657641
+  },
+  "swapped_orientation": {
+    "accepted": 100,
+    "rejected": 0,
+    "splitter_branch_to_cha": "S2",
+    "splitter_branch_to_series_path_chb": "S1",
+    "mean_chb_minus_cha_ns": 13.024323622478697,
+    "sample_standard_deviation_ns": 0.22494136191983283
+  },
+  "branch_swap_analysis": {
+    "orientation_midpoint_ns": 13.015828666215725,
+    "orientation_half_difference_ns": -0.008494956262971698,
+    "series_mean_statistical_standard_uncertainty_ns": 0.0195673423001432,
+    "method": "The orientation midpoint cancels signed splitter-branch skew while retaining PicoScope CHB-minus-CHA skew and the complete barrel-plus-adapter series delay."
+  },
+  "adapter_sum": {
+    "adapter_a_plus_b_delay_ns": 12.7808815929162,
+    "combined_standard_uncertainty_ns": 0.5864974111976476,
+    "calculation": "orientation midpoint - PicoScope CHB-minus-CHA correction - barrel delay"
+  },
+  "adapter_difference": {
+    "adapter_b_minus_a_delay_ns": -0.097377952268309,
+    "standard_uncertainty_ns": 0.2678548156024922,
+    "source": "T1-01 FIRE-to-Q-SWITCH adapter reversal",
+    "calculation": "half-difference of the two fitted FIRE-to-Q-SWITCH intercepts; fit intercept standard errors propagated"
+  },
+  "individual_adapter_delays": {
+    "adapter_a_delay_ns": 6.4391297725922545,
+    "adapter_b_delay_ns": 6.341751820323946,
+    "each_combined_standard_uncertainty_ns": 0.3223838609341031
+  },
+  "final_safe_idle": {
+    "normal_orientation_matches": true,
+    "swapped_orientation_matches": true
+  }
+}

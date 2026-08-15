@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "sign_convention": "direct EXT REF-to-Q-SWITCH minus derived EXT REF-to-FIRE plus FIRE-to-Q-SWITCH",
+  "extref_to_fire_scope_corrected_with_adapter_a_ns": 57.3200113539489,
+  "fire_to_qswitch_adapter_corrected_ns": 0.149285944280786,
+  "derived_extref_to_qswitch_with_adapter_a_ns": 57.4692972982297,
+  "direct_extref_to_qswitch_scope_corrected_with_adapter_a_ns": 57.5100495076891,
+  "closure_residual_ns": 0.040752209459356,
+  "adapter_cancellation": "Adapter A is common to the direct and derived sides and cancels from the closure residual.",
+  "scope_correction_correlation": "The common MS-02 scope correction is retained as correlated evidence and is not independently double-counted in closure.",
+  "absolute_adapter_delay_status": "Still required to report absolute trigger-input-to-FIRE and trigger-input-to-Q-SWITCH route intercepts."
+}

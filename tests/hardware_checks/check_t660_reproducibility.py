@@ -5,7 +5,7 @@ Usage:
     python tests/hardware_checks/check_t660_reproducibility.py --operator "Name" --confirm-real-hardware
 
 The script opens the configured real T660-1 and T660-2 sessions. If either unit
-is unavailable, it writes calibration/YYYYMMDD_t660_reproducibility/BLOCKED.md and
+is unavailable, it writes runs/YYYYMMDD_t660_reproducibility/BLOCKED.md and
 exits nonzero. It does not simulate T660 responses.
 """
 
@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "calibration" / f"{today_stamp()}_t660_reproducibility"
+    run_dir = REPO_ROOT / "runs" / f"{today_stamp()}_t660_reproducibility"
     run_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = run_dir / "command_log.txt"
     readback_path = run_dir / "t660_readback_before_after.json"

@@ -1,0 +1,17 @@
+{
+  "operator": "Christopher Robertson",
+  "setup": "T1-01 Setup 2 - FIRE to Q-SWITCH, swapped adapter realization",
+  "status": "OPERATOR_CONFIRMED",
+  "operator_observation": "Rewire is complete.",
+  "recorded_date_local": "2026-08-08",
+  "confirmed_requested_configuration": [
+    "Adapter B signal/shield clips connected to DB9 pins 7/2 and BNC connected to PicoScope CHA",
+    "Adapter A signal/shield clips connected to DB9 pins 6/3 and BNC connected to PicoScope CHB",
+    "FIRE remains the PicoScope CHA reference and Q-SWITCH remains the PicoScope CHB target",
+    "Nd:YAG DB9 remains disconnected from the laser",
+    "MIRcat DB9 remains disconnected/capped",
+    "EXT REF destination remains parked/capped",
+    "T660-2 CHD remains connected to T660-1 TRIG IN"
+  ],
+  "basis": "operator completion confirmation"
+}

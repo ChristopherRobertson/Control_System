@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from control_app.workflows.mircat_sweep_scan import _wavelength_targets
+from control_app.config_loader import REPO_ROOT
+from control_app.workflows.mircat_sweep_scan import (
+    MircatSweepScanError,
+    _validate_campaign_gate,
+    _wavelength_targets,
+)
 from control_app.workflows.sweep_export import segmented_kaleidagraph_rows_from_hf2li_record
 
 
@@ -65,3 +70,51 @@ def test_segmented_export_rejects_segment_with_one_anchor() -> None:
 
 def test_descending_wavelength_targets_include_endpoints() -> None:
     assert _wavelength_targets(2050, 2038, 5) == [2050, 2045, 2040, 2038]
+
+
+def test_sweep_candidate_cannot_run_without_phase_approval(tmp_path) -> None:
+    request = {
+        "campaign_gate": {
+            "campaign_id": "system_recalibration_001",
+            "allowed_phases": ["MD-01", "MSW-01"],
+            "phase_id": "USER_INPUT_REQUIRED",
+            "phase_run_id": "USER_INPUT_REQUIRED",
+            "approved_phase_directory": "USER_INPUT_REQUIRED",
+            "status": "CANDIDATE_NOT_APPROVED_FOR_EXECUTION",
+        }
+    }
+    with pytest.raises(MircatSweepScanError, match="non-executable candidate"):
+        _validate_campaign_gate(request, tmp_path)
+
+
+def test_sweep_gate_accepts_only_stable_named_phase_directory() -> None:
+    approved = REPO_ROOT / "calibration" / "system_recalibration_001" / "readbacks" / "MD-01"
+    request = {
+        "campaign_gate": {
+            "campaign_id": "system_recalibration_001",
+            "allowed_phases": ["MD-01", "MSW-01"],
+            "phase_id": "MD-01",
+            "phase_run_id": "system_recalibration_001_MD-01_001",
+            "approved_phase_directory": str(approved),
+            "status": "APPROVED_FOR_EXECUTION",
+        }
+    }
+    _validate_campaign_gate(request, approved / "raw")
+    with pytest.raises(MircatSweepScanError, match="inside the approved"):
+        _validate_campaign_gate(request, REPO_ROOT / "runs" / "wrong-directory")
+
+
+def test_sweep_gate_cannot_expand_its_own_phase_scope() -> None:
+    approved = REPO_ROOT / "calibration" / "system_recalibration_001" / "readbacks" / "E2E-01"
+    request = {
+        "campaign_gate": {
+            "campaign_id": "system_recalibration_001",
+            "allowed_phases": ["E2E-01"],
+            "phase_id": "E2E-01",
+            "phase_run_id": "system_recalibration_001_E2E-01_001",
+            "approved_phase_directory": str(approved),
+            "status": "APPROVED_FOR_EXECUTION",
+        }
+    }
+    with pytest.raises(MircatSweepScanError, match="exactly the MD-01 and MSW-01"):
+        _validate_campaign_gate(request, approved)

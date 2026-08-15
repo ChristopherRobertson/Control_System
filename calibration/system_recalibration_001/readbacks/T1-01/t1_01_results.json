@@ -1,0 +1,64 @@
+{
+  "phase": "T1-01",
+  "operator": "Christopher Robertson",
+  "status": "PASS",
+  "routes": {
+    "t6601_trigger_input_to_fire": {
+      "fit_intercept_ns": 50.747117676001295,
+      "combined_standard_uncertainty_ns": 3.141914454823104,
+      "fit_slope_ppm": 5.634795325448749,
+      "fit_slope_standard_uncertainty_ppm": 3.7485489126187685,
+      "fit_residual_rms_ns": 0.15210107843171838,
+      "derivation": "adapter-corrected EXT REF-to-FIRE intercept minus T2-01 EXT REF-to-T660-1-TRIG-IN intercept"
+    },
+    "fire_to_qswitch": {
+      "fit_intercept_ns": 0.149285944280786,
+      "combined_standard_uncertainty_ns": 0.951337567314929,
+      "fit_slope_ppm": 3.55931748818872,
+      "derivation": "midpoint of normal and adapter-swapped six-point fits"
+    },
+    "t6601_trigger_input_to_qswitch": {
+      "fit_intercept_ns": 50.93715582974147,
+      "combined_standard_uncertainty_ns": 3.067633611027974,
+      "fit_slope_ppm": 5.392582969721005,
+      "fit_slope_standard_uncertainty_ppm": 3.7482434296179092,
+      "fit_residual_rms_ns": 0.0939084141283666,
+      "derivation": "adapter-corrected direct EXT REF-to-Q-SWITCH intercept minus T2-01 EXT REF-to-T660-1-TRIG-IN intercept"
+    },
+    "extref_to_fire_adapter_corrected": {
+      "fit_intercept_ns": 50.88088158135666,
+      "adapter_a_correction_ns": 6.4391297725922545
+    },
+    "extref_to_qswitch_adapter_corrected": {
+      "fit_intercept_ns": 51.07091973509684,
+      "adapter_a_correction_ns": 6.4391297725922545
+    }
+  },
+  "closure": {
+    "status": "PASS",
+    "direct_minus_derived_ns": 0.040752209459356
+  },
+  "adapter_characterization": {
+    "status": "PASS",
+    "adapter_a_delay_ns": 6.4391297725922545,
+    "adapter_b_delay_ns": 6.341751820323946,
+    "each_combined_standard_uncertainty_ns": 0.3223838609341031
+  },
+  "acquisition_counts": {
+    "primary_six_point_accepted": 1800,
+    "adapter_swap_six_point_accepted": 600,
+    "adapter_absolute_characterization_accepted": 200,
+    "accepted_total": 2600,
+    "accepted_measurement_rejections": 0,
+    "preserved_rejected_initial_wiring_traces": 300
+  },
+  "trigger_count_agreement": "PASS",
+  "restoration": {
+    "operator_confirmed": true,
+    "final_safe_idle_matches_recipe": true
+  },
+  "uncertainty_note": "Route uncertainties conservatively combine fit statistics, threshold and interpolation sensitivities, absolute adapter uncertainty, and the T2-01 trigger-route uncertainty. Shared PicoScope correction is retained as correlated evidence rather than interpreted as independent physical route delay.",
+  "user_input_required": ["PicoScope calibration certificate and calibration age"],
+  "canonical_promotion_performed": false,
+  "next_phase_started": false
+}

@@ -1,0 +1,105 @@
+schema_version: "1.0"
+experiment_id: mircat_hf2li_sweep_example
+name: MIRcat HF2LI constrained-sweep test fixture
+description: Software-validation fixture only; not an approved campaign or experimental recipe.
+experiment_type: spectral_sweep
+required_devices: [mircat, hf2li, t660_2]
+resource_ownership:
+  mircat: experiment_engine
+  hf2li: experiment_engine
+  t660_2: experiment_engine
+fields:
+  - key: sample_name
+    label: Sample name
+    type: text
+    default: unknown
+    required: true
+    user_adjustable: true
+    help_text: Used in result metadata.
+  - key: targets_cm1
+    label: Wavenumber targets
+    type: list
+    default: [1200.0, 1250.0]
+    units: cm-1
+    required: true
+    user_adjustable: true
+  - key: continuous
+    label: Continuous acquisition
+    type: boolean
+    default: false
+    required: true
+    user_adjustable: true
+  - key: repetitions
+    label: Repetitions
+    type: integer
+    default: 1
+    minimum: 1
+    maximum: 100
+    required: true
+    user_adjustable: true
+    enabled_when: {field: continuous, equals: false}
+  - key: export_format
+    label: Export format
+    type: choice
+    default: json
+    choices: [json, csv]
+    required: true
+    user_adjustable: true
+values:
+  sample_name: validation_sample
+  targets_cm1: [1200.0, 1250.0]
+  continuous: false
+  repetitions: 1
+  export_format: json
+devices:
+  - device: t660_2
+    capabilities:
+      channel_a_hf2li_extref: true
+      channel_b_mircat_trigger: true
+      program_timing: {rate_hz: 2000000}
+      start: true
+  - device: mircat
+    capabilities:
+      sdk_ownership: custom_ui
+      qcl_selection: 1
+      scan_start_cm1: 1200.0
+      scan_stop_cm1: 1250.0
+      scan_rate_cm1_s: 100.0
+      repetitions: 1
+      pulse_rate_hz: 2000000.0
+      pulse_width_ns: 100.0
+      current_ma: 500.0
+      pulse_trigger_mode: external
+      process_trigger_mode: internal
+      arm: true
+      emission: true
+      normal_sweep_start: true
+  - device: hf2li
+    capabilities:
+      preset_selection: mircat_2mhz
+      pll_external_reference: true
+      sample_stream: true
+      reference_stream: true
+      complete_dio_word: true
+      continuous_acquisition: false
+      readback_verification: true
+acquisition:
+  duration_s: 1.0
+  streams: [sample, reference, dio_word]
+processing:
+  method: identity
+export:
+  format: json
+safety_prerequisites:
+  - mircat_area_clear
+  - mircat_interlock_closed
+stop:
+  actions: [mircat.stop, hf2li.stop, t660_2.stop]
+abort_to_safe:
+  actions: [mircat.stop, mircat.disarm, t660_2.safe_idle, hf2li.stop]
+failure_cleanup:
+  actions: [mircat.stop, mircat.disarm, mircat.deinitialize, t660_2.safe_idle, hf2li.disconnect]
+metadata:
+  routes: []
+  authority: test_fixture_only
+  campaign_evidence_allowed: false

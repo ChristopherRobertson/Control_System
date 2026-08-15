@@ -1,4 +1,4 @@
-"""Add-only workflow state machine for UI-dispatched hardware commands."""
+"""Generic workflow state machine for UI-dispatched hardware commands."""
 
 from __future__ import annotations
 
@@ -552,7 +552,7 @@ class WorkflowStateMachine:
         recipe = self._require_recipe()
         timing_recipe = command.parameters.get("timing_recipe") or recipe.get("timing_recipe")
         if not timing_recipe:
-            raise WorkflowStateMachineError("Myoglobin-CO recipe does not define timing_recipe")
+            raise WorkflowStateMachineError("active campaign recipe does not define timing_recipe")
         manager = TimingRecipeManager(self.inventory)
         validation = manager.validate_recipe(REPO_ROOT / str(timing_recipe))
         self.recipe_validation["timing_recipe"] = validation
@@ -570,7 +570,7 @@ class WorkflowStateMachine:
             )
 
         manager = TimingRecipeManager(self.inventory, command_log=self.command_log)
-        readback_path = self._artifact_path(f"day7_{Path(str(timing_recipe)).stem}_readback.json")
+        readback_path = self._artifact_path(f"workflow_{Path(str(timing_recipe)).stem}_readback.json")
         readback = manager.apply_recipe(REPO_ROOT / str(timing_recipe), output_path=readback_path)
         self._remember_readback(readback_path)
         data.update(
@@ -628,7 +628,7 @@ class WorkflowStateMachine:
         return self._complete(
             command.command,
             "MEASUREMENT_ARMED",
-            "MIRcat was tuned with emission off and HF2LI was configured with the Myoglobin-CO preset.",
+            "MIRcat was tuned with emission off and HF2LI was configured with the recipe-selected preset.",
             data,
         )
 
@@ -667,7 +667,7 @@ class WorkflowStateMachine:
         return self._complete(
             command.command,
             "ACQUIRING_POINT",
-            "Acquire-point collected real HF2LI detector data for the selected Myoglobin-CO point.",
+            "Acquire-point collected real HF2LI detector data for the selected campaign point.",
             data,
         )
 
@@ -711,12 +711,12 @@ class WorkflowStateMachine:
         return self._complete(
             command.command,
             "ACQUIRING_SCAN",
-            "Acquire-scan collected real HF2LI detector data for every Myoglobin-CO scan point.",
+            "Acquire-scan collected real HF2LI detector data for every selected campaign scan point.",
             data,
         )
 
     def _abort_to_safe(self, command: WorkflowCommand) -> WorkflowResult:
-        reason = str(command.parameters.get("reason") or "Day 7 validation abort path")
+        reason = str(command.parameters.get("reason") or "campaign workflow abort")
         self.abort_state = {
             "aborted": True,
             "reason": reason,
@@ -780,7 +780,7 @@ class WorkflowStateMachine:
             "picoscope_model": device_config.get("model"),
             "picoscope_serial": device_config.get("serial_number"),
         }
-        self._write_readback("day7_picoscope_settings_readback.json", readback)
+        self._write_readback("workflow_picoscope_settings_readback.json", readback)
         return readback
 
     def _safe_tune_mircat(self, recipe: dict[str, Any]) -> dict[str, Any]:
@@ -845,7 +845,7 @@ class WorkflowStateMachine:
             "state_before": state_before,
             "state_after": state_after,
         }
-        self._write_readback("day7_mircat_arm_readback.json", readback)
+        self._write_readback("workflow_mircat_arm_readback.json", readback)
         return readback
 
     def _prepare_mircat_for_point(
@@ -921,7 +921,7 @@ class WorkflowStateMachine:
         service = self._hf2li_service
         preset = service.load_preset(preset_name)
         applied = service.apply_preset(preset)
-        snapshot_path = self._artifact_path("day7_hf2li_arm_settings_snapshot.json")
+        snapshot_path = self._artifact_path("workflow_hf2li_arm_settings_snapshot.json")
         snapshot = service.export_settings_snapshot(snapshot_path, preset=preset)
         self._remember_readback(snapshot_path)
         self._hf2li_preset = preset
@@ -1038,13 +1038,13 @@ class WorkflowStateMachine:
 
         try:
             manager = TimingRecipeManager(self.inventory, command_log=self.command_log)
-            output_path = self._artifact_path(f"day7_{label}_safe_idle_readback.json")
+            output_path = self._artifact_path(f"workflow_{label}_safe_idle_readback.json")
             actions["t660"] = manager.apply_recipe(REPO_ROOT / "recipes" / "safe_idle.yaml", output_path=output_path)
             self._remember_readback(output_path)
         except Exception as exc:  # noqa: BLE001
             errors.append(f"T660 safe_idle failed: {exc}")
 
-        readback_path = self._write_readback(f"day7_{label}_safe_actions.json", actions)
+        readback_path = self._write_readback(f"workflow_{label}_safe_actions.json", actions)
         actions["readback_path"] = str(readback_path)
         if errors:
             raise WorkflowStateMachineError("; ".join(errors))
@@ -1053,7 +1053,12 @@ class WorkflowStateMachine:
     def _load_recipe(self, recipe_path_value: Any) -> None:
         if self.recipe is not None:
             return
-        recipe_path = Path(str(recipe_path_value or "recipes/myoglobin_co_acquisition.yaml"))
+        if recipe_path_value is None or not str(recipe_path_value).strip():
+            raise WorkflowStateMachineError(
+                "No campaign recipe was supplied. Legacy sample defaults are archived; "
+                "provide an explicitly approved campaign recipe path."
+            )
+        recipe_path = Path(str(recipe_path_value))
         if not recipe_path.is_absolute():
             recipe_path = REPO_ROOT / recipe_path
         if not recipe_path.exists():
@@ -1216,10 +1221,14 @@ def _mircat_setpoint(recipe: dict[str, Any]) -> dict[str, Any]:
         raise WorkflowStateMachineError("workflow recipe probe section must be a mapping")
     direct = probe.get("mircat")
     if isinstance(direct, dict):
-        value = float(direct.get("wavenumber_cm1", 1858.0))
+        if "wavenumber_cm1" not in direct:
+            raise WorkflowStateMachineError("workflow recipe probe.mircat does not define wavenumber_cm1")
+        value = float(direct["wavenumber_cm1"])
         qcl = int(direct.get("qcl", probe.get("qcl", 1)))
     else:
-        value = float(probe.get("wavenumber_cm1", 1858.0))
+        if "wavenumber_cm1" not in probe:
+            raise WorkflowStateMachineError("workflow recipe probe does not define wavenumber_cm1")
+        value = float(probe["wavenumber_cm1"])
         qcl = int(probe.get("qcl", 1))
     scan = _scan_definition(recipe)
     return {
@@ -1227,7 +1236,6 @@ def _mircat_setpoint(recipe: dict[str, Any]) -> dict[str, Any]:
         "units": "cm^-1",
         "qcl": qcl,
         "scan_cm1": scan,
-        "co_band_scan_cm1": probe.get("co_band_scan_cm1"),
     }
 
 
@@ -1238,9 +1246,6 @@ def _scan_definition(recipe: dict[str, Any]) -> dict[str, Any] | None:
     scan = probe.get("scan_cm1")
     if isinstance(scan, dict):
         return scan
-    legacy_scan = probe.get("co_band_scan_cm1")
-    if isinstance(legacy_scan, dict):
-        return legacy_scan
     return None
 
 
@@ -1302,7 +1307,6 @@ def _pump_enabled(recipe: dict[str, Any]) -> bool:
     pump = recipe.get("pump") if isinstance(recipe.get("pump"), dict) else {}
     return bool(
         pump.get("enabled")
-        or pump.get("enabled_for_day7")
         or pump.get("emission_allowed")
         or pump.get("fire_pump")
     )

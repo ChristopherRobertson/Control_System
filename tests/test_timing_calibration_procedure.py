@@ -4,8 +4,6 @@ import csv
 import json
 import math
 from pathlib import Path
-import subprocess
-import sys
 import tempfile
 import unittest
 import yaml
@@ -181,7 +179,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             "mircat_db9_pin_5_laser_output_on_off",
             self.inventory.signal_map,
         )
-        for recipe_name in ("timing_calibration.yaml", "pump_probe_single_point.yaml"):
+        for recipe_name in ("timing_calibration.yaml",):
             recipe = yaml.safe_load(
                 (REPO_ROOT / "recipes" / recipe_name).read_text(encoding="utf-8")
             )
@@ -306,50 +304,6 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             )
         self.assertIsInstance(caught.exception.__cause__, KeyboardInterrupt)
 
-    @unittest.skip("obsolete prehardware blocking-status gate removed")
-    def test_cli_consumes_reviewed_plan_into_explicit_blocked_status(self) -> None:
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "calibration") as temp:
-            run_dir = Path(temp) / "cli_plan"
-            command = [
-                sys.executable,
-                str(
-                    REPO_ROOT
-                    / "tests"
-                    / "hardware_checks"
-                    / "check_complete_timing_calibration.py"
-                ),
-                "--operator",
-                "CLI Test",
-            ]
-            planned = subprocess.run(
-                [*command, "--run-dir", str(run_dir)],
-                cwd=REPO_ROOT,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(planned.returncode, 0, planned.stdout + planned.stderr)
-            status_path = run_dir / "workflow_status.json"
-            plan_status = json.loads(status_path.read_text(encoding="utf-8"))
-            self.assertEqual(plan_status["status"], "PLAN_ONLY_READY_FOR_REVIEW")
-            self.assertIs(plan_status["hardware_opened"], False)
-
-            blocked = subprocess.run(
-                [*command, "--execute", "--reviewed-plan-dir", str(run_dir)],
-                cwd=REPO_ROOT,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(blocked.returncode, 2, blocked.stdout + blocked.stderr)
-            blocked_status = json.loads(status_path.read_text(encoding="utf-8"))
-            self.assertEqual(
-                blocked_status["status"], "EXECUTION_BLOCKED_PREHARDWARE"
-            )
-            self.assertIs(blocked_status["hardware_access_attempted"], False)
-            self.assertIs(blocked_status["hardware_opened"], False)
-            self.assertFalse((run_dir / "raw_pico_traces").exists())
-
     def test_generated_recipes_are_sparse_and_explicit(self) -> None:
         workflow = TimingCalibrationProcedure(operator="Test", inventory=self.inventory)
         for step in MEASUREMENT_STEPS:
@@ -406,12 +360,44 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             programmed_delay_ns=1_000_000,
             base_sample_interval_ns=2.0,
             trigger_edge="rising",
+            target_pulse_width_ns=10_000.0,
         )
         self.assertGreater(settings["timebase"], 1)
         post_span = (settings["total_samples"] - settings["pre_trigger_samples"]) * validation["sample_interval_ns"]
-        self.assertGreaterEqual(post_span, 1_010_000)
+        self.assertGreaterEqual(post_span, 1_020_000)
         self.assertLessEqual(settings["total_samples"], validation["max_samples"])
         self.assertLessEqual(settings["total_samples"], MAX_SAMPLES_PER_TRACE)
+
+    def test_capture_planner_keeps_post_falling_edge_margin(self) -> None:
+        class FakePico:
+            capture_settings: dict
+
+            def validate_sample_timing(self):
+                return {
+                    "sample_interval_ns": 2.0,
+                    "max_samples": 200_000,
+                    "timebase": int(self.capture_settings["timebase"]),
+                }
+
+        pico = FakePico()
+        base = {
+            "timebase": 1,
+            "total_samples": 100_000,
+            "pre_trigger_samples": 1_000,
+            "external_trigger": {},
+        }
+        settings, validation = _plan_capture_settings(
+            pico,
+            base,
+            programmed_delay_ns=100_000,
+            base_sample_interval_ns=2.0,
+            trigger_edge="rising",
+            target_pulse_width_ns=10_000.0,
+        )
+        post_span = (
+            settings["total_samples"] - settings["pre_trigger_samples"]
+        ) * validation["sample_interval_ns"]
+        self.assertGreaterEqual(post_span, 120_000.0)
 
     def test_splitter_math_and_ppm_fit(self) -> None:
         rows = []
@@ -619,7 +605,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                 "recipe_correction_ns",
                 "recipe_correction_standard_uncertainty_ns",
                 "recipe_formula",
-                "rsi_thesis_reporting_label",
+                "reporting_label",
                 "notes",
             }
             self.assertTrue(required_columns.issubset(consolidated[0]))
@@ -685,7 +671,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                 places=12,
             )
 
-    def test_fake_hardware_run_prompts_before_outputs_and_never_publishes(self) -> None:
+    def test_fake_ms01_run_prompts_before_outputs_and_never_promotes(self) -> None:
         events: list[str] = []
         hardware_states: list[str] = []
         fail_final_safe_idle = {"enabled": False}
@@ -817,7 +803,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             )
             summary = workflow.run(
                 run_dir=run_dir,
-                execution_scope="COMPLETE",
+                execution_scope="MS-01",
                 shot_count=1,
                 reduced_set_rationale="fake-device integration test",
                 photodetector_response_delay_ns=0.0,
@@ -829,42 +815,17 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             )
             self.assertEqual(summary["status"], "PASS")
             self.assertEqual(hardware_states, ["OPEN_ATTEMPT", "OPENED"])
-            self.assertIn("RUN_LOCAL_ONLY", summary["publication_status"])
-            self.assertEqual(
-                summary["optical_exposure_audit"]["remote_trigger_commands"],
-                3,
-            )
-            self.assertEqual(
-                summary["optical_exposure_audit"]["accepted_measurement_traces"],
-                1,
-            )
-            self.assertEqual(
-                [item["label"] for item in summary["optical_exposure_audit"]["segments"]],
-                ["beam_blocked_control", "preview", "measurement"],
-            )
-            observed_intervals = summary["optical_exposure_audit"][
-                "observed_inter_shot_intervals_s"
-            ]
-            self.assertEqual(len(observed_intervals), 2)
-            self.assertGreaterEqual(min(observed_intervals), 0.099)
+            self.assertIn("RUN_LOCAL_ONLY", summary["promotion_status"])
             self.assertFalse((Path(temp) / "calibration").exists())
-            for step in MEASUREMENT_STEPS:
+            for step in MEASUREMENT_STEPS[:2]:
                 prompt_index = events.index(f"prompt:READY {step.setup_id}")
                 recipe_events = [
                     index
                     for index, event in enumerate(events)
                     if event == f"apply:{step.measurement_id}"
                 ]
-                if step.optical:
-                    recipe_events = [
-                        index
-                        for index, event in enumerate(events)
-                        if event == "apply:ndyag_alignment_10hz"
-                    ]
                 self.assertTrue(recipe_events)
                 self.assertLess(prompt_index, recipe_events[0])
-            optical_apply = events.index("apply:ndyag_alignment_10hz")
-            self.assertGreater(optical_apply, 0)
             self.assertEqual(events[-2:], ["pico:stop", "pico:close"])
 
             fail_final_safe_idle["enabled"] = True
@@ -889,7 +850,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "SAFE-IDLE STOP/OFF"):
                 failed_workflow.run(
                     run_dir=failed_run_dir,
-                    execution_scope="COMPLETE",
+                    execution_scope="MS-01",
                     shot_count=1,
                     reduced_set_rationale="final-safe failure integration test",
                     photodetector_response_delay_ns=0.0,

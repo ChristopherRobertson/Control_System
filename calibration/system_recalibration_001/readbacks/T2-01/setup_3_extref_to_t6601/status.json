@@ -1,0 +1,47 @@
+{
+  "accepted_required_per_delay": 100,
+  "final_safe_idle_matches": true,
+  "finalization_errors": [],
+  "finished_utc": "2026-07-30T19:51:36.728602+00:00",
+  "measurement_id": "TC-03",
+  "operator": "Christopher Robertson",
+  "per_delay": {
+    "0": {
+      "accepted": 100,
+      "rejected": 0
+    },
+    "100": {
+      "accepted": 100,
+      "rejected": 0
+    },
+    "1000": {
+      "accepted": 100,
+      "rejected": 0
+    },
+    "10000": {
+      "accepted": 100,
+      "rejected": 0
+    },
+    "100000": {
+      "accepted": 100,
+      "rejected": 0
+    },
+    "1000000": {
+      "accepted": 100,
+      "rejected": 0
+    }
+  },
+  "phase": "T2-01",
+  "programmed_delays_ns": [
+    0,
+    100,
+    1000,
+    10000,
+    100000,
+    1000000
+  ],
+  "setup": "3",
+  "sign_convention": "PicoScope CHB minus CHA; positive means target arrived later",
+  "started_utc": "2026-07-30T19:49:48.791645+00:00",
+  "status": "PASS"
+}

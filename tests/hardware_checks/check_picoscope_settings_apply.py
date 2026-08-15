@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "calibration" / f"{today_stamp()}_picoscope_settings_test"
+    run_dir = REPO_ROOT / "runs" / f"{today_stamp()}_picoscope_settings_test"
     run_dir.mkdir(parents=True, exist_ok=True)
     log_dir = REPO_ROOT / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)

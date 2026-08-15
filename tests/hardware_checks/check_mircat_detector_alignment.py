@@ -4,8 +4,8 @@
 Usage:
     python tests/hardware_checks/check_mircat_detector_alignment.py --operator "Name" --confirm-real-hardware --approved-laser-safety-condition
 
-By default this hardware-check script preserves the historical T660 external
-timing path. Pass --use-internal-mircat-timing to use MIRcat internal pulsing
+By default this operational hardware check uses the T660 external timing path.
+Pass --use-internal-mircat-timing to use MIRcat internal pulsing
 without starting T660-2. The UI Start Alignment button defaults to the internal
 MIRcat mode.
 """
@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "calibration" / f"{today_stamp()}_mircat_detector_alignment"
+    run_dir = REPO_ROOT / "runs" / f"{today_stamp()}_mircat_detector_alignment"
     run_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = run_dir / "command_log.txt"
     manifest_path = run_dir / "run_manifest.json"

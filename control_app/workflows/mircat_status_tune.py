@@ -1,4 +1,4 @@
-"""Day 5 MIRcat safe status/tune workflow."""
+"""MIRcat safe status/tune workflow."""
 
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ class MircatStatusTune:
         command_log: TextIO | None = None,
         command_log_paths: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Execute the real safe tune workflow and write Day 5 evidence files."""
+        """Execute the real safe tune workflow and write operational files."""
 
         run_path = Path(run_dir)
         run_path.mkdir(parents=True, exist_ok=True)

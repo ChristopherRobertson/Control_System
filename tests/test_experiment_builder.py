@@ -14,7 +14,7 @@ from control_app.experiments.validation import validate_experiment
 
 
 def _document():
-    with open("recipes/experiments/mircat_hf2li_sweep.yaml", encoding="utf-8") as handle:
+    with open("tests/fixtures/experiment_builder/mircat_hf2li_sweep.yaml", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
 

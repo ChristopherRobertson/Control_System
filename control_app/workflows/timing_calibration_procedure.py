@@ -1,4 +1,4 @@
-"""Legacy complete timing implementation and reusable timing utilities.
+"""Reusable timing-calibration planning, acquisition, and analysis utilities.
 
 Active campaigns are orchestrated by Codex one phase and one operator action
 at a time. This module remains for regression tests, capture planning, recipe
@@ -907,7 +907,7 @@ class TimingCalibrationProcedure:
                 "run_local_only": True,
                 "existing_run_data_overwritten": False,
                 "raw_trace_directory": "raw_pico_traces/ (git ignored)",
-                "rsi_drafts_updated": False,
+                "external_documents_updated": False,
                 "canonical_calibration_updated": False,
             },
         }
@@ -963,9 +963,9 @@ class TimingCalibrationProcedure:
         run_path = Path(run_dir).resolve()
         _require_fresh_acquisition_directory(run_path)
         normalized_scope = execution_scope.strip().upper()
-        if normalized_scope not in {"MS-01", "COMPLETE"}:
+        if normalized_scope != "MS-01":
             raise TimingCalibrationError(
-                f"Unsupported execution scope {execution_scope!r}; expected MS-01 or COMPLETE"
+                f"Unsupported execution scope {execution_scope!r}; expected focused phase MS-01"
             )
         step7_corrections = _validate_step7_corrections(
             photodetector_response_delay_ns=photodetector_response_delay_ns,
@@ -1161,6 +1161,7 @@ class TimingCalibrationProcedure:
                         ),
                         base_sample_interval_ns=base_interval_ns,
                         trigger_edge=step.reference_edge,
+                        target_pulse_width_ns=_electrical_target_pulse_width_ns(step),
                     )
                     validate_capture_settings(capture_settings, device_config)
                     pico.capture_settings = capture_settings
@@ -1362,7 +1363,7 @@ class TimingCalibrationProcedure:
             "user_input_required": user_input_required,
             "skipped_steps": skipped_steps,
             "outputs": outputs,
-            "publication_status": "RUN_LOCAL_ONLY_NOT_PUBLISHED_TO_RSI_OR_CANONICAL_CALIBRATION",
+            "promotion_status": "RUN_LOCAL_ONLY_NOT_PROMOTED_TO_CANONICAL_CALIBRATION",
         }
         summary_path = _write_json_new(run_path / "workflow_summary.json", summary)
         summary["workflow_summary"] = str(summary_path)
@@ -1838,11 +1839,9 @@ def _steps_for_execution_scope(
     """Return only the measurements authorized by the requested execution scope."""
 
     normalized_scope = execution_scope.strip().upper()
-    if normalized_scope == "COMPLETE":
-        return list(plan["operator_sequence"])
     if normalized_scope != "MS-01":
         raise TimingCalibrationError(
-            f"Unsupported execution scope {execution_scope!r}; expected MS-01 or COMPLETE"
+            f"Unsupported execution scope {execution_scope!r}; expected focused phase MS-01"
         )
     steps = [
         item for item in plan["operator_sequence"] if item["step"] in {"0a", "0b"}
@@ -1856,7 +1855,7 @@ def _steps_for_execution_scope(
 
 def create_unique_run_directory(
     *,
-    run_parent: str | Path = REPO_ROOT / "calibration",
+    run_parent: str | Path = REPO_ROOT / "runs",
     requested_path: str | Path | None = None,
 ) -> Path:
     """Create an exclusive run directory; existing paths are never reused."""
@@ -1892,7 +1891,7 @@ def render_plan_markdown(plan: dict[str, Any]) -> str:
         f"Generated: {plan['generated_utc']}  ",
         f"Operator: {plan['operator']}  ",
         "",
-        "No hardware is opened by plan generation. No RSI draft or canonical calibration file is updated.",
+        "No hardware is opened by plan generation. No thesis draft or canonical calibration file is updated.",
         "",
         "## Time and sign conventions",
         "",
@@ -2005,7 +2004,7 @@ def render_plan_markdown(plan: dict[str, Any]) -> str:
                 f"- Splitter: {'yes' if step.splitter_used else 'no'}; {step.splitter_mapping}",
                 f"- Correction: {step.correction_rule}",
                 f"- Use in timing recipe: {step.recipe_use_condition or ('yes' if step.use_in_timing_recipe else 'no')}",
-                f"- RSI/thesis label: {step.reporting_label}",
+                f"- Thesis/experimental-handoff label: {step.reporting_label}",
                 f"- Notes: {step.notes}",
                 "",
             ]
@@ -2803,7 +2802,7 @@ def consolidate_results(
             "recipe_correction_standard_uncertainty_ns": recipe_correction_uncertainty,
             "recipe_formula": recipe_formula,
             "use_in_timing_recipe": recipe_use,
-            "rsi_thesis_reporting_label": step.reporting_label,
+            "reporting_label": step.reporting_label,
             "notes": notes,
         }
         consolidated.append(row)
@@ -2847,7 +2846,7 @@ def consolidate_results(
             "generated_utc": _utc_now(),
             "measurement_system_corrections": corrections,
             "derived_recipe_corrections": derived,
-            "publication_status": "review before manual promotion; no canonical recipe or RSI draft was modified",
+            "promotion_status": "review before manual promotion; no canonical recipe or thesis draft was modified",
         },
     )
     return {
@@ -3200,7 +3199,7 @@ def _derived_table_rows(derived: dict[str, Any]) -> list[dict[str, Any]]:
                     / 1_000_000.0
                 ),
                 "use_in_timing_recipe": use_in_recipe,
-                "rsi_thesis_reporting_label": label,
+                "reporting_label": label,
                 "notes": notes,
             }
         )
@@ -3339,7 +3338,7 @@ def _measurement_system_table_rows(corrections: dict[str, Any]) -> list[dict[str
                 "combined_standard_uncertainty_ns": combined_uncertainty,
                 "picoscope_fixed_timebase_standard_uncertainty_ns": picoscope_fixed_uncertainty,
                 "uncertainty_terms_and_provenance": uncertainty_provenance,
-                "rsi_thesis_reporting_label": label,
+                "reporting_label": label,
                 "notes": notes,
             }
         )
@@ -3445,6 +3444,7 @@ def _plan_capture_settings(
     programmed_delay_ns: int,
     base_sample_interval_ns: float,
     trigger_edge: str,
+    target_pulse_width_ns: float = 0.0,
     max_samples_per_trace: int = MAX_SAMPLES_PER_TRACE,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     base_settings = _settings_with_channel_a_trigger(base, edge=trigger_edge)
@@ -3470,7 +3470,11 @@ def _plan_capture_settings(
         if actual_interval <= 0:
             continue
         margin_ns = max(10_000.0, 50.0 * actual_interval, 50.0 * base_sample_interval_ns)
-        required_post_span = max(programmed_delay_ns, 0) + margin_ns
+        required_post_span = (
+            max(programmed_delay_ns, 0)
+            + max(float(target_pulse_width_ns), 0.0)
+            + margin_ns
+        )
         required_post_samples = math.ceil(required_post_span / actual_interval)
         required_total = _round_up(pre_trigger + required_post_samples, 1000)
         settings["total_samples"] = max(1000, required_total)
@@ -3500,6 +3504,14 @@ def _plan_capture_settings(
         "PicoScope could not find a supported timebase/window covering "
         f"{programmed_delay_ns} ns in one capture within the {max_samples_per_trace}-sample raw-volume budget{detail}"
     )
+
+
+def _electrical_target_pulse_width_ns(step: MeasurementStep) -> float:
+    if step.target_signal == "mircat_db9_pin_4_process_trigger":
+        return 10_000_000.0
+    if step.target_signal in {"t660_1_trig_in", "ndyag_fire", "ndyag_q_switch"}:
+        return 10_000.0
+    return 150.0
 
 
 def _settings_with_channel_a_trigger(settings: dict[str, Any], *, edge: str) -> dict[str, Any]:
@@ -3690,7 +3702,7 @@ def _render_consolidated_markdown(
         f"Photodetector response delay removed: {corrections['photodetector_response_delay_ns']:.6g} ns.",
         "PicoScope timebase term: 2 ppm initial accuracy included in fixed/derived combined uncertainties and slope uncertainty; source: `docs/PicoScope/PicoScope 5000D Series Data Sheet.pdf`, p. 17, PicoScope 5244D. Annual drift remains separately reviewable unless covered by the run's calibration record.",
         "",
-        "| Category | ID | Reference event | Target event | Physical connection summary | Final wiring? | Splitter? | Splitter/scope correction | Programmed range | Fixed intercept (ns) | Slope ppm (combined u) | Jitter / combined u (ns) | Uncertainty terms / provenance | Signed recipe correction ns (u) | Exact recipe formula | Use in recipe? | RSI/thesis label | Notes |",
+        "| Category | ID | Reference event | Target event | Physical connection summary | Final wiring? | Splitter? | Splitter/scope correction | Programmed range | Fixed intercept (ns) | Slope ppm (combined u) | Jitter / combined u (ns) | Uncertainty terms / provenance | Signed recipe correction ns (u) | Exact recipe formula | Use in recipe? | Thesis/experimental-handoff label | Notes |",
         "|---|---|---|---|---|---|---|---|---|---:|---:|---:|---|---:|---|---|---|---|",
     ]
     for row in rows:
@@ -3737,7 +3749,7 @@ def _render_consolidated_markdown(
                     recipe_correction_with_uncertainty,
                     row.get("recipe_formula", "n/a"),
                     row["use_in_timing_recipe"],
-                    row["rsi_thesis_reporting_label"],
+                    row["reporting_label"],
                     row["notes"],
                 )
             )

@@ -8,6 +8,7 @@ import math
 import time
 import threading
 
+from control_app.config_loader import REPO_ROOT
 from control_app.devices.hf2li_service import HF2LIService
 from control_app.devices.mircat_service import (
     MircatService,
@@ -26,9 +27,58 @@ class MircatSweepScanError(RuntimeError):
     pass
 
 
+def _validate_campaign_gate(request: dict, run_dir: str | Path) -> None:
+    gate = request.get("campaign_gate")
+    if not isinstance(gate, dict):
+        raise MircatSweepScanError("Sweep recipe does not define a campaign_gate")
+    if gate.get("status") != "APPROVED_FOR_EXECUTION":
+        raise MircatSweepScanError(
+            "Sweep recipe is a non-executable candidate. Approve the named calibration "
+            "phase and freeze its phase directory before hardware use."
+        )
+    campaign_id = str(gate.get("campaign_id", "")).strip()
+    phase_id = str(gate.get("phase_id", "")).strip()
+    phase_run_id = str(gate.get("phase_run_id", "")).strip()
+    declared_phases = {str(value) for value in gate.get("allowed_phases", [])}
+    workflow_phases = {"MD-01", "MSW-01"}
+    if declared_phases != workflow_phases:
+        raise MircatSweepScanError(
+            "Sweep recipe must declare exactly the MD-01 and MSW-01 qualification phases"
+        )
+    if campaign_id != "system_recalibration_001" or phase_id not in workflow_phases:
+        raise MircatSweepScanError("Sweep campaign or phase is not allowed by the recipe gate")
+    if not phase_run_id or phase_run_id == "USER_INPUT_REQUIRED":
+        raise MircatSweepScanError("Sweep campaign gate does not define an approved phase_run_id")
+
+    approved_value = str(gate.get("approved_phase_directory", "")).strip()
+    if not approved_value or approved_value == "USER_INPUT_REQUIRED":
+        raise MircatSweepScanError("Sweep campaign gate does not define an approved phase directory")
+    approved_dir = Path(approved_value)
+    if not approved_dir.is_absolute():
+        approved_dir = REPO_ROOT / approved_dir
+    approved_dir = approved_dir.resolve()
+    expected_dir = (
+        REPO_ROOT
+        / "calibration"
+        / campaign_id
+        / "readbacks"
+        / phase_id
+    ).resolve()
+    if approved_dir != expected_dir:
+        raise MircatSweepScanError(
+            f"Approved phase directory must be {expected_dir}; received {approved_dir}"
+        )
+    resolved_run_dir = Path(run_dir).resolve()
+    if resolved_run_dir != approved_dir and approved_dir not in resolved_run_dir.parents:
+        raise MircatSweepScanError(
+            "Sweep output must remain inside the approved stable calibration phase directory"
+        )
+
+
 def run_gui_owned_sweep_capture(*, request: dict, run_dir: str | Path, command_log=None) -> dict:
     """Acquire a GUI-started MIRcat scan while never opening its SDK session."""
 
+    _validate_campaign_gate(request, run_dir)
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     mircat_cfg, hf_cfg = request["mircat"], request["hf2li"]
@@ -118,6 +168,7 @@ def run_gui_owned_sweep_capture(*, request: dict, run_dir: str | Path, command_l
 
 def run_sweep_scan(*, request: dict, run_dir: str | Path, command_log=None) -> dict:
     """Run a DIO-gated, wavelength-trigger-calibrated normal sweep."""
+    _validate_campaign_gate(request, run_dir)
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     mircat_cfg, hf_cfg = request["mircat"], request["hf2li"]

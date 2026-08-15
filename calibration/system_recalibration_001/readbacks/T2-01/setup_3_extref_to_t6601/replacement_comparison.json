@@ -1,0 +1,35 @@
+{
+  "status": "PASS_AGREES_WITH_SUPERSEDED_MEASUREMENT",
+  "comparison_basis": "corrected physical CHB-minus-CHA route timing using the same MS-02 correction",
+  "old_fit": {
+    "intercept_ns": 0.1289270173636175,
+    "slope_ppm": 7.001044184606897
+  },
+  "replacement_fit": {
+    "intercept_ns": 0.13376390535536434,
+    "slope_ppm": 6.7525284066505264,
+    "residual_rms_ns": 0.025435285286155004
+  },
+  "replacement_minus_old": {
+    "intercept_ns": 0.00483688799174684,
+    "slope_ppm": -0.2485157779563706,
+    "per_delay_mean_corrected_ns": {
+      "0": -0.02087475069234642,
+      "100": 0.0120795327662,
+      "1000": 0.0310437259998,
+      "10000": 0.032835774918,
+      "100000": -0.06249041231,
+      "1000000": -0.1810486152
+    }
+  },
+  "agreement_assessment": "PASS; differences are small relative to observed per-point jitter and the common MS-02 correction uncertainty",
+  "replacement_pulse_completeness": {
+    "accepted_traces": 600,
+    "rejected_traces": 0,
+    "target_width_unavailable_trace_count": 0,
+    "target_mean_width_ns": 9999.953174425189,
+    "target_mean_amplitude_v": 5.075986815124671
+  },
+  "superseded_record_archive": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System_Archives\\Calibration\\T2-01_unused",
+  "archive_authorization": "explicit user instruction in the T2-01 operator session"
+}

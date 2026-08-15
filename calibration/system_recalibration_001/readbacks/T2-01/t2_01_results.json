@@ -1,0 +1,106 @@
+{
+  "phase": "T2-01",
+  "operator": "Christopher Robertson",
+  "status": "PASS",
+  "scope_correction": {
+    "source": "MS-02 midpoint of two complete connection realizations",
+    "chb_minus_cha_ns": 0.10994707329952519,
+    "combined_standard_uncertainty_ns": 0.5817073941913165,
+    "application": "physical target-minus-reference = raw PicoScope CHB-minus-CHA minus correction"
+  },
+  "routes": {
+    "extref_to_daq": {
+      "fit_intercept_ns": 0.9487498986878695,
+      "fit_intercept_combined_standard_uncertainty_ns": 0.694521209722919,
+      "fit_slope": 1.0000067521839862,
+      "fit_slope_ppm": 6.7521839861584,
+      "fit_slope_standard_uncertainty_ppm": 3.7426162868015407,
+      "fit_residual_rms_ns": 0.04654464646387471,
+      "jitter_sample_standard_deviation_range_ns": [0.194679427881688, 0.547258404164272],
+      "threshold_sensitivity_maximum_half_range_ns": 0.024549489668061142,
+      "interpolation_linear_vs_nearest_mean_absolute_difference_ns": 0.6748879822274152,
+      "reference_amplitude_mean_v": 5.070764128116798,
+      "target_amplitude_mean_v": 5.098160166502625,
+      "reference_width_mean_ns": 149.80084120653737,
+      "target_width_mean_ns": 149.80408311273578,
+      "reference_polarity": "positive",
+      "target_polarity": "positive",
+      "fit_residuals_ns": {
+        "0": -0.050478138512710435,
+        "100": -0.057267946792137536,
+        "1000": 0.02718944665264189,
+        "10000": 0.05975297158693138,
+        "100000": 0.023777789770974778,
+        "1000000": -0.047913438407704234
+      }
+    },
+    "extref_to_mircat_trigger": {
+      "fit_intercept_ns": 11.350148333032129,
+      "fit_intercept_combined_standard_uncertainty_ns": 0.6951422509825,
+      "fit_slope": 1.0000065419048407,
+      "fit_slope_ppm": 6.541904840728918,
+      "fit_slope_standard_uncertainty_ppm": 3.749173870100902,
+      "fit_residual_rms_ns": 0.05671489407163999,
+      "jitter_sample_standard_deviation_range_ns": [0.076721911428317, 2.5267220978331],
+      "threshold_sensitivity_maximum_half_range_ns": 0.05861294967962749,
+      "interpolation_linear_vs_nearest_mean_absolute_difference_ns": 0.6856488350923451,
+      "reference_amplitude_mean_v": 5.066912217027559,
+      "target_amplitude_mean_v": 5.198713808234908,
+      "reference_width_mean_ns": 149.86640209285252,
+      "target_width_mean_ns": 149.76583505955315,
+      "reference_polarity": "positive",
+      "target_polarity": "positive",
+      "fit_residuals_ns": {
+        "0": -0.05946938322706785,
+        "100": -0.06732321109693373,
+        "1000": 0.06461283720761912,
+        "10000": 0.026725446028649458,
+        "100000": 0.03965950716519728,
+        "1000000": -0.0690543862292543
+      }
+    },
+    "extref_to_t6601_trigger": {
+      "fit_intercept_ns": 0.13376390535536434,
+      "fit_intercept_combined_standard_uncertainty_ns": 0.694359830377634,
+      "fit_slope": 1.0000067525284067,
+      "fit_slope_ppm": 6.7525284066505264,
+      "fit_slope_standard_uncertainty_ppm": 3.7460762328808768,
+      "fit_residual_rms_ns": 0.025435285286155004,
+      "jitter_sample_standard_deviation_range_ns": [0.134193222056419, 1.8548886946748],
+      "threshold_sensitivity_maximum_half_range_ns": 0.023114108923223853,
+      "interpolation_linear_vs_nearest_mean_absolute_difference_ns": 0.5485348720345807,
+      "reference_amplitude_mean_v": 5.068690022145669,
+      "target_amplitude_mean_v": 5.075986815124671,
+      "reference_width_mean_ns": 149.88072721268284,
+      "target_width_mean_ns": 9999.953174425189,
+      "reference_polarity": "positive",
+      "target_polarity": "positive",
+      "target_width_unavailable_trace_count": 0,
+      "fit_residuals_ns": {
+        "0": -0.034024202115183075,
+        "100": -0.008197530994166868,
+        "1000": 0.01941931042779288,
+        "10000": 0.038925988623304875,
+        "100000": -0.0174733846943127,
+        "1000000": 0.021429307060316205
+      }
+    }
+  },
+  "acquisition_counts": {
+    "accepted": 1800,
+    "rejected": 0,
+    "accepted_per_route_per_delay": 100
+  },
+  "restoration": {
+    "operator_confirmed": true,
+    "clock_splitter_normal_distribution_confirmed": true,
+    "final_safe_idle_matches_recipe": true,
+    "all_eight_t660_outputs_off": true,
+    "both_t660_trigger_sources_off": true
+  },
+  "user_input_required": [
+    "PicoScope calibration certificate and calibration age; amplitude values use the configured 10 V range and nominal 8-bit ADC conversion"
+  ],
+  "canonical_promotion_performed": false,
+  "next_phase_started": false
+}

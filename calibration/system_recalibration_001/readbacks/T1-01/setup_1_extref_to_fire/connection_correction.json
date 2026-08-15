@@ -1,0 +1,20 @@
+{
+  "operator": "Christopher Robertson",
+  "recorded_date_local": "2026-08-08",
+  "status": "CORRECTED_AND_OPERATOR_CONFIRMED",
+  "operator_observation": "I have it connected now",
+  "corrected_connection": [
+    "NDYAG-DB9-BNC-01 installed FIRE branch remains connected to T660-1 CHA",
+    "Nd:YAG DB9 plug remains disconnected from the laser",
+    "BNC-to-two-wire clip-terminal adapter signal clip connected to DB9 pin 7",
+    "BNC-to-two-wire clip-terminal adapter shield/ground clip connected to DB9 pin 2",
+    "adapter BNC connected to PicoScope CHB"
+  ],
+  "adapter_inventory": {
+    "count": 2,
+    "operator_description": "identical BNC-to-two-wire clip-terminal adapters",
+    "individual_identifiers": "USER_INPUT_REQUIRED",
+    "individual_delay_characterization": "REQUIRED_BEFORE_FINAL_T1-01_RESULT"
+  },
+  "prior_acquisition_disposition": "All 300 traces from the incorrect connection remain rejected evidence and are not calibration inputs."
+}

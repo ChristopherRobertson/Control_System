@@ -1,0 +1,213 @@
+{
+  "fit_residuals_ns": {
+    "0": -0.037507010432120645,
+    "100": 0.0027992259455942303,
+    "1000": -0.04520903577065383,
+    "10000": 0.09075412410129502,
+    "100000": -0.011076517315814272,
+    "1000000": 0.003924848511815071
+  },
+  "fit_scope_corrected_provisional": {
+    "fit_residual_rms_ns": 0.044408845075884454,
+    "fixed_offset_intercept_ns": 0.0519079920124766,
+    "intercept_slope_covariance_ns": -3.43281396276849e-07,
+    "intercept_standard_error_ns": 0.3788011366556581,
+    "intercept_variance_ns2": 0.14349030113161856,
+    "maximum_point_standard_uncertainty_ns": 3.2681125079149105,
+    "minimum_point_standard_uncertainty_ns": 0.8165898041469327,
+    "slope": 1.0000035202124307,
+    "slope_fit_standard_error_ppm": 3.164573349717593,
+    "slope_ppm": 3.52021243066325,
+    "slope_standard_error_ppm": 3.743597799676513,
+    "slope_variance": 1.0014524485742829e-11,
+    "weighted_reduced_chi_squared": 0.0044306752905595125,
+    "zero_arrival_recipe_correction_ns": -0.05190780928596111,
+    "zero_arrival_recipe_correction_standard_uncertainty_ns": 0.37879985024022383
+  },
+  "interpolation_sensitivity": {
+    "absolute_difference_ns": {
+      "maximum": 4.723431255901232,
+      "mean": 0.8968187892380861,
+      "minimum": 0.0015021890187654208,
+      "sample_standard_deviation": 1.1250670648399501
+    },
+    "comparison": "linear interpolation versus nearest sample"
+  },
+  "measurement_adapter_correction": {
+    "applied_ns": null,
+    "note": "No zero was assigned; fit is corrected for PicoScope path only.",
+    "status": "USER_INPUT_REQUIRED_AND_HARDWARE_CHARACTERIZATION_REQUIRED"
+  },
+  "per_delay": [
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.1233862107607814,
+      "mean_corrected_measured_ns": 0.014400981580355958,
+      "mean_raw_measured_ns": 0.12434805487988115,
+      "mean_scope_corrected_measured_ns": 0.014400981580355958,
+      "mean_scope_corrected_residual_ns": 0.014400981580355958,
+      "programmed_delay_ns": 0,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.012338621076078141
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.13054219366518827,
+      "mean_corrected_measured_ns": 100.05505923920113,
+      "mean_raw_measured_ns": 100.16500631250065,
+      "mean_scope_corrected_measured_ns": 100.05505923920113,
+      "mean_scope_corrected_residual_ns": 0.05505923920112821,
+      "programmed_delay_ns": 100,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.013054219366518826
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.12385145520709614,
+      "mean_corrected_measured_ns": 1000.0102191686725,
+      "mean_raw_measured_ns": 1000.120166241972,
+      "mean_scope_corrected_measured_ns": 1000.0102191686725,
+      "mean_scope_corrected_residual_ns": 0.010219168672506385,
+      "programmed_delay_ns": 1000,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.012385145520709614
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.1413490409604118,
+      "mean_corrected_measured_ns": 10000.17786424042,
+      "mean_raw_measured_ns": 10000.28781131372,
+      "mean_scope_corrected_measured_ns": 10000.17786424042,
+      "mean_scope_corrected_residual_ns": 0.1778642404206039,
+      "programmed_delay_ns": 10000,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.014134904096041179
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 0.13819668059693171,
+      "mean_corrected_measured_ns": 100000.39285271776,
+      "mean_raw_measured_ns": 100000.50279979107,
+      "mean_scope_corrected_measured_ns": 100000.39285271776,
+      "mean_scope_corrected_residual_ns": 0.3928527177631622,
+      "programmed_delay_ns": 100000,
+      "sample_interval_ns": 2.0,
+      "standard_error_ns": 0.01381966805969317
+    },
+    {
+      "accepted": 100,
+      "jitter_std_ns": 1.1786728860551372,
+      "mean_corrected_measured_ns": 1000003.5760452711,
+      "mean_raw_measured_ns": 1000003.6859923443,
+      "mean_scope_corrected_measured_ns": 1000003.5760452711,
+      "mean_scope_corrected_residual_ns": 3.576045271125622,
+      "programmed_delay_ns": 1000000,
+      "sample_interval_ns": 8.0,
+      "standard_error_ns": 0.11786728860551372
+    }
+  ],
+  "pulse_fidelity": {
+    "A": {
+      "amplitude_v": {
+        "maximum": 5.78740157480315,
+        "mean": 5.661217909284777,
+        "minimum": 5.342335137795276,
+        "sample_standard_deviation": 0.07133568177683659
+      },
+      "polarity": "negative",
+      "transition_10_90_ns": {
+        "maximum": 17.385845050916032,
+        "mean": 11.332864882778342,
+        "minimum": 10.47418533905784,
+        "sample_standard_deviation": 1.2040124625155233
+      },
+      "width_50_percent_ns": {
+        "maximum": 9999.295169520132,
+        "mean": 9998.744614564512,
+        "minimum": 9998.012099659049,
+        "sample_standard_deviation": 0.19600940420062965
+      }
+    },
+    "B": {
+      "amplitude_v": {
+        "maximum": 5.907664862204724,
+        "mean": 5.752475496227034,
+        "minimum": 5.4669045275590555,
+        "sample_standard_deviation": 0.0667454306659846
+      },
+      "polarity": "negative",
+      "transition_10_90_ns": {
+        "maximum": 17.506112785195,
+        "mean": 11.480290498899409,
+        "minimum": 10.530770730381846,
+        "sample_standard_deviation": 1.2776982694510897
+      },
+      "width_50_percent_ns": {
+        "maximum": 9998.857695802593,
+        "mean": 9998.42183664674,
+        "minimum": 9997.610440204618,
+        "sample_standard_deviation": 0.16319766110900308
+      }
+    }
+  },
+  "scope_correction": {
+    "chb_minus_cha_ns": 0.10994707329952519,
+    "combined_standard_uncertainty_ns": 0.5817073941913165
+  },
+  "status": "PASS_PROVISIONAL_ADAPTER_CORRECTION_REQUIRED",
+  "step": "5",
+  "threshold_sensitivity": {
+    "maximum_half_range_ns": 0.17033210020235856,
+    "scope_corrected_means_by_delay_ns": {
+      "0": {
+        "3000": -0.20870550815692068,
+        "4000": -0.04737460768381936,
+        "5000": 0.014400981580355965,
+        "6000": 0.02399923225904957,
+        "7000": 0.022633199228056927
+      },
+      "100": {
+        "3000": 99.81412060509938,
+        "4000": 99.95492113096147,
+        "5000": 100.05505923920113,
+        "6000": 100.08139454695295,
+        "7000": 100.10098013744671
+      },
+      "1000": {
+        "3000": 999.8460578390325,
+        "4000": 999.9590164685749,
+        "5000": 1000.0102191686725,
+        "6000": 1000.0226992340351,
+        "7000": 1000.0362926647342
+      },
+      "10000": {
+        "3000": 9999.837200040016,
+        "4000": 10000.105904920474,
+        "5000": 10000.17786424042,
+        "6000": 10000.15291619384,
+        "7000": 10000.110329341465
+      },
+      "100000": {
+        "3000": 100000.25563460794,
+        "4000": 100000.32737599654,
+        "5000": 100000.39285271776,
+        "6000": 100000.40592738059,
+        "7000": 100000.41424260379
+      },
+      "1000000": {
+        "3000": 1000003.480453803,
+        "4000": 1000003.5424574075,
+        "5000": 1000003.576045271,
+        "6000": 1000003.5883783464,
+        "7000": 1000003.5820591945
+      }
+    },
+    "thresholds_adc": [
+      3000,
+      4000,
+      5000,
+      6000,
+      7000
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "campaign_id": "system_characterization_001",
+  "phase_id": "PHASE-ID",
+  "phase_run_id": "system_characterization_001_PHASE-ID_001",
+  "status": "PLANNED",
+  "operator_ids": ["USER_INPUT_REQUIRED"],
+  "start_utc": "1970-01-01T00:00:00Z",
+  "end_utc": null,
+  "configuration_id": "USER_INPUT_REQUIRED",
+  "repository": {
+    "path": "C:/Users/Chris/Documents/GitHub/Control_System",
+    "branch": "USER_INPUT_REQUIRED",
+    "dirty_files": []
+  },
+  "device_ids": [],
+  "component_ids": [],
+  "sample_ids": [],
+  "calibration_bundle_ids": [],
+  "artifact_index": "artifacts.csv",
+  "acquisition_index": "acquisition_index.csv",
+  "conditions_table": "conditions.csv",
+  "measurements_table": "measurements.csv",
+  "exclusions_table": "exclusions.csv",
+  "calibration_links_table": "calibration_links.csv",
+  "criterion_versions": {},
+  "deviations": [],
+  "user_input_required": [],
+  "restoration_artifact_id": null,
+  "promotion_performed": false,
+  "promotion_approval_reference": null,
+  "notes": "Template only; replace placeholders when an approved phase begins."
+}

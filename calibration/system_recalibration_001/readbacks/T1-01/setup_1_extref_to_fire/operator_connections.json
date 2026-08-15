@@ -1,0 +1,18 @@
+{
+  "operator": "Christopher Robertson",
+  "setup": "T1-01 Setup 1 - HF2LI EXT REF arrival to Nd:YAG FIRE pin-7 arrival",
+  "status": "OPERATOR_CONFIRMED",
+  "operator_observation": "The rewiring is complete",
+  "recorded_date_local": "2026-08-08",
+  "confirmed_requested_configuration": [
+    "T660-2 CHA final EXT REF destination end connected to PicoScope CHA",
+    "Nd:YAG timing DB9 disconnected from the laser",
+    "T660-1 CHA FIRE pin-7 line connected through the approved breakout to PicoScope CHB",
+    "Q-switch pin-6 line disconnected and capped",
+    "MIRcat DB9 process-control connector disconnected and capped",
+    "T660-2 CHD remains connected to T660-1 TRIG IN",
+    "T660-1 CHD remains disconnected and unmapped",
+    "fixed DDG assemblies, CLOCK-SPLITTER-01, and Arduino MUX wiring were not moved"
+  ],
+  "basis": "operator completion confirmation"
+}

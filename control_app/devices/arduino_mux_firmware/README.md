@@ -100,7 +100,7 @@ MUX Output B analog routes:
 
 Route commands are case-insensitive. The firmware stores and reports route names in uppercase.
 
-## Day 4 Verification
+## Operational verification
 
 After flashing this firmware, the configured Python command templates are:
 

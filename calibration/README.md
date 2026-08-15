@@ -15,6 +15,18 @@ with `APPROVE CALIBRATION PROMOTION`.
 
 Operational UI runs that are not calibration evidence continue to use `runs/`.
 
+New phase records follow `docs/measurement_campaign_data_contract.md`, which
+uses stable human-readable identifiers, paths, sizes, timestamps, versions,
+settings records, and artifact indexes allowed by the repository-level
+provenance rules. Completed evidence is indexed in place and is not reacquired
+merely to change format.
+
+Instrument-performance work downstream of calibration belongs in a separate
+`characterization/<campaign-id>/` archival unit. The active
+`system_characterization_001` campaign imports promoted calibration bundles;
+quantitative dual-detector work depends on ATT-01, DET-02, and DET-04 rather
+than assuming a 50/50 sample/reference split.
+
 ## Calibration orchestration
 
 Calibration campaigns are conducted as Codex-guided operator sessions. The
@@ -29,6 +41,6 @@ analysis. Evidence is accumulated under
 recorded as `USER_INPUT_REQUIRED`, and Codex stops at the approved phase
 boundary after guiding restoration.
 
-`tests/hardware_checks/check_complete_timing_calibration.py` is retained only
-as legacy/internal implementation and test support. Codex must not invoke it
-to conduct a campaign phase.
+The retired monolithic complete-calibration runner is archived outside the
+active repository. Campaign phases use only the approved plan and focused
+phase utilities.

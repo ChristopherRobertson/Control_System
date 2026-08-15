@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "sign_convention": "Adapter B delay minus Adapter A delay",
+  "normal_orientation": {
+    "fire_adapter": "A",
+    "qswitch_adapter": "B",
+    "scope_corrected_fit_intercept_ns": 0.0519079920124766,
+    "slope_ppm": 3.52021243066325,
+    "fit_residual_rms_ns": 0.044408845075884454
+  },
+  "swapped_orientation": {
+    "fire_adapter": "B",
+    "qswitch_adapter": "A",
+    "scope_corrected_fit_intercept_ns": 0.246663896549095,
+    "slope_ppm": 3.59842254571419,
+    "fit_residual_rms_ns": 0.03427498523195087
+  },
+  "adapter_b_minus_a_ns": -0.097377952268309,
+  "adapter_corrected_fire_to_qswitch_intercept_ns": 0.149285944280786,
+  "mean_slope_ppm": 3.55931748818872,
+  "slope_difference_ppm": 0.0782101150509362,
+  "method": "Half-difference isolates differential adapter skew; midpoint cancels signed adapter skew while retaining the common PicoScope correction.",
+  "limitation": "This swap determines differential Adapter B-minus-A delay, not the absolute common delay of either adapter."
+}

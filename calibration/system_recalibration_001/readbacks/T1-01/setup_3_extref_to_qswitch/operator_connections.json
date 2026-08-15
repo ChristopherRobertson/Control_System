@@ -1,0 +1,18 @@
+{
+  "operator": "Christopher Robertson",
+  "setup": "T1-01 Setup 3 - HF2LI EXT REF arrival to Nd:YAG Q-SWITCH pin-6 arrival",
+  "status": "OPERATOR_CONFIRMED",
+  "operator_observation": "rewire is complete",
+  "recorded_date_local": "2026-08-08",
+  "confirmed_requested_configuration": [
+    "T660-2 CHA final EXT REF destination end connected to PicoScope CHA",
+    "Adapter A signal/shield clips connected to Q-SWITCH DB9 pins 6/3 and BNC connected to PicoScope CHB",
+    "Adapter B disconnected and parked",
+    "FIRE pin-7 line disconnected/capped",
+    "Nd:YAG DB9 remains disconnected from the laser",
+    "MIRcat DB9 remains disconnected/capped",
+    "T660-2 CHD remains connected to T660-1 TRIG IN"
+  ],
+  "matched_geometry_note": "Adapter A is the same target-path adapter used in Setup 1 so its common delay cancels in direct-versus-derived closure.",
+  "basis": "operator completion confirmation"
+}

@@ -4,6 +4,10 @@ Campaign: `system_recalibration_001`
 Assessment date: 2026-07-24 (America/Los_Angeles)  
 Operator: `Christopher Robertson`
 
+This is the preserved dated P0 assessment. Current keep/narrow/discard choices
+are controlled by `p0_requirement_decisions.md`; this historical table does not
+independently keep a requirement active after a recorded decision.
+
 | ID | Missing item or unresolved condition | Affected future phase | Execution blocker or claim limitation | Permitted resolution | Safely deferrable? |
 |---|---|---|---|---|---|
 | P0-B01 | **RESOLVED:** the reviewed P0 candidate working tree was clean. | S0 and every later phase | No remaining execution blocker from repository-state provenance. | Preserve this closure record. | Resolved. |
@@ -23,3 +27,38 @@ Operator: `Christopher Robertson`
 table entry prevents MS-01; later-phase missing information remains
 `USER_INPUT_REQUIRED` and may not be silently assigned zero or represented as
 measured.
+
+## Current-scope addendum (updated 2026-08-15)
+
+The table above is the preserved P0 assessment and is not rewritten to imply
+that later phases existed at P0 closure. The current authoritative dependency
+and status records are `analysis/calibration_matrix.csv`,
+`analysis/expansion_gap_map.md`, `plans/campaign_sequence.md`, and
+`manifests/p0_requirement_decisions.md`.
+
+For current planning, replacement-detector identity and calibration metadata
+in P0-B03 also affect DET-03, DET-04, characterization AR-01/SV-02/PF-01, and
+later biological normalization. P0-B08 addresses only the electrical timing
+splitter used in MS-01/MS-02/OP-01; it must not be confused with the installed
+optical sample/reference splitter calibrated by ATT-01 and DET-04. Current
+campaign records use stable IDs, paths, sizes, timestamps, and explicit
+versions as defined by the repository-level provenance rules.
+
+All P0 requirement decisions were completed on 2026-08-15. P0-D001 was
+retained, so P0-B03 remains an execution blocker for replacement-reference-
+detector-dependent phases only until the detector arrives and its SIP
+model/serial and detector model/serial are recorded. Certificate association
+is not required. This does not require repeating completed work.
+
+P0-B04 is superseded for active planning: certificate retrieval for the
+T660s, MIRcat, Nd:YAG/OPO, HF2LI, detectors, SIP electronics, and power
+supplies was discarded. PicoScope evidence was narrowed to serial `10261`,
+actual timebases/ranges used, and applicable manufacturer accuracy. P0-B06 was
+narrowed to authoritative polystyrene features/uncertainty and authoritative
+Mylar validation features/uncertainty; film thickness and quantitative etalon
+claims were discarded. P0-B07 was discarded as a calibration requirement;
+temperature and humidity remain observational conditions only.
+
+Generic interface and adapter manufacturer-part research was also discarded.
+Stable IDs, wiring authority, photographs, directly measured behavior, and
+requalification after material replacement remain sufficient.

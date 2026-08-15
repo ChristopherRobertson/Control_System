@@ -1,0 +1,14 @@
+{
+  "accepted": 100,
+  "accepted_required": 100,
+  "final_safe_idle_matches": true,
+  "finalization_errors": [],
+  "finished_utc": "2026-08-13T22:10:50.640421+00:00",
+  "measurement_id": "MS-00B",
+  "orientation": "swapped",
+  "rejected": 0,
+  "sign_convention": "B minus A; positive means CHB arrived later than CHA",
+  "started_utc": "2026-08-13T22:10:12.063605+00:00",
+  "status": "PASS",
+  "step": "0b"
+}

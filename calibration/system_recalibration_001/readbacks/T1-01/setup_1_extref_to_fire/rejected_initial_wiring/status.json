@@ -1,0 +1,30 @@
+{
+  "accepted_required_per_delay": 100,
+  "error": "0 ns: only 0 accepted after 300 attempts",
+  "final_safe_idle_matches": true,
+  "finalization_errors": [],
+  "finished_utc": "2026-08-08T21:43:08.317736+00:00",
+  "measurement_id": "TC-04",
+  "operator": "Christopher Robertson",
+  "per_delay": {
+    "0": {
+      "accepted": 0,
+      "rejected": 300
+    }
+  },
+  "phase": "T1-01",
+  "programmed_delays_ns": [
+    0,
+    100,
+    1000,
+    10000,
+    100000,
+    1000000
+  ],
+  "reference_edge": "rising",
+  "sign_convention": "PicoScope CHB minus CHA; positive means target arrived later",
+  "started_utc": "2026-08-08T21:42:18.897859+00:00",
+  "status": "FAIL",
+  "step": "4",
+  "target_edge": "falling"
+}

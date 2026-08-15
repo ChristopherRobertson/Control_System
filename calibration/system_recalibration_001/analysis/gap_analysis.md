@@ -2,7 +2,11 @@
 
 ## Conclusion
 
-The installed system is **not presently demonstrated fully calibrated**. Existing values are historical comparison data only. The prior timing procedure covers useful electrical timing concepts but does not cover the complete campaign and conflicts with current safety restrictions.
+The installed system is **not presently demonstrated fully calibrated**.
+Historical canonical values remain comparison-only. Campaign-local results from
+completed S0 through T1-01 are valid preserved inputs to the remaining campaign
+but have not been canonically promoted. The prior timing procedure did not
+cover the complete campaign and conflicted with current safety restrictions.
 
 ## Critical conflicts and omissions
 
@@ -10,19 +14,27 @@ The installed system is **not presently demonstrated fully calibrated**. Existin
 2. An operator-confirmed side experiment established the HF2LI captured-word mapping for MIRcat DB9 pins 1–3 as bits 20, 21, and 22. Campaign-local raw evidence for that side experiment was not supplied, so MD-01 must still verify polarity/state semantics, bidirectional behavior, pulse signatures/counts, timing, and repeatability.
 3. Historical canonical timing data contain retired CHD results and raw-source paths under the protected `Control_System` repository. They are comparison-only and cannot validate this run or reintroduce the retired route.
 4. MS-01/MS-02 provide run-local Pico A/B skew, splitter branch separation, sensitivities, pulse fidelity, and controlled reconnection evidence. OP-01 measures operational monitor-to-sample latency and subtracts the MS-01 scope-path skew, signed MS-02 drive-minus-monitor branch delay, the OP-01 adapter engineering correction, and detector response delay. The adapter is assigned directly in OP-01 as 0.125 ns with 0.0722 ns rectangular standard uncertainty from a conservative 0–0.25 ns one-way interval; detector latency, saturation/noise/linearity, and sample-plane placement remain unresolved.
-5. Direct-route and cross-generator results need rerun-local slope/intercept/jitter estimates at every required delay, pulse fidelity, readbacks, counts, reference planes, controlled corrections, and closure.
+5. **Resolved by completed T2-01 and T1-01:** run-local slope/intercept/jitter estimates, pulse fidelity, readbacks, counts, reference planes, controlled corrections, and electrical closure are preserved in their stable phase records. They are imported downstream and are not repeated.
 6. The MIRcat DB9 1–3 captured-word bit assignments are accepted from the side experiment, but direction reversal, process-trigger GUI sequence, sweep pulse accounting, active/gap timing, repeated mapping qualification, and host-independent wavelength correlation are not established as a single controlled calibration chain.
-7. Absolute spectral calibration lacks verified reference-material provenance and uncertainty. Without it, only relative repeatability/hysteresis/effective sampling may be claimed.
+7. Spectral alignment still requires authoritative polystyrene features and uncertainty plus authoritative Mylar validation features and uncertainty. Film thickness and quantitative etalon/absolute-film claims are intentionally outside scope.
 8. HF2LI demodulator timing, filter response, range/clipping margin, timestamp alignment, cross-stream loss, and full-duration endurance are incomplete.
-9. Detector dark noise, drift/stability, cross-talk, relative gain, linearity, saturation, SNR, and normalization uncertainty are incomplete; absolute responsivity is unavailable absent a traceable optical-power standard.
+9. Detector dark noise, drift/stability, cross-talk, per-channel gain/response, linearity, saturation, SNR, and normalization uncertainty are incomplete. The installed sample/reference splitter and downstream paths have not been shown to be 50/50 and must not be assumed equal. ATT-01 measures both splitter ports; DET-02 separates detector/electronics responses; DET-04 establishes the wavelength-dependent detector-plane optical balance, system baseline ratio, covariance, and normalization correction. Results are installed-chain measurements referenced to the qualified available power meter; accredited absolute responsivity is not claimed.
 10. Optical Q-switch-to-sample timing lacks the run-local OP-01 adapter record, detector correction, placement uncertainty, bounded shot accounting, blocked control, preview evidence, and restoration repeatability.
-11. Complete reference-plane-compatible timing closure, operational delay equation, two-run end-to-end validation, failure recovery, complete GUM budgets, and article-to-raw traceability remain outstanding.
-12. Software/driver/firmware versions, certificates, cable/splitter/adapter/detector IDs, environmental conditions, and spectral-reference identity are incomplete.
+11. Complete reference-plane-compatible timing closure, operational delay equation, two-run end-to-end validation, failure recovery, uncertainty budgets, and thesis-claim-to-raw provenance remain outstanding.
+12. Retained lightweight software-version records, replacement detector/SIP identity, available-meter qualification, applicable wiring authority, and spectral-reference authority remain incomplete. Device-under-test certificate retrieval and calibrated environmental claims were discarded.
 
 ## Acceptance limits still requiring authoritative inputs
 
-PicoScope timebase accuracy, resolution-specific sample interval behavior, bandwidth/range accuracy; T660 delay accuracy/jitter/amplitude specifications; MIRcat sweep/trigger tolerances; HF2LI clock/demodulator specifications; detector limits; spectral reference uncertainty; cable propagation specifications; laser-safe operating constraints; and user-approved engineering closure limits must be extracted from manuals/certificates or measured noise before execution. Unknown terms will not be assigned zero.
+PicoScope timebase accuracy for actual used settings, relevant MIRcat/HF2LI operating limits, detector limits, spectral-reference uncertainty, laser-safe operating constraints, available power-meter specifications, and user-approved engineering closure limits must come from the applicable manufacturer specification or direct campaign measurement. Unknown terms are not assigned zero, but discarded certificates are not execution gates.
 
 ## Current classification
 
-`INCOMPLETELY CALIBRATED` (pre-campaign assessment). This is not a failure result; the new campaign has not begun hardware execution.
+`INCOMPLETELY CALIBRATED — PARTIAL CAMPAIGN COMPLETE`.
+
+S0, MS-01, MS-02, T2-01, and T1-01 have completed with preserved phase
+evidence; PT-01 is in progress. These completed measurements are not repeated.
+The remaining items above are addressed by the expanded sequence in
+`plans/campaign_sequence.md`, including new TR-01, OM-01, ATT-01, DET-03, and DET-04
+phases and the RPT-01/PROM-01 reuse package. Pump/probe beam performance is
+measured in the separate `system_characterization_001` campaign after its
+calibration dependencies are qualified.

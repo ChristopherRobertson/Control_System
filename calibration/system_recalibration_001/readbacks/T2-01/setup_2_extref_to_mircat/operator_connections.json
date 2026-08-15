@@ -1,0 +1,15 @@
+{
+  "operator": "Christopher Robertson",
+  "setup": "Setup 2 - HF2LI EXT REF arrival to MIRcat TRIG IN arrival",
+  "status": "OPERATOR_CONFIRMED",
+  "operator_observation": "done",
+  "recorded_date_local": "2026-07-30",
+  "confirmed_requested_configuration": [
+    "T660-2 CHC final DAQ cable restored to HF2LI DIO1 DAQ",
+    "T660-2 CHA final EXT REF cable remains connected to PicoScope CHA",
+    "T660-2 CHB final MIRcat TRIG IN cable destination end connected to PicoScope CHB",
+    "T660-2 CHD remains connected to T660-1 TRIG IN",
+    "fixed DDG assemblies and CLOCK-SPLITTER-01 were not moved"
+  ],
+  "basis": "operator completion confirmation"
+}

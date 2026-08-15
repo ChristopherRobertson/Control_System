@@ -1,0 +1,41 @@
+{
+  "capture_settings": {
+    "channels": {
+      "A": {
+        "analog_offset_v": 0.0,
+        "coupling": "DC",
+        "enabled": true,
+        "range": "10V"
+      },
+      "B": {
+        "analog_offset_v": 0.0,
+        "coupling": "DC",
+        "enabled": true,
+        "range": "10V"
+      }
+    },
+    "external_trigger": {
+      "auto_trigger_ms": 0,
+      "delay_samples": 0,
+      "direction": 3,
+      "direction_name": "falling",
+      "source": "A",
+      "threshold_adc": 5000
+    },
+    "pre_trigger_samples": 1000,
+    "pulse_count_threshold_adc": 5000,
+    "resolution": "8BIT",
+    "timebase": 1,
+    "timeout_s": 10.0,
+    "total_samples": 16000
+  },
+  "configured_model": "5244D",
+  "configured_serial_number": "10261",
+  "sample_timing_validation": {
+    "max_samples": 268435392,
+    "requested_samples": 16000,
+    "sample_interval_ns": 2.0,
+    "timebase": 1
+  },
+  "sdk_serial_number": "10261/0071"
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the real MIRcat Day 5 safe status/tune check.
+"""Run the real MIRcat safe status/tune check.
 
 Usage:
     python tests/hardware_checks/check_mircat_status_tune.py --operator "Name" --confirm-real-hardware
@@ -37,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--allow-emission-on",
         action="store_true",
-        help="Only use with explicit lab approval; omitted for the Day 5 safe-state gate.",
+        help="Only use with explicit lab approval; omitted for the safe-state gate.",
     )
     parser.add_argument(
         "--approved-laser-safety-condition",

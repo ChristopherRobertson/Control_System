@@ -44,7 +44,7 @@ procedure:
     explicit_laser_safety_confirmation: true
     unique_run_directory: true
     overwrite_existing_run_data: false
-    publish_to_rsi_draft: false
+    update_external_documents: false
     publish_to_canonical_calibration: false
 t660:
   t660_2:

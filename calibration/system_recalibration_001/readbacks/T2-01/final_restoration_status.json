@@ -1,0 +1,22 @@
+{
+  "finished_utc": "2026-08-08T21:23:08.422293+00:00",
+  "operator": "Christopher Robertson",
+  "phase": "T2-01",
+  "picoscope": {
+    "configured_model": "5244D",
+    "configured_serial_number": "10261",
+    "ownership": "PASS",
+    "sdk_serial_number": "10261/0071"
+  },
+  "process_inventory": {
+    "basis": "Windows process inventory immediately before this utility",
+    "competing_python_or_picoscope_process_found": false
+  },
+  "purpose": "exclusive PicoScope ownership and T660 safe-idle/readback before first cable change",
+  "started_utc": "2026-08-08T21:23:01.204488+00:00",
+  "t660_safe_idle": {
+    "matches_recipe": true,
+    "mismatches": [],
+    "status": "PASS"
+  }
+}
