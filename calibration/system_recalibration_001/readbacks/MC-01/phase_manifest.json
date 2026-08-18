@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0.0",
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "MC-01",
+  "phase_run_id": "system_recalibration_001_MC-01_001",
+  "status": "COMPLETE",
+  "decision": "PASS",
+  "operator_ids": ["Christopher_Robertson", "Codex_orchestration"],
+  "start_utc": "2026-08-17T18:18:18.5108546Z",
+  "end_utc": "2026-08-17T22:40:18.8720069Z",
+  "configuration_id": "MC01-CHCFG-POINT-EXTSTEP-v1",
+  "repository": {
+    "path": "C:/Users/Chris/Documents/GitHub/Control_System",
+    "branch": "main",
+    "dirty_files": ["Pre-existing and MC-01 changes preserved; captured git status is in repository_state.txt"]
+  },
+  "device_ids": ["MIRCAT-10524", "T660-1-00369", "T660-2-00431", "HF2LI-dev18500"],
+  "component_ids": ["MIRCAT-DB9-BOARD-01", "MIRCAT-DB9-CABLE-01"],
+  "sample_ids": ["NO-SAMPLE-MC01"],
+  "calibration_bundle_ids": ["CAL-system_recalibration_001-WORKING-EVIDENCE", "CAL-system_characterization_001-CH00"],
+  "artifact_index": "artifacts.csv",
+  "acquisition_index": "acquisition_index.csv",
+  "conditions_table": "conditions.csv",
+  "measurements_table": "measurements.csv",
+  "exclusions_table": "exclusions.csv",
+  "calibration_links_table": "calibration_links.csv",
+  "deviations": [
+    "Process Trigger Mode is not serialized by mcfg and requires explicit runtime set/readback",
+    "DIO21 is accepted as correlated event evidence but not as a persistent waiting/tuned level",
+    "Two accepted GUI repeats retained rejected HF2LI export attempts; separate raw-poll diagnostic supplies accepted DIO evidence"
+  ],
+  "user_input_required": [],
+  "restoration_artifact_id": "MC01-RESTORATION-002",
+  "sdk_automation_eligibility": "ELIGIBLE_WITH_MANDATORY_RUNTIME_PREREQUISITES",
+  "promotion_performed": false,
+  "promotion_approval_reference": null,
+  "next_phase_requiring_separate_authorization": "TR-01",
+  "notes": "MC-01 passed. No optical pulses occurred; process-control behavior only was qualified."
+}
+

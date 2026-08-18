@@ -1,0 +1,14 @@
+{
+  "artifact_id": "CH00-RESTORATION-001",
+  "campaign_id": "system_characterization_001",
+  "phase_id": "CH-00",
+  "confirmed_utc": "2026-08-17T17:20:42.1465097Z",
+  "hardware_operated": false,
+  "hardware_readbacks_created": false,
+  "laser_emission": false,
+  "samples_handled": false,
+  "co_handled": false,
+  "restoration_required": false,
+  "final_state": "No physical state changed by CH-00 analysis-only work",
+  "promotion_performed": false
+}

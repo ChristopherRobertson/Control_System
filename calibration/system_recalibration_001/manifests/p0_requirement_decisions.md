@@ -19,7 +19,7 @@ set on 2026-08-15.
 
 | Order | Decision ID | Requirement still requested | Current reason | Consequence if discarded | Recommended disposition | Status |
 |---:|---|---|---|---|---|---|
-| 1 | P0-D001 | Record the installed replacement reference-detector SIP model/serial and detector model/serial after arrival. | Associates DET-01/02/03/04 and all dual-channel results with the actual installed hardware. | Detector-specific calibration and normalization cannot be tied to a physical reference channel; affected phases remain blocked. | KEEP | DECIDED: KEEP — 2026-08-15 |
+| 1 | P0-D001 | Record the installed replacement reference-detector SIP model/serial and detector model/serial after arrival. | Associates DET-01/02/03/04 and all dual-channel results with the actual installed hardware. | Detector-specific calibration and normalization cannot be tied to a physical reference channel; affected phases remain blocked. | KEEP | SATISFIED — identity recorded 2026-08-17 |
 | 2 | P0-D002 | Retrieve PicoScope certificate identity, issuer, dates, covered range, uncertainty, and association to serial `10261`. | Supports traceable timebase, voltage, and timing uncertainty claims. | Use manufacturer specifications and campaign measurements only; label results documented nontraceable. | NARROW to fields that affect used ranges | DECIDED: NARROW — 2026-08-15 |
 | 3 | P0-D003 | Retrieve the T660-1 certificate/equipment record and associate it with serial `00369`. | Supports device-specific delay/amplitude traceability beyond campaign measurement. | Retain measured campaign performance without a traceable device certificate. | DISCARD certificate retrieval; retain identity/settings and direct results | DECIDED: DISCARD — 2026-08-15 |
 | 4 | P0-D004 | Retrieve the T660-2 certificate/equipment record and associate it with serial `00431`. | Supports device-specific delay/amplitude traceability beyond campaign measurement. | Retain measured campaign performance without a traceable device certificate. | DISCARD certificate retrieval; retain identity/settings and direct results | DECIDED: DISCARD — 2026-08-15 |
@@ -45,7 +45,7 @@ set on 2026-08-15.
 
 | Decision ID | Disposition | Decision date | Rationale and resulting requirement |
 |---|---|---|---|
-| P0-D001 | KEEP | 2026-08-15 | The installed replacement reference-detector SIP and detector identities are required to associate DET-01 through DET-04 and later dual-channel results with the physical reference channel. Record the SIP model/serial and detector model/serial after arrival; no claim limitation was accepted. |
+| P0-D001 | KEEP | 2026-08-15; satisfied 2026-08-17 | Installed VIGO `SIP-DC-250M` serial `445161066` and `PVM-10.6-1x1` detector serial `21834` are now associated with the physical reference channel. DET-01 through DET-04 performance qualification remains required. |
 | P0-D002 | NARROW | 2026-08-15 | Record PicoScope serial `10261`, actual timebases/ranges used, and applicable manufacturer timebase/voltage accuracy. A formal certificate is not required. Voltage accuracy is included only where voltage is a reported quantitative result rather than a threshold diagnostic. |
 | P0-D003–P0-D004 | DISCARD | 2026-08-15 | Do not retrieve T660 certificates. Retain the existing serial/firmware/configuration records and directly measured T1-01/T2-01 performance and uncertainty. |
 | P0-D005 | DISCARD | 2026-08-15 | Do not retrieve a MIRcat certificate. SP-02 and QB-01 define the measured spectral and operating performance used by the thesis. |

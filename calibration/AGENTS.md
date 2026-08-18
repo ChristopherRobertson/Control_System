@@ -31,6 +31,14 @@ stable campaign, phase, acquisition, artifact, and calibration-bundle IDs.
 Do not recreate or invoke a monolithic complete-calibration runner. Use only
 the approved phase plan and focused phase utilities.
 
+## Default wiring standing condition
+
+Use `docs/default_wiring_state.md` as the authority for the phrase `default
+wiring restored`. T660-1 channel D and MIRcat DB9 pin 5 are disconnected;
+MIRcat DB9 pins 6 and 8 are unused and unwired. Treat these as standing
+operator-confirmed conditions and do not ask for repetitive confirmation
+unless the operator explicitly reports that something changed.
+
 Do not create a new campaign plan or phase directory merely because a session
 resumes. Keep canonical calibration outputs unchanged unless the user supplies
 the exact phrase `APPROVE CALIBRATION PROMOTION`.

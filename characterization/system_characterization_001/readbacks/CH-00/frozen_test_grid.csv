@@ -1,0 +1,8 @@
+grid_id,family,source_or_region,topology,minimum_conditions,repetition_rule,rationale,status
+GRID-PROBE-MYLAR,probe,Local Mylar/polystyrene carbonyl window,TOPO-SWEEP-01,One selected sweep configuration with authoritative polystyrene alignment partition and independent Mylar holdout; three accepted Mylar scans per direction,As stated; no added survey points,Independent position/shape validation,FROZEN
+GRID-PROBE-BIO,probe,Combined 1885-1980 cm^-1 biological region,TOPO-POINT-01,HRP lower band; HRP upper band; MbCO A1; one shared off-band control,Shared points characterized once,Minimum union of HRP and MbCO claims,FROZEN
+GRID-PUMP-532,pump,Direct 532 nm,TOPO-POINT-01,Low and high planned average power plus revisit,Three readings per endpoint where applicable,Direct HRP pumping only,FROZEN
+GRID-DRIVE-355,pump_drive,355 nm,TOPO-POINT-01,Low and high planned OPO-drive average power plus revisit,Three readings per endpoint where applicable,OPO drive only; not a sample pump claim,FROZEN
+GRID-PUMP-540,pump,540 nm OPO output,TOPO-POINT-01,Low and high planned average power plus three return visits,As stated,MbCO pumping only,FROZEN
+GRID-TOPO-SWEEP,acquisition,Probe-only continuous sweep,TOPO-SWEEP-01,Selected setting and one slower reference in both directions,Two bracket settings with three step responses,Mylar workflow only,FROZEN
+GRID-TOPO-POINT,acquisition,Finite rare-pump fixed-wavenumber/recovery,TOPO-POINT-01,Selected dwell/filter and one bracket setting; longest retained recovery stream,Prospective precision count capped by exposure budget,Biological instrument workflow without biological execution,FROZEN

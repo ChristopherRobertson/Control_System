@@ -1,6 +1,6 @@
 # PT-01 Setup 1 operator gate
 
-Status: **OPERATOR ACTION REQUIRED**
+Status: **COMPLETE — OPERATOR CONFIRMED; ACQUISITION PASS; RESTORATION PASS**
 
 The 2026-08-13 initial preflight passed. Both T660s are in verified safe idle
 and all outputs are disabled.
@@ -24,3 +24,8 @@ With power/interlocks handled under the laboratory procedure:
 
 No output may be enabled until the operator reports that all six conditions
 are satisfied and the post-connection safe-idle readback passes.
+
+All six conditions were operator-confirmed on 2026-08-17 and the required
+post-connection safe-idle readback passed before acquisition. The final
+restoration and final safe-idle readback also passed. See
+`setup_1_operator_confirmations.md` and `final_report.md`.

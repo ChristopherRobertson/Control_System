@@ -1,0 +1,4 @@
+campaign_id,phase_id,acquisition_id,result_set_id,quantity_name,value,unit,statistic,reference_plane,sign_convention,correction_state,standard_uncertainty,coverage_factor,expanded_uncertainty,quality_flag,analysis_artifact_id,notes
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-RESULT-CLOSURE,mandatory_identity_resource_rows_closed,21,count,audit,decision register,not_applicable,bounded,,,,PASS,TR01-ART-0002,"All P0 decisions exported; retained later-phase work remains explicitly deferred"
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-RESULT-CLOSURE,unauthorized_physical_transitions,0,count,observed,TR-01 interval,not_applicable,bounded,,,,PASS,TR01-ART-0007,"Records-only execution"
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-RESULT-CLOSURE,canonical_promotions,0,count,observed,repository,not_applicable,bounded,,,,PASS,TR01-ART-0007,"Approval phrase not supplied"

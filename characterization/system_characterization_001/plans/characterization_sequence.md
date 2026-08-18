@@ -73,17 +73,37 @@ deliverables below are additional requirements.
 
 ### CH-00 — claim, scope, and calibration-import freeze
 
+Status: **COMPLETE — PASS; ANALYSIS-ONLY CLOSEOUT; PB-01 NOT AUTHORIZED**
+
 Define the claims the thesis and downstream experiments will make, the tested operating
 envelope needed to support them, and the calibration dependencies for every
 reported quantity. This phase is analysis-only.
+
+The mandatory grid is the smallest union of the three verified briefs:
+
+- one probe-only continuous-sweep window around the specimen-matched Mylar PET
+  carbonyl feature and the polystyrene features needed to freeze its correction;
+- the combined 1885-1980 cm^-1 biological probe region, reduced to the two
+  HRP-C-CO bands, the MbCO A1/upper diagnostic band, and only the off-band
+  anchors required by the controls;
+- direct 532 nm pumping for HRP-C-CO;
+- 355 nm only as the drive required to produce the 540 nm OPO pump for MbCO;
+- 540 nm OPO pumping for MbCO; and
+- exactly two acquisition topologies: probe-only continuous sweep and finite
+  rare-pump fixed-wavenumber/recovery acquisition.
+
+Shared anchors and settings are characterized once. The broad 1650-2050 cm^-1
+probe survey, direct 1064 nm sample-path claims, broad OPO tuning, pulse-energy
+distributions, peak power, and optional mechanistic/quantum-yield extensions
+are excluded unless CH-00 is formally reopened before hardware begins.
 
 Mandatory deliverables before CH-00 closes:
 
 - Claim-to-measurement matrix distinguishing manufacturer specification,
   measured result, derived result, and unvalidated capability.
-- Frozen wavelength/power/scan/delay test grid with rationale, including
-  every condition intended for biological work and representative points for
-  any broader range claim.
+- Frozen wavelength/power/scan/delay test grid with rationale covering every
+  retained condition in the three-brief union. Broader-range claims and their
+  representative points remain excluded unless CH-00 is formally reopened.
 - Calibration dependency graph and `calibration_links.csv` populated with the
   required bundle/quantity IDs and validity states.
 - Imported final P0 requirement decisions that affect reference bases,
@@ -92,11 +112,14 @@ Mandatory deliverables before CH-00 closes:
 - Equipment/sample/component registries, configuration-ID method, acceptance
   criteria, uncertainty plan, and exposure/shot-budget policy.
 
-### PB-01 — Nd:YAG direct-output characterization
+### PB-01 — Nd:YAG direct-pump and OPO-drive characterization
 
-Characterize the installed Nd:YAG at 1064 nm and the direct 355 nm path under
-the operating Q-switch conditions intended for downstream work. Measure only
-conditions required by the frozen claim grid.
+Characterize direct 532 nm at the HRP operating configuration and 355 nm only
+at the configuration that drives the OPO for 540 nm MbCO pumping. Observe
+residual 1064 nm only for source health, separation, and safety; do not create a
+quantitative 1064 nm sample-path grid. At each retained output use the lowest
+and highest planned average-power settings plus one revisit. Add a midpoint
+only if the predeclared linearity/stability rule fails.
 
 Mandatory deliverables:
 
@@ -112,13 +135,13 @@ Mandatory deliverables:
   statement, and safe restoration. Do not claim direct pulse-energy
   distributions, pulse-to-pulse energy jitter, or calibrated peak power.
 
-### PB-02 — OPO output and wavelength-dependent characterization
+### PB-02 — 540 nm OPO output characterization
 
-At every biologically intended OPO wavelength plus the representative points
-defined in CH-00, measure average power, wavelength/readback agreement, only a
-linewidth bound required by the experiment, throughput relative to the 355 nm pump,
-stability, tuning repeatability, and unusable/gap regions. Direct 532 nm is
-included only if it will be claimed or used.
+At 540 nm only, measure average power, independent wavelength/readback
+agreement, the linewidth bound required by the MbCO experiment, throughput
+relative to the retained 355 nm drive, stability, pointing, and three return-
+to-wavelength visits. Do not map the broader OPO tuning range. Direct 532 nm is
+owned by PB-01 and is not repeated here.
 
 Mandatory deliverables:
 
@@ -130,13 +153,17 @@ Mandatory deliverables:
   manufacturer-only range, and unavailable range; recommended wavelength-
   specific settings and restoration record.
 
-### QB-01 — MIRcat probe-source characterization
+### QB-01 — minimal MIRcat probe-source characterization
 
-Across each installed module and the CH-00 test grid, characterize sample-plane-
-independent source output: average optical power, operating pulse settings,
-repetition rate, duty cycle, wavelength/readback behavior, module transitions,
-stability, tuning delay, and polarization. Reuse SP-02 axis calibration and
-MSW-01 timing; do not redetermine them.
+Characterize only the module(s) intersecting the retained Mylar/polystyrene
+carbonyl window and combined 1885-1980 cm^-1 biological region. In the Mylar
+window use the lower edge, selected feature, and upper edge of the accepted
+continuous sweep. In the biological region use the merged HRP/MbCO band and
+off-band anchors; coincident anchors are one condition. Test the single sweep
+operating point and the single fixed-wavenumber/rare-pump operating point.
+Measure a module transition only if a retained window crosses one. Reuse SP-02
+axis calibration and MSW-01 timing; do not redetermine them or survey unused
+modules/ranges.
 
 Mandatory deliverables:
 
@@ -147,13 +174,41 @@ Mandatory deliverables:
   operating envelope.
 - Measured-versus-manufacturer capability table and safe shutdown record.
 
+### SC-01 — gas-tight sample-cell and temperature-stage qualification
+
+Qualify the minimum nonbiological sample hardware shared by the HRP-C-CO and
+MbCO procedures before biological preparation. Use water or the approved
+buffer surrogate only; no CO or protein is used. CH-00 selects the smallest
+cell set, preferring one common gas-tight CaF2 assembly/path when the two briefs'
+transmission and sensitivity constraints allow it.
+
+Mandatory deliverables:
+
+- Stable IDs for cell body, windows, spacer, seals, mount, temperature sensor/
+  stage, and fill/vent hardware; measured assembled path length and uncertainty;
+  fill/dead volume; aperture; orientation; cleaning and assembly method.
+- Empty-cell and filled-blank transmission at the retained probe anchors,
+  background/fringe/scatter results, bubble and leak criteria, one disassembly/
+  reassembly check, and compatibility with the retained pump/probe geometry.
+- Temperature-sensor basis, spatial placement, equilibration rule, stability/
+  drift and uncertainty at 293 K and 298 K when active control is available.
+  If a setpoint cannot be controlled, record the observational limit and narrow
+  the later kinetic claim rather than adding an unsupported calibration.
+- Safe handling/restoration record and a biological-handoff table identifying
+  the qualified cell/path/temperature configurations. CO loading, protein
+  state verification, and chemical stability remain experiment-phase work.
+
 ### OG-01 — sample-plane optical transfer and beam geometry
 
-Using the final optical path, characterize how source output reaches the
-sample plane. For every operating condition needed downstream, measure pump and
-probe spot size using a stated diameter convention, spatial profile, incidence
-angle, polarization, path length, transfer efficiency, sample-plane pulse
-energy/power, fluence or irradiance, and positioning uncertainty.
+Using the final optical path and SC-01 cell/mount, characterize exactly three
+optical conditions: probe-only Mylar validation, direct-532/HRP probing, and
+OPO-540/MbCO probing. For the QCL, profile one Mylar anchor and the lower/upper
+biological anchors; add an intermediate point only if the endpoint comparison
+fails the wavelength-dependence criterion. Measure pump and probe spot size
+using a stated diameter convention, spatial profile, incidence angle,
+polarization, path length, transfer efficiency, average power, derived mean
+pulse energy where allowed, fluence/irradiance inputs, and positioning
+uncertainty.
 
 Mandatory deliverables:
 
@@ -172,6 +227,12 @@ using the desired biological response as the only indicator. Quantify overlap
 fraction, relative centroids, crossing angle, overlap area/volume as applicable,
 placement repeatability, and sensitivity to routine realignment.
 
+Retain only two pump/probe pairs: direct 532 nm with the HRP probe geometry and
+OPO 540 nm with the MbCO A1 probe geometry. For each pair perform three
+independent placements and one controlled realignment. Mylar is pump-off and
+adds no overlap condition. Add a second probe wavenumber only if OG-01 shows a
+material geometry change across the corresponding biological window.
+
 Mandatory deliverables:
 
 - Independent overlap method, blocked/single-beam controls, native images or
@@ -185,11 +246,16 @@ Mandatory deliverables:
 ### AR-01 — acquisition settling and scan-dwell response
 
 Using an optically stable nonbiological signal and the qualified HF2LI setup,
-characterize lock-in settling, dwell-time distortion, phase dependence,
-forward/reverse peak shift, effective bandwidth, and sample/reference ratio
-response under normal acquisition conditions. Import HF-01/HF-02/DET-01/02
-and the DET-04 wavelength-dependent optical-balance/normalization bundle; do
-not repeat their component or splitter-balance qualification.
+characterize exactly two acquisition configurations. For the Mylar continuous
+sweep, compare the CH-00-selected speed/filter setting with one slower
+reference in both directions. For the biological fixed-wavenumber mode,
+compare the selected dwell/filter setting with one bracketing setting using a
+single wavelength step and the longest retained rare-event record. Characterize
+lock-in/source/detector settling, dwell distortion, phase dependence,
+forward/reverse peak shift, effective bandwidth, filter memory, and sample/
+reference ratio response. Add another setting only after a predeclared
+distortion, settling, or precision failure. Import HF-01/HF-02/DET-01/02 and
+the DET-04 normalization bundle; do not repeat component qualification.
 
 Mandatory deliverables:
 
@@ -202,9 +268,11 @@ Mandatory deliverables:
 
 ### SV-01 — independent FTIR reference-data acquisition
 
-Acquire or register the high-resolution FTIR references needed for polystyrene,
-Mylar, and any other nonbiological validation standard. Do not refit the QCL
-axis here and do not use biological spectra as calibration standards.
+Acquire or register one specimen-matched high-resolution FTIR reference set for
+polystyrene and one for Mylar. No other standard and no biological spectrum is
+part of this phase. Match the retained polarization/orientation basis and
+acquire only the resolution/coadds required by the frozen position/shape
+uncertainty allocation. Do not refit the QCL axis here.
 
 Mandatory deliverables:
 
@@ -250,6 +318,12 @@ Mandatory deliverables:
 - DET-04 correction ID, raw-ratio versus normalized-result audit, forward-model
   inputs/outputs, figures/tables, and thesis-claim acceptance decision.
 
+The minimum acquisition is the predeclared polystyrene alignment and holdout
+sets plus three accepted Mylar scans per direction. The post-freeze Mylar
+heterogeneity pilot may increase coupon/site/remount counts prospectively, but
+no extra scan, material, orientation, or spectral window is added merely to
+improve the appearance of the result.
+
 ### IR-01 — system temporal instrument response
 
 Measure the complete instrument temporal response at a sample-equivalent plane
@@ -257,6 +331,13 @@ using the OP-01/CL-01 time origin and qualified detector/acquisition settings.
 Characterize the combined effects of pump duration, probe gate, residual
 jitter, detector response, and lock-in filtering without repeating electrical
 path calibration.
+
+Use three retained configurations only: direct 532 nm at the lower HRP-C-CO
+band, direct 532 nm at the upper HRP-C-CO band, and OPO 540 nm at the MbCO A1
+band. Merge HRP upper/MbCO probe settings only where the pump-path-specific
+response is still measured separately. The repeat count is selected
+prospectively from the IRF-width/bias precision target and capped by the frozen
+exposure budget. Mylar adds no temporal-response condition.
 
 Mandatory deliverables:
 
@@ -277,6 +358,14 @@ baseline/etalon artifacts, back-reflection sensitivity, and saturation margin.
 Reuse component-level detector results and the DET-04 optical/detector balance
 model; do not reacquire the splitter calibration.
 
+The minimum grid is one complete Mylar continuous-sweep control, fixed-
+wavenumber records at the two HRP bands and MbCO A1 band, and one shared
+off-band control. At each condition acquire one short record and one record as
+long as the corresponding planned experiment block. Run pump-blocked plus
+finite direct-532 and OPO-540 artifact controls only at their matching
+biological anchors. Add power, dwell, or averaging points only if the retained
+claim's detection/precision rule fails.
+
 Mandatory deliverables:
 
 - Fixed-wavenumber short/long traces, repeated spectra, Sample/Reference and
@@ -294,11 +383,17 @@ separate days and after one documented normal restoration/reinstallation. This
 tests reproducibility; it is not a repeat of the complete characterization
 grid.
 
+On each of three independent days, run one compact checkpoint suite containing
+the Mylar sweep anchor, one direct-532/HRP surrogate point, and one OPO-540/
+MbCO surrogate point. Shared startup, dark, geometry, and restoration evidence
+is recorded once per day. Do not repeat full PB/QB/OG/OV/AR/SV/IR/PF grids.
+
 Mandatory deliverables:
 
-- At least three independent day/configuration realizations for the selected
-  checkpoints, with stable configuration IDs, complete settings snapshots,
-  environment, operator actions, and calibration validity.
+- Exactly three planned independent day/configuration realizations for the
+  selected checkpoints, with stable configuration IDs, complete settings
+  snapshots, environment, operator actions, and calibration validity. An
+  additional realization is allowed only under the campaign minimal-grid rule.
 - Within-run, between-run, and restoration components; control charts or
   equivalent drift assessment; agreement with earlier phase results; and
   recharacterization triggers.
@@ -307,10 +402,12 @@ Mandatory deliverables:
 
 ### E2E-CH — bounded nonbiological full-system demonstration
 
-Run the final promoted characterization configuration end to end using a
-nonbiological standard/control. Reuse calibration E2E-01 fault-recovery
-evidence; do not repeat its simulated failure unless the software/configuration
-has materially changed.
+Run one composite nonbiological demonstration with three bounded blocks under
+one reviewed phase plan: probe-only Mylar-style continuous sweep, finite
+direct-532/HRP-style fixed-wavenumber recovery, and finite OPO-540/MbCO-style
+fixed-wavenumber recovery. Reuse calibration FE-01/E2E-01 fault-recovery
+evidence; do not repeat simulated failures unless the orchestration or
+configuration has materially changed.
 
 Mandatory deliverables:
 

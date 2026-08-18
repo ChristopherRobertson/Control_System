@@ -1,0 +1,4 @@
+2026-08-18T16:21:48.8810815Z TR-01 records-only execution opened.
+No hardware command, device connection, physical transition, arm, emission, acquisition, sample handling, CO handling, biological work, promotion, staging, commit, or push occurred.
+Existing repository records and local manufacturer documents were inspected read-only.
+2026-08-18T16:21:48.8810815Z TR-01 records-only closure completed at OM-01 authorization boundary.

@@ -1,0 +1,35 @@
+campaign_id,phase_id,acquisition_id,condition_set_id,condition_name,value_text,value_number,unit,source,uncertainty_value,uncertainty_unit,uncertainty_type,notes
+system_recalibration_001,MC-01,,MC01-COND-INITIAL-GUI,gui_connection_text,Connected to MIRcat S/N 10524,,,MC01-RAW-GUI-001,,,,Exact visible text
+system_recalibration_001,MC-01,,MC01-COND-INITIAL-GUI,gui_emission_state,OFF,,,MC01-RAW-GUI-001,,,,Bounded from dark Emission status and TURN EMISSION ON action label
+system_recalibration_001,MC-01,,MC01-COND-INITIAL-GUI,displayed_tune_wavenumber,,1850.00,cm^-1,MC01-RAW-GUI-001,,,,Observed only; outside retained region and not accepted for test
+system_recalibration_001,MC-01,,MC01-COND-INITIAL-GUI,process_trigger_mode,Use Internal Step Mode,,,MC01-RAW-GUI-002,,,,Observed initial mode; not accepted for MC-01 repeats
+system_recalibration_001,MC-01,,MC01-COND-INITIAL-GUI,pulse_mode,Use External Trigger Mode,,,MC01-RAW-GUI-002,,,,Observed initial mode
+system_recalibration_001,MC-01,,MC01-COND-PROVENANCE,gui_software_version,1.9.0.4,,,MC01-RAW-GUI-003,,,,Manufacturer GUI About page
+system_recalibration_001,MC-01,,MC01-COND-PROVENANCE,controller_firmware_version,3.1.0,,,MC01-RAW-GUI-003,,,,Manufacturer GUI About page
+system_recalibration_001,MC-01,,MC01-COND-PROVENANCE,mircat_model,MIRcat-QT-Z-2100,,,MC01-RAW-GUI-003,,,,Manufacturer GUI About page
+system_recalibration_001,MC-01,,MC01-COND-PROVENANCE,mircat_serial,10524,,,MC01-RAW-GUI-003,,,,Manufacturer GUI About page
+system_recalibration_001,MC-01,,MC01-COND-PROVENANCE,motion_model_type,6,,,MC01-RAW-GUI-003,,,,Motion firmware and hardware versions shown as N/A
+system_recalibration_001,MC-01,,MC01-COND-INITIAL-GUI,visible_favorites,Default; PowerOffCfg,,,MC01-RAW-GUI-004,,,,No retained CHCFG-POINT-RAREPUMP-v1 Favorite present
+system_recalibration_001,MC-01,,MC01-COND-INITIAL-GUI,scan_mode,Sweep Mode,,,MC01-RAW-GUI-005,,,,Observed only; outside MC-01 point/process scope
+system_recalibration_001,MC-01,,MC01-COND-STEP-INITIAL,scan_mode,Step and Measure Mode,,,MC01-RAW-GUI-007,,,,Selected operating mode
+system_recalibration_001,MC-01,,MC01-COND-STEP-INITIAL,keep_laser_on_between_steps,true,,,MC01-RAW-GUI-007,,,,Inherited state; rejected for non-emitting MC-01
+system_recalibration_001,MC-01,,MC01-COND-CANDIDATE,process_trigger_mode,Use External Step Mode,,,MC01-RAW-GUI-008,,,,Saved GUI setting
+system_recalibration_001,MC-01,,MC01-COND-CANDIDATE,pulse_mode,Use External Trigger Mode,,,MC01-RAW-GUI-008,,,,Saved GUI setting
+system_recalibration_001,MC-01,,MC01-COND-CANDIDATE,scan_mode,Step and Measure Mode,,,MC01-RAW-GUI-009,,,,Selected operating mode
+system_recalibration_001,MC-01,,MC01-COND-CANDIDATE,start_wavenumber,,1905.0,cm^-1,MC01-RAW-GUI-009,,,,HRP lower qualification point
+system_recalibration_001,MC-01,,MC01-COND-CANDIDATE,stop_wavenumber,,1934.0,cm^-1,MC01-RAW-GUI-009,,,,HRP upper qualification point
+system_recalibration_001,MC-01,,MC01-COND-CANDIDATE,step_size,,29.0,cm^-1,MC01-RAW-GUI-009,,,,One commanded point transition
+system_recalibration_001,MC-01,,MC01-COND-CANDIDATE,keep_laser_on_between_steps,false,,,MC01-RAW-GUI-009,,,,Required non-emitting candidate state
+system_recalibration_001,MC-01,,MC01-COND-ACTIVE-PREARM,gui_connection_text,Connected to MIRcat S/N 10524,,,MC01-ACTIVE-GUI-001,,,,Resumed active continuation
+system_recalibration_001,MC-01,,MC01-COND-ACTIVE-PREARM,interlock_state,ON_ALLOW,,,MC01-ACTIVE-GUI-001,,,,Installed interlock indicator green
+system_recalibration_001,MC-01,,MC01-COND-ACTIVE-PREARM,gui_emission_state,OFF,,,MC01-ACTIVE-GUI-001,,,,Emission indicator dark and QCL inactive
+system_recalibration_001,MC-01,,MC01-COND-ACTIVE-PREARM,process_trigger_mode,Use External Step Mode,,,MC01-ACTIVE-GUI-001,,,,Saved runtime prerequisite
+system_recalibration_001,MC-01,,MC01-COND-ACTIVE-PREARM,pulse_mode,Use External Trigger Mode,,,MC01-ACTIVE-GUI-001,,,,Saved mode
+system_recalibration_001,MC-01,,MC01-COND-ACTIVE-PREARM,scan_sequence,1905.0 to 1934.0 cm-1; step 29.0; one scan,,,MC01-ACTIVE-GUI-002,,,,Infinite and Keep Laser On Between Steps cleared
+system_recalibration_001,MC-01,,MC01-COND-REPEAT,t660_chc_recipe,negative; 10 ms; 50OHM; REM started,,,MC01-ACTIVE-REPEAT-001-RETRY1,,,,Only CHC enabled for each process command
+system_recalibration_001,MC-01,,MC01-COND-DIO,hf2li_dio_mapping,DB9 pin1 DIO20; pin2 DIO21; pin3 DIO22,,,MC01-DIO-DIAGNOSTIC-002,,,,Pins 5 6 and 8 remained excluded
+system_recalibration_001,MC-01,,MC01-COND-DIO,hf2li_clockbase,,210000000,Hz,MC01-DIO-DIAGNOSTIC-002,,,,Device dev18500
+system_recalibration_001,MC-01,,MC01-COND-SDK,sdk_api_version,2.4.1,,,MC01-SDK-QUAL-001,,,,No SDK arm emission tune or scan command
+system_recalibration_001,MC-01,,MC01-COND-OPTICAL,manual_shutter,closed throughout,,,MC01-OPCONF-016,,,,Operator-confirmed
+system_recalibration_001,MC-01,,MC01-COND-OPTICAL,t660_2_laser_trigger_commands,none,,,MC01-OPCONF-016,,,,Pulse Mode External Trigger; no optical pulses
+system_recalibration_001,MC-01,,MC01-COND-FINAL,restoration_state,powered down; GUI closed; SDK released; interlock inhibiting; default wiring restored,,,MC01-RESTORATION-002,,,,Final T660 safe idle zero mismatches

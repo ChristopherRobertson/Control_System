@@ -1,0 +1,11 @@
+claim_id,brief,minimum_claim,measurement_class,required_phase,retained_condition,acceptance_authority,excluded_extension
+CLM-MY-01,Mylar,Independent position and shape validation of a polystyrene-frozen axis correction,measured,SV-01;SV-02,Local Mylar/polystyrene carbonyl window,CH00-AU-v1,Absolute film absorbance thickness or quantitative etalon claims
+CLM-MY-02,Mylar,Probe-only continuous-sweep performance in the retained window,measured,QB-01;AR-01;PF-01,TOPO-SWEEP-01,CH00-AU-v1,Broad 1650-2050 cm^-1 survey
+CLM-HRP-01,HRP-C-CO,Direct 532 nm pump support at the lower and upper retained biological bands,measured,PB-01;OG-01;OV-01;IR-01,532 nm plus combined 1885-1980 cm^-1 region,CH00-AU-v1,Optional mechanistic quantum-yield or biological claims
+CLM-HRP-02,HRP-C-CO,Fixed-wavenumber rare-pump and recovery acquisition support,measured,AR-01;IR-01;PF-01,TOPO-POINT-01 with two HRP band anchors,CH00-AU-v1,Executable biological recipe or sample-specific recovery settings
+CLM-MBCO-01,MbCO,540 nm OPO pump support at MbCO A1,measured,PB-02;OG-01;OV-01;IR-01,355 nm OPO drive and 540 nm output plus MbCO A1,CH00-AU-v1,532 nm comparison or broad OPO tuning
+CLM-MBCO-02,MbCO,Fixed-wavenumber rare-pump and recovery acquisition support,measured,AR-01;IR-01;PF-01,TOPO-POINT-01 at MbCO A1,CH00-AU-v1,Geminate or bimolecular biological model result
+CLM-SHARED-01,All,Average-power and transfer quantities at used conditions,measured,OM-01;ATT-01;PB-01;PB-02;OG-01,Retained sources and probe anchors only,CH00-AU-v1,Direct pulse-energy distributions or calibrated peak power
+CLM-SHARED-02,All,Mean pulse energy may be calculated only from measured average power and verified repetition rate,derived,PB-01;PB-02,Retained pump paths only,CH00-AU-v1,Pulse-to-pulse energy distribution
+CLM-SHARED-03,All,Manufacturer capabilities not campaign-measured remain specification-only,manufacturer_specification,RPT-CH,Identified installed configuration,CH00-AU-v1,Reclassification as measured performance
+CLM-SHARED-04,All,Unqualified or optional capabilities remain unsupported,unvalidated_capability,CH-00,None,CH00-SCOPE-v1,Any implied readiness claim

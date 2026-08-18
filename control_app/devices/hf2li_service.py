@@ -19,6 +19,7 @@ from control_app.config_loader import REPO_ROOT, load_hardware_config
 
 
 DEFAULT_LABONE_PACKAGE_PATHS = (
+    r"C:\Users\Chris\AppData\Local\Control_System\runtimes\zhinst_26_4_py312",
     r"C:\Users\Chris\AppData\Local\Temp\zhinst_26_4",
 )
 DEFAULT_SERVER_HOST = "127.0.0.1"
@@ -590,8 +591,16 @@ class HF2LIService:
         if not isinstance(data, dict):
             raise HF2LIError("HF2LI poll returned an unsupported data structure")
         requested_fields = record.get("fields") or list(DEFAULT_SUBSCRIBE_FIELDS)
+        subscribed_paths = {
+            str(item).lower() for item in (record.get("subscribed_paths") or [])
+        }
         for path, payload in data.items():
             path_text = str(path)
+            if subscribed_paths and path_text.lower() not in subscribed_paths:
+                # DAQ Module reads also return module settings and metadata
+                # such as /device="dev18500". They are provenance, not sample
+                # streams, and must not be coerced to numeric CSV rows.
+                continue
             if path_text.endswith("/sample"):
                 raw_rows.extend(_normalized_sample_rows_from_sample(path_text, payload, requested_fields))
             else:
@@ -883,6 +892,29 @@ def _as_sequence(value: Any) -> list[Any]:
         return []
     if isinstance(value, (str, bytes)):
         return [value]
+
+
+def _flatten_sequence(value: Any) -> list[Any]:
+    """Flatten scalar, vector, or DAQ-module grid arrays in row-major order."""
+
+    if value is None:
+        return []
+    reshape = getattr(value, "reshape", None)
+    tolist = getattr(value, "tolist", None)
+    if callable(reshape) and callable(tolist):
+        try:
+            return list(reshape(-1).tolist())
+        except (TypeError, ValueError):
+            pass
+    result: list[Any] = []
+    for item in _as_sequence(value):
+        if isinstance(item, (str, bytes)):
+            result.append(item)
+        elif hasattr(item, "__iter__"):
+            result.extend(_flatten_sequence(item))
+        else:
+            result.append(item)
+    return result
     try:
         return list(value)
     except TypeError:
@@ -905,8 +937,8 @@ def _normalized_sample_rows(path: str, payload: Any) -> list[dict[str, Any]]:
         else:
             values = chunk
             timestamps = None
-        values_seq = _as_sequence(values)
-        timestamps_seq = _as_sequence(timestamps)
+        values_seq = _flatten_sequence(values)
+        timestamps_seq = _flatten_sequence(timestamps)
         for index, value in enumerate(values_seq):
             timestamp = timestamps_seq[index] if index < len(timestamps_seq) else ""
             rows.append(
@@ -931,11 +963,11 @@ def _normalized_sample_rows_from_sample(
     for chunk in chunks:
         if not isinstance(chunk, dict):
             continue
-        timestamps = _as_sequence(chunk.get("timestamp"))
+        timestamps = _flatten_sequence(chunk.get("timestamp"))
         for field in requested_fields:
             if field not in chunk:
                 continue
-            values = _as_sequence(chunk.get(field))
+            values = _flatten_sequence(chunk.get(field))
             for index, value in enumerate(values):
                 timestamp = timestamps[index] if index < len(timestamps) else ""
                 rows.append(

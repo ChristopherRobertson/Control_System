@@ -1,0 +1,14 @@
+{
+  "authorization_id": "MC01-AUTH-002",
+  "finished_utc": "2026-08-17T22:31:33.218099+00:00",
+  "laser_emission_during_this_operation": false,
+  "mircat_sdk_connection_used_during_this_operation": false,
+  "output_enable_during_this_operation": false,
+  "purpose": "final T660 safe idle after resumed MC-01 active and SDK qualification",
+  "started_utc": "2026-08-17T22:31:27.231526+00:00",
+  "t660_safe_idle": {
+    "matches_recipe": true,
+    "mismatches": [],
+    "status": "PASS"
+  }
+}

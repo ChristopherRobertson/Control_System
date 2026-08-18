@@ -16,6 +16,9 @@ GUI-first process-trigger qualification is preserved in
 2. Verify the accepted HF2LI bit numbers for DB9 pins 1, 2, and 3 through MD-01; labels in older wiring documents are not accepted as campaign evidence.
 3. Apply the T660 recipe: T660-2 A and B run at 2 MHz; C and D are disabled. T660-1 is stopped and all of its outputs are disabled.
 4. Configure the MIRcat for external 2 MHz laser triggering, 5 cm^-1 wavelength-trigger markers with 500 us pulse width, and the process-trigger mode approved by MC-01. Read back every setting. DB9 pin 5 remains physically disconnected.
+   The standing default-wiring exclusions are defined once in
+   `docs/default_wiring_state.md` and are not recurring operator questions
+   unless the operator reports a change.
 5. Apply the HF-01-accepted configuration that replaces `campaign_sweep_qualification_candidate`. That candidate is for qualification only and is not an SV-02 or biological preset.
 6. Record Sample, Reference, and the complete DIO word continuously across the scan and its inter-channel gaps.
 7. Split the record at DB9 pin 2 Sweep Active high intervals. Exclude every detector sample in a low interval while retaining it in the native raw stream.
@@ -34,4 +37,4 @@ LabOne Demodulator 1 / API 0 records Sample, Demodulator 4 / API 3 records Refer
 
 ## External Process Trigger validation
 
-Test this first in the MIRcat GUI with T660-1 CHC idling high and producing an approximately 10 ms low pulse. Record whether the first pulse starts the first channel and how many subsequent pulses are required. Automated external-process-trigger mode remains blocked in this workflow until that observed channel/pulse sequence is implemented. Do not drive reserved DB9 pin 5 (Laser Output On/Off), unused pin 6, or unused pin 8.
+Test this first in the MIRcat GUI with T660-1 CHC idling high and producing an approximately 10 ms low pulse. Record whether the first pulse starts the first channel and how many subsequent pulses are required. Automated external-process-trigger mode remains blocked in this workflow until that observed channel/pulse sequence is implemented. Do not drive reserved DB9 pin 5 (Laser Output On/Off), unused pin 6, or unused pin 8. Their standing state is imported from `docs/default_wiring_state.md`, not repeatedly re-asked.

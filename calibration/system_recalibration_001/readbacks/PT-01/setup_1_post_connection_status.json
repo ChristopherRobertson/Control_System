@@ -1,0 +1,13 @@
+{
+  "finished_utc": "2026-08-17T16:58:42.354101+00:00",
+  "initial_preflight_repeated": false,
+  "output_enable_authorized": false,
+  "phase": "PT-01",
+  "purpose": "post-connection T660 safe-idle application and readback only",
+  "started_utc": "2026-08-17T16:58:36.363528+00:00",
+  "t660_safe_idle": {
+    "matches_recipe": true,
+    "mismatches": [],
+    "status": "PASS"
+  }
+}

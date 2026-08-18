@@ -2,6 +2,12 @@ schema_version: "0.1"
 
 system:
   name: "IR Spectroscope"
+  default_wiring_convention: "docs/default_wiring_state.md"
+  default_wiring_standing_exclusions:
+    - "T660-1 channel D disconnected and unused"
+    - "MIRcat DB9 pin 5 disconnected"
+    - "MIRcat DB9 pin 6 unused and unwired"
+    - "MIRcat DB9 pin 8 unused and unwired"
 
 devices:
 

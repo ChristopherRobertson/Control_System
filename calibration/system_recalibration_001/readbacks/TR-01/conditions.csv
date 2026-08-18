@@ -1,0 +1,8 @@
+campaign_id,phase_id,acquisition_id,condition_set_id,condition_name,value_text,value_number,unit,source,uncertainty_value,uncertainty_unit,uncertainty_type,notes
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-COND-RECORDS,execution_mode,records_only,,,operator_authorization,,,,No hardware access or active test
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-COND-RECORDS,mircat_power,powered_down,,,operator standing condition,,,,Unchanged
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-COND-RECORDS,manual_shutter,closed,,,operator standing condition,,,,Unchanged
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-COND-RECORDS,interlock,on,,,operator standing condition,,,,Unchanged
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-COND-RECORDS,default_wiring,restored,,,docs/default_wiring_state.md,,,,T660-1 CHD and MIRcat pin 5 disconnected; pins 6 and 8 unused/unwired
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-COND-RECORDS,device_ownership,released_no_client_opened,,,TR-01 execution record,,,,No GUI SDK T660 PicoScope or HF2LI connection opened
+system_recalibration_001,TR-01,TR01-AUDIT-001,TR01-COND-RECORDS,safe_idle,retained_from_MC01_no_transition,,,MC01-RESTORATION-002; MC01-ART-0071,,,,No physical transition occurred so no new active readback was required

@@ -1,0 +1,7 @@
+term_id,quantity,estimate_ns,standard_uncertainty_ns,type,source,correlation_treatment,notes
+U-PT01-01,Fit intercept repeatability,-5.4857686809108,13.4721163226001,A,PT-01 six-point weighted fit,Independent fit term,Fit intercept standard error
+U-PT01-02,PicoScope CHB-minus-CHA correction,0.10994707329952519,0.5817073941913165,B,MS-02 completed evidence,Common correlated correction,Subtracted from raw CHB-minus-CHA
+U-PT01-03,Adapter B-minus-A correction,-0.097377952268309,0.2678548156024922,B,T1-01 setup_2_adapter_swap_result.json,Common correlated correction,Subtracted from scope-corrected result
+U-PT01-04,Corrected route intercept,-5.4857686809108,13.4873291612671,combined,PT01-ANALYSIS-v1,Root-sum-square of listed independent terms,Standard uncertainty
+U-PT01-05,Threshold sensitivity half-range,,1.42956155664026,sensitivity,Five-threshold analysis,Reported separately,Not silently double-counted in fit term
+U-PT01-06,Interpolation sensitivity mean absolute difference,,16.5363778763592,sensitivity,Linear versus nearest sample,Reported separately,Maximum observed absolute difference 68.8156385634793 ns; see analysis.json

@@ -2,18 +2,31 @@
 
 Campaign: `system_characterization_001`
 
-Status: **PLAN FRAMEWORK COMPLETE; EXPERIMENT REQUIREMENTS NOT YET FROZEN; NO PHASE APPROVED FOR HARDWARE EXECUTION**
+Status: **CH-00 COMPLETE; MINIMUM GRID FROZEN; NO PHASE APPROVED FOR HARDWARE EXECUTION**
 
 This campaign characterizes the pump source, OPO, MIRcat probe, sample-plane
 geometry, optical overlap, acquisition response, spectral performance,
 temporal response, sensitivity, stability, and reproducibility needed for the
 thesis and downstream experiments.
 
+Campaign advancement is controlled by phase dependencies, mandatory
+deliverables, acceptance decisions, and explicit authorization rather than a
+calendar timeline. Recorded acquisition timestamps remain evidence; they are
+not completion deadlines.
+
 Before CH-00 freezes the characterization grid, requirements-level experiment
 designs define the claims, wavelengths, powers, delays, controls, and
 observables actually needed. Numeric experimental recipes still wait for
 promoted calibration and characterization results. This ordering prevents
 unused characterization work.
+
+The verified minimum scope is one local Mylar/polystyrene carbonyl window, one
+combined 1885-1980 cm^-1 HRP/MbCO probe region, direct 532 nm HRP pumping, 355
+nm only as the drive for 540 nm MbCO pumping, and two acquisition topologies:
+probe-only continuous sweep and finite rare-pump fixed-wavenumber/recovery.
+`SC-01` qualifies the minimum gas-tight cell/path and 293 K/298 K temperature
+states without biological material or CO. The complete mapping and exclusions
+are in `docs/experiment_requirement_campaign_crosswalk.md`.
 
 The available optical metrology includes a power meter but no energy meter.
 Characterization therefore measures average power. Mean pulse energy may be

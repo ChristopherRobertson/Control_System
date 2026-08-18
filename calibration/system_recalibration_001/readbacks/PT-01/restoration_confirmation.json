@@ -1,0 +1,19 @@
+{
+  "artifact_id": "PT01-RESTORATION-001",
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "PT-01",
+  "operator": "Christopher Robertson",
+  "operator_confirmation_utc": "2026-08-17T17:16:47Z",
+  "operator_observation": "Default wiring has been restored.",
+  "final_safe_idle_finished_utc": "2026-08-17T17:17:03.671575Z",
+  "final_safe_idle_matches_recipe": true,
+  "final_safe_idle_mismatches": [],
+  "all_outputs_disabled": true,
+  "laser_emission_occurred": false,
+  "ndyag_timing_db9_restored": true,
+  "mircat_db9_cable_restored": true,
+  "t660_1_chd_disconnected": true,
+  "temporary_splitter_moved": false,
+  "clock_splitter_moved": false,
+  "promotion_performed": false
+}

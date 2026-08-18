@@ -19,6 +19,11 @@ The procedure uses this final-system topology:
 | T660-1 CHC | MIRcat Process Trigger, DB9 pin 4 |
 | T660-1 CHD | Disconnected and unused |
 
+`Default wiring restored` has the standing meaning defined in
+`docs/default_wiring_state.md`: T660-1 CHD and MIRcat DB9 pin 5 disconnected;
+MIRcat DB9 pins 6 and 8 unused/unwired. Do not request repetitive confirmation
+unless the operator explicitly reports a change.
+
 The PicoScope uses CHA as the recorded reference channel and CHB as the recorded target channel. The measured sign is always
 
 ```text

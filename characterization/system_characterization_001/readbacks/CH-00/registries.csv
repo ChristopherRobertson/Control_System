@@ -1,0 +1,16 @@
+registry_type,stable_id,role,status,source,required_before,notes
+equipment,T660-1-00369,timing generator,IMPORTED_IDENTITY,P0/S0,dependent timing phases,Direct results and settings replace discarded certificate retrieval
+equipment,T660-2-00431,timing generator,IMPORTED_IDENTITY,P0/S0,dependent timing phases,Direct results and settings replace discarded certificate retrieval
+equipment,PICOSCOPE-10261,working timing reference,IMPORTED_IDENTITY,P0-D002,dependent timing phases,Actual range timebase and applicable manufacturer accuracy required
+equipment,MIRCAT-10524,probe source,IMPORTED_IDENTITY,P0,MC-01/QB-01,GUI SDK firmware and accepted configuration versions required
+equipment,NDYAG-SL-EX-24366-1,direct 532 and 355 source platform,IMPORTED_IDENTITY,P0,PB-01,Measured performance plus identified manufacturer bounds only
+equipment,OPO-SLOPO-PLUS-24366-2,540 nm OPO source,IMPORTED_IDENTITY,P0,PB-02,Measured performance plus identified manufacturer bounds only
+equipment,HF2LI-dev18500,dual-channel acquisition,IMPORTED_IDENTITY,P0,HF-01/AR-01,LabOne driver and accepted configuration versions required
+equipment,REFERENCE-SIP-445161066,reference detector amplifier,IDENTITY_RECORDED,P0-D001,DET-01 through DET-04,VIGO Photonics SIP-DC-250M serial 445161066
+equipment,REFERENCE-DETECTOR-21834,reference detector,IDENTITY_RECORDED,P0-D001,DET-01 through DET-04,VIGO Photonics PVM-10.6-1x1 serial 21834; performance qualification remains pending
+component,MIRCAT-DB9-BOARD-01,process-control breakout,IMPORTED_IDENTITY,P0-D019,MD-01/PT-01,Stable ID wiring and measured behavior are authority
+component,MIRCAT-DB9-CABLE-01,process-control cable,IMPORTED_IDENTITY,P0-D019,MD-01/PT-01,Stable ID wiring and measured behavior are authority
+component,MINIMUM-CAF2-CELL-SET,shared nonbiological cell hardware,PENDING_SELECTION,verified HRP and MbCO briefs,SC-01,Smallest common gas-tight set; no protein or CO
+sample,NO-SAMPLE-CH00,analysis-only sentinel,NOT_APPLICABLE,CH-00 authorization,CH-00 closeout,No sample biological material or CO handled
+configuration,CHCFG-SWEEP-PROBEONLY-v1,probe-only continuous sweep,FROZEN_REQUIREMENTS,CH00-SCOPE-v1,QB-01/AR-01,Numeric settings await dependencies
+configuration,CHCFG-POINT-RAREPUMP-v1,finite rare-pump fixed-wavenumber recovery,FROZEN_REQUIREMENTS,CH00-SCOPE-v1,PB/AR/IR phases,Numeric settings await dependencies

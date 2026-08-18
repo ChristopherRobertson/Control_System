@@ -1,0 +1,2 @@
+MC-01 record opened without hardware command. Awaiting operator gate 1.
+

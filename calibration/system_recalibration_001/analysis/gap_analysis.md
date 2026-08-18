@@ -22,6 +22,8 @@ cover the complete campaign and conflicted with current safety restrictions.
 10. Optical Q-switch-to-sample timing lacks the run-local OP-01 adapter record, detector correction, placement uncertainty, bounded shot accounting, blocked control, preview evidence, and restoration repeatability.
 11. Complete reference-plane-compatible timing closure, operational delay equation, two-run end-to-end validation, failure recovery, uncertainty budgets, and thesis-claim-to-raw provenance remain outstanding.
 12. Retained lightweight software-version records, replacement detector/SIP identity, available-meter qualification, applicable wiring authority, and spectral-reference authority remain incomplete. Device-under-test certificate retrieval and calibrated environmental claims were discarded.
+13. The biological briefs require finite sample-transmitted pump events while the Nd:YAG flashlamp remains at its qualified cadence. Command counts and the T660 shot-counter reset do not prove admitted optical events or enforce a finite exposure. FE-01 now qualifies one finite-event mechanism for direct 532 nm and OPO 540 nm with independent optical-event reconciliation and no-emission fault paths.
+14. The HRP-C-CO and MbCO briefs require gas-tight aqueous CaF2 sample cells and temperature evidence but those are sample-hardware qualifications rather than calibration corrections. Characterization SC-01 now qualifies only the minimum selected cell/path and 293 K/298 K states using nonbiological blanks; CO loading and protein-state work remain in the experiments.
 
 ## Acceptance limits still requiring authoritative inputs
 
@@ -35,6 +37,8 @@ S0, MS-01, MS-02, T2-01, and T1-01 have completed with preserved phase
 evidence; PT-01 is in progress. These completed measurements are not repeated.
 The remaining items above are addressed by the expanded sequence in
 `plans/campaign_sequence.md`, including new TR-01, OM-01, ATT-01, DET-03, and DET-04
-phases and the RPT-01/PROM-01 reuse package. Pump/probe beam performance is
+phases, the new FE-01 finite-event-control phase, and the RPT-01/PROM-01 reuse
+package. Pump/probe beam performance and the shared nonbiological cell/
+temperature qualification are
 measured in the separate `system_characterization_001` campaign after its
 calibration dependencies are qualified.

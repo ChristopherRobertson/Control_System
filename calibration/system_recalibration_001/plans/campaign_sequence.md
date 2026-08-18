@@ -2,7 +2,7 @@
 
 Campaign: `system_recalibration_001`
 
-Status: **T1-01 COMPLETE; PT-01 IN PROGRESS; PT-01 SETUP 1 OPERATOR ACTION REQUIRED**
+Status: **TR-01 PASS - COMPLETE; OM-01 REQUIRES SEPARATE AUTHORIZATION**
 
 This plan expands the original calibration scope to close the metrology gaps
 needed by the instrument-characterization campaign, thesis, and downstream
@@ -46,8 +46,10 @@ do not create a replacement PT-01 directory or rerun its completed preflight.
    state. A failed safe-idle readback blocks the transition.
 4. Laser emission requires a separate written phase approval and a frozen shot
    budget. No rejected acquisition silently authorizes another emitted shot.
-5. T660-1 CHD and MIRcat DB9 pin 5 remain disconnected and unused; MIRcat DB9
-   pins 6 and 8 remain unused and unwired.
+5. Under `docs/default_wiring_state.md`, `default wiring restored` means
+   T660-1 CHD and MIRcat DB9 pin 5 are disconnected, while MIRcat DB9 pins 6
+   and 8 are unused and unwired. These are standing operator-confirmed
+   conditions and are not re-asked unless the operator reports a change.
 6. Unavailable metadata are recorded as `USER_INPUT_REQUIRED`. Independent
    valid work may continue, but affected claims remain limited.
 7. A phase closes only when every mandatory deliverable below exists, is
@@ -133,7 +135,7 @@ route results, adapter normal/swapped evidence, trigger-count diagnostics,
 direct-versus-derived closure, all accepted and rejected traces, and final
 restoration. Do not reacquire.
 
-### 6. PT-01 — MIRcat Process Trigger electrical timing — IN PROGRESS
+### 6. PT-01 — MIRcat Process Trigger electrical timing — COMPLETE; PASS
 
 Resume the existing PT-01 record after its passed preflight. Measure the
 approved reference to T660-1 CHC/MIRcat DB9 pin 4, including idle-high,
@@ -148,23 +150,41 @@ Mandatory closeout deliverables:
 - Reference-plane definition, uncertainty budget, final report, and safe-idle
   readback. PT-01 closes before MC-01 begins.
 
-### 7. MC-01 — MIRcat GUI process-trigger qualification
+### 7. MC-01 — MIRcat GUI process-trigger qualification — COMPLETE / PASS
 
-Under manufacturer-GUI ownership, verify external laser/process-trigger modes,
-first and subsequent channel behavior, pulse counts, Sweep Active transitions,
-and the permitted delay after Sweep Active falls. No SDK connection or
-automation occurs until this phase passes.
+Under manufacturer-GUI ownership, qualify only the discrete point/process
+sequence selected in CH-00 for the biological fixed-wavenumber workflow. Verify
+external laser/process-trigger state transitions, one-command/one-process
+behavior, the first and subsequent bounded repeats, and the permitted delay
+after Sweep Active falls. Do not exercise unused multispectral/channel modes.
+SDK use before GUI qualification was prohibited; bounded SDK control
+qualification was performed only after the GUI repeats passed.
 
 Mandatory closeout deliverables:
 
 - GUI/version/firmware provenance, selected operating modes, screenshots or
   exported logs, T660 readbacks, DIO evidence, and a timestamped action ledger.
-- Expected-versus-observed state/pulse table covering first and subsequent
-  channels, bounded repeats, exceptions, and failure behavior.
+- Expected-versus-observed state/pulse table for one inhibited control and
+  three bounded repeats of the retained point/process sequence, including
+  exceptions and failure behavior.
 - Ownership release, safe shutdown, restoration record, uncertainty/ambiguity
   statement, and explicit SDK-automation eligibility decision.
 
-### 8. TR-01 — retained identity and measurement-resource closure
+The inhibited control and three bounded repeats passed. Each accepted repeat
+used one started-engine 10 ms active-low T660-1 CHC command and produced one
+1905-to-1934 cm^-1 transition followed by explicit Stop Scan. Raw DIO evidence
+supports event correlation but not a persistent ready level; automation must
+use MIRcat waiting/tuned state readback rather than a fixed delay. SDK control
+qualification set/read External process mode and restored/read Internal mode.
+Initial configuration import, power-down, GUI/SDK ownership release, interlock
+inhibition, default-wiring restoration, and final T660 safe idle all passed.
+
+The shutter remained closed and T660-2 sent no external laser-trigger pulse,
+so no optical pulses occurred. Authorization `MC01-AUTH-002` permitted the
+bounded continuation but did not authorize any later phase. See
+`../readbacks/MC-01/final_report.md` and `continuation_authorization.md`.
+
+### 8. TR-01 — retained identity and measurement-resource closure — COMPLETE / PASS
 
 Close only requirements retained or narrowed in
 `manifests/p0_requirement_decisions.md` plus metrology resources actually
@@ -198,6 +218,13 @@ traceability that the campaign does not establish. The replacement
 reference-detector SIP model/serial and detector model/serial must be recorded
 after arrival and before reference-detector-dependent DET phases begin.
 
+TR-01 closed by records audit in `../readbacks/TR-01/`. It imported completed
+campaign evidence by stable identifier, retained the applicable PicoScope
+manufacturer-specification basis, classified spectral authority as deferred to
+SP-01 and optical resource qualification as deferred to OM-01, and made no
+hardware or canonical-calibration change. OM-01 is the exact next phase and
+requires separate authorization.
+
 ### 9. OM-01 — optical metrology readiness and transfer standards
 
 Qualify only the available instruments selected after downstream experiment
@@ -206,11 +233,19 @@ polarization, attenuation, and observational ambient records. No energy meter
 is currently available, so this phase does not require direct pulse-energy
 measurement. It does not characterize the pump or probe beams themselves.
 
-At each intended wavelength/range, record zeroing, background, sensor head,
-range, wavelength correction, sampling mode, warm-up, linearity/check points,
-repeatability, saturation limits, spatial-scale calibration, and the applicable
-manufacturer specification or available comparison. Do not add a new meter or
-certificate task unless an approved experimental claim requires it.
+The minimum wavelength grid is the union frozen in CH-00: direct 532 nm pump,
+355 nm only as the OPO drive, 540 nm OPO output, one Mylar-carbonyl probe
+anchor, and the merged HRP/MbCO probe anchors and off-band control points.
+Shared points are measured once. No other wavelength or range is qualified
+unless the frozen claim grid requires it.
+
+At each retained wavelength and actually used meter range, record zeroing,
+background, sensor head, wavelength correction, sampling mode, warm-up,
+linearity at the lowest and highest planned readings, three repeat readings,
+one revisit, saturation limits, spatial-scale calibration, and the applicable
+manufacturer specification or available comparison. Add a midpoint only when
+the endpoint residual rule fails. Do not add a new meter or certificate task
+unless an approved experimental claim requires it.
 
 Mandatory closeout deliverables:
 
@@ -235,6 +270,12 @@ from the same incident condition and quantify total insertion loss and the
 port-resolved split versus wavenumber, polarization, alignment, and operating
 power wherever those dependencies are material.
 
+Use only the CH-00-retained 532 nm, 355 nm OPO-drive, 540 nm, Mylar-carbonyl,
+and merged biological probe anchors. At each used configuration measure the
+lowest and highest planned power; add a midpoint only if the predeclared
+linearity test fails. Reuse shared optics and anchor measurements across the
+three briefs rather than creating sample-specific transfer grids.
+
 Mandatory closeout deliverables:
 
 - Stable component IDs, orientation, wavelength, polarization, mounting, and
@@ -253,8 +294,13 @@ Mandatory closeout deliverables:
 
 ### 11. HF-01 — HF2LI configuration and external-reference qualification
 
-Verify reference lock/readback, demodulator assignments, rates, time constants,
-filter orders, phase, ranges, clipping margin, and reload equivalence.
+Qualify exactly two retained configurations: the probe-only continuous-sweep
+configuration used by polystyrene/Mylar and the fixed-wavenumber/rare-pump
+configuration shared by HRP-C-CO and MbCO. For each, verify reference
+lock/readback, demodulator assignments, the single CH-00 candidate rate/time-
+constant/order combination, phase, used ranges, clipping margin, and one reload
+equivalence. Alternative settings are tested only if the candidate fails its
+predeclared response or margin criterion.
 
 Mandatory closeout deliverables: complete node snapshot, configuration diff
 after reload, reference-frequency comparison, phase/filter response results,
@@ -264,9 +310,11 @@ approved configuration ID.
 ### 12. MD-01 — MIRcat/HF2LI DIO mapping qualification
 
 Use the accepted side-experiment mapping (pin 1 to bit 20, pin 2 to bit 21,
-pin 3 to bit 22) without repeating the mapping-only discovery. Acquire
-campaign-local repeated scans in both directions to verify polarity/state
-semantics, direction behavior, signatures, counts, timing, and repeatability.
+pin 3 to bit 22) without repeating the mapping-only discovery. Acquire three
+campaign-local scans per direction at the one retained continuous-sweep
+configuration and three repeats of the retained point/process sequence. Verify
+polarity/state semantics, direction behavior, signatures, counts, timing, and
+repeatability. Do not map unused DB9 modes or reserved pins.
 
 Mandatory closeout deliverables: complete DIO words rather than selected bits,
 MIRcat logs, HF2LI configuration ID, pin/bit/state truth table, direction and
@@ -275,20 +323,26 @@ index entries, and an explicit qualification decision.
 
 ### 13. MSW-01 — MIRcat sweep timing
 
-At 5 cm^-1 trigger spacing, 500 us pulse width, and 40 cm^-1/s, measure trigger
-spacing, counts/jitter, Sweep Active segments/gaps, direction, channel
-transitions, scan repeatability, and host-independent correlation.
+Measure the single CH-00-selected continuous-sweep speed and marker interval/
+width in both directions over the longest retained Mylar/polystyrene window.
+Also measure the one discrete point-tune/process transition sequence used by
+the biological workflows. The former 5 cm^-1, 500 us, and 40 cm^-1/s values are
+planning candidates only; test them only if CH-00 retains them. An alternative
+setting is added only after the selected setting fails a predeclared marker,
+transition, or uncertainty criterion.
 
-Mandatory closeout deliverables: at least three complete scans per direction,
-raw MIRcat and HF2LI/DIO streams, trigger/segment event table, expected-versus-
-observed counts, approximately 125 ms spacing check, transition/gap analysis,
-clock/reference conventions, uncertainty, and acceptance decision.
+Mandatory closeout deliverables: three complete scans per direction plus three
+point/process sequences, raw MIRcat and HF2LI/DIO streams, trigger/segment event
+table, expected-versus-observed counts, measured spacing check, transition/gap
+analysis, clock/reference conventions, uncertainty, and acceptance decision.
 
 ### 14. HF-02 — cross-stream alignment, loss, and endurance
 
 Verify simultaneous Sample, Reference, and complete-DIO timestamps, API/server
-buffering, dropped samples, scan-boundary behavior, and endurance over at least
-two full-duration scans using the approved HF-01 configuration.
+buffering, dropped samples, and boundary behavior over exactly two maximum-
+duration records: one complete retained continuous sweep and one longest
+planned rare-pump recovery stream. Additional endurance records are acquired
+only if either retained topology fails.
 
 Mandatory closeout deliverables: native streams, common-event alignment table,
 sample-count and gap audit, loss/reorder/duplicate statistics, host/server
@@ -299,6 +353,10 @@ supported scan envelope with uncertainty or limitation.
 
 With non-emitting sources, determine dark noise, drift, Allan-style stability,
 electrical cross-talk, range dependence, and short/long-duration repeatability.
+Use only the gains/ranges retained for the two HF-01 configurations. For each
+installed channel/configuration acquire one short record, one record as long as
+the longest planned acquisition, and one revisit; do not scan unused gains,
+ranges, or durations.
 
 Mandatory closeout deliverables: exact installed detector/amplifier/power-
 supply identities and settings, blocked-state definition, environmental log,
@@ -316,6 +374,13 @@ approved branch/detector interchange where practical to separate detector-
 electronics response from optical-path transmission. Do not repeat DET-01 dark
 acquisitions; import their result bundle.
 
+The minimum grid is the merged CH-00 probe-anchor set: one Mylar-carbonyl
+anchor, the two HRP-C-CO band anchors, the MbCO A1/upper diagnostic anchor, and
+only the off-band point needed by the biological controls. Merge coincident
+anchors. At each retained wavelength use the lowest and highest expected
+incident powers with three readings per channel and one revisit; add a midpoint
+only if the predeclared fit-residual rule fails.
+
 Mandatory closeout deliverables: frozen illumination budget and conditions,
 raw detector and optical-meter data, incident-power reference planes,
 attenuation/transfer IDs, per-channel response curves, fit residuals,
@@ -331,6 +396,10 @@ scope.
 Measure or authoritatively bound the response delay and temporal bandwidth of
 the exact detector/amplifier/cable/acquisition path used by OP-01. This is a
 new missing correction term; it does not repeat MS-01/MS-02 or T1-01.
+Test each installed channel at its fastest retained acquisition configuration
+and at the low/high accepted signal levels. Use one anchor in each disjoint
+Mylar and biological probe window; add another wavelength only if the
+manufacturer model or measured residuals show material wavelength dependence.
 
 Mandatory closeout deliverables: stimulus/reference planes, detector placement
 and cable IDs, raw response data or authoritative model record, amplitude-
@@ -347,12 +416,13 @@ same source condition. Establish the end-to-end optical balance, detector-
 electronics balance, and measured system baseline ratio without assuming the
 splitter is 50/50.
 
-Use the wavelengths, polarization states, alignments, and power levels required
-by the downstream spectral and biological operating envelope. Include at least
-one controlled realignment/revisit. If detector or branch exchange is safe and
-practical, use it as a separation/closure test; otherwise use the same
-qualified transfer detector sequentially at both detector planes and retain
-the placement/repeatability uncertainty.
+Use the same merged probe anchors and low/high expected powers retained in
+DET-02, with shared points measured once. Use only the polarization and
+alignment states that survive CH-00, and include one controlled realignment/
+revisit. If detector or branch exchange is safe and practical, use it once as
+a separation/closure test; otherwise use the same qualified transfer detector
+sequentially at both detector planes and retain the placement/repeatability
+uncertainty.
 
 Mandatory closeout deliverables:
 
@@ -407,53 +477,98 @@ agreement, and scan-to-scan repeatability using qualified prior phases. Import
 the DET-04 balance/normalization bundle; do not estimate or assume a 50/50
 split from the spectral data.
 
-Mandatory closeout deliverables: native spectra/readbacks/DIO streams, at least
-three scans per direction and relevant channel, frozen calibration fit, residual
-and hysteresis tables, interpolation method, uncertainty budget, independent
-validation partition, DET-04 correction ID, raw and normalized Sample/Reference
-products, and validity range. Calibration data and validation data must remain
-separately identifiable.
+The grid contains only two disjoint validated regions: the CH-00 Mylar/
+polystyrene carbonyl window and the combined 1885-1980 cm^-1 HRP/MbCO window.
+Use one accepted continuous-sweep configuration and three scans per direction
+per retained region. Add a module-crossover condition only when a retained
+region crosses one. Do not run the former broad 1650-2050 cm^-1 candidate.
+
+Mandatory closeout deliverables: native spectra/readbacks/DIO streams, exactly
+three planned scans per direction and relevant channel, frozen calibration fit,
+residual and hysteresis tables, interpolation method, uncertainty budget,
+independent validation partition, DET-04 correction ID, raw and normalized
+Sample/Reference products, and validity range. Calibration data and validation
+data must remain separately identifiable. Another scan is allowed only after a
+predeclared acceptance criterion fails.
 
 ### 21. OP-01 — operational pump-command-to-sample timing
 
-Execute the previously defined bounded optical timing measurement using the
-identified straight barrel adapter correction (0.125 ns with 0.0722 ns
-rectangular standard uncertainty), MS-01/MS-02 results, and DET-03 detector
-correction. The Q-switch cable, loaded Nd:YAG response, internal laser/OPO
-response, and optical propagation remain intentionally included.
+Execute two bounded optical timing configurations only: the direct 532 nm path
+selected for HRP-C-CO and the 355 nm-pumped OPO path at 540 nm selected for
+MbCO. Use the identified straight barrel adapter correction (0.125 ns with
+0.0722 ns rectangular standard uncertainty), MS-01/MS-02 results, and DET-03
+detector correction. The Q-switch cable, loaded Nd:YAG response, the applicable
+internal laser/OPO response, and optical propagation remain intentionally
+included. Mylar is pump-off and adds no OP-01 condition.
 
-Mandatory closeout deliverables: frozen shot budget; blocked control; one
-attenuated preview; at most 100 planned measurement shots unless separately
-approved; raw traces; shot/rejection/counter ledger; SNR/saturation checks;
+Mandatory closeout deliverables for each retained pump path: frozen shot
+budget; blocked control; one attenuated preview; a prospective precision-based
+repeat count capped at 100 unless separately approved; raw traces;
+shot/rejection/counter ledger; SNR/saturation checks;
 adapter/splitter/detector/placement IDs; signed correction equation; placement
 and restoration repeatability; uncertainty budget; photographs; and final safe
 state. No automatic replacement shots are permitted.
 
-### 22. CL-01 — complete timing-chain closure
+### 22. FE-01 — finite emitted-pump-event control and reconciliation
+
+Qualify the finite-exposure mechanism shared by the biological experiments
+without a biological sample. Preserve the manufacturer-qualified flashlamp
+cadence while admitting only the CH-00-approved rare direct-532 or OPO-540 pump
+events to the sample-equivalent plane. The accepted implementation may be a
+validated laser pulse-division mode, an interlocked optical pulse picker/
+shutter, or another separately approved topology. A T660 shot-counter reset is
+never an exposure limiter.
+
+Mandatory closeout deliverables:
+
+- Stable configuration and topology IDs for each retained 532 and 540 nm path,
+  with command source, flashlamp cadence, optical gate/divider state, and an
+  independent optical pump-event observation.
+- A blocked zero-event control, a one-event test, and one finite multi-event
+  block per retained path; command-versus-observed event reconciliation;
+  verification that the programmed limit stops further admitted events; and
+  proof that unused pulses remain blocked from the sample-equivalent plane.
+- No-emission fault tests for observation loss, command/observation mismatch,
+  software exception, and operator stop, plus the normal-completion path. Each
+  path must close the pump first, stop both T660s/MIRcat as applicable, apply
+  safe idle, preserve partial evidence, and verify restoration.
+- Latency/uncertainty and maximum supported rare-event interval/record length
+  needed by the HRP recovery stream and MbCO delay workflow. Dose, photolysis,
+  and biological recovery are outside this calibration phase.
+
+### 23. CL-01 — complete timing-chain closure
 
 Calculate direct and derived chains only between compatible reference planes.
 Keep programmed, cable-end, device-pin, detector, optical, and chemical origins
 distinct and establish the operational nonzero-delay correction and pump-probe
 equation.
 
+Close both retained pump paths and both acquisition topologies: the probe-only
+continuous sweep and the finite rare-pump fixed-wavenumber/recovery stream.
+Use existing completed electrical sweeps; do not reacquire them. Include the
+FE-01 observed-event clock bridge over the longest planned HRP recovery record.
+
 Mandatory closeout deliverables: machine-readable correction-term register,
 reference-plane graph, covariance-aware uncertainty propagation, closure table
 and residuals, incompatible-chain rejection list, validity/configuration IDs,
 and pass/fail decisions against frozen engineering limits.
 
-### 23. E2E-01 — normal-wiring validation
+### 24. E2E-01 — normal-wiring validation
 
-Perform two bounded normal experimental runs covering startup, ownership,
-T660s, MIRcat/reference lock, Sample/Reference/full-DIO capture, pump only if
-authorized, axes, processing, safe stop, repeatability, artifact completeness,
-and recovery from a simulated software failure without unintended firing.
+Perform exactly two bounded nonbiological runs: one probe-only continuous sweep
+and one finite rare-pump fixed-wavenumber/recovery run using the more complex
+retained pump topology. Together they cover startup, ownership, T660s,
+MIRcat/reference lock, Sample/Reference/full-DIO capture, finite exposure,
+axes, processing, safe stop, repeatability, and artifact completeness. Reuse
+FE-01 fault-path evidence; add one no-emission simulated software fault only if
+the E2E orchestration differs materially.
 
 Mandatory closeout deliverables: two complete independent manifests and native
 data sets, configuration/calibration bundle IDs, processed-axis outputs,
 cross-run comparison, artifact audit, safe-stop records, no-fire fault-injection
 record, recovery record, and normal-wiring restoration.
 
-### 24. RPT-01 — calibration reporting, uncertainty, and reuse package
+### 25. RPT-01 — calibration reporting, uncertainty, and reuse package
 
 Create the reusable package that downstream characterization, thesis analysis,
 and experimental campaigns will consume. This is analysis-only and does not
@@ -472,7 +587,7 @@ Mandatory closeout deliverables:
 - Retention audit confirming raw, rejected, excluded, and superseded evidence
   remain recoverable and distinguishable.
 
-### 25. PROM-01 — promotion gate
+### 26. PROM-01 — promotion gate
 
 Present results, uncertainties, bypasses, unresolved terms, closure/E2E results,
 retention audit, proposed canonical diff, and characterization prerequisites.

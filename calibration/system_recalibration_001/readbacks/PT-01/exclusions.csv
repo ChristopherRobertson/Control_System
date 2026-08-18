@@ -1,0 +1,5 @@
+campaign_id,phase_id,acquisition_id,decision_utc,decision_maker,exclusion_code,criterion_version,reason,downstream_effect,superseded_by_acquisition_id,notes
+system_recalibration_001,PT-01,,2026-08-17T17:17:03Z,authorized_scope,EXCL-PT01-PIN5,PT01-ACCEPT-v1,Reserved MIRcat pin 5 remains disconnected,No pin-5 timing claim,,No acquisition attempted
+system_recalibration_001,PT-01,,2026-08-17T17:17:03Z,authorized_scope,EXCL-PT01-PINS6-8,PT01-ACCEPT-v1,MIRcat pins 6 and 8 remain unused and unwired,No pin-6 or pin-8 claim,,No acquisition attempted
+system_recalibration_001,PT-01,,2026-08-17T17:17:03Z,authorized_scope,EXCL-PT01-CHD,PT01-ACCEPT-v1,T660-1 CHD remains disconnected and unused,No CHD claim,,No acquisition attempted
+system_recalibration_001,PT-01,,2026-08-17T17:17:03Z,authorized_scope,EXCL-PT01-EMISSION,PT01-ACCEPT-v1,Electrical-only non-emitting phase,No optical or MIRcat process-behavior claim,,MC-01 requires separate authorization

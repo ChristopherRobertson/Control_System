@@ -83,17 +83,20 @@ Manufacturer: `VIGO Photonics`
 
 ### Reference channel replacement
 
-Status: **IN SHIPMENT — INSTALLED IDENTITY UNRESOLVED**
+Status: **INSTALLED IDENTITY RECORDED — P0-D001 SATISFIED**
 
-The replacement is planned to be identical to the sample detector:
-manufacturer `VIGO Photonics`, TYPE `SIP-DC-250M`, and DET TYPE
-`PVM-10.6-1x1`. Its SIP serial number and detector serial number remain
-**UNRESOLVED** until the physical labels can be inspected. Requested zero
-placeholders `0000000000` and `00000` were not used because the campaign
-prohibits representing unknown identifiers as zero.
+Manufacturer: `VIGO Photonics`
 
-This item can be deferred through S0 but blocks reference-detector identity
-closure and dependent detector/optical execution phases.
+| Label field | Exact value | Source | Recorded timestamp |
+|---|---|---|---|
+| TYPE | `SIP-DC-250M` | Operator-reported installed identity | `2026-08-17T18:02:28Z` |
+| SIP serial number | `445161066` | Operator-reported installed identity | `2026-08-17T18:02:28Z` |
+| DET TYPE | `PVM-10.6-1x1` | Operator-reported installed identity | `2026-08-17T18:02:28Z` |
+| Detector serial number | `21834` | Operator-reported installed identity | `2026-08-17T18:02:28Z` |
+
+These identities satisfy the P0-D001 installed-reference-chain identity
+requirement. Detector response, timing, range, balance, and normalization still
+require DET-01 through DET-04; identity does not substitute for qualification.
 
 ## Signal-dependent PicoScope measurement assemblies
 
@@ -207,7 +210,9 @@ Recorded: `2026-07-24T11:08:47.1962787-07:00`
 Reference-channel campaign-local cable identifier:
 `REFERENCE-DETECTOR-OUT-01`  
 Length: `40 in`  
-The replacement detector identity remains unresolved until arrival.
+The replacement reference detector identity was recorded on 2026-08-17 as
+VIGO `SIP-DC-250M` serial `445161066` with `PVM-10.6-1x1` detector serial
+`21834`. Its performance remains subject to DET-01 through DET-04.
 
 ### Installed but inactive MUX-related cables
 
@@ -465,8 +470,8 @@ Recorded: `2026-07-23T17:37:05.5116756-07:00`
 
 The following items remain explicitly unresolved or deferred:
 
-- Replacement reference-detector SIP and detector serial numbers, pending
-  arrival.
+- Replacement reference-detector SIP and detector serial numbers were resolved
+  on 2026-08-17; see the detector inventory above.
 - Certificate identifiers, issuers, calibration/recalibration dates,
   uncertainties, and exact equipment associations for reported available
   certificates.

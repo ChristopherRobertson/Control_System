@@ -16,6 +16,8 @@ without repeating completed work.
 | Spectral reference and axis | P0 polystyrene/Mylar observations | SP-01, SP-02 | Independent spectral validation and forward modeling. |
 | Pump/probe beam output and geometry | No completed quantitative evidence | Metrology resources only in OM-01/ATT-01 | PB-01 through OV-01. |
 | Operational optical timing | MS-01/MS-02/T1-01 corrections | OP-01, CL-01 | Import corrected time origin; measure complete response without redoing path timing. |
+| Finite rare-pump exposure and observed-event reconciliation | Completed electrical routes plus OP-01 optical timing | FE-01 qualifies only direct-532 and OPO-540 event admission normal stop and no-emission fault paths | Import the finite-event controller; biological dose recovery and photolysis remain experiment work. |
+| Gas-tight cell path and temperature basis | P0 inventory and OM-01 metrology links | None; this is installed sample hardware rather than a calibration correction | SC-01 qualifies the minimum shared CaF2 cell set with blank leak path reassembly and 293 K/298 K temperature evidence without protein or CO. |
 | Data provenance and aggregation | Existing stable phase directories | Common data contract, RPT-01, PROM-01 | Same contract and foreign-key bundle links. |
 | Biological experiments | None; biological samples are not standards | Outside calibration | Separate biological campaigns after characterization promotion. |
 
@@ -26,3 +28,5 @@ without repeating completed work.
 - Calibration qualifies measuring systems and corrections; characterization
   measures source/beam/system performance.
 - Biological samples are never used to establish spectral or timing calibration.
+- The minimum retained grids and experiment-only exclusions are controlled by
+  `docs/experiment_requirement_campaign_crosswalk.md`.

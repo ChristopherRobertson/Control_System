@@ -1,0 +1,22 @@
+{
+  "artifact_id": "TR01-RESTORATION-001",
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "TR-01",
+  "operator": "Christopher Robertson",
+  "recorded_utc": "2026-08-18T16:21:48.8810815Z",
+  "records_only_phase": true,
+  "physical_transition_performed": false,
+  "device_connection_opened": false,
+  "laser_arm_or_emission_command_issued": false,
+  "mircat_powered_down": true,
+  "manual_shutter_closed": true,
+  "interlock_on": true,
+  "default_wiring_restored": true,
+  "t660_1_channel_d": "disconnected_unused",
+  "mircat_db9_pin_5": "disconnected",
+  "mircat_db9_pins_6_and_8": "unused_unwired",
+  "ownership_state": "released_no_client_opened",
+  "safe_idle_state": "retained_MC01_final_safe_idle_no_transition",
+  "safe_idle_source_artifacts": ["MC01-RESTORATION-002", "MC01-ART-0071"],
+  "canonical_promotion_performed": false
+}

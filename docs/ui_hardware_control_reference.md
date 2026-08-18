@@ -42,11 +42,15 @@ Run hardware-control scripts from Windows Python, not WSL Python, when using Lab
 C:\Users\Chris\AppData\Local\Programs\Python\Python312\python.exe
 ```
 
-The LabOne Python package used successfully was installed at:
+The persistent LabOne 26.4 Python 3.12 package is installed at:
 
 ```python
-sys.path.insert(0, r"C:\Users\Chris\AppData\Local\Temp\zhinst_26_4")
+sys.path.insert(0, r"C:\Users\Chris\AppData\Local\Control_System\runtimes\zhinst_26_4_py312")
 ```
+
+The earlier `AppData\Local\Temp\zhinst_26_4` location is fallback-only and
+must not be treated as persistent; Windows temp cleanup can leave incomplete
+namespace directories. Run LabOne hardware scripts with Python 3.12.
 
 The MIRcat SDK DLL used successfully was:
 

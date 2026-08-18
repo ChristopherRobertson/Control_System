@@ -1,0 +1,5 @@
+Initial passed preflight commands: initial_preflight_command_log.txt
+Setup 1 post-connection safe-idle commands: setup_1_post_connection_command_log.txt
+Setup 1 active acquisition commands: setup_1_fire_to_process_trigger/command_log.txt
+Final restoration safe-idle commands: final_restoration_command_log.txt
+No laser emission command was issued. MC-01 was not started.

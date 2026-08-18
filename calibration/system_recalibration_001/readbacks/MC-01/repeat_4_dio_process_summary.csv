@@ -1,0 +1,2 @@
+path,sample_count,mean,rms,minimum,maximum,first_timestamp,last_timestamp
+/dev18500/demods/2/sample.dio,5000,1199364714.688,1831408196.1609538,0.0,3222290624.0,279876300436480,279876592218112

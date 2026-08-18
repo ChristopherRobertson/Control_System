@@ -54,6 +54,10 @@ The technical information below is preserved as supplied by the operator.
 - DB9 pin 5 is reserved for Laser Output On/Off in the installed board
   documentation and remains disconnected.
 - Under the installed topology, DB9 pins 6 and 8 are unused and unwired.
+- The repository phrase `default wiring restored` also includes T660-1 channel
+  D disconnected and unused, plus DB9 pin 5 disconnected and pins 6/8
+  unused/unwired. These standing conditions are not re-asked unless the
+  operator explicitly reports a change; see `docs/default_wiring_state.md`.
 - The room interlock remains authoritative; this campaign does not use DB9 pin
   6 and does not disconnect or replace the MIRcat interlock BNC.
 - External Process Trigger must be qualified in the manufacturer GUI before SDK

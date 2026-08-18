@@ -1,0 +1,342 @@
+{
+  "acquisition_id": "MC01-ACTIVE-REPEAT-003",
+  "authorization_id": "MC01-AUTH-002",
+  "dio_mapping": {
+    "pin1_scan_direction": 20,
+    "pin2_tuned_sweep_active": 21,
+    "pin3_wavelength_trigger": 22
+  },
+  "finished_utc": "2026-08-17T22:23:59.754968+00:00",
+  "hf2li_clockbase_hz": 210000000,
+  "hf2li_device": "dev18500",
+  "shot_count_after": 1,
+  "shot_count_before": 0,
+  "started_utc": "2026-08-17T22:23:49.120325+00:00",
+  "status": "STARTED",
+  "t660_command": {
+    "channel": "C",
+    "count": 1,
+    "device": "T660-1 00369",
+    "polarity": "negative",
+    "termination": "50OHM",
+    "width": "10ms"
+  },
+  "t660_identity": "HTI,T660-1,00369,28E660-1-1.7",
+  "t660_post_readback": {
+    "channels": {
+      "A": {
+        "delay_edge": {
+          "ok": true,
+          "response": "+000.000000000000"
+        },
+        "enabled": {
+          "ok": true,
+          "response": "OFF"
+        },
+        "polarity": {
+          "ok": true,
+          "response": "POSitive"
+        },
+        "termination": {
+          "ok": true,
+          "response": "50OHM"
+        },
+        "timing_mode": {
+          "ok": true,
+          "response": "DW"
+        },
+        "width_edge": {
+          "ok": true,
+          "response": "+000.000000150000"
+        }
+      },
+      "B": {
+        "delay_edge": {
+          "ok": true,
+          "response": "+000.000000000000"
+        },
+        "enabled": {
+          "ok": true,
+          "response": "OFF"
+        },
+        "polarity": {
+          "ok": true,
+          "response": "POSitive"
+        },
+        "termination": {
+          "ok": true,
+          "response": "50OHM"
+        },
+        "timing_mode": {
+          "ok": true,
+          "response": "DW"
+        },
+        "width_edge": {
+          "ok": true,
+          "response": "+000.000000150000"
+        }
+      },
+      "C": {
+        "delay_edge": {
+          "ok": true,
+          "response": "+000.000000000000"
+        },
+        "enabled": {
+          "ok": true,
+          "response": "OFF"
+        },
+        "polarity": {
+          "ok": true,
+          "response": "NEGative"
+        },
+        "termination": {
+          "ok": true,
+          "response": "50OHM"
+        },
+        "timing_mode": {
+          "ok": true,
+          "response": "DW"
+        },
+        "width_edge": {
+          "ok": true,
+          "response": "+000.010000000000"
+        }
+      },
+      "D": {
+        "delay_edge": {
+          "ok": true,
+          "response": "+000.000000000000"
+        },
+        "enabled": {
+          "ok": true,
+          "response": "OFF"
+        },
+        "polarity": {
+          "ok": true,
+          "response": "POSitive"
+        },
+        "termination": {
+          "ok": true,
+          "response": "50OHM"
+        },
+        "timing_mode": {
+          "ok": true,
+          "response": "DW"
+        },
+        "width_edge": {
+          "ok": true,
+          "response": "+000.000000150000"
+        }
+      }
+    },
+    "device": "t660_1",
+    "queries": {
+      "burst": {
+        "ok": true,
+        "response": "OFF"
+      },
+      "firmware": {
+        "ok": true,
+        "response": "28E660-1-1.7",
+        "source": "*IDN?"
+      },
+      "gate_mode": {
+        "ok": true,
+        "response": "0"
+      },
+      "identity": {
+        "ok": true,
+        "response": "HTI,T660-1,00369,28E660-1-1.7"
+      },
+      "predivider": {
+        "ok": true,
+        "response": "1"
+      },
+      "shots": {
+        "ok": true,
+        "response": "1"
+      },
+      "synth_frequency": {
+        "ok": true,
+        "response": "+000010000.000000"
+      },
+      "trigger_input_polarity": {
+        "ok": true,
+        "response": "POSitive"
+      },
+      "trigger_input_termination": {
+        "ok": true,
+        "response": "50OHM"
+      },
+      "trigger_input_threshold_v": {
+        "ok": true,
+        "response": "+2.000"
+      },
+      "trigger_source": {
+        "ok": true,
+        "response": "OFF"
+      }
+    },
+    "timestamp_utc": "2026-08-17T22:23:52+00:00"
+  },
+  "t660_staged_readback": {
+    "channels": {
+      "A": {
+        "delay_edge": {
+          "ok": true,
+          "response": "+000.000000000000"
+        },
+        "enabled": {
+          "ok": true,
+          "response": "OFF"
+        },
+        "polarity": {
+          "ok": true,
+          "response": "POSitive"
+        },
+        "termination": {
+          "ok": true,
+          "response": "50OHM"
+        },
+        "timing_mode": {
+          "ok": true,
+          "response": "DW"
+        },
+        "width_edge": {
+          "ok": true,
+          "response": "+000.000000150000"
+        }
+      },
+      "B": {
+        "delay_edge": {
+          "ok": true,
+          "response": "+000.000000000000"
+        },
+        "enabled": {
+          "ok": true,
+          "response": "OFF"
+        },
+        "polarity": {
+          "ok": true,
+          "response": "POSitive"
+        },
+        "termination": {
+          "ok": true,
+          "response": "50OHM"
+        },
+        "timing_mode": {
+          "ok": true,
+          "response": "DW"
+        },
+        "width_edge": {
+          "ok": true,
+          "response": "+000.000000150000"
+        }
+      },
+      "C": {
+        "delay_edge": {
+          "ok": true,
+          "response": "+000.000000000000"
+        },
+        "enabled": {
+          "ok": true,
+          "response": "ON"
+        },
+        "polarity": {
+          "ok": true,
+          "response": "NEGative"
+        },
+        "termination": {
+          "ok": true,
+          "response": "50OHM"
+        },
+        "timing_mode": {
+          "ok": true,
+          "response": "DW"
+        },
+        "width_edge": {
+          "ok": true,
+          "response": "+000.010000000000"
+        }
+      },
+      "D": {
+        "delay_edge": {
+          "ok": true,
+          "response": "+000.000000000000"
+        },
+        "enabled": {
+          "ok": true,
+          "response": "OFF"
+        },
+        "polarity": {
+          "ok": true,
+          "response": "POSitive"
+        },
+        "termination": {
+          "ok": true,
+          "response": "50OHM"
+        },
+        "timing_mode": {
+          "ok": true,
+          "response": "DW"
+        },
+        "width_edge": {
+          "ok": true,
+          "response": "+000.000000150000"
+        }
+      }
+    },
+    "device": "t660_1",
+    "queries": {
+      "burst": {
+        "ok": true,
+        "response": "OFF"
+      },
+      "firmware": {
+        "ok": true,
+        "response": "28E660-1-1.7",
+        "source": "*IDN?"
+      },
+      "gate_mode": {
+        "ok": true,
+        "response": "0"
+      },
+      "identity": {
+        "ok": true,
+        "response": "HTI,T660-1,00369,28E660-1-1.7"
+      },
+      "predivider": {
+        "ok": true,
+        "response": "1"
+      },
+      "shots": {
+        "ok": true,
+        "response": "1"
+      },
+      "synth_frequency": {
+        "ok": true,
+        "response": "+000010000.000000"
+      },
+      "trigger_input_polarity": {
+        "ok": true,
+        "response": "POSitive"
+      },
+      "trigger_input_termination": {
+        "ok": true,
+        "response": "50OHM"
+      },
+      "trigger_input_threshold_v": {
+        "ok": true,
+        "response": "+2.000"
+      },
+      "trigger_source": {
+        "ok": true,
+        "response": "REM"
+      }
+    },
+    "timestamp_utc": "2026-08-17T22:23:50+00:00"
+  },
+  "timing_demodulator_api_index": 2,
+  "trigger_issued_utc": "2026-08-17T22:23:52.480214+00:00",
+  "trigger_was_issued": true
+}

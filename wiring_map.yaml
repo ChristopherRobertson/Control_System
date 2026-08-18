@@ -15,6 +15,10 @@ source:
     inputs do not mirror to HF2LI DIO9-DIO15 outputs.
   - MIRcat DB9 pin 5 is reserved for Laser Output On/Off and is disconnected.
     DB9 pins 6 and 8 are unused and unwired in the installed topology.
+  - The phrase "default wiring restored" includes T660-1 CHD disconnected,
+    MIRcat DB9 pin 5 disconnected, and MIRcat DB9 pins 6 and 8 unused/unwired.
+    These remain standing conditions unless the operator explicitly reports a
+    change; see docs/default_wiring_state.md.
   - Manufacturer correspondence is preserved at
     docs/MIRcat/daylight_db9_process_trigger_correspondence.md.
 global_buses:

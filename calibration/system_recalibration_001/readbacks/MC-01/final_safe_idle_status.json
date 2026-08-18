@@ -1,0 +1,16 @@
+{
+  "campaign_id": "system_recalibration_001",
+  "finished_utc": "2026-08-17T20:23:57.742484+00:00",
+  "laser_emission_authorized": false,
+  "mircat_sdk_connection_used": false,
+  "output_enable_authorized": false,
+  "phase_id": "MC-01",
+  "phase_run_id": "system_recalibration_001_MC-01_001",
+  "purpose": "final T660-only safe idle for blocked MC-01 closeout",
+  "started_utc": "2026-08-17T20:23:51.714627+00:00",
+  "t660_safe_idle": {
+    "matches_recipe": true,
+    "mismatches": [],
+    "status": "PASS"
+  }
+}
