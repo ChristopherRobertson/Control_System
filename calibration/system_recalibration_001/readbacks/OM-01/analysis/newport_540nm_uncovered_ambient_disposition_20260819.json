@@ -1,0 +1,10 @@
+{
+  "source_artifact": "raw/newport_540nm_uncovered_ambient_settling_repeat_20260819.json",
+  "final_disposition": "ACCEPTED_UNCOVERED_AMBIENT_NOISE_LIMITED",
+  "supersedes_embedded_provisional_disposition": true,
+  "mean_w": 0.001116321,
+  "sample_sd_w": 0.00006808099225846045,
+  "segment_change_w": -0.0001436306,
+  "sensor_documented_noise_w": 0.0002,
+  "rationale": "The sample standard deviation and absolute first-to-last segment change are both below the sensor's documented 0.2 mW noise level. The apparent variation is noise-limited ambient response and does not justify an additional two-minute dwell."
+}

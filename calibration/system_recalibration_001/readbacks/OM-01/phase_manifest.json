@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "OM-01",
+  "phase_run_id": "system_recalibration_001_OM-01_001",
+  "status": "PASS_COMPLETE_QUALIFIED_BOUNDED",
+  "operator_ids": ["Christopher_Robertson", "Codex_orchestration"],
+  "start_utc": "2026-08-18T20:59:35.3243368Z",
+  "end_utc": "2026-08-19T18:15:16.704345Z",
+  "configuration_id": "OM01-NEWPORT1918-919P01016-v1",
+  "repository": {
+    "path": "C:/Users/Chris/Documents/GitHub/Control_System",
+    "branch": "main",
+    "working_tree_state": "dirty; OM-01 campaign records, Newport Python service/tests, and user-supplied power-meter documentation are uncommitted",
+    "git_write_actions": "no stage, commit, push, or canonical promotion"
+  },
+  "device_ids": [
+    "POWER-METER-NEWPORT-1918R-15879",
+    "T660-1-00369",
+    "T660-2-00431",
+    "NDYAG-SURELITE-EX-24366-1",
+    "OPO-HORIZON-SLOPO-PLUS",
+    "ENV-TAGPLUS-TN-250105084H"
+  ],
+  "component_ids": ["POWER-SENSOR-NEWPORT-919P01016-161791"],
+  "sample_ids": ["NO-SAMPLE-OM01"],
+  "calibration_bundle_ids": [
+    "CAL-system_recalibration_001-WORKING-EVIDENCE",
+    "CAL-system_characterization_001-CH00",
+    "CAL-system_recalibration_001-OM01-v1"
+  ],
+  "artifact_index": "artifacts.csv",
+  "acquisition_index": "acquisition_index.csv",
+  "conditions_table": "conditions.csv",
+  "measurements_table": "measurements.csv",
+  "exclusions_table": "exclusions.csv",
+  "calibration_links_table": "calibration_links.csv",
+  "criterion_versions": {
+    "measurement_contract": "1.0.0",
+    "om01_acceptance": "OM01-ACCEPT-v1",
+    "power_meter_configuration": "OM01-POWER-NEWPORT-v1",
+    "python_usb_service": "NEWPORT1918-PY3-QUERY-v1"
+  },
+  "deviations": [
+    "The certificate's July 2026 recommended recalibration date has passed. The operator reports the sensor has not been used since its 2025 calibration and authorizes continued campaign use; this is an operator-approved campaign validity decision, not a new calibration or extension of the certificate issuer's date.",
+    "The representative OPO output was not spectrally pure and exhibited visible halos. The recorded value is combined incident OPO-output power indicated using the 540 nm meter setting; spectral-composition bias is unquantified and excluded from the stated 4.34% meter-indication uncertainty."
+  ],
+  "user_input_required": [],
+  "deferred_downstream_inputs": [
+    "Exact retained probe setpoints are frozen by their owning phases within the qualified regions.",
+    "Quantitative and invisible-beam geometry is established by OG-01.",
+    "Exact source control settings and stability envelopes are established by PB-01/PB-02/QB-01.",
+    "OPO spectral composition or qualified wavelength-selective rejection is established before wavelength-specific power or dose claims."
+  ],
+  "restoration_artifact_id": "OM01-RESTORATION-FINAL-001",
+  "promotion_performed": false,
+  "promotion_approval_reference": null,
+  "notes": "OM-01 passed as a bounded working-reference qualification. Canonical promotion was not performed; ATT-01 remains unauthorized."
+}

@@ -1,16 +1,20 @@
 Hardware Configuration Inventory
-config_path: /mnt/c/Users/Chris/Documents/GitHub/Control_System/hardware_configuration.yaml
-schema_version: 0.1
+config_path: C:\Users\Chris\Documents\GitHub\Control_System\hardware_configuration.yaml
+schema_version: 0.2
 
 Devices:
 - arduino_mux: Arduino MUX Controller (mux_controller)
 - hf2li: Zurich Instruments HF2LI (lockin_amplifier)
 - mircat: Daylight MIRcat (probe_laser)
 - ndyag: Surelite EX Nd:YAG (pump_laser)
+- opo_iris: Thorlabs ELL15 Motorized Iris (permanent_opo_beam_conditioner)
+- optical_power_meter: Newport 1918-R Optical Power Meter (average_optical_power_working_reference)
+- optical_power_sensor: Newport 919P-010-16 Thermopile Sensor (average_optical_power_sensor)
 - picoscope: PicoScope 5000 Series (oscilloscope)
 - slopo: SLOPO / Horizon OPO (opo_controller)
 - t660_1: T660-1 (pump_timing)
 - t660_2: T660-2 (master_timing_trains_frames)
+- wavemaster: Coherent WaveMaster Wavelength Meter (visible_near_ir_wavelength_working_reference)
 
 T660 signal map:
 - hf2li_daq_trigger: t660_2 channel C
@@ -153,3 +157,5 @@ PicoScope settings:
 
 Warnings:
 - Arduino MUX is disabled and no MUX routes are active; scope/HF2LI observations must use direct wiring.
+- OPO iris is configured but remains unqualified until ATT-01 passes.
+- WM-01 entry BLOCKED by [VALUE_REQUIRED] WaveMaster fields: serial_number, instrument_identity_response, firmware_revision, preferred_port, usb_vid_hex, usb_pid_hex, usb_serial_number, port_serial_number, usb_adapter_model, driver_provider, driver_version_observed, power_supply_identity, power_supply_approval_basis

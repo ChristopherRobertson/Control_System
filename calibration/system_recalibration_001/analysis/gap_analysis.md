@@ -22,8 +22,10 @@ cover the complete campaign and conflicted with current safety restrictions.
 10. Optical Q-switch-to-sample timing lacks the run-local OP-01 adapter record, detector correction, placement uncertainty, bounded shot accounting, blocked control, preview evidence, and restoration repeatability.
 11. Complete reference-plane-compatible timing closure, operational delay equation, two-run end-to-end validation, failure recovery, uncertainty budgets, and thesis-claim-to-raw provenance remain outstanding.
 12. Retained lightweight software-version records, replacement detector/SIP identity, available-meter qualification, applicable wiring authority, and spectral-reference authority remain incomplete. Device-under-test certificate retrieval and calibrated environmental claims were discarded.
-13. The biological briefs require finite sample-transmitted pump events while the Nd:YAG flashlamp remains at its qualified cadence. Command counts and the T660 shot-counter reset do not prove admitted optical events or enforce a finite exposure. FE-01 now qualifies one finite-event mechanism for direct 532 nm and OPO 540 nm with independent optical-event reconciliation and no-emission fault paths.
+13. Both biological briefs require finite post-iris OPO-540 events at the sample while the Nd:YAG/OPO source remains at its qualified cadence. Command counts, the T660 shot-counter reset, and iris motion do not prove admitted optical events or enforce a finite exposure. FE-01 now qualifies one shared OPO-540 finite-event mechanism with independent optical-event reconciliation and no-emission fault paths.
 14. The HRP-C-CO and MbCO briefs require gas-tight aqueous CaF2 sample cells and temperature evidence but those are sample-hardware qualifications rather than calibration corrections. Characterization SC-01 now qualifies only the minimum selected cell/path and 293 K/298 K states using nonbiological blanks; CO loading and protein-state work remain in the experiments.
+15. The Coherent WaveMaster is the visible/near-IR wavelength working reference, but its electronic identity, firmware, COM/adapter identity, installed driver, and power-supply identity/approval basis require the disconnected device. Those fields are explicitly `[VALUE_REQUIRED]`; WM-01 and therefore ATT-01 are blocked until they are observed, the preflight passes, and the phase is separately authorized. The instrument does not cover the 355 nm drive and cannot determine spectral-power fractions.
+16. The permanent ELL15 iris identity, FTDI converter identity, COM observation, driver, native service, and offline tests are registered. Its far-field Z/X/Y mount, accepted 540 nm diameter/tolerance, halo-rejection/core-margin bound, 950 nm home-sensor leakage control, and transfer correction remain ATT-01 outputs. The iris is not a safety shutter, interlock, pulse picker, or finite-event gate.
 
 ## Acceptance limits still requiring authoritative inputs
 
@@ -33,12 +35,13 @@ PicoScope timebase accuracy for actual used settings, relevant MIRcat/HF2LI oper
 
 `INCOMPLETELY CALIBRATED — PARTIAL CAMPAIGN COMPLETE`.
 
-S0, MS-01, MS-02, T2-01, and T1-01 have completed with preserved phase
-evidence; PT-01 is in progress. These completed measurements are not repeated.
+S0, MS-01, MS-02, T2-01, T1-01, PT-01, MC-01, TR-01, and OM-01 have completed
+with preserved phase evidence. These completed measurements are not repeated.
 The remaining items above are addressed by the expanded sequence in
-`plans/campaign_sequence.md`, including new TR-01, OM-01, ATT-01, DET-03, and DET-04
-phases, the new FE-01 finite-event-control phase, and the RPT-01/PROM-01 reuse
-package. Pump/probe beam performance and the shared nonbiological cell/
+`plans/campaign_sequence.md`. WM-01 is the exact next phase and is blocked by
+the connection-derived `[VALUE_REQUIRED]` fields. ATT-01 follows only after
+WM-01 passes. DET-03, DET-04, FE-01, and the RPT-01/PROM-01 reuse package remain
+unexecuted. Pump/probe beam performance and the shared nonbiological cell/
 temperature qualification are
 measured in the separate `system_characterization_001` campaign after its
 calibration dependencies are qualified.

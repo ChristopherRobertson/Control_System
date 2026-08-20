@@ -1,0 +1,59 @@
+{
+  "manifest_id": "OM01-OPTICAL-METROLOGY-CONFIG-v1",
+  "status": "QUALIFIED_BOUNDED",
+  "power_meter": {
+    "equipment_id": "POWER-METER-NEWPORT-1918R-15879",
+    "manufacturer": "Newport",
+    "model": "1918-R",
+    "serial": "15879",
+    "firmware_readback": "v1.0.2 04/06/12",
+    "usb_address": 2,
+    "usb_product_id": "0xCEC7",
+    "driver_dll": "C:/Program Files/Newport/Newport USB Driver/Bin/usbdll.dll",
+    "driver_dll_version": "5.0.8",
+    "software_id": "NEWPORT1918-PY3-QUERY-v1",
+    "qualified_mode": "DC Continuous",
+    "qualified_range_code": 0,
+    "analog_filter_hz": 0.5,
+    "digital_filter": "off"
+  },
+  "sensor_head": {
+    "component_id": "POWER-SENSOR-NEWPORT-919P01016-161791",
+    "manufacturer": "Newport",
+    "model": "919P-010-16",
+    "serial": "161791",
+    "type": "broadband thermopile",
+    "active_diameter_mm": 16,
+    "active_area_cm2": 2.01,
+    "nominal_maximum_average_power_w": 10,
+    "power_noise_level_w": 0.0002,
+    "spectral_range_nm": [190, 11000],
+    "certificate_id": "3161791-001",
+    "certificate_calibration_date": "2025-01-12",
+    "certificate_recommended_recalibration": "2026-07",
+    "campaign_validity_decision": "Operator reports no use since calibration and accepts bounded campaign use; certificate date is not extended."
+  },
+  "qualified_wavelength_rules": {
+    "visible_nm": [355, 532, 540],
+    "mid_ir_regions_nm": [[5051, 5305], [5764, 5935]],
+    "selection": "Set the meter EEPROM wavelength to the actual integer-nm point; for a wavenumber use lambda_nm=1E7/wavenumber_cm-1 and record conversion and selected integer."
+  },
+  "installed_check": {
+    "wavelength_nm": 540,
+    "programmed_fire_to_q_switch_delay_us": 300,
+    "repetition_rate_hz": 10,
+    "three_window_mean_w": 0.0843148227,
+    "between_window_cv_percent": 1.441516,
+    "observed_power_range_w": [0.07529341, 0.135972],
+    "meter_status": "normal_no_overrange",
+    "beam_containment": "operator confirmed complete visible footprint, including observed halos, within 8 mm active radius",
+    "spectral_interpretation": "OPO output not spectrally pure; value is combined incident output indicated using the 540 nm meter responsivity setting"
+  },
+  "spatial_method": "OM01-BINARY-CONTAINMENT-16MM; total-power capture only; quantitative and invisible-beam geometry deferred to OG-01",
+  "polarization": "No OM-01 polarization claim or correction; downstream polarization dependence remains phase-owned.",
+  "reference_plane_definitions": "reference_planes_and_applicability.md",
+  "uncertainty": {
+    "representative_provisional_expanded_percent_k2": 4.34,
+    "limitation": "Binary containment only; final geometry/transfer uncertainty is established downstream. Spectral-composition bias is unquantified and excluded from 4.34%, which applies only to the meter indication under the observed mixed-spectrum condition."
+  }
+}

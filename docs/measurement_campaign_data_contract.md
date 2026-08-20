@@ -1,6 +1,6 @@
 # Measurement campaign data contract
 
-Version: `1.0.0`
+Version: `1.1.0`
 
 This contract makes calibration, characterization, and later experimental
 campaigns collectable and aggregatable without reacquisition. It governs new
@@ -82,6 +82,19 @@ campaign_id,phase_id,acquisition_id,result_set_id,quantity_name,value,unit,stati
 `correction_state` is one of `raw`, `corrected`, `derived`, or `bounded`.
 Corrections are not silently baked into a value; named correction terms appear
 as their own rows or in a linked uncertainty/correction table.
+
+For WaveMaster records, `quality_flag` is one of `valid`, `multi_line`,
+`saturated`, `no_signal`, `invalid_reply`, or `communication_failure`. The
+native response and time tag remain linked raw evidence. Non-numeric outcomes
+have an empty numeric `value` and are never coerced to zero or a wavelength.
+
+For the retained OPO-540 path, `conditions.csv` separately records the iris
+device/configuration ID, command and readback diameter, tolerance/fault state,
+locked-mount check, WaveMaster configuration ID, units, pulse/CW mode,
+autocalibration state, probe/reference plane, response quality, center-
+wavelength result, residual spectral-content result, and post-iris power. A
+center wavelength and a residual spectral-power fraction are different
+quantities and cannot share one measurement row or authority.
 
 ### `artifacts.csv`
 

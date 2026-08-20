@@ -174,6 +174,35 @@ def build_config_inventory(
         warnings.append("arduino_mux device is missing")
     if "picoscope" not in devices:
         warnings.append("picoscope device is missing")
+
+    iris = devices.get("opo_iris")
+    if not isinstance(iris, dict):
+        warnings.append("opo_iris device is missing")
+    elif iris.get("qualification_status") != "qualified":
+        warnings.append(
+            "OPO iris is configured but remains unqualified until ATT-01 passes."
+        )
+
+    wavemaster = devices.get("wavemaster")
+    if not isinstance(wavemaster, dict):
+        warnings.append("wavemaster device is missing")
+    else:
+        required = wavemaster.get("phase_entry_required_fields") or []
+        if not isinstance(required, list):
+            warnings.append(
+                "WaveMaster phase_entry_required_fields must be a list."
+            )
+        else:
+            unresolved = [
+                str(field)
+                for field in required
+                if wavemaster.get(str(field)) in (None, "", "[VALUE_REQUIRED]")
+            ]
+            if unresolved:
+                warnings.append(
+                    "WM-01 entry BLOCKED by [VALUE_REQUIRED] WaveMaster fields: "
+                    + ", ".join(unresolved)
+                )
     if not signal_map:
         raise HardwareConfigError("no configured T660 signal names were discovered")
 

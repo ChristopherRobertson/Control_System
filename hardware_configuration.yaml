@@ -1,4 +1,4 @@
-schema_version: "0.1"
+schema_version: "0.2"
 
 system:
   name: "IR Spectroscope"
@@ -86,6 +86,170 @@ devices:
     model_number: "SLOPO PLUS"
     serial_number: "24366-2"
     procurement_identity: "Surelite OPO Plus Blue"
+
+  optical_power_meter:
+    display_name: "Newport 1918-R Optical Power Meter"
+    role: "average_optical_power_working_reference"
+    manufacturer: "Newport"
+    model_number: "1918-R"
+    serial_number: "15879"
+    firmware_readback: "v1.0.2 04/06/12"
+    qualification_status: "OM-01_qualified_bounded_not_canonically_promoted"
+    interface: "newport_usb_dll"
+    usb_address_observed_OM-01: 2
+    usb_product_id_hex: "CEC7"
+    driver_dll: "C:/Program Files/Newport/Newport USB Driver/Bin/usbdll.dll"
+    driver_dll_version: "5.0.8"
+    software_service: "control_app/devices/newport_1918_service.py"
+    qualified_mode: "DC Continuous"
+    qualified_range_code: 0
+    analog_filter_hz: 0.5
+    digital_filter: "off"
+    qualification_bundle: "CAL-system_recalibration_001-OM01-v1"
+    manufacturer_documents:
+      - "docs/Power_Meter/1918-R_Power_Meter_Users_Manual_RevA.pdf"
+      - "docs/Power_Meter/1918-R_Power_Meter_Datasheet.pdf"
+    operational_constraints:
+      - "The OM-01 result is bounded average-power metrology and is not a pulse-energy distribution or peak-power measurement."
+      - "The OM-01 OPO observation is mixed-spectrum pre-iris evidence and is not post-iris 540 nm dose."
+
+  optical_power_sensor:
+    display_name: "Newport 919P-010-16 Thermopile Sensor"
+    role: "average_optical_power_sensor"
+    manufacturer: "Newport"
+    model_number: "919P-010-16"
+    serial_number: "161791"
+    qualification_status: "OM-01_qualified_bounded_not_canonically_promoted"
+    sensor_type: "broadband thermopile"
+    active_diameter_mm: 16.0
+    active_area_cm2: 2.01
+    nominal_maximum_average_power_w: 10.0
+    power_noise_level_w: 0.0002
+    spectral_range_nm:
+      minimum: 190
+      maximum: 11000
+    certificate_id: "3161791-001"
+    certificate_calibration_date: "2025-01-12"
+    certificate_recommended_recalibration: "2026-07"
+    qualification_bundle: "CAL-system_recalibration_001-OM01-v1"
+    manufacturer_documents:
+      - "docs/Power_Meter/919-P_Sensor_Datasheet.pdf"
+      - "docs/Power_Meter/919-P_Sensor_Certificate_of_Calibration.pdf"
+    operational_constraints:
+      - "The certificate date is not extended by campaign use."
+      - "OM-01 qualified binary visible-footprint containment only; quantitative beam geometry remains downstream work."
+
+  opo_iris:
+    display_name: "Thorlabs ELL15 Motorized Iris"
+    role: "permanent_opo_beam_conditioner"
+    manufacturer: "Thorlabs"
+    procurement_model: "ELL15K"
+    device_model: "ELL15"
+    protocol_model_code_hex: "0F"
+    serial_number: "11500020"
+    manufacture_year: 2024
+    firmware_field_hex: "10"
+    hardware_field_hex: "21"
+    qualification_status: "connected_unqualified_pending_ATT-01"
+    interface: "usb_serial"
+    preferred_port: "COM5"
+    usb_vid_hex: "0403"
+    usb_pid_hex: "6015"
+    usb_serial_number: "DP06U124"
+    port_serial_number: "DP06U124A"
+    usb_converter: "FTDI FT230X Basic UART"
+    driver_provider: "FTDI"
+    driver_version_observed: "2.12.36.20"
+    baudrate: 9600
+    bytesize: 8
+    parity: "N"
+    stopbits: 1
+    flow_control: "none"
+    device_address: "0"
+    aperture_units: "mm_diameter"
+    minimum_aperture_mm: 1.0
+    maximum_aperture_mm: 11.5
+    encoder_counts_per_mm: 1000
+    minimum_incremental_motion_mm: 0.01
+    unidirectional_repeatability_mm: 0.10
+    homing_repeatability_mm: 0.10
+    backlash_mm: 0.20
+    power_requirement: "5 VDC +/-10%; 800 mA typical during movement"
+    manufacturer_documents:
+      - "docs/Iris/ELL15K_Iris_Manual.pdf"
+      - "docs/Iris/Ellx_Iris_Communication_Protocol.pdf"
+    software_service: "control_app/devices/ell15_iris_service.py"
+    operational_constraints:
+      - "The iris is a static beam conditioner, not a safety shutter, pulse picker, interlock, or finite-event gate."
+      - "No scientific acquisition is permitted while the iris is homing or moving."
+      - "Target diameters are approached from a larger aperture for repeatability."
+      - "The 950 nm home-sensor leakage is controlled and measured in ATT-01."
+      - "The Z/X/Y mount and accepted 540 nm diameter are ATT-01 outputs and remain unqualified until promotion."
+
+  wavemaster:
+    display_name: "Coherent WaveMaster Wavelength Meter"
+    role: "visible_near_ir_wavelength_working_reference"
+    manufacturer: "Coherent"
+    model_number: "WaveMaster"
+    catalog_number: "33-2650"
+    part_number: "33-2650-000"
+    reported_label_serial: "WO 339"
+    serial_number: "[VALUE_REQUIRED]"
+    instrument_identity_response: "[VALUE_REQUIRED]"
+    firmware_revision: "[VALUE_REQUIRED]"
+    qualification_status: "disconnected_blocked_pending_WM-01"
+    interface: "rs232_via_usb_adapter"
+    preferred_port: "[VALUE_REQUIRED]"
+    usb_vid_hex: "[VALUE_REQUIRED]"
+    usb_pid_hex: "[VALUE_REQUIRED]"
+    usb_serial_number: "[VALUE_REQUIRED]"
+    port_serial_number: "[VALUE_REQUIRED]"
+    usb_adapter_model: "[VALUE_REQUIRED]"
+    driver_provider: "[VALUE_REQUIRED]"
+    driver_version_observed: "[VALUE_REQUIRED]"
+    cable_configuration: "straight-through; not null modem; RTS/CTS carried"
+    baudrate: 9600
+    bytesize: 8
+    parity: "N"
+    stopbits: 1
+    flow_control: "RTS/CTS hardware"
+    response_terminator: "CR/LF"
+    command_terminator: "CR"
+    power_supply_identity: "[VALUE_REQUIRED]"
+    power_supply_approval_basis: "[VALUE_REQUIRED]"
+    power_requirement: "12 VDC, 2.5 A; manufacturer-supplied or Coherent-approved replacement"
+    wavelength_range_nm:
+      minimum: 380.0
+      maximum: 1095.0
+    manufacturer_accuracy_nm: 0.005
+    resolution_nm: 0.001
+    display_update_hz: 3
+    measurement_authority: "unqualified_pending_WM-01"
+    manufacturer_documents:
+      - "docs/WaveMaster/WaveMaster_Manual.pdf"
+      - "docs/WaveMaster/Coherent_WaveMaster_33-2650_Datasheet.pdf"
+      - "docs/WaveMaster/WaveMaster_USB_driver_install.pdf"
+    software_service: "control_app/devices/coherent_wavemaster_service.py"
+    phase_entry_required_fields:
+      - "serial_number"
+      - "instrument_identity_response"
+      - "firmware_revision"
+      - "preferred_port"
+      - "usb_vid_hex"
+      - "usb_pid_hex"
+      - "usb_serial_number"
+      - "port_serial_number"
+      - "usb_adapter_model"
+      - "driver_provider"
+      - "driver_version_observed"
+      - "power_supply_identity"
+      - "power_supply_approval_basis"
+    operational_constraints:
+      - "WM-01 cannot start while any phase_entry_required_fields value is [VALUE_REQUIRED]."
+      - "The instrument identifies wavelength but does not apportion optical power among spectral components."
+      - "The qualified range does not include the 355 nm OPO drive."
+      - "Quantitative qualification uses explicit air/vacuum units, pulse mode, autocalibration state, input status, and thermal-stability record."
+      - "A Multi-Line result is retained as evidence and is not converted into a wavelength or spectral-power fraction."
 
   ndyag:
     display_name: "Surelite EX Nd:YAG"

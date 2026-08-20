@@ -1,0 +1,16 @@
+2026-08-18T20:59:35.3243368Z OM01-USB-DIAG-001 BEGIN query-only Newport USB diagnostic
+2026-08-18T20:59:35.3243368Z Opened product 0xCEC7 through usbdll.dll 5.0.8; one device found
+2026-08-18T20:59:35.3243368Z Queried identity address sensor model/serial wavelength bounds/current mode autorange range filter and stored zero
+2026-08-18T20:59:39.0000000Z Newport USB ownership released; no PM:Power/PM:PWS query and no state-changing command
+2026-08-18T20:59:39.0000000Z No laser arm emission rewire sample handling or canonical promotion
+2026-08-18T21:38:14.7565917Z OM01-INSP-001 operator reported sensor surface aperture housing DB15 and cable condition PASS; no optical acquisition or state transition
+2026-08-18T21:43:00.2266989Z OM01-INSP-002 Sensor.jpg reviewed; dedicated dark cap unavailable; temporary non-contact enclosure required; no optical acquisition or state transition
+2026-08-18T21:45:21.4408163Z OM01-INSP-003 opaque plastic dark cover installed over tube end with tape; operator reports no sensor contact and no edge light; photo required before reading/zero
+2026-08-18T21:49:10.5304389Z CoveredSensor.jpg accepted for OM01-DARK-COVER-PLASTIC-v1
+2026-08-18T21:49:10.5304389Z OM01-DARK-PREVIEW-001 BEGIN read-only covered preview
+2026-08-18T21:49:14.4165958Z OM01-DARK-PREVIEW-001 END reading -1.629390E-002 W status 0x108; range 0 span 3.534768E-001 to 3.927520E+000 W; REJECTED_RANGE_TOO_HIGH; no setting/zero change
+2026-08-18T21:50:33.4429580Z OM01-DARK-PREVIEW-002 BEGIN operator-requested repeat after zero offset removal
+2026-08-18T21:50:36.8213635Z OM01-DARK-PREVIEW-002 END zero 0 W reading -1.504746E-002 W status 0x108; range 0 remains invalid for dark result; no setting change
+2026-08-18T22:01:16.0815508Z OM01-DARK-PREZERO-001 532 nm manual 3.868 W analog 0.5 Hz digital off; 30 covered readings mean -1.6539046E-002 W SD 5.17823E-005 W segment drift 6.4518E-005 W; PASS for zero gate
+2026-08-18T22:01:16.0815508Z CORRECTION range code 0 maps to the most sensitive 3.868 W full-scale option; earlier range-invalid interpretation superseded; raw previews preserved
+2026-08-18T22:08:11.9240003Z OM01-DARK-POSTZERO-001 stored zero -1.658558E-002 W; 20 covered corrected readings mean -5.00513E-005 W SD 2.54404E-005 W; PASS

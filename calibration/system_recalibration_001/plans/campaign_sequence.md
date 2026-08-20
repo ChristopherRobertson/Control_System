@@ -2,11 +2,26 @@
 
 Campaign: `system_recalibration_001`
 
-Status: **TR-01 PASS - COMPLETE; OM-01 REQUIRES SEPARATE AUTHORIZATION**
+Status: **OM-01 PASS - COMPLETE, QUALIFIED BOUNDED; WM-01 BLOCKED BY [VALUE_REQUIRED]; ATT-01 NOT AUTHORIZED**
 
 This plan expands the original calibration scope to close the metrology gaps
 needed by the instrument-characterization campaign, thesis, and downstream
 experiments.
+The permanent OPO output path includes one electronically commanded iris whose
+far-field axial placement, fixed transverse mounting, and 540 nm aperture
+setpoint are qualified in ATT-01. The iris remains installed for every later
+OPO-540 calibration, characterization, and experiment configuration. Its USB/
+API control is an operating-configuration dependency, not a safety shutter or
+finite-exposure device.
+The Coherent WaveMaster is the visible/near-IR wavelength working reference.
+WM-01 qualifies its installed identity, power, serial communications,
+measurement settings, response states, repeatability, and uncertainty authority
+before ATT-01 or any downstream phase may use its wavelength observations.
+The unexecuted downstream biological-pump phases use this single post-iris
+540 nm configuration for HRP-C–CO first and MbCO second. This prospective
+scope reduction does not rewrite completed CH-00 or OM-01 evidence; prior
+direct-532 observations remain historical/source-health records rather than a
+retained biological pump qualification.
 It is a planning and phase-gate document only. It does not authorize hardware
 execution, laser emission, a cable move, or promotion of canonical calibration
 files.
@@ -33,8 +48,8 @@ evidence unusable for its stated purpose, or the user separately approves a
 bounded verification. Such work is a new suffixed phase; it never overwrites
 the completed record.
 
-PT-01 is already in progress in `readbacks/PT-01/`. Resume that stable record;
-do not create a replacement PT-01 directory or rerun its completed preflight.
+PT-01 is complete in its stable `readbacks/PT-01/` record. Do not create a
+replacement PT-01 directory or rerun its completed preflight.
 
 ## Global execution and advancement gates
 
@@ -58,6 +73,18 @@ do not create a replacement PT-01 directory or rerun its completed preflight.
    documented bypass with its downstream claim limitation.
 8. Canonical calibration outputs remain unchanged until PROM-01 passes and the
    user supplies the exact phrase `APPROVE CALIBRATION PROMOTION`.
+9. Any phase using the OPO output after ATT-01 must acquire and retain the
+   electronic-iris identity, connection/driver/API versions, commanded and
+   read-back aperture, qualified configuration ID, and mismatch/fault state.
+   Loss of ownership, communication, or accepted readback blocks OPO emission;
+   the iris is never credited as a personnel-safety shutter or pulse limiter.
+10. Any phase using a WaveMaster result must retain the qualified working-
+    reference bundle ID, device and adapter identities, units, pulse/CW mode,
+    autocalibration state, probe geometry, native time tag and response text,
+    quality state, thermal-stability classification, and applicable uncertainty.
+    `Multi-Line`, `Saturated`, and `No Signal` are measurement outcomes, not
+    numeric wavelengths. A WaveMaster reading neither assigns spectral-power
+    fractions nor proves that no additional wavelength is present.
 
 ## Common phase record and retention gate
 
@@ -222,10 +249,17 @@ TR-01 closed by records audit in `../readbacks/TR-01/`. It imported completed
 campaign evidence by stable identifier, retained the applicable PicoScope
 manufacturer-specification basis, classified spectral authority as deferred to
 SP-01 and optical resource qualification as deferred to OM-01, and made no
-hardware or canonical-calibration change. OM-01 is the exact next phase and
-requires separate authorization.
+hardware or canonical-calibration change. It designated OM-01 as its successor;
+OM-01 is now complete and retained without reacquisition.
 
 ### 9. OM-01 — optical metrology readiness and transfer standards
+
+Execution status: **PASS - COMPLETE, QUALIFIED BOUNDED** in the stable
+`readbacks/OM-01/` record. Newport 1918-R serial `15879` with 919P-010-16
+sensor serial `161791` has passed query-only USB identity/configuration
+communication and the completed installed checks are retained in
+`optical_metrology_bundle.json`. This status does not authorize WM-01, ATT-01,
+or any later phase and performs no canonical promotion.
 
 Qualify only the available instruments selected after downstream experiment
 requirements define the needed pump/probe power, wavelength, beam-size,
@@ -239,12 +273,15 @@ anchor, and the merged HRP/MbCO probe anchors and off-band control points.
 Shared points are measured once. No other wavelength or range is qualified
 unless the frozen claim grid requires it.
 
-At each retained wavelength and actually used meter range, record zeroing,
-background, sensor head, wavelength correction, sampling mode, warm-up,
-linearity at the lowest and highest planned readings, three repeat readings,
-one revisit, saturation limits, spatial-scale calibration, and the applicable
-manufacturer specification or available comparison. Add a midpoint only when
-the endpoint residual rule fails. Do not add a new meter or certificate task
+At each retained wavelength family and meter range required by the
+experiment-derived expected reading envelope, record zeroing, background,
+sensor head, wavelength correction, sampling mode, warm-up, bounded
+low/high meter-behavior evidence, three repeat readings, one revisit,
+saturation limits, spatial-scale calibration, and the applicable manufacturer
+specification or available comparison. Exact laser delay, current, pulse/duty,
+and delivered-power operating points are selected and characterized later in
+PB-01/PB-02/QB-01; they are not OM-01 inputs. Add a midpoint only when the
+meter-behavior residual rule fails. Do not add a new meter or certificate task
 unless an approved experimental claim requires it.
 
 Mandatory closeout deliverables:
@@ -259,40 +296,188 @@ Mandatory closeout deliverables:
 - `optical_metrology_bundle.json` assigning a stable bundle ID consumable by
   DET-02, DET-03, DET-04, OP-01, and `system_characterization_001`.
 
-### 10. ATT-01 — optical attenuation and sample-plane transfer calibration
+### 10. WM-01 — visible/near-IR wavelength-metrology readiness
 
-Characterize every neutral-density filter, attenuator, installed or temporary
-beamsplitter, meter pickoff, window, or preview element used to transfer
-source-plane measurements to the sample or detector planes. Unused elements
-are not measured. A nominal 50/50 label is never used as a correction value.
-For the installed sample/reference splitter, measure both output-port powers
-from the same incident condition and quantify total insertion loss and the
-port-resolved split versus wavenumber, polarization, alignment, and operating
-power wherever those dependencies are material.
+Execution status: **PREHARDWARE IMPLEMENTATION COMPLETE; BLOCKED BY
+`[VALUE_REQUIRED]`; NOT AUTHORIZED**.
 
-Use only the CH-00-retained 532 nm, 355 nm OPO-drive, 540 nm, Mylar-carbonyl,
-and merged biological probe anchors. At each used configuration measure the
-lowest and highest planned power; add a midpoint only if the predeclared
-linearity test fails. Reuse shared optics and anchor measurements across the
-three briefs rather than creating sample-specific transfer grids.
+WM-01 qualifies the installed Coherent WaveMaster, catalog number 33-2650, as
+a campaign-local wavelength working reference over only the source conditions
+used by the retained campaign. It does not qualify optical power, spectral-
+power fractions, absence of additional wavelengths, or the 355 nm OPO drive,
+which is outside the instrument's 380-1095 nm specified range.
+
+Before WM-01 may start, every `devices.wavemaster.phase_entry_required_fields`
+entry in `hardware_configuration.yaml` must contain an observed value. The
+following connection-derived fields are presently `[VALUE_REQUIRED]`:
+
+- electronic serial, complete `*IDN?` response, and firmware revision;
+- assigned COM port, adapter VID/PID, adapter/interface serials, adapter model,
+  and installed driver provider/version; and
+- installed power-supply identity and its Coherent approval basis.
+
+`python tools/wm01_preflight.py` enforces this entry gate. Replacing the
+placeholders establishes only documentation readiness; separate user approval
+is still required before phase work, instrument power, optical placement, or
+laser emission. A loose supply connector, uncertain connector polarity, a
+null-modem cable, missing RTS/CTS conductors, or a supply lacking an accepted
+approval basis blocks the phase.
+
+The phase first identifies and photographs the label, front/rear panels,
+sampling probe/fibre and acceptance switch, power supply, cable, USB adapter,
+mount, pickoff, and dump. It then verifies straight-through RS-232 operation at
+9600 baud, 8-N-1 with hardware RTS/CTS, exclusive port ownership, `*IDN?`,
+`*TST?`, local/remote restoration, documented query/set/readback behavior,
+communication loss/reconnect, malformed/stale-response rejection, and safe
+cleanup. Electronic identity is compared with the reported `WO 339` label
+without normalizing an ambiguous character by assumption.
+
+Optical qualification freezes air-nanometre units, pulsed mode for OPO work,
+autocalibration enabled, sampling-probe geometry/acceptance setting, input-
+status interpretation, and the retained reference plane. Quantitative records
+use the manufacturer guidance for best thermal stability after approximately
+four hours. At 540 nm, and at 532 nm only where useful as a visible source-
+health/reference point, acquire blocked/no-signal controls, native `VAL$`
+records with time tags, repeated windows and a later revisit. Capture naturally
+observed `Multi-Line` or saturation states without coercion or deliberate
+overload. An applicable independent wavelength reference may support an
+agreement check; when none is available, the result remains a manufacturer-
+specification-based installed working reference and does not claim accredited
+traceability.
 
 Mandatory closeout deliverables:
 
-- Stable component IDs, orientation, wavelength, polarization, mounting, and
-  reference-plane photographs/diagrams.
+- Installed-device, power, cable, adapter/driver, probe, mount, reference-plane,
+  and software configuration manifests with native identities and photographs.
+- Raw serial transcript; self-test/autocalibration results; settings/readbacks;
+  disconnect/reconnect, exclusive-ownership, invalid-response, local-control,
+  and restoration evidence; offline-test results; and accepted/rejected index.
+- Native wavelength/status/time-tag records, blocked control, thermal-stability
+  classification, repeatability/revisit analysis, any reference comparison,
+  response-state handling, uncertainty budget, and explicit 355 nm and
+  spectral-power-fraction exclusions.
+- `wavelength_metrology_bundle.json` with a stable bundle ID, validity envelope,
+  permitted units/modes/probe geometry, revalidation triggers, and machine-
+  readable quantity IDs consumable by ATT-01, PB-02, OG-01, PF-01, RP-01,
+  RPT-01, and the characterization campaign.
+
+WM-01 must pass and close before ATT-01 can be authorized. A bypass cannot
+support independent 540 nm wavelength identity, residual-color interpretation,
+or quantitative notebook-prediction claims.
+
+### 11. ATT-01 — electronic-iris, optical attenuation, and sample-plane transfer calibration
+
+ATT-01 imports the accepted WM-01 wavelength working-reference bundle and
+establishes the permanent beam-conditioning configuration before any
+downstream OPO-output characterization. Characterize every used neutral-density
+filter, attenuator, electronic iris or fixed aperture, installed or temporary
+beamsplitter, meter pickoff, window, or preview element that transfers a
+source-plane measurement to a sample or detector plane. Unused elements are
+not measured. A nominal 50/50 label is never used as a correction value.
+
+The electronic iris is a controlled subsystem. Its registered ELL15 identity,
+USB-converter identity, power requirements, driver/service versions, units,
+command range, readback semantics, homing behavior, power-on state,
+timeout/error behavior, and clear-aperture limits are phase inputs. Use
+exclusive ownership and the focused service with offline tests for unit
+conversion, bounds, malformed or stale replies, and safe connection cleanup.
+Qualify connect/query, bounded
+command/readback agreement, monotonicity, repeatability, backlash or
+hysteresis, reconnect, power-cycle recovery, invalid-command rejection, and
+restoration. The iris is not an interlock, safety shutter, pulse picker, or
+finite-event gate; communication or readback failure prevents OPO emission and
+requires the independent laser shutter to remain closed.
+
+Scientifically determine the permanent axial position rather than selecting it
+for mechanical convenience. At accessible far-field candidate planes, compare
+the desired 540 nm core with the angularly separated halo using attenuated or
+indirect diagnostics suitable for pulsed light. Select the plane that provides
+the largest reproducible spatial separation and halo rejection while retaining
+the un-clipped 540 nm core, adequate damage margin, beam-dump containment,
+mechanical stability, downstream clearance, and a reproducible fixed X/Y mount.
+Record rejected candidate planes and the selection analysis. Once accepted,
+lock the Z/X/Y mount; routine electronic control changes aperture diameter only
+unless later manufacturer documentation establishes another controlled axis.
+
+At the accepted plane, scan the available aperture diameter in a prospectively
+frozen sequence at 540 nm. For every diameter retain commanded and read-back
+values, transmitted desired-wavelength power, residual off-wavelength content,
+beam profile/encircled energy, centroid, radii or stated diameter convention,
+ellipticity, diffraction/profile change, and repeatability. The accepted
+diameter is the largest stable halo-rejecting setting that meets predeclared
+spectral-contamination and core-transmission limits without clipping the 540 nm
+beam over its measured centroid/radius uncertainty and return-to-wavelength
+drift envelope. Do not choose it solely by appearance or maximum throughput.
+Before seeing the diameter-scan results, derive the permitted residual-
+contamination bound from the maximum tolerable bias in the notebook's absorbed-
+photon/initial-photolysis prediction and the intended RSI/thesis uncertainty
+budget. Evaluate the absorption-weighted bias for both planned HRP-C–CO and
+MbCO samples and use the stricter bound; if a required sample absorption input
+is not yet measured, use a documented conservative envelope and retain the
+sample-specific pilot as a later confirmation gate. Report both the post-iris off-wavelength power fraction and a
+conservative absorption-weighted dose-bias bound; visible suppression alone is
+not an acceptance measurement.
+
+The WaveMaster records independent center-wavelength/status evidence for every
+retained optical condition within its accepted envelope. Its native
+`Multi-Line` result is a qualitative spectral-complexity flag, not a power
+fraction; the residual off-wavelength power fraction still requires the
+phase-approved dispersive/spectral method and the power-meter transfer chain.
+Keep the iris powered but stationary during accepted optical records and run a
+lasers-blocked iris-powered control to bound the ELL15 home sensor's 950 nm
+leakage at each detector or meter plane used by the selection analysis.
+
+The retained campaign uses only OPO 540 nm at the sample. Do not create a broad
+410-710 nm iris map. Approach 540 nm from the directions required by PB-02 and
+record X/Y centroid return behavior. Any later use of another OPO wavelength
+requires a separately approved wavelength-specific iris position/diameter and
+beam-center qualification; the 540 nm setting is not interpolated or assumed
+valid. Direct 532 nm and the 355 nm OPO drive remain distinct upstream paths
+and do not inherit the OPO-output iris correction.
+
+For the installed sample/reference splitter, measure both output-port powers
+from the same incident condition and quantify total insertion loss and the
+port-resolved split versus wavenumber, polarization, alignment, and operating
+power wherever those dependencies are material. Use only the CH-00-retained
+355 nm OPO-drive, post-iris 540 nm, Mylar-carbonyl, and merged biological
+probe anchors. At each used configuration measure the lowest and highest
+planned power; add a midpoint only if the predeclared linearity test fails.
+
+Mandatory closeout deliverables:
+
+- Manufacturer-document register; electronic-iris device/service manifest;
+  USB/API native readbacks and command log; offline test results; command-
+  readback, monotonicity, hysteresis, repeatability, reconnect, power-cycle,
+  invalid-command, loss-of-communication, and restoration results.
+- Stable component and configuration IDs; accepted and rejected far-field
+  candidate positions; locked Z/X/Y mount coordinates or fiducials; orientation,
+  wavelength, polarization, beam-dump, and reference-plane photographs/diagrams.
+- Complete 540 nm diameter-scan records and the frozen selection rule, including
+  pre/post-iris and sample-plane power, residual spectral content, beam profile,
+  centroid/radii, core encircled-energy or transmission loss, diffraction,
+  drift margin, uncertainty, accepted aperture/readback tolerance, and the
+  lasers-blocked iris-powered 950 nm leakage control.
+- WM-01 bundle link and native center-wavelength/status/time-tag records for
+  each retained condition, with probe geometry, units, pulsed mode,
+  autocalibration state, quality outcome, and the explicit limitation that the
+  WaveMaster does not determine spectral-power fractions.
 - Raw incident/transmitted readings, dark subtraction, transmission or optical
   density with repeatability and uncertainty, linearity/saturation checks, and
-  wavelength interpolation limits.
+  wavelength interpolation limits for every other used transfer element.
 - For every used splitter: incident power, both output powers, total recovered
   power, insertion loss, `f_sample = P_sample/(P_sample + P_reference)`,
   `f_reference`, `P_sample/P_reference`, wavelength/polarization/alignment
   dependence, revisit drift, and covariance/uncertainty. Record the exact port,
   orientation, and downstream reference plane for every reading.
-- Machine-readable transfer matrix identifying which corrections may be used
-  in each later phase. No uncharacterized attenuator may enter an emitting
-  phase silently, and no downstream calculation may assume a 0.5 split.
+- A machine-readable transfer/configuration matrix identifying which
+  corrections and iris setpoint may be used in each later phase, plus
+  revalidation triggers after iris command/readback mismatch, diameter change,
+  mount or upstream-optic movement, OPO realignment, service/firmware change,
+  or centroid/profile drift outside the qualified envelope. No uncharacterized
+  aperture or attenuator may enter an emitting phase silently, and no
+  downstream calculation may assume a 0.5 split.
 
-### 11. HF-01 — HF2LI configuration and external-reference qualification
+### 12. HF-01 — HF2LI configuration and external-reference qualification
 
 Qualify exactly two retained configurations: the probe-only continuous-sweep
 configuration used by polystyrene/Mylar and the fixed-wavenumber/rare-pump
@@ -307,7 +492,7 @@ after reload, reference-frequency comparison, phase/filter response results,
 range/clipping tests, raw records, uncertainty/acceptance table, and restorable
 approved configuration ID.
 
-### 12. MD-01 — MIRcat/HF2LI DIO mapping qualification
+### 13. MD-01 — MIRcat/HF2LI DIO mapping qualification
 
 Use the accepted side-experiment mapping (pin 1 to bit 20, pin 2 to bit 21,
 pin 3 to bit 22) without repeating the mapping-only discovery. Acquire three
@@ -321,7 +506,7 @@ MIRcat logs, HF2LI configuration ID, pin/bit/state truth table, direction and
 transition signatures, count reconciliation, timestamp alignment, raw artifact
 index entries, and an explicit qualification decision.
 
-### 13. MSW-01 — MIRcat sweep timing
+### 14. MSW-01 — MIRcat sweep timing
 
 Measure the single CH-00-selected continuous-sweep speed and marker interval/
 width in both directions over the longest retained Mylar/polystyrene window.
@@ -336,7 +521,7 @@ point/process sequences, raw MIRcat and HF2LI/DIO streams, trigger/segment event
 table, expected-versus-observed counts, measured spacing check, transition/gap
 analysis, clock/reference conventions, uncertainty, and acceptance decision.
 
-### 14. HF-02 — cross-stream alignment, loss, and endurance
+### 15. HF-02 — cross-stream alignment, loss, and endurance
 
 Verify simultaneous Sample, Reference, and complete-DIO timestamps, API/server
 buffering, dropped samples, and boundary behavior over exactly two maximum-
@@ -349,7 +534,7 @@ sample-count and gap audit, loss/reorder/duplicate statistics, host/server
 clock record, resource/endurance log, configuration reload check, and a maximum
 supported scan envelope with uncertainty or limitation.
 
-### 15. DET-01 — dark detector/electronics performance
+### 16. DET-01 — dark detector/electronics performance
 
 With non-emitting sources, determine dark noise, drift, Allan-style stability,
 electrical cross-talk, range dependence, and short/long-duration repeatability.
@@ -363,7 +548,7 @@ supply identities and settings, blocked-state definition, environmental log,
 raw Sample/Reference records, PSD/Allan/noise tables, cross-talk controls,
 uncertainty budget, and accepted dark-operating configuration.
 
-### 16. DET-02 — illuminated detector/electronics transfer performance
+### 17. DET-02 — illuminated detector/electronics transfer performance
 
 Using OM-01/ATT-01-qualified metrology and separately authorized illumination,
 measure each detector/amplifier/HF2LI channel's response against independently
@@ -391,7 +576,7 @@ than optical splitting. Report installed-chain response to the qualified
 available power meter; accredited absolute detector responsivity is outside
 scope.
 
-### 17. DET-03 — detector temporal-response and latency correction
+### 18. DET-03 — detector temporal-response and latency correction
 
 Measure or authoritatively bound the response delay and temporal bandwidth of
 the exact detector/amplifier/cable/acquisition path used by OP-01. This is a
@@ -407,7 +592,7 @@ dependence and threshold checks, latency/bandwidth estimate, sign convention,
 standard uncertainty, validity envelope, and a stable correction ID accepted
 for OP-01.
 
-### 18. DET-04 — installed sample/reference optical-balance and normalization calibration
+### 19. DET-04 — installed sample/reference optical-balance and normalization calibration
 
 Combine ATT-01's component/port measurements with DET-02's separate channel
 response functions in the final installed sample/reference optical paths.
@@ -454,7 +639,7 @@ Mandatory closeout deliverables:
 DET-04 is a prerequisite for quantitative dual-detector spectral calibration,
 normalization, platform sensitivity, and later biological absorbance claims.
 
-### 19. SP-01 — spectral-reference provenance
+### 20. SP-01 — spectral-reference provenance
 
 Close the identity, source, lot, accepted features, feature authority, and
 uncertainty for polystyrene and Mylar. Record temperature and any available
@@ -469,7 +654,7 @@ table with uncertainty, observational conditions, and an explicit statement
 that absolute film absorbance and quantitative Mylar etalon prediction are
 outside scope. Missing film thickness does not block SP-01 or SV-02.
 
-### 20. SP-02 — spectral-axis calibration
+### 21. SP-02 — spectral-axis calibration
 
 Measure internal-readback accuracy, trigger-derived axis, per-channel behavior,
 direction hysteresis, crossovers, effective sampling/interpolation, reference
@@ -491,17 +676,22 @@ Sample/Reference products, and validity range. Calibration data and validation
 data must remain separately identifiable. Another scan is allowed only after a
 predeclared acceptance criterion fails.
 
-### 21. OP-01 — operational pump-command-to-sample timing
+### 22. OP-01 — operational pump-command-to-sample timing
 
-Execute two bounded optical timing configurations only: the direct 532 nm path
-selected for HRP-C-CO and the 355 nm-pumped OPO path at 540 nm selected for
-MbCO. Use the identified straight barrel adapter correction (0.125 ns with
+Execute one bounded biological-pump timing configuration: the 355 nm-pumped
+OPO path at permanent-iris 540 nm shared by HRP-C-CO first and MbCO second.
+Use the identified straight barrel adapter correction (0.125 ns with
 0.0722 ns rectangular standard uncertainty), MS-01/MS-02 results, and DET-03
 detector correction. The Q-switch cable, loaded Nd:YAG response, the applicable
 internal laser/OPO response, and optical propagation remain intentionally
 included. Mylar is pump-off and adds no OP-01 condition.
 
-Mandatory closeout deliverables for each retained pump path: frozen shot
+The OPO-540 timing configuration must use the ATT-01-qualified permanent iris
+at its accepted locked mount and aperture setpoint. Record a fresh command/
+readback and configuration ID before every emitted block. Do not use the iris
+as the timing origin, optical event gate, or safety shutter.
+
+Mandatory closeout deliverables for the retained pump path: frozen shot
 budget; blocked control; one attenuated preview; a prospective precision-based
 repeat count capped at 100 unless separately approved; raw traces;
 shot/rejection/counter ledger; SNR/saturation checks;
@@ -509,23 +699,28 @@ adapter/splitter/detector/placement IDs; signed correction equation; placement
 and restoration repeatability; uncertainty budget; photographs; and final safe
 state. No automatic replacement shots are permitted.
 
-### 22. FE-01 — finite emitted-pump-event control and reconciliation
+### 23. FE-01 — finite emitted-pump-event control and reconciliation
 
 Qualify the finite-exposure mechanism shared by the biological experiments
-without a biological sample. Preserve the manufacturer-qualified flashlamp
-cadence while admitting only the CH-00-approved rare direct-532 or OPO-540 pump
-events to the sample-equivalent plane. The accepted implementation may be a
+without a biological sample. Preserve the manufacturer-qualified Nd:YAG/OPO
+cadence while admitting only CH-00-approved rare post-iris OPO-540 pump events
+to the sample-equivalent plane. The accepted implementation may be a
 validated laser pulse-division mode, an interlocked optical pulse picker/
 shutter, or another separately approved topology. A T660 shot-counter reset is
 never an exposure limiter.
 
+For the OPO-540 path, retain the ATT-01 iris configuration and verify its
+command/readback before the independent event-count tests. Changing iris
+diameter or mount state creates a different optical configuration and cannot be
+used to admit or suppress individual pump events.
+
 Mandatory closeout deliverables:
 
-- Stable configuration and topology IDs for each retained 532 and 540 nm path,
+- Stable configuration and topology IDs for the retained 540 nm path,
   with command source, flashlamp cadence, optical gate/divider state, and an
   independent optical pump-event observation.
 - A blocked zero-event control, a one-event test, and one finite multi-event
-  block per retained path; command-versus-observed event reconciliation;
+  block for the retained path; command-versus-observed event reconciliation;
   verification that the programmed limit stops further admitted events; and
   proof that unused pulses remain blocked from the sample-equivalent plane.
 - No-emission fault tests for observation loss, command/observation mismatch,
@@ -536,24 +731,28 @@ Mandatory closeout deliverables:
   needed by the HRP recovery stream and MbCO delay workflow. Dose, photolysis,
   and biological recovery are outside this calibration phase.
 
-### 23. CL-01 — complete timing-chain closure
+### 24. CL-01 — complete timing-chain closure
 
 Calculate direct and derived chains only between compatible reference planes.
 Keep programmed, cable-end, device-pin, detector, optical, and chemical origins
 distinct and establish the operational nonzero-delay correction and pump-probe
 equation.
 
-Close both retained pump paths and both acquisition topologies: the probe-only
+Close the retained OPO-540 pump path and both acquisition topologies: the probe-only
 continuous sweep and the finite rare-pump fixed-wavenumber/recovery stream.
 Use existing completed electrical sweeps; do not reacquire them. Include the
 FE-01 observed-event clock bridge over the longest planned HRP recovery record.
+The OPO-540 chain is valid only for the ATT-01 iris configuration imported by
+OP-01 and FE-01; iris USB/API latency is recorded as configuration provenance
+but is not part of the per-shot timing equation because the aperture remains
+static throughout an emitted block.
 
 Mandatory closeout deliverables: machine-readable correction-term register,
 reference-plane graph, covariance-aware uncertainty propagation, closure table
 and residuals, incompatible-chain rejection list, validity/configuration IDs,
 and pass/fail decisions against frozen engineering limits.
 
-### 24. E2E-01 — normal-wiring validation
+### 25. E2E-01 — normal-wiring validation
 
 Perform exactly two bounded nonbiological runs: one probe-only continuous sweep
 and one finite rare-pump fixed-wavenumber/recovery run using the more complex
@@ -563,12 +762,16 @@ axes, processing, safe stop, repeatability, and artifact completeness. Reuse
 FE-01 fault-path evidence; add one no-emission simulated software fault only if
 the E2E orchestration differs materially.
 
+The rare-pump run uses the qualified OPO-540 iris configuration when that is
+the retained more-complex path. Its startup, command/readback, configuration
+foreign key, mismatch stop, and restoration are part of the end-to-end audit.
+
 Mandatory closeout deliverables: two complete independent manifests and native
 data sets, configuration/calibration bundle IDs, processed-axis outputs,
 cross-run comparison, artifact audit, safe-stop records, no-fire fault-injection
 record, recovery record, and normal-wiring restoration.
 
-### 25. RPT-01 — calibration reporting, uncertainty, and reuse package
+### 26. RPT-01 — calibration reporting, uncertainty, and reuse package
 
 Create the reusable package that downstream characterization, thesis analysis,
 and experimental campaigns will consume. This is analysis-only and does not
@@ -586,8 +789,18 @@ Mandatory closeout deliverables:
   scripts.
 - Retention audit confirming raw, rejected, excluded, and superseded evidence
   remain recoverable and distinguishable.
+- Electronic-iris reuse package containing the control/service version,
+  permanent mount/fiducials, accepted 540 nm setpoint and tolerance, optical
+  transfer and contamination bounds, validity envelope, command/readback
+  requirements, and revalidation triggers. Preserve the pre-iris OM-01 result
+  as historical mixed-spectrum evidence rather than relabeling it.
+- WaveMaster working-reference package containing its WM-01 identity,
+  adapter/power/probe configuration, native response-state contract,
+  measurement settings, repeatability and uncertainty, validity envelope,
+  bundle/quantity IDs, and the distinction between center-wavelength evidence
+  and spectral-power-fraction evidence.
 
-### 26. PROM-01 — promotion gate
+### 27. PROM-01 — promotion gate
 
 Present results, uncertainties, bypasses, unresolved terms, closure/E2E results,
 retention audit, proposed canonical diff, and characterization prerequisites.
@@ -599,6 +812,12 @@ approved calibration bundle ID and validity date if promoted, rollback/archive
 plan, and updated downstream dependency record. After promotion and retention
 review, the campaign directory can be archived as one independent unit.
 
+The promotion candidate must include the electronic-iris control/optical-
+transfer bundle and the qualified WaveMaster working-reference bundle. It must
+not promote the original OM-01 mixed-spectrum indication as post-iris 540 nm
+sample-plane power or a WaveMaster center wavelength as a spectral-power
+fraction.
+
 ## Characterization handoff gate
 
 `characterization/system_characterization_001` may be planned in parallel but
@@ -606,5 +825,10 @@ may not begin emitting or quantitative acquisition until its required
 calibration dependencies are promoted or explicitly accepted as bounded
 provisional inputs. It imports calibration bundle IDs and existing evidence;
 it does not copy raw calibration files or reacquire completed calibration work.
+
+Every OPO-540 handoff names the permanent ATT-01 iris configuration and WM-01
+wavelength working-reference bundle; another OPO wavelength remains outside
+the handoff until its own iris/beam-center qualification is approved and
+completed.
 
 The hardwired room and door interlocks remain external to software execution.

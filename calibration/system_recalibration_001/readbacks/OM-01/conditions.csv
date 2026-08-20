@@ -1,0 +1,43 @@
+campaign_id,phase_id,acquisition_id,condition_set_id,condition_name,value_text,value_number,unit,source,uncertainty_value,uncertainty_unit,uncertainty_type,notes
+system_recalibration_001,OM-01,OM01-USB-DIAG-001,OM01-COND-USB-001,mircat_power,powered_down,,,operator standing condition,,,,Unchanged
+system_recalibration_001,OM-01,OM01-USB-DIAG-001,OM01-COND-USB-001,manual_shutter,closed,,,operator standing condition,,,,Unchanged
+system_recalibration_001,OM-01,OM01-USB-DIAG-001,OM01-COND-USB-001,interlock,on,,,operator standing condition,,,,Unchanged
+system_recalibration_001,OM-01,OM01-USB-DIAG-001,OM01-COND-USB-001,default_wiring,restored,,,docs/default_wiring_state.md,,,,Unchanged
+system_recalibration_001,OM-01,OM01-USB-DIAG-001,OM01-COND-USB-001,power_meter_usb_ownership,released_after_query,,,OM01-RAW-USB-0001,,,,Connection closed normally
+system_recalibration_001,OM-01,OM01-USB-DIAG-001,OM01-COND-USB-001,optical_acquisition,none,,,OM01-RAW-USB-0001,,,,No PM:Power or PM:PWS query
+system_recalibration_001,OM-01,OM01-INSP-001,OM01-COND-INSP-001,sensor_surface_condition,clean_no_visible_defect,,,operator observation,,,,No dust residue fingerprints discoloration scratches dents or burn marks
+system_recalibration_001,OM-01,OM01-INSP-001,OM01-COND-INSP-001,sensor_housing_condition,no_visible_damage_or_looseness,,,operator observation,,,,Essentially brand new
+system_recalibration_001,OM-01,OM01-INSP-001,OM01-COND-INSP-001,db15_condition,good_no_bent_pins_or_cable_strain,,,operator observation,,,,Passed visual inspection
+system_recalibration_001,OM-01,OM01-INSP-001,OM01-COND-INSP-001,optical_path_state,outside_all_beams,,,operator instruction and observation context,,,,No emission authorized
+system_recalibration_001,OM-01,OM01-INSP-002,OM01-COND-INSP-002,dedicated_dark_cap,unavailable,,,operator report,,,,Temporary qualified enclosure required
+system_recalibration_001,OM-01,OM01-INSP-002,OM01-COND-INSP-002,sensor_mount,adjustable_base_visible,,,Sensor.jpg,,,,Photograph does not show absorber face
+system_recalibration_001,OM-01,OM01-INSP-002,OM01-COND-INSP-002,optical_acquisition,none,,,operator report and photograph context,,,,No beam or emission
+system_recalibration_001,OM-01,OM01-INSP-003,OM01-COND-INSP-003,dark_cover_material,opaque_plastic,,,operator report,,,,Secured over tube end with tape
+system_recalibration_001,OM-01,OM01-INSP-003,OM01-COND-INSP-003,dark_cover_sensor_contact,none,,,operator report,,,,Does not contact sensor area in any way
+system_recalibration_001,OM-01,OM01-INSP-003,OM01-COND-INSP-003,visible_edge_light,none_observed,,,operator report,,,,Installed cover blocks visible edge light
+system_recalibration_001,OM-01,OM01-INSP-003,OM01-COND-INSP-003,placement_photo,accepted_CoveredSensor.jpg,,,OM-01 operator gate,,,,Qualified noncontact cover photograph
+system_recalibration_001,OM-01,OM01-DARK-PREVIEW-001,OM01-COND-DARK-PREVIEW-001,dark_cover_configuration,OM01-DARK-COVER-PLASTIC-v1,,,operator report and CoveredSensor.jpg,,,,Accepted non-contact cover
+system_recalibration_001,OM-01,OM01-DARK-PREVIEW-001,OM01-COND-DARK-PREVIEW-001,range_code,,0,,meter readback,,,,Manual lowest full-scale approximately 3.8 W range
+system_recalibration_001,OM-01,OM01-DARK-PREVIEW-001,OM01-COND-DARK-PREVIEW-001,range_minimum_power,,0.3534768,W,meter readback,,,,Dark preview below valid lower bound
+system_recalibration_001,OM-01,OM01-DARK-PREVIEW-001,OM01-COND-DARK-PREVIEW-001,range_maximum_power,,3.92752,W,meter readback,,,,
+system_recalibration_001,OM-01,OM01-DARK-PREVIEW-001,OM01-COND-DARK-PREVIEW-001,stored_zero,,0,W,meter readback,,,,No zero command issued
+system_recalibration_001,OM-01,OM01-DARK-PREVIEW-002,OM01-COND-DARK-PREVIEW-002,dark_cover_configuration,OM01-DARK-COVER-PLASTIC-v1,,,operator report and CoveredSensor.jpg,,,,Unchanged
+system_recalibration_001,OM-01,OM01-DARK-PREVIEW-002,OM01-COND-DARK-PREVIEW-002,range_code,,0,,meter readback,,,,Manual lowest full-scale approximately 3.8 W range
+system_recalibration_001,OM-01,OM01-DARK-PREVIEW-002,OM01-COND-DARK-PREVIEW-002,stored_zero,,0,W,meter readback,,,,Operator removed prior offset before repeat
+system_recalibration_001,OM-01,OM01-DARK540-PREZERO-001,OM01-COND-540-DARK-001,wavelength,,540,nm,meter readback,,,,
+system_recalibration_001,OM-01,OM01-DARK540-PREZERO-001,OM01-COND-540-DARK-001,range_code,,0,,meter readback,,,,Manual lowest full-scale range
+system_recalibration_001,OM-01,OM01-DARK540-PREZERO-001,OM01-COND-540-DARK-001,analog_filter,,0.5,Hz,meter configuration,,,,Digital filter off
+system_recalibration_001,OM-01,OM01-DARK540-PREZERO-001,OM01-COND-540-DARK-001,dark_cover,installed_noncontact,,,operator confirmation and photograph,,,,All shutters closed
+system_recalibration_001,OM-01,OM01-DARK540-POSTZERO-001,OM01-COND-540-DARK-002,stored_zero,active,-0.01801508,W,meter readback,,,,
+system_recalibration_001,OM-01,OM01-AMBIENT540-001,OM01-COND-540-AMBIENT-001,dark_cover,removed,,,operator confirmation,,,,All beams shuttered
+system_recalibration_001,OM-01,OM01-ILLUM540-REPEAT-001,OM01-COND-540-ILLUM-001,opo_output_wavelength,,540,nm,operator/controller confirmation,,,,OPO ready before exposure
+system_recalibration_001,OM-01,OM01-ILLUM540-REPEAT-001,OM01-COND-540-ILLUM-001,fire_to_q_switch_delay,,300,us,GUI readback and retained T660 readback,,,,FIRE 0 us; Q-switch 300 us
+system_recalibration_001,OM-01,OM01-ILLUM540-REPEAT-001,OM01-COND-540-ILLUM-001,repetition_rate,,10,Hz,GUI/T660 readback,,,,Continuous no sample
+system_recalibration_001,OM-01,OM01-ILLUM540-REPEAT-001,OM01-COND-540-ILLUM-001,beam_containment,complete_visible_beam_within_8mm_radius,,,operator observation,,,,Binary containment only
+system_recalibration_001,OM-01,OM01-ILLUM540-REPEAT-001,OM01-COND-540-ILLUM-001,reference_plane,temporary_OPO_output_reference_plane,,,operator placement,,,,Sensor terminal beam stop
+system_recalibration_001,OM-01,OM01-ILLUM540-REVISIT-001,OM01-COND-540-ILLUM-001,controls_unchanged,true,,,operator confirmation and GUI state,,,,Source evolution observed despite nominally unchanged controls
+system_recalibration_001,OM-01,OM01-ILLUM540-REVISIT-001,OM01-COND-RESTORATION-001,t660_state,safe_idle_all_channels_off,,,ndyag_safe_idle_readback.json,,,,matches_recipe true
+system_recalibration_001,OM-01,OM01-ILLUM540-REVISIT-001,OM01-COND-RESTORATION-001,ndyag_state,powered_off,,,operator confirmation,,,,
+system_recalibration_001,OM-01,OM01-ILLUM540-REVISIT-001,OM01-COND-RESTORATION-001,opo_state,thermally_stabilized_no_pump_output_shutter_closed,,,operator confirmation,,,,Controller intentionally remains powered
+system_recalibration_001,OM-01,OM01-ILLUM540-REVISIT-001,OM01-COND-RESTORATION-001,mircat_state,emission_off_disarmed_shutter_closed_cooling_interlock_normal_no_owner,,,operator confirmation,,,,MIRcat not used or controlled during OM-01 acquisition
+system_recalibration_001,OM-01,OM01-ILLUM540-REVISIT-001,OM01-COND-RESTORATION-001,power_meter_state,zero_inactive_sensor_removed_and_covered,,,meter readback and operator confirmation,,,,Final uncorrected shuttered reading -17.1823 mW before movement

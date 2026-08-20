@@ -29,9 +29,25 @@ pulse-to-pulse energy jitter, or calibrated peak power. Mean pulse energy may
 be derived as average power divided by verified repetition rate when the meter
 and acquisition are suitable, with the derivation and limitation stated.
 
+The retained OPO-540 path includes the permanent ATT-01-qualified electronic
+iris. Characterization measures the beam only after this fixed far-field mount
+and accepted 540 nm aperture setpoint. Every emitted OPO block retains the iris
+device/configuration ID, command, readback, and validity state; the iris is not
+used as a safety shutter or pulse-admission device.
+Independent center-wavelength/status evidence uses the WM-01-qualified
+WaveMaster configuration. Every applicable record retains its working-
+reference bundle, device/adapter/probe configuration, units, pulsed mode,
+autocalibration state, native time tag/value/status, and uncertainty. The
+WaveMaster does not measure spectral-power fractions or the 355 nm drive.
+
 ## Non-duplication and dependency gate
 
 - Import `system_recalibration_001` results through `calibration_links.csv`.
+- OPO-540 phases must import ATT-01's electronic-iris control, permanent-mount,
+  aperture-optimization, spectral-rejection, transfer, and revalidation bundle.
+- OPO-540 wavelength claims must import WM-01's wavelength working-reference
+  bundle and ATT-01/PB-02 residual-spectral-content evidence. A center
+  wavelength is not evidence that all measured optical power is at 540 nm.
 - Never copy or modify calibration raw files. Never reacquire a calibration
   quantity only to populate a characterization table.
 - A phase may use a provisional calibration input only when the manifest names
@@ -112,14 +128,36 @@ Mandatory deliverables before CH-00 closes:
 - Equipment/sample/component registries, configuration-ID method, acceptance
   criteria, uncertainty plan, and exposure/shot-budget policy.
 
-### PB-01 — Nd:YAG direct-pump and OPO-drive characterization
+#### Retained permanent OPO-iris configuration boundary
 
-Characterize direct 532 nm at the HRP operating configuration and 355 nm only
-at the configuration that drives the OPO for 540 nm MbCO pumping. Observe
-residual 1064 nm only for source health, separation, and safety; do not create a
-quantitative 1064 nm sample-path grid. At each retained output use the lowest
-and highest planned average-power settings plus one revisit. Add a midpoint
+CH-00 remains complete and is not reacquired or rewritten. The iris does not
+change its wavelength, claim, biological-sample, or acquisition-topology
+evidence. All unexecuted phases treat the ATT-01-qualified iris and the
+WM-01-qualified wavelength working reference as required parts of the final
+OPO-540 configuration. The characterized wavelength remains 540 nm only.
+Observed X/Y beam-center motion elsewhere in the OPO tuning range is a reason
+not to extrapolate this configuration: any future OPO wavelength requires a
+separately approved wavelength-specific iris/centroid qualification.
+
+Every unexecuted downstream phase uses one biological pump path:
+permanent-iris OPO 540 nm, used by HRP-C-CO first and MbCO second. Completed
+CH-00 evidence remains unchanged and is not repeated. The shared instrument
+configuration is characterized once; HRP and MbCO retain separate sample-
+specific dose, absorbance, overlap, photolysis, damage, and kinetics pilots.
+
+### PB-01 — Nd:YAG OPO-drive characterization
+
+Characterize 355 nm only at the configuration that drives the OPO for the
+shared 540 nm HRP/MbCO pump. Observe direct 532 nm and residual 1064 nm only for
+source health, separation, and safety; do not create quantitative biological
+sample-path grids for them. At the retained drive output use the lowest and
+highest planned average-power settings plus one revisit. Add a midpoint
 only if the predeclared linearity/stability rule fails.
+
+PB-01 characterizes the 355 nm OPO drive upstream of the OPO and does not use
+the downstream iris to define 355 nm power. If the permanent iris has already
+been installed, retain its device/configuration ID and non-emitting state in
+the layout record without assigning it a 355 nm transfer correction.
 
 Mandatory deliverables:
 
@@ -137,21 +175,48 @@ Mandatory deliverables:
 
 ### PB-02 — 540 nm OPO output characterization
 
-At 540 nm only, measure average power, independent wavelength/readback
-agreement, the linewidth bound required by the MbCO experiment, throughput
-relative to the retained 355 nm drive, stability, pointing, and three return-
-to-wavelength visits. Do not map the broader OPO tuning range. Direct 532 nm is
-owned by PB-01 and is not repeated here.
+At 540 nm only, characterize the final output after the permanent ATT-01 iris
+using its locked mount and accepted aperture setpoint. Before every emitted
+block acquire the iris USB/API identity, service/firmware version, command,
+readback, tolerance result, and configuration ID. Measure post-iris average
+power, WM-01-linked independent wavelength/readback agreement, residual off-wavelength
+content, the linewidth bound required by the MbCO experiment, throughput
+relative to both the retained 355 nm drive and the pre-iris 540 nm reference,
+stability, spatial profile, and pointing.
+
+Perform three return-to-540 visits, approaching from the directions required
+to expose repeatability/hysteresis, and retain X/Y centroid displacement,
+radius/profile change, aperture-margin calculation, and transmitted-power
+change. The accepted configuration must remain free of 540 nm clipping over
+the measured centroid/radius uncertainty while meeting the ATT-01 halo-
+rejection bound. A failed margin, iris readback, or residual-content criterion
+stops PB-02 and returns to a separately approved ATT-01 investigation; PB-02
+does not silently retune the aperture.
+
+Do not map the broader OPO tuning range. The observed wavelength-dependent X/Y
+beam walk makes the qualified iris setting explicitly 540 nm-specific. Direct
+532 nm is outside the retained biological scope and is not added here; any other future OPO output
+wavelength requires its own approved iris/centroid qualification before use.
 
 Mandatory deliverables:
 
-- Native pump/OPO meter and wavelength-reference records with synchronized shot
-  or acquisition IDs.
-- Average-power-versus-wavelength, pump-to-OPO throughput, required linewidth bound, warm-up,
-  direction/revisit repeatability, and uncertainty tables.
+- Native pump/OPO meter, wavelength-reference, spatial-profile, and iris USB/
+  API command/readback records with synchronized shot or acquisition IDs.
+- WaveMaster bundle/configuration ID, device/adapter/probe identity, reference
+  plane, air-nanometre units, pulsed mode, autocalibration state, native
+  `VAL$` time tag/value/status, thermal-stability class, and uncertainty for
+  every accepted wavelength record. `Multi-Line`, `Saturated`, and `No Signal`
+  remain non-numeric outcomes; an unresolved `Multi-Line` result blocks the
+  single-wavelength claim unless the accepted spectral method resolves and
+  bounds every contributing component.
+- Post-iris average power, residual spectral-content bound, 355-to-OPO and
+  pre/post-iris throughput, required linewidth bound, warm-up, X/Y centroid,
+  beam radius/profile, aperture margin, direction/revisit repeatability, and
+  uncertainty tables.
 - Explicit distinction between measured range, interpolated range,
   manufacturer-only range, and unavailable range; recommended wavelength-
-  specific settings and restoration record.
+  specific settings, accepted iris configuration/tolerance, mismatch stop,
+  revalidation triggers, and restoration record.
 
 ### QB-01 — minimal MIRcat probe-source characterization
 
@@ -201,8 +266,8 @@ Mandatory deliverables:
 ### OG-01 — sample-plane optical transfer and beam geometry
 
 Using the final optical path and SC-01 cell/mount, characterize exactly three
-optical conditions: probe-only Mylar validation, direct-532/HRP probing, and
-OPO-540/MbCO probing. For the QCL, profile one Mylar anchor and the lower/upper
+optical conditions: probe-only Mylar validation, permanent-iris OPO-540/HRP
+probing, and the same OPO-540 pump with MbCO probing. For the QCL, profile one Mylar anchor and the lower/upper
 biological anchors; add an intermediate point only if the endpoint comparison
 fails the wavelength-dependence criterion. Measure pump and probe spot size
 using a stated diameter convention, spatial profile, incidence angle,
@@ -210,10 +275,17 @@ polarization, path length, transfer efficiency, average power, derived mean
 pulse energy where allowed, fluence/irradiance inputs, and positioning
 uncertainty.
 
+For OPO-540, the final path begins at the qualified post-iris plane. OG-01
+independently verifies that the accepted aperture does not clip the useful core
+at the sample plane and measures the delivered post-iris power used to derive
+mean pulse energy and theoretical pump dose. Pre-iris OM-01 mixed-output power
+is not substituted for this quantity.
+
 Mandatory deliverables:
 
 - Reference-plane and optical-layout diagrams/photos with stable optic,
-  attenuator, meter-pickoff, aperture, window, and mount IDs.
+  attenuator, meter-pickoff, electronic-iris device/configuration/readback,
+  aperture, window, and mount IDs.
 - Native profiles/images/readings; background and scale calibration; beam-
   diameter calculations; transfer/fluence/irradiance tables with full
   uncertainty propagation.
@@ -227,11 +299,17 @@ using the desired biological response as the only indicator. Quantify overlap
 fraction, relative centroids, crossing angle, overlap area/volume as applicable,
 placement repeatability, and sensitivity to routine realignment.
 
-Retain only two pump/probe pairs: direct 532 nm with the HRP probe geometry and
-OPO 540 nm with the MbCO A1 probe geometry. For each pair perform three
+Retain only two pump/probe pairs: permanent-iris OPO 540 nm with the HRP probe
+geometry and that same pump with the MbCO A1 probe geometry. For each pair perform three
 independent placements and one controlled realignment. Mylar is pump-off and
 adds no overlap condition. Add a second probe wavenumber only if OG-01 shows a
 material geometry change across the corresponding biological window.
+
+All OPO-540 placements retain the same ATT-01/PB-02 iris mount and diameter.
+The controlled realignment tests routine downstream placement and does not
+authorize an iris adjustment. If overlap cannot pass without changing the
+iris, stop and investigate the upstream configuration rather than fitting the
+aperture to a biological or desired-response result.
 
 Mandatory deliverables:
 
@@ -332,12 +410,17 @@ Characterize the combined effects of pump duration, probe gate, residual
 jitter, detector response, and lock-in filtering without repeating electrical
 path calibration.
 
-Use three retained configurations only: direct 532 nm at the lower HRP-C-CO
-band, direct 532 nm at the upper HRP-C-CO band, and OPO 540 nm at the MbCO A1
-band. Merge HRP upper/MbCO probe settings only where the pump-path-specific
-response is still measured separately. The repeat count is selected
+Use three retained configurations only: permanent-iris OPO 540 nm at the lower
+HRP-C-CO band, the same pump at the upper HRP-C-CO band, and the same pump at
+the MbCO A1 band. Merge HRP upper/MbCO probe settings only where the combined
+probe/detector response is demonstrably equivalent. The repeat count is selected
 prospectively from the IRF-width/bias precision target and capped by the frozen
 exposure budget. Mylar adds no temporal-response condition.
+
+The OPO-540 configuration uses the static qualified iris. Its command/readback
+and configuration ID are retained with each block, but iris communication
+latency is not convolved into the per-shot IRF because the aperture is not
+commanded during an emitted sequence.
 
 Mandatory deliverables:
 
@@ -362,9 +445,15 @@ The minimum grid is one complete Mylar continuous-sweep control, fixed-
 wavenumber records at the two HRP bands and MbCO A1 band, and one shared
 off-band control. At each condition acquire one short record and one record as
 long as the corresponding planned experiment block. Run pump-blocked plus
-finite direct-532 and OPO-540 artifact controls only at their matching
+finite OPO-540 artifact controls only at their matching
 biological anchors. Add power, dwell, or averaging points only if the retained
 claim's detection/precision rule fails.
+
+The OPO-540 controls use the qualified iris without adjustment and explicitly
+test for residual pump-color/scatter artifacts after the aperture. Record the
+post-iris power, iris configuration readback, and native WaveMaster wavelength/
+status record for every associated block. Use the accepted spectral method,
+not a center-wavelength reading alone, to assign or bound residual-color power.
 
 Mandatory deliverables:
 
@@ -384,9 +473,15 @@ tests reproducibility; it is not a repeat of the complete characterization
 grid.
 
 On each of three independent days, run one compact checkpoint suite containing
-the Mylar sweep anchor, one direct-532/HRP surrogate point, and one OPO-540/
-MbCO surrogate point. Shared startup, dark, geometry, and restoration evidence
+the Mylar sweep anchor, one OPO-540/HRP surrogate point, and one OPO-540/MbCO
+surrogate point with the unchanged iris configuration. Shared startup, dark, geometry, and restoration evidence
 is recorded once per day. Do not repeat full PB/QB/OG/OV/AR/SV/IR/PF grids.
+
+Each OPO-540 checkpoint verifies the permanent mount/fiducials, commands and
+reads back the promoted diameter, and evaluates centroid/profile/aperture
+margin against the revalidation limits. It also acquires a WM-01-linked native
+wavelength/status checkpoint in the retained probe geometry. Failure triggers
+recharacterization; the daily checkpoint does not optimize a new diameter.
 
 Mandatory deliverables:
 
@@ -404,10 +499,15 @@ Mandatory deliverables:
 
 Run one composite nonbiological demonstration with three bounded blocks under
 one reviewed phase plan: probe-only Mylar-style continuous sweep, finite
-direct-532/HRP-style fixed-wavenumber recovery, and finite OPO-540/MbCO-style
-fixed-wavenumber recovery. Reuse calibration FE-01/E2E-01 fault-recovery
+OPO-540/HRP-style fixed-wavenumber recovery, and finite OPO-540/MbCO-style
+fixed-wavenumber recovery using one unchanged iris configuration. Reuse calibration FE-01/E2E-01 fault-recovery
 evidence; do not repeat simulated failures unless the orchestration or
 configuration has materially changed.
+
+The OPO-540 block includes electronic-iris startup/ownership, accepted command/
+readback, configuration foreign key, post-iris power, mismatch stop, unchanged-
+setpoint audit, WaveMaster working-reference identity/settings/native status,
+and restoration. The iris remains outside finite-event control.
 
 Mandatory deliverables:
 
@@ -428,6 +528,14 @@ Mandatory deliverables:
 - Source/beam/geometry/spectral/temporal/noise/reproducibility summary tables,
   uncertainty budgets, machine-readable claim-to-evidence matrix, and
   thesis figure and downstream-experiment source packages.
+- Electronic-iris characterization summary linking ATT-01 control/placement
+  evidence to PB-02/OG/OV/RP results, the accepted 540 nm setting and tolerance,
+  post-iris dose inputs, spectral-rejection/core-margin bounds, and all
+  revalidation triggers.
+- Wavelength-metrology summary linking the WM-01 device/adapter/power/probe
+  configuration and uncertainty to PB-02/PF/RP/E2E records, with native status
+  handling and an audit that center-wavelength evidence was not used as a
+  spectral-power fraction.
 - Data dictionary, analysis environment, reproducibility instructions,
   retention audit, unresolved/bypass register, and biological-handoff bundle.
 
@@ -441,6 +549,10 @@ No canonical promotion occurs without the exact phrase
 Mandatory deliverables: exact proposed diff, approved bundle ID and validity
 envelope if promoted, recharacterization triggers, archive/rollback plan, and
 downstream dependency record.
+Promotion of the OPO-540 envelope requires the WM-01 wavelength working-
+reference bundle, ATT-01 electronic-iris bundle, and accepted
+PB-02/OG/OV/RP configuration chain; a bypass cannot support quantitative
+540 nm dose or notebook-prediction claims.
 
 ## Biological handoff
 
@@ -450,3 +562,11 @@ own sample/preparation/control metadata, and never mutate these campaign
 archives. At minimum they inherit the sample-plane fluence/overlap method,
 spectral-axis calibration, temporal-origin convention, acquisition settings,
 normalization model, sensitivity limits, and revalidation triggers.
+HRP-C–CO first and MbCO second additionally inherit the same permanent iris
+device/service version, locked mount/fiducials, 540 nm command/readback/
+tolerance, post-iris power and beam geometry, contamination bound, and
+configuration-validity checks. The iris is not adjusted during either
+experiment. HRP closeout/restoration is the operational handoff to MbCO, while
+each protein retains separate biological dose and response evidence. Another
+OPO wavelength cannot inherit the 540 nm setting and requires its own approved
+qualification.

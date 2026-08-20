@@ -1,0 +1,48 @@
+{
+  "analysis_id": "OM01-AN-540-001",
+  "created_utc": "2026-08-19T18:15:16.704345+00:00",
+  "configuration": {
+    "wavelength_nm": 540,
+    "fire_to_q_switch_delay_us": 300,
+    "repetition_rate_hz": 10,
+    "meter_range_code": 0,
+    "analog_filter_hz": 0.5,
+    "digital_filter": "off",
+    "zero_value_w": -0.01801508
+  },
+  "repeatability": {
+    "window_means_w": [
+      0.08305300033333333,
+      0.08441368233333334,
+      0.08547778533333333
+    ],
+    "mean_of_window_means_w": 0.08431482266666666,
+    "sample_sd_of_window_means_w": 0.0012154116583801276,
+    "between_window_cv_percent": 1.4415159991324193,
+    "within_window_cv_percent": [
+      3.86128155652685,
+      2.9150585684619488,
+      4.78713984242488
+    ],
+    "observed_min_w": 0.07529341,
+    "observed_max_w": 0.09323028
+  },
+  "shutter_transition_revisit": {
+    "transition_sample": 21,
+    "transition_utc": "2026-08-19T18:02:28.668151+00:00",
+    "pretransition_mean_w": 0.0006945512,
+    "posttransition_all_mean_w": 0.12462319935103244,
+    "stable_tail_n": 120,
+    "stable_tail_mean_w": 0.12607306166666668,
+    "stable_tail_sd_w": 0.003879717942753691,
+    "stable_tail_cv_percent": 3.077356805224217,
+    "stable_tail_min_w": 0.1179709,
+    "stable_tail_max_w": 0.135972,
+    "revisit_shift_from_initial_mean_percent": 49.52656920727757
+  },
+  "interpretation": {
+    "meter_status": "All status words 0x108; detector present, watts, manual range 0, no transition, no overrange.",
+    "source_behavior": "Large output evolution between initial repeatability and revisit is assigned to the OPO/source condition and retained for PB-02; it is not used as a meter uncertainty term.",
+    "om01_claim": "Installed meter communication, zero/background behavior, safe range, sampling, and repeatability acquisition are demonstrated with the OPO GUI and meter set to 540 nm. The OPO output is known to contain unwanted spectral content, so the result is total incident OPO-output power indicated using the 540 nm responsivity setting, not spectrally isolated 540 nm power. No source power calibration, spectral-purity, or stability acceptance is claimed."
+  }
+}

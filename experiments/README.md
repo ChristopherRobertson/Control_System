@@ -17,6 +17,22 @@ Planned campaign families:
 - myoglobin-CO spectroscopy and kinetics, defined at requirements level in
   `myoglobin_co_requirement_brief.md`.
 
+The biological execution order is fixed: complete the HRP-C–CO campaign
+through its R9 analysis/closeout and verified platform restoration before
+starting MbCO biological phase MB-01. Both campaigns use the same promoted,
+permanent-iris 540 nm OPO configuration and WM-01-qualified WaveMaster
+wavelength working-reference configuration. HRP is therefore the first biological
+use and an operational handoff, but its biological response never becomes an
+instrument calibration or an MbCO sample parameter. MbCO may proceed after an
+accepted HRP closeout even if an HRP scientific hypothesis is not supported,
+provided the shared instrument configuration remains valid and all MbCO entry
+gates independently pass.
+
+Every OPO-540 experimental block retains native WaveMaster wavelength/status
+evidence and the separate accepted residual-spectral-content result. A center
+wavelength does not apportion optical power among wavelengths, and the
+WaveMaster is not used for the 355 nm OPO drive.
+
 No legacy recipe is active here. Numeric settings and executable recipes are
 finalized only after the required calibration and characterization results are
 available. Each future campaign imports the promoted bundle IDs, uses the

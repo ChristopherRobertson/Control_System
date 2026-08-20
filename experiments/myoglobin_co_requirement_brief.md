@@ -17,7 +17,7 @@ A quantitative geminate claim near the literature value of approximately 4% with
 
 The recommended biological starting point is 4.0 mM equine-heart myoglobin in 25 mM phosphate buffer at pH 7.0, reduced with four molar equivalents of sodium dithionite and equilibrated with CO at atmospheric pressure. This exactly reproduces the most directly relevant aqueous time-resolved FTIR preparation (4.0 mM Mb, 16 mM dithionite, 25 mM phosphate, pH 7.0) and is a **development starting point**, not a frozen batch instruction. Final concentration and optical path are selected together from measured A₁ absorbance, water transmission, detector linearity, and sensitivity. [L01, L03]
 
-The recommended pump candidate is 540 nm because an aqueous MbCO time-resolved IR study used a 10 ns, 540 nm OPO pulse absorbed by the heme β band. A 532 nm fallback may be qualified because 532 nm Nd:YAG excitation is established in Mb ligand photolysis and is the notebook's nominal wavelength, but it must demonstrate equivalent sample-plane stability, photolysis linearity, and absence of added damage. The chosen wavelength is not frozen until OPO characterization and sample-plane power/beam characterization are promoted. [L01, L10, N01, R08]
+The required pump is 540 nm because an aqueous MbCO time-resolved IR study used a 10 ns, 540 nm OPO pulse absorbed by the heme β band and because the preceding HRP-C–CO campaign uses the same shared biological pump configuration. The retained path includes the WM-01-qualified Coherent WaveMaster wavelength working reference and permanent ATT-01-qualified USB/API electronic iris at its locked far-field mount and accepted 540 nm diameter so wavelength-separated OPO halos do not enter the sample-plane power/dose calculation. The WaveMaster provides center-wavelength/status evidence but does not assign spectral-power fractions. Direct 532 nm is not a fallback within the MbCO MVP; any future comparison is a separate, prospectively approved pump-path qualification and experiment amendment. The post-iris configuration is frozen from promoted instrument characterization and must remain unchanged across the HRP-to-MbCO handoff. [L01, L10, N01, R08]
 
 The primary probe is the A₁ band near 1943–1945 cm⁻¹; secondary steady-state probes near 1932–1937 cm⁻¹ (A₃) and 1965–1966 cm⁻¹ (A₀) diagnose conformational composition and pH/sample changes. The reported photodissociated-pocket bands near 2119–2131 cm⁻¹ are outside the documented installed MIRcat range and are excluded from this experiment's claims. [L04–L07, N01, R06]
 
@@ -51,7 +51,7 @@ Archived Day-based, RSI-specific, generic-sample, and prior MbCO recipes are not
 
 | Area | Current evidence | Consequence for this brief |
 |---|---|---|
-| Calibration | S0, MS-01, MS-02, T2-01, and T1-01 are complete; PT-01 is in progress; no canonical promotion exists. [R03, R07, R11] | Campaign-local timing results may inform risk analysis but cannot freeze biological delays. |
+| Calibration | S0, MS-01, MS-02, T2-01, T1-01, PT-01, MC-01, TR-01, and OM-01 are complete; WM-01 is blocked by `[VALUE_REQUIRED]`; no canonical promotion exists. [R03, R07, R11] | Campaign-local results may inform risk analysis but cannot freeze biological delays or wavelength assignments. |
 | Characterization | Matrix and sequence exist; no experimental-requirement freeze and no promoted bundle. [R08, R12] | Power, probe envelope, geometry, overlap, settling, IRF, sensitivity, and reproducibility remain dependencies. |
 | Reference channel | Replacement reference chain identified as VIGO `SIP-DC-250M` serial `445161066` with `PVM-10.6-1x1` detector serial `21834`. [R06, R08] | Identity gate resolved; no final dual-detector normalization or latency correction until DET results are promoted. |
 | MIRcat software readiness | Installed notebook range is 1638.8–2077.3 cm⁻¹; current builder registry says 900–1800 cm⁻¹. [R09] | Correct and verify the registry before authoring or validating a 1933–1966 cm⁻¹ recipe. |
@@ -126,7 +126,7 @@ Archived Day-based, RSI-specific, generic-sample, and prior MbCO recipes are not
 | Free dissolved CO | Calculate from measured CO partial pressure and temperature; about 0.95–0.99 mM in water at 298.15 K and about 1 mM near 293 K is an expectation, not a measured sample value | NIST/IUPAC compilations and L01 agree in scale. Protein binding, salts, and headspace mass balance must be included. [L01, L11, L12] | High for scale; medium for actual sample | DER/PILOT | Report equation, gas purity, pressure, water-vapor correction, temperature, headspace/liquid volumes, and uncertainty; do not label it measured unless measured. |
 | Cell windows | CaF₂, aqueous-compatible, gas-tight demountable cell | MbCO pump–probe precedent used 2 mm CaF₂ windows. [L09] | Medium-high | LIT/PILOT | Freeze exact window grade/thickness, seal, torque method, and compatibility after blank, leak, scatter, and pump-only tests. |
 | Optical path | 10 µm primary start; 25 µm alternative | A 10 µm flow cell supported 4 mM aqueous MbCO TRIR; 25 µm CaF₂-spacer cells supported MbCO pump–probe. [L01, L09] | High for bracket | LIT/PILOT | Measure the assembled path independently; select 10 or 25 µm from water transmission, A₁ absorbance, fringe behavior, and detector linearity. No absolute concentration claim with an unverified path. |
-| Pump wavelength | 540 nm primary candidate; 532 nm qualified fallback | 540 nm/10 ns OPO excitation is the closest time-resolved IR precedent. Aqueous horse-heart MbCO was readily photodissociated with 8 ns, 532 nm YAG pulses in an independent ligand-rebinding study. [L01, L10] | High for 540; medium for fallback | LIT/CHAR | PB-02 and OG-01 must show stable sample-plane output/geometry; a dose-response equivalence test selects the wavelength without added damage. |
+| Pump wavelength | permanent-iris OPO 540 nm only in the MVP | 540 nm/10 ns OPO excitation is the closest time-resolved IR precedent and is the shared biological path first used by HRP. The 532 nm literature remains contextual evidence, not fallback authorization. [L01, L10] | High for 540 nm design; dose remains pilot-dependent | LIT/CHAR/PILOT | ATT-01/PB-02/OG-01/OV-01 must show valid post-iris wavelength, contamination bound, output, geometry, and overlap; MB-05 selects the reversible dose without changing wavelength or iris. |
 | Pump duration | Literature expectation 5–10 ns; use measured promoted value | L01 used 10 ns; the Surelite manual identifies approximately 5–8 ns as a well-aligned oscillator pulse. [L01, M01] | High as expectation | MAN/CHAR | Freeze the measured optical duration from PB/IR evidence, not the manual nominal. |
 | Pump repetition | 0.5 Hz effective pump-output starting candidate while preserving the flashlamp's optimized repetition; qualify higher rates only by recovery/damage testing | QCL MbCO work used 0.5 Hz and 20 repeats; flow-FTIR used 10 Hz with more than four illuminated-volume exchanges between pulses. Surelite pulse division permits lower optical output without changing lamp discharge rate. [L01, L04, M01] | Medium-high | LIT/MAN/PILOT | Preserve the installed optimized lamp rate; verify effective optical rate. Promote a higher pump rate only if pre-pump recovery, post-integrity, and cumulative-dose criteria pass. |
 | Probe window | 1900–1980 cm⁻¹ core; 1850–2050 cm⁻¹ survey if throughput permits | Covers A₃, A₁, and A₀. QCL work reconstructed 1880–1960 cm⁻¹ in 2 cm⁻¹ steps; flow-FTIR filtered 1850–2300 cm⁻¹. [L01, L04–L07] | High | LIT/CAL/CHAR | SP-02 and QB-01 must validate wavenumber/readback/output over every used point; omit non-performing regions rather than extrapolate. |
@@ -273,41 +273,43 @@ Absence of a resolvable A₀ or A₃ component is reportable; it is not a reason
 
 ### 8.1 Pump and probe geometry
 
-The pump candidate is OPO output at 540 nm, verified at the sample plane. The OPO is pumped by the Surelite 355 nm third harmonic, but residual 355 nm and other OPO outputs must be blocked from the sample and detectors. The OPO manual requires wavelength calibration with a spectral device of 0.1 nm resolution; its `GoTo` value is not independent wavelength evidence. [M02]
+The pump candidate is OPO output at 540 nm, verified at the sample plane after the permanent ATT-01-qualified electronic iris with the WM-01-qualified WaveMaster configuration. The OPO is pumped by the Surelite 355 nm third harmonic, but residual 355 nm and other OPO outputs must be blocked from the sample and detectors. ATT-01 scientifically selects and locks the iris far-field Z/X/Y mount and 540 nm aperture diameter; PB-02 verifies native WaveMaster time-tag/value/status evidence, residual spectral content from the accepted spectral/power method, transmitted core, X/Y centroid drift, profile, and post-iris power. The OPO manual requires wavelength calibration with a spectral device of 0.1 nm resolution; its `GoTo` value is not independent wavelength evidence, and a WaveMaster center wavelength is not a residual spectral-power fraction. [M02, M08, M09]
 
-PB-02 qualifies 540 nm output. If it fails output/stability/beam-quality criteria, 532 nm may be compared as a separate qualified condition. Pump wavelength, bandwidth, polarization, pulse duration, average power, effective repetition, beam radii/profile, pointing, and sample-plane transfer are recorded. The pump spot must cover the accepted probe-sensitive area with a measured, stable overlap; OV-01 supplies the overlap map and uncertainty. No overlap fraction of one is assumed.
+PB-02 qualifies only the final post-iris 540 nm output. Failure of output/stability/beam-quality/contamination/aperture-margin criteria blocks the MbCO pump path; it does not automatically authorize substitution of 532 nm. Pump wavelength, bandwidth, polarization, pulse duration, post-iris average power, effective repetition, beam radii/profile, pointing, iris command/readback/configuration, and sample-plane transfer are recorded. The promoted iris diameter and locked mount remain unchanged through the preceding HRP campaign, MB-05, and every confirmatory experiment; loss of USB/API ownership/readback, an out-of-tolerance diameter, mount movement, or centroid/profile drift outside the qualified envelope blocks OPO emission and invokes revalidation. The iris is not a safety shutter or finite-event limiter. The pump spot must cover the accepted probe-sensitive area with a measured, stable overlap; OV-01 supplies the overlap map and uncertainty. No overlap fraction of one is assumed.
+
+Because the OPO beam center moves in X/Y with wavelength, the promoted iris configuration is valid only at 540 nm. No other OPO wavelength may be introduced by changing the iris during an experiment. A future OPO wavelength requires a separately approved instrument qualification and a new wavelength-specific iris/centroid configuration before biological use.
 
 The primary probe is the sample-specific A₁ fitted center or a small symmetric set of points sufficient to estimate peak area without converting drift into kinetics. A₃/A₀ kinetic probes are optional. An off-band point on each side is interleaved to monitor baseline/pump artifacts. Probe setpoints must lie within SP-02/QB-01 validity.
 
 ### 8.2 Dose quantities and the no-energy-meter limitation
 
-Directly report measured sample-plane average power \(P_{avg}\) and its uncertainty. With verified accepted optical-pulse rate \(f_{pump}\), the only permitted pulse-energy quantity is
+Directly report measured post-iris sample-plane total average power, the residual off-wavelength fraction or upper bound \(r_{off}\), and the spectrally assigned desired-wavelength power \(P_{540}=P_{total}(1-r_{off})\) with covariance and uncertainty. If only an upper bound on \(r_{off}\) is available, carry it as a one-sided dose uncertainty rather than silently treating the meter's total as pure 540 nm power. With verified accepted optical-pulse rate \(f_{pump}\), the only permitted pulse-energy quantity for the single-wavelength notebook term is
 
 \[
-\bar E_{pulse}=\frac{P_{avg}}{f_{pump}},\qquad
+\bar E_{pulse,540}=\frac{P_{540}}{f_{pump}},\qquad
 \left(\frac{u_E}{\bar E}\right)^2=
-\left(\frac{u_P}{P_{avg}}\right)^2+
-\left(\frac{u_f}{f_{pump}}\right)^2-2\frac{\operatorname{cov}(P,f)}{P f}.
+\left(\frac{u_{P,540}}{P_{540}}\right)^2+
+\left(\frac{u_f}{f_{pump}}\right)^2-2\frac{\operatorname{cov}(P_{540},f_{pump})}{P_{540} f_{pump}}.
 \]
 
-Label this **derived mean energy per accepted pulse**. It is not a direct energy measurement and provides no pulse-to-pulse distribution. Do not infer calibrated peak power from \(\bar E\) and a nominal pulse width.
+Label this **derived mean 540 nm energy per accepted pulse**. It is not a direct energy measurement and provides no pulse-to-pulse distribution. Do not infer calibrated peak power from \(\bar E\) and a nominal pulse width.
 
-If OG-01 supplies sample-plane 1/e² radii \(w_x,w_y\) and a measured spatial profile, calculate the stated profile-specific mean fluence. For an elliptical Gaussian, for example, peak fluence would require profile/model assumptions and is reported only as a model-derived quantity with uncertainty—not as a direct measurement. The primary dose record remains \(P_{avg}\), accepted pulse count, and illuminated geometry.
+If OG-01 supplies sample-plane 1/e² radii \(w_x,w_y\) and a measured spatial profile, calculate the stated profile-specific mean fluence. For an elliptical Gaussian, for example, peak fluence would require profile/model assumptions and is reported only as a model-derived quantity with uncertainty—not as a direct measurement. The primary single-wavelength dose record remains \(P_{540}\), the residual-power bound, accepted pulse count, and illuminated geometry.
 
 The notebook photon-balance estimate is retained with all inputs explicit:
 
 \[
-N_{abs}=\frac{\bar E_{pulse}}{hc/\lambda_{pump}}
+N_{abs,540}=\frac{\bar E_{pulse,540}}{hc/\lambda_{540}}
           (1-10^{-A_{pump}}),
 \]
 \[
 f_0=\min\left[1,
- \frac{\Phi\,N_{abs}\,f_{overlap}}
+ \frac{\Phi\,N_{abs,540}\,f_{overlap}}
  {N_{MbCO,illum}}
 \right],
 \]
 
-where pump absorbance, quantum yield \(\Phi\), overlap fraction, concentration/path/illuminated volume, and their covariance are either measured or literature priors. The quantum efficiency “close to unity” is a starting prior from L01, not a sample-specific measurement. The measured initial bleach is an independent cross-check. [L01, N01]
+where pump absorbance, quantum yield \(\Phi\), overlap fraction, concentration/path/illuminated volume, and their covariance are either measured or literature priors. Separately bound the absorbed-photon contribution of every detected residual band using its power fraction, photon energy, and MbCO absorbance envelope. The single-wavelength comparison is valid only when that conservative contribution is below the predeclared ATT-01/MB-05 uncertainty criterion; otherwise improve spatial/spectral rejection or use a multiwavelength forward model rather than ignoring the pollution. The quantum efficiency “close to unity” is a starting prior from L01, not a sample-specific measurement. The measured initial bleach is an independent cross-check. [L01, N01]
 
 For an order-of-magnitude planning check, the L01 bound-CO extinction coefficient of 1,920 M⁻¹ cm⁻¹, the 4.0 mM starting concentration, and a 10 µm path predict a full bound-band absorbance contribution of
 
@@ -481,11 +483,11 @@ Any failed item blocks the biological phase. A changed or missing file hash does
 ### 10.2 Controlled startup
 
 1. Establish the laser-controlled area, CO monitor/ventilation, signage, beam enclosures/dumps, eyewear, authorized personnel, and emergency access.
-2. Start passive electronics, computer control, HF2LI, PicoScope, detectors/amplifiers, temperature monitoring, and power meter; allow manual-specified warm-up where accuracy depends on it.
+2. Start passive electronics, computer control, HF2LI, PicoScope, detectors/amplifiers, temperature monitoring, power meter, and WaveMaster; allow manual-specified warm-up where accuracy depends on it.
 3. Connect to MIRcat in GUI-first mode with emission off. Verify identity, interlocks, range/readbacks, trigger mode capability, errors, and cooling/state.
 4. Connect to both T660s with outputs disabled. Verify firmware, clock/reference status, routing, polarity/termination staging, forced-safe/EOD behavior, and no rate errors.
 5. Start the Surelite only under its approved manufacturer/institutional procedure. The manual calls for 15–20 min thermal stabilization after flashlamp start, prevents shutter opening for the first 20 min after AC power, and calls for 5 min harmonic operation before optimization. The thermal lockout must not be overridden for routine use. [M01]
-6. Verify OPO state, covers/interlocks, wavelength calibration validity, residual-beam blocks, and `GoTo`/readback with the pump still contained. [M02]
+6. Verify OPO state, covers/interlocks, wavelength calibration validity, residual-beam blocks, `GoTo`/readback, and the qualified WaveMaster device/adapter/probe configuration, air-nanometre pulsed mode, autocalibration state, native wavelength/status, and uncertainty with the pump still contained. [M02, M08]
 7. Perform only the nonbiological low-risk diagnostics already authorized by calibration/characterization. Alignment does not use the MbCO sample as a calibrant.
 
 ### 10.3 Sample installation and pre-arm confirmation
@@ -664,14 +666,24 @@ Never exclude because a value is inconvenient, a fit residual is large, or a rep
 
 ## 13. Experiment phases, gates, deliverables, and aborts
 
+Biological execution of this campaign begins only after the HRP-C–CO campaign
+has completed R9 closeout and verified restoration of the shared 540 nm
+OPO/iris platform. This is an ordering and configuration-handoff gate, not a
+requirement that HRP support a particular scientific hypothesis. HRP biological
+data do not recalibrate the platform or supply MbCO absorbance, quantum yield,
+overlap, dose-response, damage, or kinetics inputs. Any procedure change learned
+from HRP must be incorporated prospectively into the MbCO plan before MB-00 is
+frozen, and any movement or loss of validity of the permanent iris invokes the
+instrument revalidation rules.
+
 | Phase | Entry gate | Ordered requirements-level actions | Mandatory deliverables | Acceptance / abort |
 |---|---|---|---|---|
 | **MB-00 claims and dependency freeze** | This brief reviewed; thesis minimum/optional claims agreed | Freeze analyte/species, observables, models, numeric evidence map, required promoted imports, and exclusions | Approved claim matrix; unresolved-dependency register; analysis preregistration | Abort freeze if a claim lacks an observable, calibration path, or analysis test. |
-| **MB-01 safety/procurement readiness** | EHS review available | Select supplier/lot, CO supply/regulator/monitor, cell/windows/spacers/seals, temperature stage, waste route, and UV–visible access | SDS/manual set; training/authorization record; procurement/identity table; emergency plan | Abort for missing CO monitoring/ventilation, incompatible/unknown cell materials, or unapproved waste/gas procedure. |
-| **MB-02 promoted platform imports** | PROM-01 and PROM-CH complete and valid | Import axis, timing, detector, normalization, power, beam/overlap, settling, IRF, sensitivity, and reproducibility bundles; fix/verify MIRcat range registry | Calibration links; validity-envelope assessment; configuration registry; readiness report | Abort on missing promotion, stale validity, unresolved reference detector, or software range mismatch. |
+| **MB-01 safety/procurement readiness** | HRP-C–CO R9 closeout and platform restoration accepted; EHS review available | Verify the unchanged shared 540 nm OPO/iris/WaveMaster handoff; select supplier/lot, CO supply/regulator/monitor, cell/windows/spacers/seals, temperature stage, waste route, and UV–visible access | HRP closeout/restoration link; shared-configuration validity record; SDS/manual set; training/authorization record; procurement/identity table; emergency plan | Abort for missing HRP closeout/restoration, invalid iris/wavelength/platform handoff, missing CO monitoring/ventilation, incompatible/unknown cell materials, or unapproved waste/gas procedure. |
+| **MB-02 promoted platform imports** | PROM-01 and PROM-CH complete and valid | Import wavelength, axis, timing, detector, normalization, power, beam/overlap, settling, IRF, sensitivity, and reproducibility bundles; fix/verify MIRcat range registry | Calibration links; validity-envelope assessment; configuration registry; readiness report | Abort on missing promotion, stale validity, unresolved reference detector, wavelength-reference invalidity, or software range mismatch. |
 | **MB-03 blank/cell qualification** | MB-01/02 pass; no protein | Assemble and measure empty/buffer cell, path, leak, temperature hold, forward/reverse scan, pump-only/probe-only response | Cell/path report; background spectrum; compatibility/leak evidence; baseline/noise results | Abort on leak, bubble-prone fill, pump-correlated blank, insufficient transmission, nonlinearity, or irreproducible fringe. |
 | **MB-04 sample chemistry pilot** | Approved sample procedure and UV–visible access | Prepare small independent batches, verify concentration/state/pH/stability, load cell, collect steady IR and post-check | Preparation records; pre/post UV–visible and IR; concentration/path uncertainty; stability window | Abort on mixed/oxidized state beyond validation limit, precipitation, concentration ambiguity, or irreproducible A₁. |
-| **MB-05 pump/dose/overlap pilot** | Accepted steady sample; PB/OG/OV imports valid | Verify 540 nm sample-plane beam, begin lowest dose/0.5 Hz, run blank/deoxy/no-pump controls, dose series, overlap scan, post-integrity | Dose-response/overlap maps; derived mean-energy calculation; photolysis estimate; damage ceiling | Abort on pump artifact, nonlinearity at lowest useful dose, temperature/integrity failure, or overlap instability. |
+| **MB-05 pump/dose/overlap pilot** | Accepted steady sample; WM/ATT/PB/OG/OV imports and iris/wavelength validity are current | Verify the unchanged promoted iris mount and 540 nm command/readback, WaveMaster configuration/native status, post-iris sample-plane beam/power and aperture margin; begin lowest dose/0.5 Hz; run blank/deoxy/no-pump controls, dose series, downstream overlap scan, and post-integrity | Iris/WaveMaster/configuration ledger; post-iris dose-response/overlap maps; derived mean-energy calculation; photolysis estimate; damage ceiling | Abort on wavelength/status failure, iris mismatch or communication loss, mount/centroid/profile invalidity, residual pump artifact, nonlinearity at lowest useful dose, temperature/integrity failure, or overlap instability. Do not optimize the iris on biological response. |
 | **MB-06 timing/IRF and discovery kinetics** | MB-05 passes; OP/CL/IR/DET valid | Verify time zero on surrogate, acquire adaptive negative/prompt/slow/recovery schedule, assess SNR/identifiability, repeat-pulse spacing | Time-zero/IRF link; discovery traces; identifiability simulation; selected delay/rate/filter design | Abort mechanistic extension if 180 ns component unidentifiable; abort all kinetics for trigger mismatch, incomplete recovery, or sample damage. |
 | **MB-07 confirmatory MVP** | Analysis/settings frozen from independent pilot; sample size set | Run randomized/counterbalanced independent preparations/days, full controls, primary A₁ kinetics, post-integrity, restoration each day | Native/raw and derived datasets; fit diagnostics; uncertainty; predicted-vs-measured; reproducibility report | Accept minimum claim only if all primary criteria and retention audit pass; otherwise report feasibility/limitation. |
 | **MB-08 optional mechanistic extension** | MVP accepted; IRF/SNR/model simulation supports extension | Add dense geminate schedule, A₀/A₃ kinetics, concentration series or qualified 532 nm comparison | Extension-specific preregistration, data, model comparison, sensitivity analysis | Keep this phase outside the MVP; stop if validity, sample, or identifiability fails. |
@@ -689,7 +701,7 @@ Every record must carry the applicable stable, human-readable identifiers:
 
 - `campaign_id`, `phase_id`, `phase_run_id`, `acquisition_id`, and `configuration_id`;
 - `calibration_bundle_id` and characterization/promotion references;
-- sample preparation, supplier/catalog/lot, buffer batch, reductant batch, CO cylinder/gas, cell/window/spacer/seal, temperature stage/sensor, sample detector, reference detector, splitter, cables/adapters, power meter, PicoScope, HF2LI, T660-1, T660-2, MIRcat, Surelite, OPO, workstation/software, and operator IDs.
+- sample preparation, supplier/catalog/lot, buffer batch, reductant batch, CO cylinder/gas, cell/window/spacer/seal, temperature stage/sensor, sample detector, reference detector, splitter, cables/adapters, power meter, WaveMaster device/adapter/probe, electronic iris, PicoScope, HF2LI, T660-1, T660-2, MIRcat, Surelite, OPO, workstation/software, and operator IDs.
 
 Use relative repository paths, UTC timestamps, explicit software/schema/analysis versions, branch/commit reference, dirty-file list, and source/producer records. A hash may be displayed for information, but no recorded hash is required to match for loading, analysis, aggregation, reproduction, acceptance, promotion, or closeout.
 
@@ -711,7 +723,7 @@ Native/raw objects become immutable when indexed. A correction creates a new der
 
 ### 14.3 Required condition fields beyond the base contract
 
-At minimum retain: preparation time/history; verified concentration/state/pH; calculated ionic strength/free CO; cell path/fill/headspace/position; sample temperature; pump wavelength/average power/effective rate/derived mean energy/accepted pulse count; beam radii/overlap; probe wavenumber/mode/current/width/rate; every T660 delay/width/polarity/termination/enable/readback; scope trigger/timebase/range/sample interval/record/pretrigger/segments; HF2 reference/demodulator/input/range/order/τ/sample rate/phase/lock; detector gains/bandwidth/cables; time-zero/IRF; scan/delay randomization position; cumulative exposure; control type; pre/post integrity result; and all error/overload/trigger counts.
+At minimum retain: preparation time/history; verified concentration/state/pH; calculated ionic strength/free CO; cell path/fill/headspace/position; sample temperature; pump wavelength/post-iris average power/effective rate/derived mean energy/accepted pulse count; WaveMaster bundle/device/adapter/probe configuration, reference plane, units, pulsed mode, autocalibration state, native time tag/value/status and uncertainty; electronic-iris device/service/configuration ID, locked-mount check, commanded/read-back diameter, tolerance/fault state and revalidation status; beam radii/centroid/aperture margin/overlap; probe wavenumber/mode/current/width/rate; every T660 delay/width/polarity/termination/enable/readback; scope trigger/timebase/range/sample interval/record/pretrigger/segments; HF2 reference/demodulator/input/range/order/τ/sample rate/phase/lock; detector gains/bandwidth/cables; time-zero/IRF; scan/delay randomization position; cumulative exposure; control type; pre/post integrity result; and all error/overload/trigger counts.
 
 ### 14.4 Retention audit
 
@@ -779,18 +791,19 @@ Separate contaminated protein/reductant liquid, sharps/broken windows, solvent/c
 | Scope/cable/splitter timing correction | MS-01, MS-02 | Electrical timing uncertainty | Corrected reference-plane offsets/uncertainty; campaign-local values only after promotion. |
 | T660-2 route delays | T2-01 | Probe/reference/DAQ/pump-chain alignment | Per route corrected intercept/slope/uncertainty and valid configuration. |
 | T660-1 FIRE/Q timing | T1-01 | Surelite DAT2 timing | Trigger-to-FIRE/Q offsets, closure, adapter/cable IDs, uncertainty. |
-| Power-meter readiness | OM-01 | Direct pump average power | Meter identity, wavelength response, geometry, zero/range, validity. |
-| Optical transfer/splitter | ATT-01, DET-04 | Sample/reference normalization and sample-plane power | Measured ratios versus wavelength/configuration with uncertainty; no 50/50 assumption. |
+| Power-meter readiness | OM-01 | Bounded meter operation and historical pre-iris mixed-output evidence | Meter identity, wavelength response, geometry, zero/range, validity; OM-01 mixed-spectrum indication is not used as post-iris 540 nm dose. |
+| Wavelength working reference | WM-01 | Independent 540 nm center-wavelength/status evidence | Coherent WaveMaster identity, power/cable/adapter/probe configuration, air-nanometre pulsed settings, native response states/time tags, repeatability, uncertainty, validity, 355 nm exclusion, and no spectral-power-fraction authority. |
+| Electronic iris/optical transfer/splitter | ATT-01, DET-04 | Halo rejection, final sample-plane pump power, and sample/reference normalization | Qualified iris USB/API control, permanent far-field mount, accepted 540 nm diameter/tolerance, residual-contamination and core-clipping bounds, measured ratios versus wavelength/configuration with uncertainty, and no 50/50 assumption. |
 | HF2LI configuration/streams | HF-01, HF-02 | Reference/demodulators/filter/sample rate/data fields | Exact node mapping, demods 0/3, DIO mapping, LabOne version, τ/order/rates/readbacks. |
 | MIRcat DIO/process mapping | MD-01 | TRIG IN/process/Trigger Out behavior | One-to-one edge behavior, active levels, widths, DIO20/21/22 mapping, no reserved-pin use. |
 | MIRcat sweep/settling | MSW-01, AR-01 | Wavelength order/dwell | Direction-dependent tune latency/stability and 99% criterion. |
 | Detector dark/linearity/latency/normalization | DET-01–DET-04 | Ranges, noise, IRF, dual normalization | Exact sample/reference detector identities, gains/bandwidths, latency offset, linear envelope, covariance. |
 | Spectral references and axis | SP-01, SP-02, SV-01, SV-02 | 1933–1966 cm⁻¹ setpoints/uncertainty | Reference provenance, axis correction/uncertainty, verified usable range, resolution. |
-| Pump command-to-sample timing | OP-01 | Optical time zero | 540/532 nm sample-plane arrival, reference plane, wavelength/path/configuration uncertainty. |
+| Pump command-to-sample timing | OP-01 | Optical time zero | Permanent-iris 540 nm sample-plane arrival, reference plane, path/configuration uncertainty. |
 | Full clock chain/end to end | CL-01, E2E-01, E2E-CH | Delay sign/range, trigger sequencing, restoration | One-to-one mapping, no channel interaction, missed/extra-trigger behavior, end-to-end uncertainty. |
-| Nd:YAG/OPO power/beam | PB-01, PB-02 | Wavelength selection, average power, duration/stability | 355 nm pump/OPO output; sample-required 540 nm and fallback 532 nm if used. |
+| Nd:YAG/OPO power/beam | PB-01, PB-02 | Required-wavelength validation, post-iris average power, duration/stability, X/Y pointing and aperture margin | 355 nm OPO drive and permanent-iris sample-required 540 nm output with WM-01-linked native wavelength/status records; no direct-532 fallback in the MVP. |
 | Probe envelope | QB-01 | MIRcat frequency/current/width/rate | Valid optical envelope across the core spectral window and safe detector/sample limits. |
-| Sample-plane geometry/overlap | OG-01, OV-01 | Fluence model, illuminated volume, overlap fraction | Beam profiles/radii/positions/polarization and stable overlap with uncertainty. |
+| Sample-plane geometry/overlap | OG-01, OV-01 | Fluence model, illuminated volume, overlap fraction | Post-iris beam profiles/radii/positions/polarization, stable overlap and clipping margin with uncertainty; iris remains fixed throughout placement and experiments. |
 | Instrument response | IR-01 | Convolution, time zero, geminate identifiability | Measured sample-plane IRF and constituent response model across used configuration. |
 | Sensitivity/noise | PF-01 | SNR, averaging, filter/dwell, quantification | Noise covariance, NEA, averaging/Allan behavior, detectable/quantifiable ΔA. |
 | Reproducibility | RPT-01, RPT-CH | Drift/repeatability limits and revalidation | Within/between-startup/configuration results and control limits. |
@@ -819,7 +832,7 @@ calendar dates.
 
 | Order | Mandatory outcome | Decision |
 |---|---|---|
-| **1 — requirements and readiness** | Review this brief; freeze minimum claim; select/procure Mb, cell/spacers/seals, CO hardware/monitor, temperature solution; approve safety/sample concepts; correct MIRcat range representation. | If required cell/CO safety items are unavailable, narrow thesis to platform/steady-state validation rather than improvising. |
+| **1 — HRP handoff, requirements, and readiness** | Accept HRP-C–CO R9 closeout/restoration; verify the unchanged shared 540 nm OPO/iris validity; review this brief; freeze minimum claim; select/procure Mb, cell/spacers/seals, CO hardware/monitor, temperature solution; approve safety/sample concepts; correct MIRcat range representation. | Do not start MbCO biological work before HRP closeout. If the shared configuration is invalid, revalidate instrumentally; if required cell/CO safety items are unavailable, narrow thesis to platform/steady-state validation rather than improvising. |
 | **2 — instrument dependencies** | Finish/promote calibration and characterization imports required for 1933–1966 cm⁻¹, 540 nm pumping, dual detection, timing/IRF, overlap, settling, and sensitivity. Qualify blank cell/path. | No biological recipe freeze without PROM-01/PROM-CH and reference detector identity. |
 | **3 — chemistry and steady-state pilot** | Chemistry/steady-state pilot; verified pre/post UV–visible and IR; select concentration/path; prove blank/no-pump/pump-only behavior. | Stop if stable MbCO/A₁ cannot be produced reproducibly. |
 | **4 — dose and kinetics pilot** | Dose/overlap/time-zero/discovery kinetics at conservative rate; finalize MVP power, delay grid, dwell/filter, sample replacement, and analysis preregistration. | Drop geminate extension if IRF/SNR identifiability fails. |
@@ -842,7 +855,7 @@ calendar dates.
 1. Resolved 180 ns geminate fraction/lifetime.
 2. A₃ and A₀ state-specific kinetics.
 3. Concentration series sufficient for explicit second-order kinetics.
-4. Qualified 532 nm versus 540 nm excitation comparison.
+4. Separately approved 532 nm versus 540 nm excitation comparison after a new direct-path qualification and prospective experiment amendment.
 5. Flow-cell or translation-stage comparison.
 
 ## 18. Final readiness checklist
@@ -862,7 +875,10 @@ calendar dates.
 - [ ] PROM-01 and PROM-CH bundles exist, are valid, and cover the selected configuration.
 - [ ] Replacement reference detector identity and DET-01–04 results are promoted.
 - [ ] MIRcat registry/range accepts and verifies 1933–1966 cm⁻¹ without bypass.
-- [ ] 540 nm PB-02/OG/OV characterization passes; 532 nm is absent unless separately qualified.
+- [ ] WM-01 WaveMaster identity/communications/settings/response-state,
+  repeatability, uncertainty, and validity bundle is promoted; every required
+  OPO-540 block retains its native wavelength/status evidence.
+- [ ] ATT-01 electronic-iris control, permanent mount, 540 nm diameter, contamination and core-margin bounds are promoted; PB-02/OG/OV passes with that exact configuration; 532 nm is absent unless separately qualified.
 - [ ] SP/SV axis, OP/CL time zero, IR-01 IRF, AR dwell, HF configuration, PF sensitivity, and RPT reproducibility are imported with uncertainty.
 - [ ] No imported archived recipe or campaign-local unpromoted value is treated as final.
 
@@ -879,7 +895,7 @@ calendar dates.
 
 ### Power and controls
 
-- [ ] Direct sample-plane average power and uncertainty are recorded.
+- [ ] Post-iris sample-plane average power and uncertainty are recorded with the promoted iris command/readback and configuration ID; the OM-01 pre-iris mixed-output indication is not used as pump dose.
 - [ ] Effective optical repetition is independently verified.
 - [ ] Mean pulse energy is labeled derived; no distribution/peak-power claim exists.
 - [ ] Pump absorbance, overlap, illuminated volume, predicted/observed photolysis, heating screen, and cumulative exposure are documented.
@@ -906,7 +922,8 @@ calendar dates.
 | U06 | Temperature stage/sensor capability not established | Rate comparison and CO estimate | Characterize sample temperature control/uncertainty | Hard gate for quantitative kinetics; report limitation for feasibility only. |
 | U07 | Exact Mb supplier/lot and UV–visible access not selected | State/concentration verification | Procure and document; validate spectral method | Hard gate. |
 | U08 | CO/EHS equipment and approved procedure not evidenced here | Any CO preparation | EHS approval, cylinder/regulator/hood/monitor/SOP/waste | Hard safety gate. |
-| U09 | 540 nm sample-plane OPO output uncharacterized | Pump selection/dose | PB-02/OG-01/OP-01 at 540 nm | Hard gate; 532 nm requires separate qualification. |
+| U09 | Permanent electronic iris and 540 nm post-iris sample-plane OPO output uncharacterized | Pump selection/dose | ATT-01 control/placement/diameter qualification followed by PB-02/OG-01/OV-01/OP-01 at the unchanged 540 nm configuration | Hard gate; another OPO wavelength requires wavelength-specific iris/centroid qualification and 532 nm requires separate direct-path qualification. |
+| U09A | WaveMaster connection-derived identity/adapter/driver/power fields remain `[VALUE_REQUIRED]`; WM-01 is not qualified | Independent 540 nm wavelength assignment and ATT-01 entry | Connect with approved supply/cable/adapter; record native identity and installed fields; pass WM-01 | Hard gate; center wavelength still does not establish residual spectral-power fraction or 355 nm identity. |
 | U10 | Probe envelope at 1933–1966 cm⁻¹ not promoted | Probe width/rate/current/throughput | QB-01/SV/PF results | Hard gate. |
 | U11 | Optical time zero and full IRF absent | Delay values and geminate claim | OP-01/CL-01/IR-01/DET-03 | Hard gate for kinetics. |
 | U12 | Sample-specific variance/damage/recovery unknown | n, averaging, pump rate/dose, replacement | MB-04–06 pilots | Pilot-dependent; cannot be literature-frozen. |
@@ -956,6 +973,8 @@ Direct PDF links are supplied where a stable public PDF was located; otherwise t
 - **[M05]** Daylight Solutions, *MIRcat-QT User Manual* and installed SDK guide, external-trigger/external-pulse/process-trigger behavior. [Local manual](../docs/MIRcat/Daylight%20Solutions%20MIRcat%20Manual.pdf); [SDK guide](../docs/MIRcat/SDK/MIRcatSDKGuide.pdf).
 - **[M06]** VIGO Photonics, PVM-10.6 detector and SIP-TO39 amplifier data sheets. [Local read-only detector package PDF](../docs/Detectors/MIDIR-Detector-Package.pdf).
 - **[M07]** Pico Technology, *PicoScope 5000D Series Data Sheet*. [Local read-only PDF](../docs/PicoScope/PicoScope%205000D%20Series%20Data%20Sheet.pdf); [manufacturer product family](https://www.picotech.com/oscilloscope/5000/flexible-resolution-oscilloscope).
+- **[M08]** Coherent, *WaveMaster User Manual*, part 1095245 Rev. AA, and catalog data sheet, covering range, accuracy/resolution, pulsed operation, autocalibration, native response states, thermal stability, probe handling, and RS-232 behavior. [Local manual](../docs/WaveMaster/WaveMaster_Manual.pdf); [local data sheet](../docs/WaveMaster/Coherent_WaveMaster_33-2650_Datasheet.pdf).
+- **[M09]** Thorlabs, *ELL15K Motorized Iris Manual*, Rev. A, and Elliptec communication protocol, Issue 12, covering aperture range/units, repeatability/backlash, control, homing, and 950 nm home-sensor leakage. [Local manual](../docs/Iris/ELL15K_Iris_Manual.pdf); [local protocol](../docs/Iris/Ellx_Iris_Communication_Protocol.pdf).
 
 ### Safety and quality sources
 
@@ -975,7 +994,7 @@ Direct PDF links are supplied where a stable public PDF was located; otherwise t
 | CO concentration | L01, L11, L12 | Measured T/P/headspace/liquid and mass balance | Approximately 1 mM expectation only; calculate actual estimate. |
 | Cell/path | L01, L09 | Cell procurement, path measurement, DET/PF | 10 µm start, 25 µm alternative; final from transmission/signal/linearity. |
 | Bands/window | L01, L04–L07 | SP/SV/QB and sample fit | A₃/A₁/A₀; 1900–1980 core, 1850–2050 survey. |
-| Pump | L01, L09, L10, M01, M02 | PB/OG/OV/OP/IR and dose pilot | 540 nm primary; 532 nm conditional; measured duration/power/geometry. |
+| Pump | L01, L09, L10, M01, M02 | ATT/PB/OG/OV/OP/IR and dose pilot | Permanent-iris 540 nm in the MVP; measured residual content, duration, post-iris power, geometry, and overlap; another wavelength requires a separate amendment. |
 | Photolysis/dose | L01, L09, N01 | OM/PB/OG/OV/PF and MB-05 | Lowest linear accepted dose; 25% literature ceiling for development. |
 | Kinetics/delay | L01, L02, L13, N01 | OP/CL/DET/IR/PF and identifiability pilot | Cover ~180 ns and 10² µs–1 ms; adaptive grid through recovery. |
 | Repetition/refresh | L01, L04, M01, N01 | Recovery/damage pilot | Start 0.5 Hz effective pump while preserving lamp rate; promote only passing rate. |

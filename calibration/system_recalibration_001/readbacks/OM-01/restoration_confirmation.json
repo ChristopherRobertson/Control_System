@@ -1,0 +1,37 @@
+{
+  "artifact_id": "OM01-RESTORATION-FINAL-001",
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "OM-01",
+  "recorded_utc": "2026-08-19T18:15:16.704345Z",
+  "interim": false,
+  "t660_safe_idle_readback": "../../runs/20260819_ndyag_ui/ndyag_safe_idle_readback.json",
+  "t660_safe_idle_matches_recipe": true,
+  "all_t660_channels_off": true,
+  "ndyag_powered_down": true,
+  "opo": {
+    "controller_power": "on_for_continuous_thermal_stability",
+    "ndyag_pump": "off",
+    "output_shutter": "closed",
+    "optical_output": "absent"
+  },
+  "mircat": {
+    "used_or_controlled_during_om01": false,
+    "emission": "off",
+    "armed": false,
+    "shutter": "closed",
+    "cooling": "normal",
+    "interlock": "normal",
+    "gui": "closed",
+    "ownership": "none"
+  },
+  "power_meter": {
+    "zero_active": false,
+    "stored_zero_w": 0,
+    "sensor_location": "safe_nonbeam_position",
+    "sensor_cover": "installed_noncontact",
+    "usb_ownership": "released"
+  },
+  "default_wiring_restored": true,
+  "canonical_promotion_performed": false,
+  "git_stage_commit_push_performed": false
+}

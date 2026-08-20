@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "bundle_id": "CAL-system_recalibration_001-OM01-v1",
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "OM-01",
+  "status": "PASS_QUALIFIED_BOUNDED",
+  "canonical_promotion_performed": false,
+  "configuration_manifest": "optical_metrology_configuration_manifest.json",
+  "meter_id": "POWER-METER-NEWPORT-1918R-15879",
+  "sensor_id": "POWER-SENSOR-NEWPORT-919P01016-161791",
+  "methods": ["power_meter_method.md", "spatial_containment_method.md", "reference_planes_and_applicability.md", "polarization_applicability.md"],
+  "tables": ["permitted_range_wavelength_table.csv", "wavelength_correction_table.csv", "measurement_resource_register.csv", "measurements.csv"],
+  "uncertainty": "provisional_uncertainty_budget.md",
+  "representative_analysis": "analysis/om01_540nm_analysis.json",
+  "limitations": [
+    "Average optical power only.",
+    "No direct pulse-energy distribution or calibrated peak-power claim.",
+    "Binary containment of the full visible footprint, including observed halos, only; no quantitative beam diameter or fluence.",
+    "OPO output was not spectrally pure; reported power is combined incident output indicated at the 540 nm meter setting, with unquantified spectral-composition bias.",
+    "Exact source envelopes, stability, and final geometry remain PB-01/PB-02/QB-01/OG-01 work.",
+    "Polarization-dependent transfer and sample claims remain downstream work.",
+    "Certificate recommended recalibration date is not extended."
+  ],
+  "downstream_consumers": ["ATT-01", "DET-02", "DET-03", "DET-04", "OP-01", "system_characterization_001"]
+}
