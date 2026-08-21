@@ -2,7 +2,7 @@
 
 Campaign: `system_recalibration_001`
 
-Status: **OM-01 PASS - COMPLETE, QUALIFIED BOUNDED; WM-01 BLOCKED BY [VALUE_REQUIRED]; ATT-01 NOT AUTHORIZED**
+Status: **OM-01 PASS - COMPLETE, QUALIFIED BOUNDED; WM-01 READY FOR PHASE APPROVAL; ATT-01 NOT AUTHORIZED**
 
 P0 completed without hardware access. S0 then passed on 2026-07-24 with
 exclusive T660/MIRcat ownership, all eight T660 outputs verified disabled
@@ -57,6 +57,11 @@ device control and readback, scientifically selects and
 locks the far-field mount, optimizes the 540 nm aperture diameter against halo
 rejection and core clipping, and produces the configuration/transfer bundle
 used by every later OPO-540 phase and both the HRP-C–CO and MbCO experiments.
+ATT-01 first performs the preliminary pre-iris FIRE-to-Q-SWITCH delay search;
+PB-02 performs the final narrow search through the locked iris and freezes the
+experiment operating delay. Supplemental direct-355 thesis characterization
+is performed after characterization promotion and is outside every OPO-540,
+completion, promotion, and biological-entry gate.
 The Coherent WaveMaster is the visible/near-IR wavelength working reference;
 WM-01 qualifies its installed identity, communications, response states,
 settings, repeatability, uncertainty, and validity before ATT-01 uses it.
@@ -91,8 +96,8 @@ plots.
 | T2-01 | Guide each T660-2 destination route and six-point electrical sweep. |
 | T1-01 | Guide each T660-1 trigger/output route and six-point electrical sweep. |
 | PT-01 | Guide the MIRcat Process Trigger electrical setup and polarity/timing acquisition. |
-| WM-01 | Qualify WaveMaster identity, supply/cable/adapter, RS-232 behavior, measurement states/settings, 540 nm repeatability, uncertainty, and working-reference validity. |
-| ATT-01 | Qualify the electronic iris USB/API control; select and lock its far-field mount; optimize the 540 nm diameter against halo rejection, beam walk, and core clipping; then measure the retained optical transfers. |
+| WM-01 | Qualify WaveMaster identity, cable/adapter, RS-232 behavior, measurement states/settings, 540 nm repeatability, uncertainty, and working-reference validity. |
+| ATT-01 | Perform the preliminary pre-iris 540 nm FIRE-to-Q-SWITCH delay search; qualify the electronic iris USB/API control; select and lock its far-field mount; optimize the diameter against halo rejection, beam walk, and core clipping; then measure the retained optical transfers. |
 | MC-01 onward | Follow the existing phase procedure interactively using focused utilities and the same stable phase-record pattern. |
 
 ## Current phase boundary
@@ -110,10 +115,12 @@ made SDK automation eligible with mandatory runtime prerequisites. TR-01
 closed the retained identity and measurement-resource register without
 hardware access or reacquisition. OM-01 qualified the Newport 1918-R / 919P
 average-power chain as a bounded campaign-local working reference without
-canonical promotion. WM-01 is the exact next phase, but it is blocked until
-all connection-derived WaveMaster fields marked `[VALUE_REQUIRED]` in
-`hardware_configuration.yaml` are observed and recorded. Resolving those
-fields does not replace separate phase authorization. ATT-01 cannot start until
+canonical promotion. The 2026-08-20 query-only WaveMaster connection intake
+recorded the electronic identity, firmware, COM port, USB-adapter identities,
+installed driver, and native query responses without changing settings. The
+operator confirms that the connected instrument works safely. All WM-01 entry
+fields are resolved and its preflight is ready, but that does not replace
+separate phase authorization. WM-01 is the exact next phase. ATT-01 cannot start until
 WM-01 passes. OM-01 is not repeated: its mixed-output reading remains bounded
 pre-iris evidence, while post-iris power and transfer belong to ATT-01 and
 downstream characterization. Codex resumes from

@@ -139,6 +139,41 @@ devices:
       - "The certificate date is not extended by campaign use."
       - "OM-01 qualified binary visible-footprint containment only; quantitative beam geometry remains downstream work."
 
+  ndyag_355_power_sensor:
+    display_name: "Newport 919P-050-18HP High-Power Thermopile Sensor"
+    role: "terminal_direct_355_nm_average_power_sensor"
+    manufacturer: "Newport"
+    model_number: "919P-050-18HP"
+    serial_number: "USER_INPUT_REQUIRED"
+    installed_readout: "optical_power_meter"
+    installation_status: "operator_reported_installed"
+    qualification_status: "unqualified_pending_supplemental_PB-01"
+    manufacturer_documents:
+      - "docs/Power_Meter/919-P_Sensor_Datasheet.pdf"
+    phase_entry_required_fields:
+      - "serial_number"
+      - "calibration_basis"
+      - "accepted_355_nm_single_pulse_energy_density_limit"
+    absorber_type: "PF type plus diffuser"
+    active_diameter_mm: 17.5
+    active_area_cm2: 2.40
+    spectral_range_um:
+      minimum: 0.24
+      maximum: 2.2
+    measurement_mode: "average optical power through compatible Newport meter; exact PB-01 meter settings pending"
+    calibration_basis: "USER_INPUT_REQUIRED"
+    maximum_average_power_w: 50.0
+    maximum_average_power_density_kw_per_cm2: ">10"
+    minimum_energy_j: 0.060
+    maximum_energy_j: 200.0
+    manufacturer_sub_100ns_energy_density_limit_at_1064nm_j_per_cm2: 4.0
+    manufacturer_355nm_derating_statement: "Derate 60% at 355 nm; accepted numerical interpretation remains pending PB-01 review."
+    accepted_355_nm_single_pulse_energy_density_limit: "USER_INPUT_REQUIRED"
+    operational_constraints:
+      - "This detector is reserved for supplemental post-promotion PB-01 direct-355 thesis characterization and is outside every completion, promotion, biological-entry, and OPO-540 gate."
+      - "PB-01 emission is prohibited until every phase-entry field is observed from the installed device or applicable documentation and the worst-case load margin is accepted."
+      - "For Gaussian beams multiply power and energy density by 2 and for hot spots by 3 when comparing incident loading with the datasheet threshold, as instructed by the manufacturer datasheet."
+
   opo_iris:
     display_name: "Thorlabs ELL15 Motorized Iris"
     role: "permanent_opo_beam_conditioner"
@@ -194,19 +229,21 @@ devices:
     catalog_number: "33-2650"
     part_number: "33-2650-000"
     reported_label_serial: "WO 339"
-    serial_number: "[VALUE_REQUIRED]"
-    instrument_identity_response: "[VALUE_REQUIRED]"
-    firmware_revision: "[VALUE_REQUIRED]"
-    qualification_status: "disconnected_blocked_pending_WM-01"
+    serial_number: "W0339"
+    instrument_identity_response: "*IDN$ Coherent Inc,WaveMaster,W0339,A1.1V1.6"
+    firmware_revision: "A1.1V1.6"
+    qualification_status: "connected_unqualified_pending_WM-01"
     interface: "rs232_via_usb_adapter"
-    preferred_port: "[VALUE_REQUIRED]"
-    usb_vid_hex: "[VALUE_REQUIRED]"
-    usb_pid_hex: "[VALUE_REQUIRED]"
-    usb_serial_number: "[VALUE_REQUIRED]"
-    port_serial_number: "[VALUE_REQUIRED]"
-    usb_adapter_model: "[VALUE_REQUIRED]"
-    driver_provider: "[VALUE_REQUIRED]"
-    driver_version_observed: "[VALUE_REQUIRED]"
+    preferred_port: "COM8"
+    usb_vid_hex: "0403"
+    usb_pid_hex: "6001"
+    usb_serial_number: "BG03ADXP"
+    port_serial_number: "BG03ADXPA"
+    usb_adapter_model: "FTDI FT232R USB UART"
+    driver_provider: "FTDI"
+    driver_version_observed: "2.12.36.20"
+    driver_date_observed: "2024-10-27"
+    driver_inf_observed: "oem182.inf"
     cable_configuration: "straight-through; not null modem; RTS/CTS carried"
     baudrate: 9600
     bytesize: 8
@@ -215,9 +252,8 @@ devices:
     flow_control: "RTS/CTS hardware"
     response_terminator: "CR/LF"
     command_terminator: "CR"
-    power_supply_identity: "[VALUE_REQUIRED]"
-    power_supply_approval_basis: "[VALUE_REQUIRED]"
-    power_requirement: "12 VDC, 2.5 A; manufacturer-supplied or Coherent-approved replacement"
+    operator_confirmed_safe_operation: true
+    manufacturer_support_status: "obsolete; no manufacturer service, replacement parts, or additional documentation available (operator-reported Coherent support response, 2026-08-20)"
     wavelength_range_nm:
       minimum: 380.0
       maximum: 1095.0
@@ -225,6 +261,16 @@ devices:
     resolution_nm: 0.001
     display_update_hz: 3
     measurement_authority: "unqualified_pending_WM-01"
+    connection_intake:
+      observed_utc: "2026-08-20T17:58:23.012Z"
+      query_scope: "read_only_no_settings_changed"
+      self_test_raw: "*TST$ 01"
+      autocalibration_raw: "CAL$ ON"
+      measurement_mode_raw: "MDE$ P"
+      units_raw: "UNI$ A"
+      period_raw: "PRD$ 0"
+      value_raw: "VAL$ 29397,NO SIGNAL"
+      evidence_record: "docs/WaveMaster/connection_intake_20260820.json"
     manufacturer_documents:
       - "docs/WaveMaster/WaveMaster_Manual.pdf"
       - "docs/WaveMaster/Coherent_WaveMaster_33-2650_Datasheet.pdf"
@@ -242,8 +288,6 @@ devices:
       - "usb_adapter_model"
       - "driver_provider"
       - "driver_version_observed"
-      - "power_supply_identity"
-      - "power_supply_approval_basis"
     operational_constraints:
       - "WM-01 cannot start while any phase_entry_required_fields value is [VALUE_REQUIRED]."
       - "The instrument identifies wavelength but does not apportion optical power among spectral components."

@@ -1160,7 +1160,7 @@ and the prospective replicate count.
 The following campaign work is unnecessary for the mandatory Mylar position/
 shape validation:
 
-- pump/Nd:YAG/OPO output phases `PB-01` and `PB-02`;
+- supplemental post-promotion direct-355 phase `PB-01` and OPO-540 phase `PB-02`;
 - pump–probe overlap `OV-01`;
 - system temporal instrument response `IR-01`;
 - biological sample preparation or biological spectra;

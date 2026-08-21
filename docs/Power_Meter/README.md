@@ -56,3 +56,20 @@ OM-01 capture helper is `tools/om01_newport_transition_capture.py`.
 Supplier binaries and documents are provenance sources. Their presence does
 not authorize installation, firmware change, instrument operation, or phase
 advancement.
+
+## Supplemental direct-355 sensor
+
+A Newport 919P-050-18HP high-power thermopile sensor has been reported as
+installed for supplemental PB-01 direct-355 thesis characterization. It is a separate
+measurement configuration from the completed OM-01 919P-010-16 working-
+reference result and does not alter or extend that completed qualification.
+The retained datasheet identifies a 17.5 mm active diameter (2.40 cm²),
+0.24–2.2 µm spectral range, 50 W continuous maximum, greater-than-10 kW/cm²
+maximum average power density, and 4 J/cm² sub-100 ns energy-density limit at
+1064 nm with a stated 355 nm derating. It also requires Gaussian-beam and hot-
+spot factors when comparing incident loading with the threshold. The installed
+serial number, device-specific calibration basis, and accepted numerical 355
+nm derated limit remain `USER_INPUT_REQUIRED` in `hardware_configuration.yaml`.
+PB-01 emission is prohibited until those fields and the worst-case load margin
+are accepted. PB-01 is a supplemental thesis characterization after PROM-CH
+and is outside all completion, promotion, biological-entry, and OPO-540 gates.

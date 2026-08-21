@@ -2,8 +2,8 @@
 
 Configuration family: `OPO540-PERMANENT-IRIS`
 
-Qualification state: **NOT YET QUALIFIED — WM-01 BLOCKED BY
-`[VALUE_REQUIRED]`; ATT-01 NOT AUTHORIZED**
+Qualification state: **NOT YET QUALIFIED — WM-01 READY FOR PHASE APPROVAL;
+ATT-01 NOT AUTHORIZED**
 
 This is the sole retained biological pump path for HRP-C–CO followed by MbCO.
 The OPO output passes through the permanently mounted Thorlabs ELL15 iris at
@@ -23,7 +23,7 @@ laser-safety and FE-01-qualified event-admission systems.
 | Iris USB converter | FTDI FT230X, VID/PID `0403:6015`, serial `DP06U124`, interface serial `DP06U124A` | Windows inventory and native service discovery |
 | Iris service | `control_app/devices/ell15_iris_service.py` | ATT-01-qualified software/version record |
 | Power working reference | Newport 1918-R `15879` with 919P-010-16 `161791` | OM-01 bundle and ATT-01 transfer records |
-| Wavelength working reference | Coherent WaveMaster 33-2650 | WM-01 bundle; connection-derived identity fields remain `[VALUE_REQUIRED]` |
+| Wavelength working reference | Coherent WaveMaster 33-2650, electronic serial `W0339`, on `COM8` through FTDI adapter `BG03ADXP` | 2026-08-20 query-only intake; WM-01 entry preflight ready, phase not yet authorized or qualified |
 
 ## Phase-qualified fields
 
@@ -34,6 +34,8 @@ into downstream manifests.
 | Field | Present state | Authority |
 |---|---|---|
 | WaveMaster configuration/bundle ID | `NOT_YET_QUALIFIED` | WM-01 |
+| Preliminary pre-iris FIRE-to-Q-SWITCH delay and search envelope | `NOT_YET_QUALIFIED` | ATT-01 |
+| Final locked-iris FIRE-to-Q-SWITCH delay and tolerance | `NOT_YET_QUALIFIED` | PB-02 |
 | Iris axial plane and Z coordinate/fiducials | `NOT_YET_QUALIFIED` | ATT-01 |
 | Iris X/Y mount coordinates/fiducials | `NOT_YET_QUALIFIED` | ATT-01 |
 | Iris diameter command/readback/tolerance | `NOT_YET_QUALIFIED` | ATT-01 |
@@ -51,6 +53,8 @@ Every phase or experiment using this path retains:
 
 - OPO, iris, and WaveMaster stable IDs plus applicable calibration and
   characterization bundle IDs;
+- final PB-02 FIRE-to-Q-SWITCH delay, command/readback, tolerance, and current
+  validity against the accepted locked-iris delay-search envelope;
 - iris controller ownership, driver/service version, commanded diameter,
   diameter readback, tolerance result, fault/status state, and locked-mount
   check;

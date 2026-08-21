@@ -7,6 +7,7 @@ Devices:
 - hf2li: Zurich Instruments HF2LI (lockin_amplifier)
 - mircat: Daylight MIRcat (probe_laser)
 - ndyag: Surelite EX Nd:YAG (pump_laser)
+- ndyag_355_power_sensor: Newport 919P-050-18HP High-Power Thermopile Sensor (terminal_direct_355_nm_average_power_sensor)
 - opo_iris: Thorlabs ELL15 Motorized Iris (permanent_opo_beam_conditioner)
 - optical_power_meter: Newport 1918-R Optical Power Meter (average_optical_power_working_reference)
 - optical_power_sensor: Newport 919P-010-16 Thermopile Sensor (average_optical_power_sensor)
@@ -158,4 +159,3 @@ PicoScope settings:
 Warnings:
 - Arduino MUX is disabled and no MUX routes are active; scope/HF2LI observations must use direct wiring.
 - OPO iris is configured but remains unqualified until ATT-01 passes.
-- WM-01 entry BLOCKED by [VALUE_REQUIRED] WaveMaster fields: serial_number, instrument_identity_response, firmware_revision, preferred_port, usb_vid_hex, usb_pid_hex, usb_serial_number, port_serial_number, usb_adapter_model, driver_provider, driver_version_observed, power_supply_identity, power_supply_approval_basis

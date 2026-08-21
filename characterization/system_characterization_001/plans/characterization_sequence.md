@@ -87,9 +87,16 @@ deliverables below are additional requirements.
 
 ## Phase sequence
 
+The required campaign order is `PB-02 -> QB-01 -> SC-01 -> OG-01 -> OV-01 ->
+AR-01 -> SV-01 -> SV-02 -> IR-01 -> PF-01 -> RP-01 -> E2E-CH -> RPT-CH ->
+PROM-CH`, subject to each phase's calibration dependencies and separate
+authorization. PB-01 is a supplemental thesis characterization performed after
+PROM-CH under its own authorization. It is outside the required completion,
+promotion, and biological-entry dependency chain.
+
 ### CH-00 — claim, scope, and calibration-import freeze
 
-Status: **COMPLETE — PASS; ANALYSIS-ONLY CLOSEOUT; PB-01 NOT AUTHORIZED**
+Status: **COMPLETE — PASS; ANALYSIS-ONLY CLOSEOUT; PB-02 NOT AUTHORIZED**
 
 Define the claims the thesis and downstream experiments will make, the tested operating
 envelope needed to support them, and the calibration dependencies for every
@@ -145,34 +152,6 @@ CH-00 evidence remains unchanged and is not repeated. The shared instrument
 configuration is characterized once; HRP and MbCO retain separate sample-
 specific dose, absorbance, overlap, photolysis, damage, and kinetics pilots.
 
-### PB-01 — Nd:YAG OPO-drive characterization
-
-Characterize 355 nm only at the configuration that drives the OPO for the
-shared 540 nm HRP/MbCO pump. Observe direct 532 nm and residual 1064 nm only for
-source health, separation, and safety; do not create quantitative biological
-sample-path grids for them. At the retained drive output use the lowest and
-highest planned average-power settings plus one revisit. Add a midpoint
-only if the predeclared linearity/stability rule fails.
-
-PB-01 characterizes the 355 nm OPO drive upstream of the OPO and does not use
-the downstream iris to define 355 nm power. If the permanent iris has already
-been installed, retain its device/configuration ID and non-emitting state in
-the layout record without assigning it a 355 nm transfer correction.
-
-Mandatory deliverables:
-
-- Source-plane average-power readings at experiment-required conditions,
-  repetition-rate verification, warm-up behavior, short-term stability,
-  longer drift record, and rejected-reading accounting. If useful, report only
-  derived mean pulse energy from average power and verified repetition rate.
-- Exact harmonic configuration, meter/sensor IDs, wavelength corrections,
-  trigger/timing configuration, polarization and beam-location observations,
-  environmental conditions, and all calibration/attenuation links.
-- Average-power stability and uncertainty tables, any explicitly derived mean
-  pulse-energy table, recommended operating window, saturation/damage-margin
-  statement, and safe restoration. Do not claim direct pulse-energy
-  distributions, pulse-to-pulse energy jitter, or calibrated peak power.
-
 ### PB-02 — 540 nm OPO output characterization
 
 At 540 nm only, characterize the final output after the permanent ATT-01 iris
@@ -181,8 +160,19 @@ block acquire the iris USB/API identity, service/firmware version, command,
 readback, tolerance result, and configuration ID. Measure post-iris average
 power, WM-01-linked independent wavelength/readback agreement, residual off-wavelength
 content, the linewidth bound required by the MbCO experiment, throughput
-relative to both the retained 355 nm drive and the pre-iris 540 nm reference,
-stability, spatial profile, and pointing.
+relative to the pre-iris 540 nm reference, stability, spatial profile, and
+pointing. PB-02 has no PB-01 or direct-355 measurement dependency.
+
+Begin with the ATT-01 preliminary delay and a prospectively frozen narrow
+FIRE-to-Q-SWITCH delay range. With the iris mount and aperture locked, acquire
+repeated ascending and descending searches plus a revisit. For every point
+retain the programmed and read-back delay, synchronized post-iris power,
+WaveMaster native value/status, residual-content result, iris readback,
+centroid/profile, and stability diagnostics. Select the final delay by maximum
+accepted post-iris 540 nm average power, not unfiltered total power, subject to
+the wavelength, residual-content, stability, core-clipping, and meter-safety
+criteria. Confirm the selected point on a separate return visit and freeze it
+as part of the OPO-540 configuration before the remaining PB-02 measurements.
 
 Perform three return-to-540 visits, approaching from the directions required
 to expose repeatability/hysteresis, and retain X/Y centroid displacement,
@@ -200,7 +190,7 @@ wavelength requires its own approved iris/centroid qualification before use.
 
 Mandatory deliverables:
 
-- Native pump/OPO meter, wavelength-reference, spatial-profile, and iris USB/
+- Native OPO meter, wavelength-reference, spatial-profile, and iris USB/
   API command/readback records with synchronized shot or acquisition IDs.
 - WaveMaster bundle/configuration ID, device/adapter/probe identity, reference
   plane, air-nanometre units, pulsed mode, autocalibration state, native
@@ -209,8 +199,8 @@ Mandatory deliverables:
   remain non-numeric outcomes; an unresolved `Multi-Line` result blocks the
   single-wavelength claim unless the accepted spectral method resolves and
   bounds every contributing component.
-- Post-iris average power, residual spectral-content bound, 355-to-OPO and
-  pre/post-iris throughput, required linewidth bound, warm-up, X/Y centroid,
+- Post-iris average power, residual spectral-content bound, pre/post-iris
+  throughput, required linewidth bound, warm-up, X/Y centroid,
   beam radius/profile, aperture margin, direction/revisit repeatability, and
   uncertainty tables.
 - Explicit distinction between measured range, interpolated range,
@@ -520,6 +510,7 @@ Mandatory deliverables:
 ### RPT-CH — characterization reporting and thesis reuse package
 
 Analysis-only aggregation phase. It must not create replacement measurements.
+PB-01 is outside its required-phase completion gate.
 
 Mandatory deliverables:
 
@@ -552,7 +543,47 @@ downstream dependency record.
 Promotion of the OPO-540 envelope requires the WM-01 wavelength working-
 reference bundle, ATT-01 electronic-iris bundle, and accepted
 PB-02/OG/OV/RP configuration chain; a bypass cannot support quantitative
-540 nm dose or notebook-prediction claims.
+540 nm dose or notebook-prediction claims. PB-01 is outside this gate.
+
+### PB-01 — supplemental direct 355 nm OPO-drive characterization
+
+PB-01 is performed after PROM-CH as a non-gating thesis/source-characterization
+phase. It is not a prerequisite for campaign completion, RPT-CH, PROM-CH,
+biological entry, or any OPO-540 phase. Measure the upstream 355 nm beam at the
+final PB-02 FIRE-to-Q-SWITCH delay and the retained low/high OPO-drive envelope.
+Observe direct 532 nm and residual 1064 nm only for source health, separation,
+and safety; do not create quantitative biological sample-path grids for them.
+
+The newly installed high-energy detector remains `USER_INPUT_REQUIRED` until
+its manufacturer, model, serial number, active-area/aperture geometry,
+wavelength range and correction, measurement mode, calibration basis,
+single-pulse energy-density limit, average-power limit, and installed readout
+identity are recorded from the device and its documentation. PB-01 entry must
+prove that the worst-case 355 nm pulse and average loading, including spatial
+nonuniformity and alignment uncertainty, remain inside those limits.
+
+PB-01 characterizes the 355 nm OPO drive upstream of the OPO. The permanent
+downstream iris does not define 355 nm power and receives no 355 nm transfer
+correction. Retain its device/configuration ID and non-emitting state in the
+layout record.
+
+Mandatory deliverables:
+
+- Installed high-energy detector/readout identity, documentation, calibration
+  basis, wavelength correction, active-area geometry, load/damage-margin
+  calculation, range/linearity checks, zero/background, and reference plane.
+- Source-plane readings at the final PB-02 delay and retained low/high drive
+  conditions, repetition-rate verification, warm-up, short-term stability,
+  longer drift record, revisit, and rejected-reading accounting. Report mean
+  pulse energy only when explicitly derived from measured average power and
+  verified repetition rate.
+- Exact harmonic configuration, trigger/timing configuration, polarization and
+  beam-location observations, environmental conditions, and any used transfer
+  or attenuation links.
+- Average-power stability and uncertainty tables, any explicitly derived mean
+  pulse-energy table, measured 355 nm operating envelope, saturation/damage-
+  margin statement, and safe restoration. Do not claim direct pulse-energy
+  distributions, pulse-to-pulse energy jitter, or calibrated peak power.
 
 ## Biological handoff
 

@@ -25,8 +25,8 @@ def main() -> int:
                 "status": "BLOCKED" if gaps else "READY_FOR_PHASE_APPROVAL",
                 "value_required_fields": gaps,
                 "note": (
-                    "Resolving fields does not authorize WM-01, power application, "
-                    "laser emission, or phase advancement."
+                    "Resolving fields does not authorize WM-01, laser emission, "
+                    "or phase advancement."
                 ),
             },
             indent=2,

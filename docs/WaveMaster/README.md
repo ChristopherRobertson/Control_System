@@ -1,7 +1,7 @@
 # Coherent WaveMaster wavelength working reference
 
 The visible/near-IR wavelength working reference is a Coherent WaveMaster,
-catalog number 33-2650. WM-01 qualifies its installed identity, power,
+catalog number 33-2650. WM-01 qualifies its installed identity,
 communications, self-test/autocalibration behavior, measurement modes,
 repeatability, and uncertainty authority before ATT-01 uses its results.
 
@@ -13,37 +13,43 @@ measurement outcomes and are never coerced into numeric wavelengths.
 
 ## Installed configuration gate
 
-The instrument is disconnected while its installed RS-232/USB adapter and
-power supply are being established. Every connection-derived field below must
-be resolved in `hardware_configuration.yaml` before WM-01 may start:
+Read-only connection intake on 2026-08-20 established native communication and
+the instrument/adapter fields below. The operator confirms that the connected
+instrument works safely. Coherent support declared the WaveMaster obsolete with
+no service, replacement parts, or additional documentation available. All
+connection-derived WM-01 entry fields are resolved:
 
 | Field | Current value |
 |---|---|
-| Electronically reported serial | `[VALUE_REQUIRED]` |
-| Complete `*IDN?` response | `[VALUE_REQUIRED]` |
-| Firmware revision | `[VALUE_REQUIRED]` |
-| Assigned COM port | `[VALUE_REQUIRED]` |
-| USB adapter VID/PID | `[VALUE_REQUIRED]` |
-| USB adapter and port-interface serials | `[VALUE_REQUIRED]` |
-| USB adapter model | `[VALUE_REQUIRED]` |
-| Installed driver provider/version | `[VALUE_REQUIRED]` |
-| Installed power-supply identity | `[VALUE_REQUIRED]` |
-| Power-supply manufacturer approval basis | `[VALUE_REQUIRED]` |
+| Electronically reported serial | `W0339` |
+| Complete `*IDN?` response | `*IDN$ Coherent Inc,WaveMaster,W0339,A1.1V1.6` |
+| Firmware revision | `A1.1V1.6` |
+| Assigned COM port | `COM8` |
+| USB adapter VID/PID | `0403:6001` |
+| USB adapter and port-interface serials | `BG03ADXP`; `BG03ADXPA` |
+| USB adapter model | FTDI FT232R USB UART |
+| Installed driver provider/version | FTDI `2.12.36.20` |
+| Operational status | Operator-confirmed working safely |
 
-The visible rear label was reported as `WO 339`. The manual specifies a serial
-format of `W` followed by four digits. The label photograph and `*IDN?` response
-must be retained independently; no character is normalized by assumption.
+The visible rear label was reported as `WO 339`; the electronic response is
+`W0339`. The label photograph and `*IDN?` response remain independent evidence,
+and the discrepancy is not normalized by assumption.
 
 Run `python tools/wm01_preflight.py` to evaluate this gate. A successful result
 means only that the entry fields are resolved; it does not authorize WM-01,
-power application, laser emission, or phase advancement.
+laser emission, or phase advancement.
 
-After physical inspection of the connected supply and straight-through cable,
+After inspection of the straight-through cable,
 `python tools/wavemaster_connection_intake.py --port COMx
---confirm-supply-and-cable-inspected` can collect the native `*IDN?` and serial-
+--confirm-cable-inspected` can collect the native `*IDN?` and serial-
 adapter observations without editing configuration. Its output is an intake
-record for review, not WM-01 evidence or authorization. Driver, USB-parent, and
-power-supply fields still require independent installed-system observation.
+record for review, not WM-01 evidence or authorization. Driver and USB-parent
+fields require independent installed-system observation.
+
+The retained intake record is `connection_intake_20260820.json`. It includes
+raw `*TST?`, autocalibration, mode, units, period, and `VAL?` responses. The
+`NO SIGNAL` result is retained as a non-numeric status and does not qualify an
+optical measurement or interpret the raw self-test byte.
 
 ## Electrical and software interface
 
@@ -62,13 +68,9 @@ an observation. The files under `DRIVER_64/` contain FTDI driver 2.08.14 dated
 actual installed adapter must be current, signed, compatible, and recorded;
 the archived driver is not an operational matching gate.
 
-## Power and physical inspection
+## Physical inspection
 
-The manufacturer documentation specifies 12 VDC, 2.5 A and directs use of the
-supplied supply. WM-01 requires a manufacturer-supplied or explicitly
-Coherent-approved unit, exact connector/polarity confirmation, strain-free
-rear-panel connection, and an inspection record before power is applied. A
-loose power connection is a failed entry condition.
+The operator confirms that the connected instrument works safely.
 
 The sampling probe, captive fibre, ST connector, wide/narrow acceptance switch,
 nosepiece/pickoff, mount, and beam-dump arrangement receive stable component
@@ -115,4 +117,7 @@ recalibration.
 | `DRIVER_64/` | Archived FTDI driver package | Driver 2.08.14 dated 2011 |
 
 All supplier files are provenance sources, not executable evidence that the
-installed device, adapter, power supply, or measurement authority has passed.
+installed device, adapter, or measurement authority has passed.
+The repository documentation remains the retained manufacturer basis because
+the operator-reported Coherent response states that no additional manufacturer
+documentation or service is available.

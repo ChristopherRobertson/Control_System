@@ -25,16 +25,13 @@ def main() -> int:
     )
     parser.add_argument("--port", required=True, help="Observed COM port, e.g. COM6")
     parser.add_argument(
-        "--confirm-supply-and-cable-inspected",
+        "--confirm-cable-inspected",
         action="store_true",
-        help=(
-            "Confirm that the 12 VDC supply/connector and straight-through "
-            "RTS/CTS cable were physically inspected before opening the port."
-        ),
+        help="Confirm that the straight-through RTS/CTS cable was inspected.",
     )
     args = parser.parse_args()
-    if not args.confirm_supply_and_cable_inspected:
-        parser.error("--confirm-supply-and-cable-inspected is required")
+    if not args.confirm_cable_inspected:
+        parser.error("--confirm-cable-inspected is required")
 
     try:
         import serial
@@ -100,8 +97,6 @@ def main() -> int:
             "usb_serial_number",
             "driver_provider",
             "driver_version_observed",
-            "power_supply_identity",
-            "power_supply_approval_basis",
         ],
         "note": (
             "This query does not start or qualify WM-01 and does not edit "

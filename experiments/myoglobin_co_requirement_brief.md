@@ -51,7 +51,7 @@ Archived Day-based, RSI-specific, generic-sample, and prior MbCO recipes are not
 
 | Area | Current evidence | Consequence for this brief |
 |---|---|---|
-| Calibration | S0, MS-01, MS-02, T2-01, T1-01, PT-01, MC-01, TR-01, and OM-01 are complete; WM-01 is blocked by `[VALUE_REQUIRED]`; no canonical promotion exists. [R03, R07, R11] | Campaign-local results may inform risk analysis but cannot freeze biological delays or wavelength assignments. |
+| Calibration | S0, MS-01, MS-02, T2-01, T1-01, PT-01, MC-01, TR-01, and OM-01 are complete; WM-01 entry preflight is ready but the phase is not authorized; no canonical promotion exists. [R03, R07, R11] | Campaign-local results may inform risk analysis but cannot freeze biological delays or wavelength assignments. |
 | Characterization | Matrix and sequence exist; no experimental-requirement freeze and no promoted bundle. [R08, R12] | Power, probe envelope, geometry, overlap, settling, IRF, sensitivity, and reproducibility remain dependencies. |
 | Reference channel | Replacement reference chain identified as VIGO `SIP-DC-250M` serial `445161066` with `PVM-10.6-1x1` detector serial `21834`. [R06, R08] | Identity gate resolved; no final dual-detector normalization or latency correction until DET results are promoted. |
 | MIRcat software readiness | Installed notebook range is 1638.8–2077.3 cm⁻¹; current builder registry says 900–1800 cm⁻¹. [R09] | Correct and verify the registry before authoring or validating a 1933–1966 cm⁻¹ recipe. |
@@ -402,7 +402,7 @@ Surelite Direct Access Triggering Mode 2 requires two negative-going TTL command
 Accordingly:
 
 - T660-1 A and B polarity/width/level/termination must meet the installed Surelite receiver at the DB9, verified electrically with the laser inhibited before optical use.
-- FIRE-to-Q delay is frozen only from PB-01/PB-02 plus OP-01/IR-01; the repository's nominal 179830 ns value is explicitly uncalibrated and is not authority.
+- FIRE-to-Q delay is frozen by the ATT-01 preliminary search and PB-02 final locked-iris search, with OP-01/IR-01 supplying timing validity; the repository's nominal 179830 ns value is explicitly uncalibrated and is not authority. Supplemental PB-01 direct-355 measurement does not select or gate the delay.
 - OPO wavelength motion finishes and a wavelength/readback/power stability gate passes before pump arming. The OPO's internal calibration tables and GUI position do not replace wavelength verification. [M02]
 - Pump optical arrival is measured at the sample plane for the chosen wavelength/path; electrical FIRE/Q edges are retained as diagnostics.
 
@@ -792,7 +792,7 @@ Separate contaminated protein/reductant liquid, sharps/broken windows, solvent/c
 | T660-2 route delays | T2-01 | Probe/reference/DAQ/pump-chain alignment | Per route corrected intercept/slope/uncertainty and valid configuration. |
 | T660-1 FIRE/Q timing | T1-01 | Surelite DAT2 timing | Trigger-to-FIRE/Q offsets, closure, adapter/cable IDs, uncertainty. |
 | Power-meter readiness | OM-01 | Bounded meter operation and historical pre-iris mixed-output evidence | Meter identity, wavelength response, geometry, zero/range, validity; OM-01 mixed-spectrum indication is not used as post-iris 540 nm dose. |
-| Wavelength working reference | WM-01 | Independent 540 nm center-wavelength/status evidence | Coherent WaveMaster identity, power/cable/adapter/probe configuration, air-nanometre pulsed settings, native response states/time tags, repeatability, uncertainty, validity, 355 nm exclusion, and no spectral-power-fraction authority. |
+| Wavelength working reference | WM-01 | Independent 540 nm center-wavelength/status evidence | Coherent WaveMaster identity, cable/adapter/probe configuration, air-nanometre pulsed settings, native response states/time tags, repeatability, uncertainty, validity, 355 nm exclusion, and no spectral-power-fraction authority. |
 | Electronic iris/optical transfer/splitter | ATT-01, DET-04 | Halo rejection, final sample-plane pump power, and sample/reference normalization | Qualified iris USB/API control, permanent far-field mount, accepted 540 nm diameter/tolerance, residual-contamination and core-clipping bounds, measured ratios versus wavelength/configuration with uncertainty, and no 50/50 assumption. |
 | HF2LI configuration/streams | HF-01, HF-02 | Reference/demodulators/filter/sample rate/data fields | Exact node mapping, demods 0/3, DIO mapping, LabOne version, τ/order/rates/readbacks. |
 | MIRcat DIO/process mapping | MD-01 | TRIG IN/process/Trigger Out behavior | One-to-one edge behavior, active levels, widths, DIO20/21/22 mapping, no reserved-pin use. |
@@ -801,7 +801,7 @@ Separate contaminated protein/reductant liquid, sharps/broken windows, solvent/c
 | Spectral references and axis | SP-01, SP-02, SV-01, SV-02 | 1933–1966 cm⁻¹ setpoints/uncertainty | Reference provenance, axis correction/uncertainty, verified usable range, resolution. |
 | Pump command-to-sample timing | OP-01 | Optical time zero | Permanent-iris 540 nm sample-plane arrival, reference plane, path/configuration uncertainty. |
 | Full clock chain/end to end | CL-01, E2E-01, E2E-CH | Delay sign/range, trigger sequencing, restoration | One-to-one mapping, no channel interaction, missed/extra-trigger behavior, end-to-end uncertainty. |
-| Nd:YAG/OPO power/beam | PB-01, PB-02 | Required-wavelength validation, post-iris average power, duration/stability, X/Y pointing and aperture margin | 355 nm OPO drive and permanent-iris sample-required 540 nm output with WM-01-linked native wavelength/status records; no direct-532 fallback in the MVP. |
+| OPO-540 power/beam | ATT-01, PB-02 | Preliminary and final delay selection, required-wavelength validation, post-iris average power, duration/stability, X/Y pointing and aperture margin | Permanent-iris sample-required 540 nm output with WM-01-linked native wavelength/status records; supplemental PB-01 direct-355 measurement is thesis/source characterization and not an MVP gate. |
 | Probe envelope | QB-01 | MIRcat frequency/current/width/rate | Valid optical envelope across the core spectral window and safe detector/sample limits. |
 | Sample-plane geometry/overlap | OG-01, OV-01 | Fluence model, illuminated volume, overlap fraction | Post-iris beam profiles/radii/positions/polarization, stable overlap and clipping margin with uncertainty; iris remains fixed throughout placement and experiments. |
 | Instrument response | IR-01 | Convolution, time zero, geminate identifiability | Measured sample-plane IRF and constituent response model across used configuration. |
@@ -923,7 +923,7 @@ calendar dates.
 | U07 | Exact Mb supplier/lot and UV–visible access not selected | State/concentration verification | Procure and document; validate spectral method | Hard gate. |
 | U08 | CO/EHS equipment and approved procedure not evidenced here | Any CO preparation | EHS approval, cylinder/regulator/hood/monitor/SOP/waste | Hard safety gate. |
 | U09 | Permanent electronic iris and 540 nm post-iris sample-plane OPO output uncharacterized | Pump selection/dose | ATT-01 control/placement/diameter qualification followed by PB-02/OG-01/OV-01/OP-01 at the unchanged 540 nm configuration | Hard gate; another OPO wavelength requires wavelength-specific iris/centroid qualification and 532 nm requires separate direct-path qualification. |
-| U09A | WaveMaster connection-derived identity/adapter/driver/power fields remain `[VALUE_REQUIRED]`; WM-01 is not qualified | Independent 540 nm wavelength assignment and ATT-01 entry | Connect with approved supply/cable/adapter; record native identity and installed fields; pass WM-01 | Hard gate; center wavelength still does not establish residual spectral-power fraction or 355 nm identity. |
+| U09A | WaveMaster device/adapter/driver intake is recorded and entry preflight is ready, but WM-01 is not yet authorized or qualified | Independent 540 nm wavelength assignment and ATT-01 entry | Separately authorize and pass WM-01 | Hard gate; center wavelength still does not establish residual spectral-power fraction or 355 nm identity. |
 | U10 | Probe envelope at 1933–1966 cm⁻¹ not promoted | Probe width/rate/current/throughput | QB-01/SV/PF results | Hard gate. |
 | U11 | Optical time zero and full IRF absent | Delay values and geminate claim | OP-01/CL-01/IR-01/DET-03 | Hard gate for kinetics. |
 | U12 | Sample-specific variance/damage/recovery unknown | n, averaging, pump rate/dose, replacement | MB-04–06 pilots | Pilot-dependent; cannot be literature-frozen. |

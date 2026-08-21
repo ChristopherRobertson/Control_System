@@ -34,6 +34,12 @@ configuration and retain its bundle, device/adapter/probe identity, units,
 pulsed mode, autocalibration state, native time tag/value/status, and
 uncertainty. The WaveMaster does not apportion optical power among simultaneous
 wavelengths and does not cover the 355 nm OPO drive.
+ATT-01 supplies a preliminary pre-iris 540 nm FIRE-to-Q-SWITCH delay. PB-02
+performs the final narrow search through the locked iris and freezes the delay
+that maximizes accepted wavelength-qualified stable post-iris 540 nm power.
+PB-01 is a supplemental direct-355 thesis characterization performed after
+PROM-CH. It is outside the completion, promotion, biological-entry, and
+OPO-540 dependency chains.
 `SC-01` qualifies the minimum gas-tight cell/path and 293 K/298 K temperature
 states without biological material or CO. The complete mapping and exclusions
 are in `docs/experiment_requirement_campaign_crosswalk.md`.

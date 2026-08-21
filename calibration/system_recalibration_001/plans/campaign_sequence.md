@@ -2,7 +2,7 @@
 
 Campaign: `system_recalibration_001`
 
-Status: **OM-01 PASS - COMPLETE, QUALIFIED BOUNDED; WM-01 BLOCKED BY [VALUE_REQUIRED]; ATT-01 NOT AUTHORIZED**
+Status: **OM-01 PASS - COMPLETE, QUALIFIED BOUNDED; WM-01 READY FOR PHASE APPROVAL; ATT-01 NOT AUTHORIZED**
 
 This plan expands the original calibration scope to close the metrology gaps
 needed by the instrument-characterization campaign, thesis, and downstream
@@ -14,7 +14,7 @@ OPO-540 calibration, characterization, and experiment configuration. Its USB/
 API control is an operating-configuration dependency, not a safety shutter or
 finite-exposure device.
 The Coherent WaveMaster is the visible/near-IR wavelength working reference.
-WM-01 qualifies its installed identity, power, serial communications,
+WM-01 qualifies its installed identity and serial communications,
 measurement settings, response states, repeatability, and uncertainty authority
 before ATT-01 or any downstream phase may use its wavelength observations.
 The unexecuted downstream biological-pump phases use this single post-iris
@@ -280,7 +280,7 @@ low/high meter-behavior evidence, three repeat readings, one revisit,
 saturation limits, spatial-scale calibration, and the applicable manufacturer
 specification or available comparison. Exact laser delay, current, pulse/duty,
 and delivered-power operating points are selected and characterized later in
-PB-01/PB-02/QB-01; they are not OM-01 inputs. Add a midpoint only when the
+ATT-01/PB-02/PB-01/QB-01; they are not OM-01 inputs. Add a midpoint only when the
 meter-behavior residual rule fails. Do not add a new meter or certificate task
 unless an approved experimental claim requires it.
 
@@ -298,8 +298,8 @@ Mandatory closeout deliverables:
 
 ### 10. WM-01 — visible/near-IR wavelength-metrology readiness
 
-Execution status: **PREHARDWARE IMPLEMENTATION COMPLETE; BLOCKED BY
-`[VALUE_REQUIRED]`; NOT AUTHORIZED**.
+Execution status: **PREHARDWARE IMPLEMENTATION COMPLETE; ENTRY PREFLIGHT
+READY; NOT AUTHORIZED**.
 
 WM-01 qualifies the installed Coherent WaveMaster, catalog number 33-2650, as
 a campaign-local wavelength working reference over only the source conditions
@@ -309,22 +309,19 @@ which is outside the instrument's 380-1095 nm specified range.
 
 Before WM-01 may start, every `devices.wavemaster.phase_entry_required_fields`
 entry in `hardware_configuration.yaml` must contain an observed value. The
-following connection-derived fields are presently `[VALUE_REQUIRED]`:
+2026-08-20 query-only connection intake resolved and recorded the electronic
+serial, complete `*IDN?` response, firmware revision, COM port, adapter
+VID/PID, adapter/interface serials, adapter model, installed driver, and native
+query responses. The operator confirms that the connected instrument works
+safely. All phase-entry fields are resolved.
 
-- electronic serial, complete `*IDN?` response, and firmware revision;
-- assigned COM port, adapter VID/PID, adapter/interface serials, adapter model,
-  and installed driver provider/version; and
-- installed power-supply identity and its Coherent approval basis.
-
-`python tools/wm01_preflight.py` enforces this entry gate. Replacing the
-placeholders establishes only documentation readiness; separate user approval
-is still required before phase work, instrument power, optical placement, or
-laser emission. A loose supply connector, uncertain connector polarity, a
-null-modem cable, missing RTS/CTS conductors, or a supply lacking an accepted
-approval basis blocks the phase.
+`python tools/wm01_preflight.py` enforces this entry gate and now reports
+`READY_FOR_PHASE_APPROVAL`. Separate user approval is still required before
+phase work, optical placement, or laser emission. A null-modem cable or missing
+RTS/CTS conductors blocks the phase.
 
 The phase first identifies and photographs the label, front/rear panels,
-sampling probe/fibre and acceptance switch, power supply, cable, USB adapter,
+sampling probe/fibre and acceptance switch, cable, USB adapter,
 mount, pickoff, and dump. It then verifies straight-through RS-232 operation at
 9600 baud, 8-N-1 with hardware RTS/CTS, exclusive port ownership, `*IDN?`,
 `*TST?`, local/remote restoration, documented query/set/readback behavior,
@@ -347,7 +344,7 @@ traceability.
 
 Mandatory closeout deliverables:
 
-- Installed-device, power, cable, adapter/driver, probe, mount, reference-plane,
+- Installed-device, cable, adapter/driver, probe, mount, reference-plane,
   and software configuration manifests with native identities and photographs.
 - Raw serial transcript; self-test/autocalibration results; settings/readbacks;
   disconnect/reconnect, exclusive-ownership, invalid-response, local-control,
@@ -387,6 +384,20 @@ hysteresis, reconnect, power-cycle recovery, invalid-command rejection, and
 restoration. The iris is not an interlock, safety shutter, pulse picker, or
 finite-event gate; communication or readback failure prevents OPO emission and
 requires the independent laser shutter to remain closed.
+
+Before comparing iris planes, perform a preliminary FIRE-to-Q-SWITCH delay
+search using the unoccluded pre-iris 540 nm output. Freeze the permitted delay
+range, coarse step sequence, dwell, repetition count, approach directions, and
+meter safety limit before emission. The previously observed approximately
+245 microsecond maximum at 632 nm is only a safe search-center hypothesis; it
+is not authority for the 355 nm drive or 540 nm output. Use the qualified power
+meter within its accepted range and the WM-01 wavelength/status record at every
+retained point. Reject saturated, unstable, unresolved `Multi-Line`, or
+otherwise wavelength-invalid points. Select a reproducible preliminary delay
+from repeated ascending and descending searches by maximum accepted pre-iris
+540 nm average power subject to wavelength-state and stability criteria. This
+setting establishes the source condition for the candidate-plane and aperture
+work; it is not the final operating delay.
 
 Scientifically determine the permanent axial position rather than selecting it
 for mechanical convenience. At accessible far-field candidate planes, compare
@@ -452,6 +463,10 @@ Mandatory closeout deliverables:
 - Stable component and configuration IDs; accepted and rejected far-field
   candidate positions; locked Z/X/Y mount coordinates or fiducials; orientation,
   wavelength, polarization, beam-dump, and reference-plane photographs/diagrams.
+- Preliminary FIRE-to-Q-SWITCH delay-search definition, native programmed and
+  read-back delays, synchronized pre-iris power and WaveMaster status records,
+  rejected-point accounting, direction/revisit comparison, selected
+  preliminary delay, uncertainty, and safe restoration.
 - Complete 540 nm diameter-scan records and the frozen selection rule, including
   pre/post-iris and sample-plane power, residual spectral content, beam profile,
   centroid/radii, core encircled-energy or transmission loss, diffraction,

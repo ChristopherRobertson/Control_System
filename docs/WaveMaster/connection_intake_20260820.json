@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "record_type": "PRE_WM01_CONNECTION_INTAKE",
+  "observed_utc": "2026-08-20T17:58:23.012Z",
+  "phase_authorized": false,
+  "settings_changed": false,
+  "port": {
+    "preferred_port_observation": "COM8",
+    "friendly_name": "USB Serial Port (COM8)",
+    "port_instance_id": "FTDIBUS\\VID_0403+PID_6001+BG03ADXPA\\0000",
+    "usb_parent_instance_id": "USB\\VID_0403&PID_6001\\BG03ADXP",
+    "usb_vid_hex": "0403",
+    "usb_pid_hex": "6001",
+    "usb_serial_number": "BG03ADXP",
+    "port_serial_number": "BG03ADXPA",
+    "adapter_model": "FTDI FT232R USB UART",
+    "driver_provider": "FTDI",
+    "driver_version": "2.12.36.20",
+    "driver_date": "2024-10-27",
+    "driver_inf": "oem182.inf"
+  },
+  "serial_settings": {
+    "baudrate": 9600,
+    "bytesize": 8,
+    "parity": "N",
+    "stopbits": 1,
+    "flow_control": "RTS/CTS hardware",
+    "command_terminator": "CR"
+  },
+  "native_queries": [
+    {"command": "*IDN?", "response": "*IDN$ Coherent Inc,WaveMaster,W0339,A1.1V1.6"},
+    {"command": "*TST?", "response": "*TST$ 01"},
+    {"command": "CAL?", "response": "CAL$ ON"},
+    {"command": "MDE?", "response": "MDE$ P"},
+    {"command": "UNI?", "response": "UNI$ A"},
+    {"command": "PRD?", "response": "PRD$ 0"},
+    {"command": "VAL?", "response": "VAL$ 29397,NO SIGNAL"}
+  ],
+  "parsed_identity": {
+    "manufacturer": "Coherent Inc",
+    "model": "WaveMaster",
+    "serial_number": "W0339",
+    "firmware_revision": "A1.1V1.6"
+  },
+  "operator_followup": {
+    "recorded_utc": "2026-08-20T18:00:50.660Z",
+    "instrument_operational_status": "operator confirms the connected instrument works safely",
+    "manufacturer_support_report": "Coherent support stated that the WaveMaster is obsolete and that service, replacement parts, and additional documentation are no longer available",
+    "source_classification": "operator report; manufacturer correspondence not captured in this record"
+  },
+  "unresolved_phase_entry_fields": [],
+  "limitations": [
+    "This record does not start or qualify WM-01.",
+    "The raw self-test byte is retained without a phase acceptance interpretation.",
+    "NO SIGNAL is a non-numeric measurement outcome.",
+    "The safe-operation and manufacturer-support statements are operator reports, not electronic instrument readbacks.",
+    "No optical wavelength or spectral-power fraction was measured."
+  ]
+}
