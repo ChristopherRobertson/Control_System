@@ -2,7 +2,7 @@
 
 Campaign: `system_recalibration_001`
 
-Status: **OM-01 PASS - COMPLETE, QUALIFIED BOUNDED; WM-01 READY FOR PHASE APPROVAL; ATT-01 NOT AUTHORIZED**
+Status: **WM-01 OPEN / DEFERRED PENDING REPLACEMENT SPECTROMETER; 540 NM / ATT-01 CHAIN DEFERRED; INDEPENDENT PHASES MAY PROCEED WITH SEPARATE AUTHORIZATION; PROMOTION BLOCKED**
 
 P0 completed without hardware access. S0 then passed on 2026-07-24 with
 exclusive T660/MIRcat ownership, all eight T660 outputs verified disabled
@@ -19,6 +19,14 @@ Campaign advancement is controlled only by the documented phase order,
 dependencies, mandatory deliverables, acceptance decisions, and explicit
 authorizations. Calendar deadlines do not waive or shorten a phase. Recorded
 dates and timestamps remain provenance for work that actually occurred.
+
+The 2026-08-25 dependency amendment permits work that does not consume the
+deferred wavelength/540 nm chain to proceed out of numerical phase order. This
+is not a WM-01 bypass or pass. `HF-01`, `MD-01`, `MSW-01`, `HF-02`, `DET-01`,
+and `SP-01` may be separately authorized and completed now. Any phase that
+consumes WM-01, ATT-01, independent 540 nm identity, or the retained OPO-540
+path remains deferred. `RPT-01` may receive provisional indexes but may not
+close, and `PROM-01` may not begin, until the deferred chain is completed.
 
 The active campaign is confined to
 `C:\Users\Chris\Documents\GitHub\Control_System\calibration\system_recalibration_001`.
@@ -62,15 +70,18 @@ PB-02 performs the final narrow search through the locked iris and freezes the
 experiment operating delay. Supplemental direct-355 thesis characterization
 is performed after characterization promotion and is outside every OPO-540,
 completion, promotion, and biological-entry gate.
-The Coherent WaveMaster is the visible/near-IR wavelength working reference;
-WM-01 qualifies its installed identity, communications, response states,
-settings, repeatability, uncertainty, and validity before ATT-01 uses it.
+WM-01 provides the visible/near-IR wavelength working reference. The installed
+Coherent WaveMaster candidate passed electronic checks but failed optical
+qualification; a replacement spectrometer is pending. WM-01 must still close
+with identity, communications, response states, settings, repeatability,
+uncertainty, and validity before ATT-01 uses it.
 HRP is executed first and MbCO inherits the unchanged promoted configuration.
 The iris is not a safety shutter or finite-event limiter.
 FE-01 qualifies finite admission and independent observation of rare post-iris
 540 nm pump events without biological samples; it does not determine
 biological dose, recovery, or photolysis. The remaining grids are limited to
-the two spectral regions, two acquisition topologies, and source path in the
+the two spectral regions, two acquisition topologies, three experiment-specific
+HF2LI configurations (sweep, HRP-C-CO fixed point, and MbCO fixed point), and source path in the
 verified requirement briefs.
 The non-duplication mapping is in `analysis/expansion_gap_map.md`.
 
@@ -98,6 +109,7 @@ plots.
 | PT-01 | Guide the MIRcat Process Trigger electrical setup and polarity/timing acquisition. |
 | WM-01 | Qualify WaveMaster identity, cable/adapter, RS-232 behavior, measurement states/settings, 540 nm repeatability, uncertainty, and working-reference validity. |
 | ATT-01 | Perform the preliminary pre-iris 540 nm FIRE-to-Q-SWITCH delay search; qualify the electronic iris USB/API control; select and lock its far-field mount; optimize the diameter against halo rejection, beam walk, and core clipping; then measure the retained optical transfers. |
+| HF-01 | With all lasers inhibited, use three monitored PicoScope-AWG anchor settings to validate the HF2LI response model, evaluate all supported settings computationally, and confirm only the selected sweep, HRP-C-CO, and MbCO configurations plus one ambiguity challenger when required. |
 | MC-01 onward | Follow the existing phase procedure interactively using focused utilities and the same stable phase-record pattern. |
 
 ## Current phase boundary
@@ -120,8 +132,11 @@ recorded the electronic identity, firmware, COM port, USB-adapter identities,
 installed driver, and native query responses without changing settings. The
 operator confirms that the connected instrument works safely. All WM-01 entry
 fields are resolved and its preflight is ready, but that does not replace
-separate phase authorization. WM-01 is the exact next phase. ATT-01 cannot start until
-WM-01 passes. OM-01 is not repeated: its mixed-output reading remains bounded
+separate phase authorization. WM-01 began on 2026-08-21 but remains open and
+deferred pending a replacement spectrometer. ATT-01 and every dependent 540 nm
+phase remain deferred until WM-01 passes. Dependency-independent phases listed
+above may proceed with their own authorization. OM-01 is not repeated: its
+mixed-output reading remains bounded
 pre-iris evidence, while post-iris power and transfer belong to ATT-01 and
 downstream characterization. Codex resumes from
 stable phase evidence rather than restarting the campaign or launching a

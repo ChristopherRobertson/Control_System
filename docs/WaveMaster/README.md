@@ -5,6 +5,14 @@ catalog number 33-2650. WM-01 qualifies its installed identity,
 communications, self-test/autocalibration behavior, measurement modes,
 repeatability, and uncertainty authority before ATT-01 uses its results.
 
+Current disposition (2026-08-25): the installed WaveMaster passed WM-01
+electronic checks but failed optical qualification. Its front-panel fibre
+receptacle moved relative to the panel, red-source outcomes depended on
+connector position, and the instrument did not respond to the 540 nm OPO
+output despite gross fibre continuity. It has no measurement authority. WM-01
+remains open and deferred pending a replacement spectrometer; the intake and
+failed qualification evidence remain retained and are not a bypass.
+
 The WaveMaster identifies a wavelength within its accepted installed envelope.
 It does not measure total optical power, apportion power among simultaneous
 spectral components, establish the absence of undetected components, or cover
@@ -70,7 +78,9 @@ the archived driver is not an operational matching gate.
 
 ## Physical inspection
 
-The operator confirms that the connected instrument works safely.
+The operator previously confirmed that the connected instrument worked safely
+for intake. That statement does not override the later optical failure or grant
+wavelength-measurement authority.
 
 The sampling probe, captive fibre, ST connector, wide/narrow acceptance switch,
 nosepiece/pickoff, mount, and beam-dump arrangement receive stable component

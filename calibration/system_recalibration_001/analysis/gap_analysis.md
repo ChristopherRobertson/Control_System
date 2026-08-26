@@ -38,8 +38,10 @@ PicoScope timebase accuracy for actual used settings, relevant MIRcat/HF2LI oper
 S0, MS-01, MS-02, T2-01, T1-01, PT-01, MC-01, TR-01, and OM-01 have completed
 with preserved phase evidence. These completed measurements are not repeated.
 The remaining items above are addressed by the expanded sequence in
-`plans/campaign_sequence.md`. WM-01 is the exact next phase, its entry preflight
-is ready, and it remains not authorized. ATT-01 follows only after
+`plans/campaign_sequence.md`. WM-01 started on 2026-08-21 and is open/deferred
+pending a replacement spectrometer after installed-WaveMaster optical failure. Its entry preflight
+was ready and WM-01 was authorized on 2026-08-21; the phase is now deferred,
+not unauthorized. ATT-01 follows only after
 WM-01 passes. DET-03, DET-04, FE-01, and the RPT-01/PROM-01 reuse package remain
 unexecuted. Pump/probe beam performance and the shared nonbiological cell/
 temperature qualification are

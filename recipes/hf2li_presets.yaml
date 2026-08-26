@@ -244,11 +244,14 @@ presets:
       expected_output: "runs/YYYYMMDD_mircat_detector_alignment_internal"
 
   campaign_step_scan_candidate:
-    purpose: "Provisional engineering settings for HF-01 and AR-01 qualification; not approved for SV-02 or biological acquisition."
+    purpose: "Provisional engineering seed for separate HRP-C-CO and MbCO HF-01/AR-01 qualification; not evidence that their settings are equivalent and not approved for biological acquisition."
+    qualification_plan: "calibration/system_recalibration_001/plans/hf01_awg_parameter_characterization.md"
     operator_checks:
       - "Confirm the approved calibration or characterization phase ID before acquisition."
       - "Confirm MIRcat setpoint/actual wavelength and full configuration are saved for every point."
       - "Do not use this candidate after HF-01/AR-01 without replacing it with the accepted configuration ID."
+      - "Qualify acquisition rate, time constant, filter order, settling/bias, noise/SNR, clipping, loss, and record envelope separately for HRP-C-CO and MbCO."
+      - "Retain separate HRP-C-CO and MbCO configuration IDs even if measured equivalence supports identical numeric settings."
     signal_inputs:
       ch1:
         index: 0

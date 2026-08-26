@@ -1,0 +1,2 @@
+campaign_id,phase_id,phase_run_id,acquisition_id,measurement_id,quantity_id,timestamp_utc,device_time_tag_10ms,value,unit,quality_flag,raw_value_text,reference_plane_id,configuration_id,correction_state,uncertainty_id,accepted,rejection_code,notes
+system_recalibration_001,WM-01,WM01-RUN-20260821,WM01-ACQ-0001,WM01-MEAS-0001,WM01-Q-WAVELENGTH-STATUS,2026-08-21T16:24:23.405Z,8107904,,,no_signal,NO SIGNAL,WM01-PLANE-UNPLACED,WM01-CONFIG-BLOCKED-WIDE-AIR-PULSE-AUTOCAL,native_uncorrected,,true,,Native raw response VAL$ 8107904 NO SIGNAL; deliberately non-numeric

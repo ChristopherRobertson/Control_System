@@ -1,0 +1,13 @@
+phase_id,execution_state,deferred_dependency,work_permitted_before_dependency,closeout_permitted,promotion_effect
+WM-01,OPEN_DEFERRED,replacement spectrometer procurement and qualification,existing-evidence indexing and replacement-instrument intake,false,blocks ATT-01 and every independent 540 nm claim
+ATT-01,DEFERRED,WM-01 pass,prehardware planning only,false,blocks retained OPO-540 configuration and transfers
+DET-02,DEFERRED,ATT-01 plus HF-01 and DET-01,prehardware planning only,false,blocks illuminated detector transfer
+DET-03,DEFERRED,DET-02,authoritative-source review only,false,blocks OP-01 detector latency correction
+DET-04,DEFERRED,ATT-01 plus DET-02,prehardware planning only,false,blocks normalization bundle
+SP-02,DEFERRED,DET-04 plus independent prerequisites,prehardware planning only,false,blocks spectral-axis bundle
+OP-01,DEFERRED,ATT-01 plus DET-03,prehardware planning only,false,blocks OPO-540 timing
+FE-01,DEFERRED,ATT-01 plus OP-01,prehardware planning only,false,blocks finite emitted-event qualification
+CL-01,DEFERRED,ATT-01 plus OP-01 plus FE-01,analysis of completed independent terms only,false,blocks timing-chain closure
+E2E-01,PARTIALLY_DEFERRED,ATT-01 plus downstream OPO-540 chain,probe-only planning allowed but phase cannot close,false,blocks end-to-end closeout
+RPT-01,PARTIALLY_DEFERRED,all required calibration phases,provisional indexing and report scaffolding allowed,false,blocks promotion package
+PROM-01,BLOCKED,closed RPT-01 including returned deferred chain,no execution,false,no canonical promotion

@@ -83,10 +83,12 @@ timing to MS/T phases and process-trigger timing to PT-01.
 The following completed calibration phases remain unchanged and are imported
 as existing evidence: P0, S0, MS-01, MS-02, T2-01, T1-01, PT-01, MC-01, TR-01,
 and OM-01. Completed CH-00 characterization evidence also remains unchanged.
-WM-01 is the next calibration phase. Its electronic device, adapter, driver,
-native query intake, and operator-confirmed safe operation are recorded. Entry
-preflight is ready, but WM-01 still requires separate authorization. ATT-01
-cannot begin until WM-01 passes.
+WM-01 started on 2026-08-21 and remains open but deferred after the installed
+WaveMaster failed optical qualification. A replacement spectrometer is pending.
+ATT-01 and every phase consuming WM-01 or independent 540 nm evidence cannot
+begin until WM-01 passes. Dependency-independent phases HF-01, MD-01, MSW-01,
+HF-02, DET-01, and SP-01 may proceed with separate authorization. RPT-01 cannot
+close and PROM-01 cannot begin until the deferred chain is complete.
 
 ## Requirement-to-phase map
 
@@ -102,20 +104,20 @@ cannot begin until WM-01 passes.
 | Average-power metrology and beam-size method | HRP and MbCO; probe checks for Mylar | completed OM-01 plus downstream transfer | PB/QB/OG use | Preserve completed 532/355/540 observations as provenance; biological authority is the qualified post-iris 540 nm output plus merged probe anchors at used ranges only. Direct 355 nm PB-01 evidence is supplemental thesis characterization. |
 | Visible/near-IR wavelength working reference | HRP and MbCO | WM-01 | PB-02/PF/RP/E2E-CH import | Qualify the installed WaveMaster at 540 nm with identity/settings/native status/uncertainty; retain non-numeric response states; do not infer spectral-power fraction or 355 nm wavelength. |
 | OPO-540 preliminary delay search electronic iris halo rejection attenuator transfer and non-50/50 splitter behavior | all briefs; iris applies to the shared HRP/MbCO OPO-540 path | ATT-01 after WM-01 | PB-02 and OG/OV/PF/RP import | Freeze and execute a bidirectional preliminary pre-iris FIRE-to-Q-SWITCH delay search; qualify USB/API behavior; select/lock far-field mount; scan 540 nm diameter; control 950 nm home-sensor leakage; bound residual off-wavelength light and core clipping; used optics only. |
-| HF2LI reference demodulator and filter configurations | all briefs | HF-01 | AR-01/PF-01 | One continuous-sweep and one fixed-point/rare-pump configuration. |
-| MIRcat DB9 full-word mapping | Mylar scan plus biological point workflow | MD-01 | QB-01/AR-01 | Three scans per direction and three point/process sequences using accepted pins only. |
-| Sweep markers and point-tune transition timing | all briefs | MSW-01 | AR-01 | One selected sweep configuration and one point-tune sequence. |
-| Cross-stream timestamps loss and endurance | all briefs | HF-02 | AR-01/PF-01 | One longest sweep and one longest recovery stream. |
-| Detector dark drift and cross-talk | all briefs | DET-01 | PF-01 imports | Used gains/ranges only with short longest and revisit records. |
+| HF2LI reference demodulator and filter configurations | all briefs | HF-01 | AR-01/PF-01 | Validate the manufacturer response model with three monitored PicoScope-AWG anchors, evaluate the supported range/time-constant/order/rate space computationally, and confirm only the selected continuous-sweep, HRP, and MbCO settings plus one challenger when selection uncertainty requires it. No Mylar parameter grid. |
+| MIRcat DB9 full-word mapping | Mylar scan plus biological point workflow | MD-01 | QB-01/AR-01 | Three scans per direction and three point/process sequences under each retained biological acquisition configuration, using accepted pins only. |
+| Sweep markers and point-tune transition timing | all briefs | MSW-01 | AR-01 | One selected sweep configuration and one point-tune sequence under each HRP and MbCO acquisition configuration. |
+| Cross-stream timestamps loss and endurance | all briefs | HF-02 | AR-01/PF-01 | One longest sweep, one longest HRP recovery, and one retained MbCO stream. |
+| Detector dark drift and cross-talk | all briefs | DET-01 | PF-01 imports | Used gains/ranges for all three HF2LI configurations only, with short, longest, and revisit records. |
 | Per-channel gain linearity saturation and SNR | all briefs | DET-02 | PF-01 imports | Merged Mylar/HRP/MbCO probe anchors and low/high powers only. |
-| Detector response latency and bandwidth | HRP and MbCO timing | DET-03 | IR-01 | Fastest retained config at low/high signal in the two disjoint probe regions. |
+| Detector response latency and bandwidth | HRP and MbCO timing | DET-03 | IR-01 | Measure the installed detector/amplifier/cable path at the fastest required acquisition path and low/high signal, then compose it with HF-01 complex filter transfers for HRP and MbCO; repeat another configuration only after a failed or marginal composition check. |
 | Installed optical and detector balance normalization | all briefs | DET-04 | SV-02/PF-01 | Same merged anchors/powers as DET-02 plus one realignment. |
 | Polystyrene/Mylar feature authority | Mylar | SP-01 | SV-01/SV-02 | Position/shape authority only; no thickness or absolute-film claim. |
 | Spectral axis and direction uncertainty | all briefs | SP-02 | SV-02 imports | Mylar/polystyrene carbonyl region plus combined 1885-1980 cm^-1 biological region only. |
-| Pump command to sample optical timing | HRP and MbCO shared post-iris OPO 540 | OP-01 | IR-01 | One retained biological pump path; iris is static and configuration-tracked but is not a timing origin or event gate. |
+| Pump command to sample optical timing | HRP and MbCO shared post-iris OPO 540 | OP-01 | IR-01 | One retained biological pump path captured under separate HRP and MbCO acquisition IDs; iris is static and configuration-tracked but is not a timing origin or event gate. |
 | Finite pump-event admission and independent event count | HRP and MbCO | **FE-01 new** | PB/IR/E2E-CH import | Zero one-event and one finite block per path plus no-emission fault paths. |
-| Complete timing closure and long recovery clock bridge | HRP and MbCO | CL-01 | IR-01 | One shared OPO-540 pump path two acquisition topologies and the longest HRP recovery record. |
-| Calibration end-to-end workflow | all briefs | E2E-01 | E2E-CH imports | One probe-only sweep and one rare-pump run; reuse FE-01 fault evidence. |
+| Complete timing closure and long recovery clock bridge | HRP and MbCO | CL-01 | IR-01 | One shared OPO-540 pump path, two acquisition topologies, and three experiment-specific configurations including the retained HRP and MbCO record envelopes. |
+| Calibration end-to-end workflow | all briefs | E2E-01 | E2E-CH imports | One probe-only sweep, one HRP-style rare-pump run, and one MbCO-style rare-pump run; reuse FE-01 fault evidence. |
 | Supplemental direct 355 nm OPO-drive measurement | thesis and source characterization only | installed high-energy 355 nm detector entry qualification and the final PB-02 operating configuration | PB-01 after PROM-CH | Measure the direct upstream 355 nm drive at the final OPO operating condition and its retained low/high envelope; direct 532 and 1064 are safety/health observations. PB-01 is excluded from completion promotion biological-entry and OPO-540 gates. |
 | Permanent post-iris 540 nm OPO output and final delay search | HRP then MbCO | OM pre-iris history plus WM/ATT/OP/FE qualified configuration | PB-02 | Perform a narrow bidirectional FIRE-to-Q-SWITCH delay search through the locked iris and select maximum wavelength-qualified stable post-iris 540 nm power; then complete three return visits and retain WaveMaster status iris readback X/Y profile aperture margin residual spectral content and post-iris power. |
 | QCL source envelope | all briefs | SP/MSW/DET inputs | QB-01 | One Mylar window plus merged biological band/off-band anchors in sweep and point modes. |

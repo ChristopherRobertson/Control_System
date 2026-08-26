@@ -1,0 +1,4 @@
+campaign_id,phase_id,phase_run_id,exclusion_id,scope,reason,disposition,notes
+system_recalibration_001,WM-01,WM01-RUN-20260821,WM01-EXC-0001,rear_panel_photograph,operator-authorized plan change,omitted_nonmeasurement,Installed connections remain documented by configuration cable/adapter and electronic evidence
+system_recalibration_001,WM-01,WM01-RUN-20260821,WM01-EXC-0002,cable_and_adapter_photographs,operator-authorized plan change,omitted_nonmeasurement,Single USB-to-RS-232 cable reported; registered FTDI and live communication evidence retained
+system_recalibration_001,WM-01,WM01-RUN-20260821,WM01-EXC-0003,mircat_red_probe_connector_diagnostic,unplanned source and connector-position-dependent display outcomes,rejected_diagnostic_only,MULTI-LINE non-numeric; intermittent 635.549 nm lacks native time tag and is not accepted

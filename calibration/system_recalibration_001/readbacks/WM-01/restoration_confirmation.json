@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "WM-01",
+  "phase_run_id": "WM01-RUN-20260821",
+  "status": "USER_INPUT_REQUIRED",
+  "last_confirmed_safe_state_utc": "2026-08-21T17:10:36.559Z",
+  "last_confirmed_safe_state": "Nd:YAG workflow safe idle and all shutters closed",
+  "later_emission_diagnostics_occurred": true,
+  "final_state_after_later_diagnostics": "USER_INPUT_REQUIRED",
+  "disposition": "WM-01 remains open. Before another hardware phase begins, apply and verify that phase's normal safe-idle preflight; do not infer current state from the earlier confirmation."
+}

@@ -2,8 +2,9 @@
 
 Configuration family: `OPO540-PERMANENT-IRIS`
 
-Qualification state: **NOT YET QUALIFIED — WM-01 READY FOR PHASE APPROVAL;
-ATT-01 NOT AUTHORIZED**
+Qualification state: **DEFERRED — INSTALLED WAVEMASTER FAILED WM-01 OPTICAL
+QUALIFICATION; REPLACEMENT SPECTROMETER PENDING; ATT-01 AND OPO-540 CLAIMS NOT
+AUTHORIZED; CANONICAL PROMOTION BLOCKED**
 
 This is the sole retained biological pump path for HRP-C–CO followed by MbCO.
 The OPO output passes through the permanently mounted Thorlabs ELL15 iris at
@@ -23,7 +24,7 @@ laser-safety and FE-01-qualified event-admission systems.
 | Iris USB converter | FTDI FT230X, VID/PID `0403:6015`, serial `DP06U124`, interface serial `DP06U124A` | Windows inventory and native service discovery |
 | Iris service | `control_app/devices/ell15_iris_service.py` | ATT-01-qualified software/version record |
 | Power working reference | Newport 1918-R `15879` with 919P-010-16 `161791` | OM-01 bundle and ATT-01 transfer records |
-| Wavelength working reference | Coherent WaveMaster 33-2650, electronic serial `W0339`, on `COM8` through FTDI adapter `BG03ADXP` | 2026-08-20 query-only intake; WM-01 entry preflight ready, phase not yet authorized or qualified |
+| Wavelength working reference | Replacement spectrometer `USER_INPUT_REQUIRED`; failed installed candidate was Coherent WaveMaster 33-2650, electronic serial `W0339`, on `COM8` through FTDI adapter `BG03ADXP` | WM-01 started 2026-08-21; electronic checks passed but optical qualification failed; no wavelength authority issued |
 
 ## Phase-qualified fields
 

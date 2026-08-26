@@ -2,7 +2,7 @@
 
 Campaign: `system_characterization_001`
 
-Status: **PLAN ONLY — NO HARDWARE, EMISSION, OR ACQUISITION APPROVED**
+Status: **PLAN ONLY; WM-01 / ATT-01 / OPO-540 CHAIN DEFERRED; SV-01 MAY PROCEED AFTER SP-01 WITH SEPARATE AUTHORIZATION; PROMOTION BLOCKED**
 
 ## Objective and boundary
 
@@ -87,10 +87,25 @@ deliverables below are additional requirements.
 
 ## Phase sequence
 
-The required campaign order is `PB-02 -> QB-01 -> SC-01 -> OG-01 -> OV-01 ->
+### 2026-08-25 deferred calibration-dependency amendment
+
+The installed WaveMaster failed WM-01 optical qualification and a replacement
+spectrometer is pending. Every characterization phase consuming WM-01,
+ATT-01, or OPO-540 evidence remains deferred and cannot execute or close on a
+setpoint-only or bypass basis. `SV-01` is dependency-independent of that chain
+and may proceed after calibration `SP-01` closes, with separate phase
+authorization, even though it appears later in the numbered integration order.
+`RPT-CH` cannot close and `PROM-CH` cannot begin until the deferred calibration
+and characterization chain returns and passes.
+
+Legacy downstream references to `WaveMaster` mean the future WM-01-qualified
+wavelength instrument. They do not grant authority to the failed installed
+device or require the replacement to use the same interface or native format.
+
+The intended integration order is `PB-02 -> QB-01 -> SC-01 -> OG-01 -> OV-01 ->
 AR-01 -> SV-01 -> SV-02 -> IR-01 -> PF-01 -> RP-01 -> E2E-CH -> RPT-CH ->
 PROM-CH`, subject to each phase's calibration dependencies and separate
-authorization. PB-01 is a supplemental thesis characterization performed after
+authorization and the dependency-independent SV-01 exception above. PB-01 is a supplemental thesis characterization performed after
 PROM-CH under its own authorization. It is outside the required completion,
 promotion, and biological-entry dependency chain.
 
@@ -314,25 +329,33 @@ Mandatory deliverables:
 ### AR-01 — acquisition settling and scan-dwell response
 
 Using an optically stable nonbiological signal and the qualified HF2LI setup,
-characterize exactly two acquisition configurations. For the Mylar continuous
-sweep, compare the CH-00-selected speed/filter setting with one slower
-reference in both directions. For the biological fixed-wavenumber mode,
-compare the selected dwell/filter setting with one bracketing setting using a
-single wavelength step and the longest retained rare-event record. Characterize
-lock-in/source/detector settling, dwell distortion, phase dependence,
-forward/reverse peak shift, effective bandwidth, filter memory, and sample/
-reference ratio response. Add another setting only after a predeclared
-distortion, settling, or precision failure. Import HF-01/HF-02/DET-01/02 and
-the DET-04 normalization bundle; do not repeat component qualification.
+validate exactly three experiment-specific acquisition configurations across
+two topologies. Import the HF-01 PicoScope-AWG complex transfer, step, range,
+rate, noise, channel-equivalence, and uncertainty results; do not repeat its
+electrical parameter grid. For the Mylar continuous sweep, compare the selected
+speed/filter setting with one slower quasi-static reference in both directions,
+because that optical comparison is required to measure scan peak shift and
+broadening. For each HRP-C-CO and MbCO fixed-wavenumber configuration, acquire
+the selected setting only using one controlled nonbiological point transition
+and that workflow's retained record envelope. Compare observed settling,
+filter memory, and Sample/Reference response with the HF-01/DET-03 prediction.
+Add one bracketing biological setting only when the prediction residual fails,
+the observed result lies inside its acceptance guard band, or an installed
+source/detector effect cannot otherwise be separated. A common numeric setting
+remains acceptable only with the explicit HF-01 equivalence record and separate
+configuration IDs.
 
 Mandatory deliverables:
 
 - Native Sample/Reference/full-DIO streams, complete settings/readbacks,
   controlled step/dwell series, and environmental records.
-- Measured step response, model parameters, residuals, scan-direction shift/
-  broadening, minimum justified dwell, filtering/averaging rules, covariance
-  behavior, and uncertainty.
-- Frozen acquisition configurations linked to their permitted scan envelopes.
+- Imported-versus-observed response residuals, scan-direction shift/broadening,
+  minimum justified dwell, filtering/averaging rules, covariance behavior,
+  uncertainty, and any predeclared bracket-escalation decision.
+- Three frozen experiment-specific acquisition configuration IDs linked to
+  their permitted scan/record envelopes, including filter transfer, effective
+  noise bandwidth, settling, temporal attenuation/bias, and any explicit
+  biological equivalence alias.
 
 ### SV-01 — independent FTIR reference-data acquisition
 
@@ -395,7 +418,10 @@ improve the appearance of the result.
 ### IR-01 — system temporal instrument response
 
 Measure the complete instrument temporal response at a sample-equivalent plane
-using the OP-01/CL-01 time origin and qualified detector/acquisition settings.
+using the OP-01/CL-01 time origin and the applicable experiment-specific
+detector/acquisition settings. Apply the HRP configuration to both HRP bands
+and the MbCO configuration to MbCO A1; do not transfer lock-in filter delay or
+attenuation between them without the HF-01/AR-01 equivalence record.
 Characterize the combined effects of pump duration, probe gate, residual
 jitter, detector response, and lock-in filtering without repeating electrical
 path calibration.
@@ -431,8 +457,9 @@ baseline/etalon artifacts, back-reflection sensitivity, and saturation margin.
 Reuse component-level detector results and the DET-04 optical/detector balance
 model; do not reacquire the splitter calibration.
 
-The minimum grid is one complete Mylar continuous-sweep control, fixed-
-wavenumber records at the two HRP bands and MbCO A1 band, and one shared
+The minimum grid is one complete Mylar continuous-sweep control under the sweep
+configuration, fixed-wavenumber records at the two HRP bands under the HRP
+configuration and MbCO A1 under the MbCO configuration, and one shared
 off-band control. At each condition acquire one short record and one record as
 long as the corresponding planned experiment block. Run pump-blocked plus
 finite OPO-540 artifact controls only at their matching
@@ -463,8 +490,10 @@ tests reproducibility; it is not a repeat of the complete characterization
 grid.
 
 On each of three independent days, run one compact checkpoint suite containing
-the Mylar sweep anchor, one OPO-540/HRP surrogate point, and one OPO-540/MbCO
-surrogate point with the unchanged iris configuration. Shared startup, dark, geometry, and restoration evidence
+the Mylar sweep anchor under the sweep configuration, one OPO-540/HRP surrogate
+point under the HRP configuration, and one OPO-540/MbCO surrogate point under
+the MbCO configuration with the unchanged iris configuration. Shared startup,
+dark, geometry, and restoration evidence
 is recorded once per day. Do not repeat full PB/QB/OG/OV/AR/SV/IR/PF grids.
 
 Each OPO-540 checkpoint verifies the permanent mount/fiducials, commands and
@@ -488,9 +517,11 @@ Mandatory deliverables:
 ### E2E-CH — bounded nonbiological full-system demonstration
 
 Run one composite nonbiological demonstration with three bounded blocks under
-one reviewed phase plan: probe-only Mylar-style continuous sweep, finite
-OPO-540/HRP-style fixed-wavenumber recovery, and finite OPO-540/MbCO-style
-fixed-wavenumber recovery using one unchanged iris configuration. Reuse calibration FE-01/E2E-01 fault-recovery
+one reviewed phase plan: probe-only Mylar-style continuous sweep under the
+sweep configuration, finite OPO-540/HRP-style fixed-wavenumber recovery under
+the HRP configuration, and finite OPO-540/MbCO-style fixed-wavenumber recovery
+under the MbCO configuration using one unchanged iris configuration. Reuse
+calibration FE-01/E2E-01 fault-recovery
 evidence; do not repeat simulated failures unless the orchestration or
 configuration has materially changed.
 

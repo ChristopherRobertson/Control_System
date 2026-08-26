@@ -232,7 +232,7 @@ devices:
     serial_number: "W0339"
     instrument_identity_response: "*IDN$ Coherent Inc,WaveMaster,W0339,A1.1V1.6"
     firmware_revision: "A1.1V1.6"
-    qualification_status: "connected_unqualified_pending_WM-01"
+    qualification_status: "electronic_checks_passed_optical_qualification_failed_WM-01_deferred_pending_replacement_spectrometer"
     interface: "rs232_via_usb_adapter"
     preferred_port: "COM8"
     usb_vid_hex: "0403"
@@ -260,7 +260,7 @@ devices:
     manufacturer_accuracy_nm: 0.005
     resolution_nm: 0.001
     display_update_hz: 3
-    measurement_authority: "unqualified_pending_WM-01"
+    measurement_authority: "not_qualified_installed_WaveMaster_optical_failure_replacement_spectrometer_pending"
     connection_intake:
       observed_utc: "2026-08-20T17:58:23.012Z"
       query_scope: "read_only_no_settings_changed"
@@ -328,6 +328,14 @@ devices:
       - "C:\\Program Files\\Pico Technology\\PicoLog"
     settings_source: "workflow_recipe"
     settings_test_recipe: "recipes/picoscope_settings_test.yaml"
+    signal_generator_capabilities:
+      source: "docs/PicoScope/PicoScope 5000D Series Data Sheet.pdf"
+      function_generator_frequency_hz: {minimum: 0.025, maximum: 20000000.0}
+      output_voltage_overall_v: {minimum: -2.0, maximum: 2.0}
+      arbitrary_waveform_update_rate_sps: 200000000.0
+      arbitrary_waveform_buffer_samples: 32000
+      arbitrary_waveform_resolution_bits: 14
+      hf01_use: "Monitored electrical stimulus only; actual connected output at the HF2LI input is the stimulus authority."
     capture_capabilities:
       resolutions:
         - "8BIT"

@@ -2,7 +2,7 @@
 
 Campaign: `system_recalibration_001`
 
-Status: **OM-01 PASS - COMPLETE, QUALIFIED BOUNDED; WM-01 READY FOR PHASE APPROVAL; ATT-01 NOT AUTHORIZED**
+Status: **WM-01 OPEN / DEFERRED PENDING REPLACEMENT SPECTROMETER; 540 NM / ATT-01 DEPENDENCY CHAIN DEFERRED; INDEPENDENT PHASES MAY PROCEED WITH SEPARATE AUTHORIZATION; PROMOTION BLOCKED**
 
 This plan expands the original calibration scope to close the metrology gaps
 needed by the instrument-characterization campaign, thesis, and downstream
@@ -113,6 +113,35 @@ terms and as corrected results. Original, excluded, rejected, and superseded
 records remain distinguishable and aggregatable.
 
 ## Phase sequence and mandatory deliverables
+
+### 2026-08-25 dependency-aware execution amendment
+
+The numbered order remains the intended integration order, but it is not an
+operational gate for phases that do not consume the deferred dependency. The
+installed WaveMaster failed WM-01 optical qualification and cannot supply the
+required independent 540 nm evidence. WM-01 remains one open phase record and
+will resume when a replacement spectrometer is available.
+
+This amendment does not waive, bypass, or mark WM-01 or ATT-01 complete. It
+creates two explicit lanes:
+
+- **May proceed now with separate phase authorization:** `HF-01`, `MD-01`,
+  `MSW-01`, `HF-02`, `DET-01`, and `SP-01`.
+- **Deferred until WM-01 and the applicable upstream chain pass:** `ATT-01`,
+  `DET-02`, `DET-03`, `DET-04`, `SP-02`, `OP-01`, `FE-01`, `CL-01`, the
+  OPO-540 portion and closure of `E2E-01`, closure of `RPT-01`, and `PROM-01`.
+
+Prehardware planning and retention indexing for a deferred phase may continue,
+but measurement execution, acceptance, or closeout may not represent a missing
+WM-01/ATT-01 result as available. Canonical calibration promotion remains
+blocked until all deferred required phases return, pass, close, and the exact
+promotion authorization is separately supplied.
+
+Legacy downstream text and table headers that say `WaveMaster` are interpreted
+during this deferral as `the WM-01-qualified wavelength instrument`; they do
+not authorize the failed device or constrain procurement to the same model.
+Instrument-specific field names and collectors are updated prospectively after
+the replacement identity and native data contract are known.
 
 ### 0. P0 — provenance and inventory baseline — COMPLETE; DECISIONS RESOLVED
 
@@ -298,8 +327,8 @@ Mandatory closeout deliverables:
 
 ### 10. WM-01 — visible/near-IR wavelength-metrology readiness
 
-Execution status: **PREHARDWARE IMPLEMENTATION COMPLETE; ENTRY PREFLIGHT
-READY; NOT AUTHORIZED**.
+Execution status: **STARTED 2026-08-21; INSTALLED WAVEMASTER OPTICAL
+QUALIFICATION FAILED; OPEN / DEFERRED PENDING REPLACEMENT SPECTROMETER**.
 
 WM-01 qualifies the installed Coherent WaveMaster, catalog number 33-2650, as
 a campaign-local wavelength working reference over only the source conditions
@@ -320,9 +349,12 @@ safely. All phase-entry fields are resolved.
 phase work, optical placement, or laser emission. A null-modem cable or missing
 RTS/CTS conductors blocks the phase.
 
-The phase first identifies and photographs the label, front/rear panels,
-sampling probe/fibre and acceptance switch, cable, USB adapter,
-mount, pickoff, and dump. It then verifies straight-through RS-232 operation at
+The phase first identifies and photographs the label, front panel, sampling
+probe/fibre and acceptance switch, mount, pickoff, and dump. Cable, USB adapter,
+and rear-panel photographs are optional when the installed RS-232 and power
+connections are otherwise identified in the cable/adapter, driver, device
+configuration, and live communication evidence. It then verifies
+straight-through RS-232 operation at
 9600 baud, 8-N-1 with hardware RTS/CTS, exclusive port ownership, `*IDN?`,
 `*TST?`, local/remote restoration, documented query/set/readback behavior,
 communication loss/reconnect, malformed/stale-response rejection, and safe
@@ -345,7 +377,9 @@ traceability.
 Mandatory closeout deliverables:
 
 - Installed-device, cable, adapter/driver, probe, mount, reference-plane,
-  and software configuration manifests with native identities and photographs.
+  and software configuration manifests with native identities and applicable
+  photographs; rear-panel, cable, and adapter photographs are not mandatory
+  when the installed connections are otherwise identified.
 - Raw serial transcript; self-test/autocalibration results; settings/readbacks;
   disconnect/reconnect, exclusive-ownership, invalid-response, local-control,
   and restoration evidence; offline-test results; and accepted/rejected index.
@@ -358,11 +392,16 @@ Mandatory closeout deliverables:
   readable quantity IDs consumable by ATT-01, PB-02, OG-01, PF-01, RP-01,
   RPT-01, and the characterization campaign.
 
-WM-01 must pass and close before ATT-01 can be authorized. A bypass cannot
+WM-01 must pass and close before ATT-01 can be authorized. The 2026-08-25
+dependency amendment allows only independent non-WaveMaster phases to proceed;
+it is not a bypass. A bypass cannot
 support independent 540 nm wavelength identity, residual-color interpretation,
 or quantitative notebook-prediction claims.
 
 ### 11. ATT-01 — electronic-iris, optical attenuation, and sample-plane transfer calibration
+
+Execution status: **DEFERRED PENDING WM-01 REPLACEMENT-SPECTROMETER
+QUALIFICATION; NO ATT-01 MEASUREMENT EXECUTION AUTHORIZED**.
 
 ATT-01 imports the accepted WM-01 wavelength working-reference bundle and
 establishes the permanent beam-conditioning configuration before any
@@ -494,25 +533,65 @@ Mandatory closeout deliverables:
 
 ### 12. HF-01 — HF2LI configuration and external-reference qualification
 
-Qualify exactly two retained configurations: the probe-only continuous-sweep
-configuration used by polystyrene/Mylar and the fixed-wavenumber/rare-pump
-configuration shared by HRP-C-CO and MbCO. For each, verify reference
-lock/readback, demodulator assignments, the single CH-00 candidate rate/time-
-constant/order combination, phase, used ranges, clipping margin, and one reload
-equivalence. Alternative settings are tested only if the candidate fails its
-predeclared response or margin criterion.
+Execute the bounded PicoScope-AWG electrical parameter-characterization design
+in `plans/hf01_awg_parameter_characterization.md`. Keep all lasers inhibited
+and shuttered. Use the monitored AWG carrier step and offset-carrier response to
+measure, rather than merely assume, the relationship among input range,
+time constant, filter order, acquisition rate, noise, settling, attenuation,
+phase/delay, clipping, and throughput. Use exactly three separated electrical
+points solely to validate the manufacturer response model; they are not
+preselected experiment settings and receive no sweep, HRP-C-CO, or MbCO label.
+After model validation, evaluate every supported order, time constant, range,
+and output rate computationally against each experiment's requirements, then
+physically confirm only the configurations selected by that analysis plus one
+challenger per case when uncertainty leaves the selection ambiguous. Do not
+run an HF2LI parameter grid on Mylar. Preserve `CLOCK-SPLITTER-01` in its
+normal T660-2-to-T660-1/HF2LI 10 MHz clock distribution. Use a separately
+identified passive 50 ohm, DC-coupled BNC tee for monitored AWG stimulus and
+use measured, read-back-verified T660 reference/marker copy channels for
+PicoScope timing.
 
-Mandatory closeout deliverables: complete node snapshot, configuration diff
-after reload, reference-frequency comparison, phase/filter response results,
-range/clipping tests, raw records, uncertainty/acceptance table, and restorable
-approved configuration ID.
+All HF-01 signal-input stimuli remain centered at the retained 2 MHz carrier.
+The 10 Hz Nd:YAG/OPO cadence is not an analog HF2LI test frequency and does not
+create a fourth response point or anchor. Check it once, without emission, only
+as the retained T660 digital event/recording-marker cadence across the
+PicoScope and HF2LI DIO timestamps; leave stream endurance and optical-event
+reconciliation to HF-02 and FE-01 respectively.
+
+Qualify exactly three experiment-specific retained configurations across two
+topologies: the probe-only continuous-sweep configuration used by
+polystyrene/Mylar, an HRP-C-CO fixed-wavenumber/rare-pump configuration sized
+for the longest retained HRP recovery, and an MbCO fixed-wavenumber/rare-pump
+configuration sized for the fastest retained MbCO dynamics. Select acquisition
+rate, time constant, filter order, phase, ranges, and record length separately
+for each configuration against frozen temporal-bandwidth, settling/bias,
+noise/SNR, clipping, loss, and data-volume criteria. The CH-00 settings and
+repository presets are qualification seeds, not accepted values. A common
+numeric setting may be retained for HRP-C-CO and MbCO only after measured
+equivalence demonstrates that it satisfies both sets of criteria; even then,
+retain separate configuration IDs with an explicit alias/equivalence record.
+For each selected configuration, verify reference lock/readback, demodulator
+assignments, model-predicted filter transfer and effective noise bandwidth,
+used ranges, clipping margin, and one reload equivalence. Add a challenger only
+under the ambiguity rule in the HF-01 AWG design; add a fourth model anchor only
+after a predeclared model-residual failure.
+
+Mandatory closeout deliverables: the complete evidence package required by the
+HF-01 AWG design, complete node snapshots and reload diffs, reference-frequency
+comparison, native monitored-stimulus and HF2LI records, analytical candidate-
+disposition table, three-anchor model validation, complex filter/step/noise/
+range/rate/selected-setting channel-equivalence results, uncertainty/acceptance
+table, and three restorable experiment-specific
+approved configuration IDs (or separate biological IDs supported by an
+explicit equivalence alias).
 
 ### 13. MD-01 — MIRcat/HF2LI DIO mapping qualification
 
 Use the accepted side-experiment mapping (pin 1 to bit 20, pin 2 to bit 21,
 pin 3 to bit 22) without repeating the mapping-only discovery. Acquire three
-campaign-local scans per direction at the one retained continuous-sweep
-configuration and three repeats of the retained point/process sequence. Verify
+campaign-local scans per direction at the retained continuous-sweep
+configuration and three repeats of the retained point/process sequence under
+each of the HRP-C-CO and MbCO acquisition configurations. Verify
 polarity/state semantics, direction behavior, signatures, counts, timing, and
 repeatability. Do not map unused DB9 modes or reserved pins.
 
@@ -525,24 +604,32 @@ index entries, and an explicit qualification decision.
 
 Measure the single CH-00-selected continuous-sweep speed and marker interval/
 width in both directions over the longest retained Mylar/polystyrene window.
-Also measure the one discrete point-tune/process transition sequence used by
-the biological workflows. The former 5 cm^-1, 500 us, and 40 cm^-1/s values are
+Also measure the discrete point-tune/process transition sequence under each
+retained HRP-C-CO and MbCO acquisition configuration. The former 5 cm^-1,
+500 us, and 40 cm^-1/s values are
 planning candidates only; test them only if CH-00 retains them. An alternative
 setting is added only after the selected setting fails a predeclared marker,
 transition, or uncertainty criterion.
 
 Mandatory closeout deliverables: three complete scans per direction plus three
-point/process sequences, raw MIRcat and HF2LI/DIO streams, trigger/segment event
+point/process sequences per biological acquisition configuration, raw MIRcat
+and HF2LI/DIO streams, trigger/segment event
 table, expected-versus-observed counts, measured spacing check, transition/gap
 analysis, clock/reference conventions, uncertainty, and acceptance decision.
 
 ### 15. HF-02 — cross-stream alignment, loss, and endurance
 
 Verify simultaneous Sample, Reference, and complete-DIO timestamps, API/server
-buffering, dropped samples, and boundary behavior over exactly two maximum-
-duration records: one complete retained continuous sweep and one longest
-planned rare-pump recovery stream. Additional endurance records are acquired
-only if either retained topology fails.
+buffering, dropped samples, and boundary behavior over exactly three maximum-
+duration records: one complete retained continuous sweep, one longest planned
+HRP-C-CO recovery stream, and one longest planned MbCO acquisition stream.
+Additional endurance records are acquired only if a retained configuration
+fails. A biological record may serve both configurations only when HF-01 has
+documented numeric equivalence and the maximum-duration envelopes are also
+identical; preserve the cross-reference rather than silently omitting a test.
+Import the HF-01 filter/rate response bundle; HF-02 tests streaming integrity
+and duration only and must not repeat AWG transfer, settling, range, or noise
+mapping.
 
 Mandatory closeout deliverables: native streams, common-event alignment table,
 sample-count and gap audit, loss/reorder/duplicate statistics, host/server
@@ -553,7 +640,7 @@ supported scan envelope with uncertainty or limitation.
 
 With non-emitting sources, determine dark noise, drift, Allan-style stability,
 electrical cross-talk, range dependence, and short/long-duration repeatability.
-Use only the gains/ranges retained for the two HF-01 configurations. For each
+Use only the gains/ranges retained for the three HF-01 configurations. For each
 installed channel/configuration acquire one short record, one record as long as
 the longest planned acquisition, and one revisit; do not scan unused gains,
 ranges, or durations.
@@ -596,16 +683,23 @@ scope.
 Measure or authoritatively bound the response delay and temporal bandwidth of
 the exact detector/amplifier/cable/acquisition path used by OP-01. This is a
 new missing correction term; it does not repeat MS-01/MS-02 or T1-01.
-Test each installed channel at its fastest retained acquisition configuration
-and at the low/high accepted signal levels. Use one anchor in each disjoint
-Mylar and biological probe window; add another wavelength only if the
-manufacturer model or measured residuals show material wavelength dependence.
+Test each installed detector/amplifier/cable path at the fastest required
+acquisition configuration and at the low/high accepted signal levels. Import
+the HF-01 measured complex filter transfers and compose them with this detector
+response to produce HRP-C-CO and MbCO latency/attenuation corrections. Confirm
+that composition once under the other biological configuration only if the
+paths cannot be shown linear and time invariant, the propagated result lies in
+an acceptance guard band, or the confirmation residual fails. Use one anchor
+in each disjoint Mylar and biological probe window; add another wavelength only
+if the manufacturer model or measured residuals show material wavelength
+dependence. Do not repeat the HF-01 AWG filter grid.
 
 Mandatory closeout deliverables: stimulus/reference planes, detector placement
 and cable IDs, raw response data or authoritative model record, amplitude-
-dependence and threshold checks, latency/bandwidth estimate, sign convention,
-standard uncertainty, validity envelope, and a stable correction ID accepted
-for OP-01.
+dependence and threshold checks, detector-only response plus HF-01-composed
+HRP/MbCO latency and attenuation estimates, composition residual or stated
+escalation result, sign convention, standard uncertainty, validity envelope,
+and a stable correction ID accepted for OP-01.
 
 ### 19. DET-04 — installed sample/reference optical-balance and normalization calibration
 
@@ -693,8 +787,10 @@ predeclared acceptance criterion fails.
 
 ### 22. OP-01 — operational pump-command-to-sample timing
 
-Execute one bounded biological-pump timing configuration: the 355 nm-pumped
-OPO path at permanent-iris 540 nm shared by HRP-C-CO first and MbCO second.
+Execute one bounded biological-pump optical path at permanent-iris 540 nm, but
+capture and report it under the separate retained HRP-C-CO and MbCO HF2LI
+acquisition configuration IDs. The pump path may be shared; acquisition-filter
+delay, sampling, and estimator corrections may not be assumed shared.
 Use the identified straight barrel adapter correction (0.125 ns with
 0.0722 ns rectangular standard uncertainty), MS-01/MS-02 results, and DET-03
 detector correction. The Q-switch cable, loaded Nd:YAG response, the applicable
@@ -742,8 +838,9 @@ Mandatory closeout deliverables:
   software exception, and operator stop, plus the normal-completion path. Each
   path must close the pump first, stop both T660s/MIRcat as applicable, apply
   safe idle, preserve partial evidence, and verify restoration.
-- Latency/uncertainty and maximum supported rare-event interval/record length
-  needed by the HRP recovery stream and MbCO delay workflow. Dose, photolysis,
+- Latency/uncertainty, event-observation behavior, and maximum supported rare-
+  event interval/record length under each retained HRP and MbCO acquisition
+  configuration. Dose, photolysis,
   and biological recovery are outside this calibration phase.
 
 ### 24. CL-01 — complete timing-chain closure
@@ -753,10 +850,12 @@ Keep programmed, cable-end, device-pin, detector, optical, and chemical origins
 distinct and establish the operational nonzero-delay correction and pump-probe
 equation.
 
-Close the retained OPO-540 pump path and both acquisition topologies: the probe-only
-continuous sweep and the finite rare-pump fixed-wavenumber/recovery stream.
+Close the retained OPO-540 pump path and all three acquisition configurations
+across both topologies: the probe-only continuous sweep, the HRP-C-CO finite
+rare-pump recovery stream, and the MbCO finite rare-pump delay/recovery stream.
 Use existing completed electrical sweeps; do not reacquire them. Include the
-FE-01 observed-event clock bridge over the longest planned HRP recovery record.
+FE-01 observed-event clock bridge over both the longest planned HRP recovery
+record and the retained MbCO record.
 The OPO-540 chain is valid only for the ATT-01 iris configuration imported by
 OP-01 and FE-01; iris USB/API latency is recorded as configuration provenance
 but is not part of the per-shot timing equation because the aperture remains
@@ -769,9 +868,9 @@ and pass/fail decisions against frozen engineering limits.
 
 ### 25. E2E-01 — normal-wiring validation
 
-Perform exactly two bounded nonbiological runs: one probe-only continuous sweep
-and one finite rare-pump fixed-wavenumber/recovery run using the more complex
-retained pump topology. Together they cover startup, ownership, T660s,
+Perform exactly three bounded nonbiological runs: one probe-only continuous
+sweep, one HRP-style finite rare-pump recovery run, and one MbCO-style finite
+rare-pump delay/recovery run. Together they cover startup, ownership, T660s,
 MIRcat/reference lock, Sample/Reference/full-DIO capture, finite exposure,
 axes, processing, safe stop, repeatability, and artifact completeness. Reuse
 FE-01 fault-path evidence; add one no-emission simulated software fault only if
@@ -781,7 +880,7 @@ The rare-pump run uses the qualified OPO-540 iris configuration when that is
 the retained more-complex path. Its startup, command/readback, configuration
 foreign key, mismatch stop, and restoration are part of the end-to-end audit.
 
-Mandatory closeout deliverables: two complete independent manifests and native
+Mandatory closeout deliverables: three complete independent manifests and native
 data sets, configuration/calibration bundle IDs, processed-axis outputs,
 cross-run comparison, artifact audit, safe-stop records, no-fire fault-injection
 record, recovery record, and normal-wiring restoration.
@@ -797,6 +896,14 @@ Mandatory closeout deliverables:
 - Versioned calibration-bundle manifest linking every promoted candidate value
   to raw evidence, analysis code, correction terms, units, reference planes,
   covariance, validity envelope, and unresolved limitations.
+- Three experiment-specific HF2LI configuration IDs, their acquisition-rate,
+  time-constant, filter-order, settling, bandwidth, and record-length validity
+  envelopes, plus any measured biological equivalence/alias record. Reporting
+  must not silently substitute one biological configuration for the other.
+- The reusable HF-01 electrical response bundle containing the monitored-AWG
+  topology, three-anchor validation, computational setting-evaluation table,
+  complex transfer/step/noise/range/rate/selected-channel-equivalence models,
+  covariance, validity limits, and explicit downstream non-duplication links.
 - Aggregation-ready acquisition/artifact indexes for all phases, including the
   previously completed phases without relocating or rewriting their raw data.
 - GUM-style budgets, thesis claim-to-evidence matrix, bypass register,

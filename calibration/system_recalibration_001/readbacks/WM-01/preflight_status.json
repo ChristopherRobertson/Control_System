@@ -1,0 +1,11 @@
+{
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "WM-01",
+  "observed_date_local": "2026-08-21",
+  "preflight_utility": "tools/wm01_preflight.py",
+  "status": "READY_FOR_PHASE_APPROVAL",
+  "value_required_fields": [],
+  "phase_authorized_after_preflight": true,
+  "prerequisite_connection_intake": "docs/WaveMaster/connection_intake_20260820.json",
+  "note": "The intake is prerequisite evidence, not WM-01 qualification evidence."
+}

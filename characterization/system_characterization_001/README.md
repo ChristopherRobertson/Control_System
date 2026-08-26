@@ -2,7 +2,7 @@
 
 Campaign: `system_characterization_001`
 
-Status: **CH-00 COMPLETE; MINIMUM GRID FROZEN; NO PHASE APPROVED FOR HARDWARE EXECUTION**
+Status: **CH-00 COMPLETE; WM-01 / ATT-01 / OPO-540 DEPENDENCY CHAIN DEFERRED; SV-01 MAY PROCEED AFTER SP-01 WITH SEPARATE AUTHORIZATION; CHARACTERIZATION PROMOTION BLOCKED**
 
 This campaign characterizes the pump source, OPO, MIRcat probe, sample-plane
 geometry, optical overlap, acquisition response, spectral performance,
@@ -14,6 +14,14 @@ deliverables, acceptance decisions, and explicit authorization rather than a
 calendar timeline. Recorded acquisition timestamps remain evidence; they are
 not completion deadlines.
 
+The 2026-08-25 calibration dependency amendment leaves WM-01 open pending a
+replacement spectrometer and defers ATT-01 and every OPO-540 characterization
+claim. This is not a bypass. `SV-01`, which depends on CH-00 and calibration
+`SP-01` but not on WM-01/ATT-01/540 nm evidence, may proceed out of numerical
+order after SP-01 closes and only with separate authorization. All other
+characterization phases retain their declared dependencies. `RPT-CH` cannot
+close and `PROM-CH` cannot begin until the deferred chain returns and passes.
+
 Before CH-00 freezes the characterization grid, requirements-level experiment
 designs define the claims, wavelengths, powers, delays, controls, and
 observables actually needed. Numeric experimental recipes still wait for
@@ -22,18 +30,19 @@ unused characterization work.
 
 The verified minimum scope is one local Mylar/polystyrene carbonyl window, one
 combined 1885-1980 cm^-1 HRP/MbCO probe region, 355 nm only as the drive for
-the shared post-iris 540 nm OPO pump used by HRP first and MbCO second, and two acquisition topologies:
+the shared post-iris 540 nm OPO pump used by HRP first and MbCO second, and two acquisition topologies implemented by three experiment-specific HF2LI configurations (sweep, HRP fixed point, and MbCO fixed point):
 probe-only continuous sweep and finite rare-pump fixed-wavenumber/recovery.
 The OPO-540 path is characterized only with the permanent ATT-01-qualified
 USB/API electronic iris installed at its selected far-field plane and accepted
 diameter. The setting is 540 nm-specific because wavelength-dependent X/Y beam
 walk is not assumed negligible. No broad OPO/iris map is added; another OPO
 wavelength requires separate iris/centroid qualification before use.
-Center-wavelength/status records use the WM-01-qualified Coherent WaveMaster
-configuration and retain its bundle, device/adapter/probe identity, units,
-pulsed mode, autocalibration state, native time tag/value/status, and
-uncertainty. The WaveMaster does not apportion optical power among simultaneous
-wavelengths and does not cover the 355 nm OPO drive.
+Center-wavelength/status records will use the WM-01-qualified replacement
+spectrometer configuration and retain its bundle, device/probe identity,
+units, mode, calibration state, native value/time/status data, and uncertainty.
+The failed installed WaveMaster has no measurement authority. A center-
+wavelength instrument does not apportion optical power among simultaneous
+wavelengths and WM-01 does not cover the 355 nm OPO drive.
 ATT-01 supplies a preliminary pre-iris 540 nm FIRE-to-Q-SWITCH delay. PB-02
 performs the final narrow search through the locked iris and freezes the delay
 that maximizes accepted wavelength-qualified stable post-iris 540 nm power.

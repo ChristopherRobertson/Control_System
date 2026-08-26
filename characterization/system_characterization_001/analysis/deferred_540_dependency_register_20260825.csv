@@ -1,0 +1,15 @@
+phase_id,execution_state,deferred_dependency,work_permitted_before_dependency,closeout_permitted,promotion_effect
+PB-02,DEFERRED,system_recalibration_001 WM-01 and ATT-01,prehardware planning only,false,blocks OPO-540 characterization chain
+QB-01,DEFERRED,system_recalibration_001 SP-02 and independent prerequisites,prehardware planning only,false,blocks downstream probe qualification
+SC-01,DEFERRED,QB-01 and system_recalibration_001 ATT-01,prehardware planning only,false,blocks geometry chain
+OG-01,DEFERRED,PB-02 QB-01 SC-01 and ATT-01,prehardware planning only,false,blocks OPO-540 geometry
+OV-01,DEFERRED,OG-01,prehardware planning only,false,blocks overlap chain
+AR-01,DEFERRED,deferred calibration detector/normalization and characterization prerequisites,prehardware planning only,false,blocks acquisition configuration
+SV-01,ELIGIBLE_AFTER_SP01,system_recalibration_001 SP-01,phase may execute only after SP-01 and separate authorization,true,independent of WM-01 ATT-01 and OPO-540
+SV-02,DEFERRED,SP-02 DET-04 QB-01 OG-01 AR-01,prehardware planning only,false,blocks spectral validation
+IR-01,DEFERRED,full OPO-540 timing and geometry chain,prehardware planning only,false,blocks temporal characterization
+PF-01,DEFERRED,WM-01 ATT-01 and downstream chain,prehardware planning only,false,blocks sensitivity package
+RP-01,DEFERRED,PB-02 through PF-01,prehardware planning only,false,blocks reproducibility package
+E2E-CH,DEFERRED,RP-01 plus completed calibration OPO-540 chain,prehardware planning only,false,blocks characterization closeout
+RPT-CH,PARTIALLY_DEFERRED,all required characterization phases,provisional indexing and report scaffolding only,false,blocks promotion
+PROM-CH,BLOCKED,closed RPT-CH including returned deferred chain,no execution,false,no canonical characterization promotion
