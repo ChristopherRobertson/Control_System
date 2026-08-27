@@ -1,0 +1,625 @@
+schema_version: '0.1'
+source:
+  file: Wiring Table.xlsx
+  sheet: Sheet1
+  range: A1:F165
+  generated_from_spreadsheet: true
+  notes:
+  - This file separates fixed wiring from hardware identity configuration.
+  - Preferred routing uses the confirmed timing architecture where spreadsheet rows
+    conflict.
+  - Legacy spreadsheet labels "RS232 7" and "RS232 6" mean the Surelite Nd:YAG
+    DB9 EXT TTL fire-command pin 7 and Q-switch-command pin 6. They are not
+    RS-232 electrical-level signals and must never be driven as an RS-232 port.
+  - Arduino MUX boards are bypassed/inactive until rewired; HF2LI DIO16-DIO22
+    inputs do not mirror to HF2LI DIO9-DIO15 outputs.
+  - MIRcat DB9 pin 5 is reserved for Laser Output On/Off and is disconnected.
+    DB9 pins 6 and 8 are unused and unwired in the installed topology.
+  - The phrase "default wiring restored" includes T660-1 CHD disconnected,
+    MIRcat DB9 pin 5 disconnected, and MIRcat DB9 pins 6 and 8 unused/unwired.
+    These remain standing conditions unless the operator explicitly reports a
+    change; see instrument/default_wiring_state.md.
+  - Manufacturer correspondence is preserved at
+    references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md.
+global_buses:
+  ground_bus:
+    connected_devices:
+    - hf2li
+    - mircat_db9_pins_7_9
+    - arduino
+    - dmb1
+    - dmb2
+    - dmb3
+    - amb1
+    - amb2
+  arduino_5v_bus:
+    source: arduino_uno_r4_minima.5V
+    destinations:
+    - dmb1.VCC
+    - dmb2.VCC
+    - dmb3.VCC
+    - amb1.VCC
+    - amb2.VCC
+critical_timing_chain:
+  t660_2:
+    clock_output:
+    - t660_1.clock_input
+    - hf2li.clock_input
+    CHA: hf2li.dio0_ext_ref
+    CHB: mircat.trig_in
+    CHC: hf2li.dio1_daq_trigger
+    CHD: t660_1.trig_in
+  t660_1:
+    clock_input: t660_2.clock_output
+    trig_in: t660_2.CHD
+    CHA: surelite_ndyag.db9_ext_pin_7_fire_command
+    CHB: surelite_ndyag.db9_ext_pin_6_q_switch_command
+    CHC: mircat.db9_4_process_trigger
+    CHD: null
+device_io:
+  t660_2:
+  - signal: Clock
+    direction: Output
+    connected_to: Clock
+    connected_device: T660-1; HF2LI
+    bulkhead: null
+    split_count: 3
+  - signal: CHA
+    direction: Output
+    connected_to: DIO 0
+    connected_device: HF2LI
+    bulkhead: null
+    split_count: 1
+  - signal: CHB
+    direction: Output
+    connected_to: TRIG IN
+    connected_device: MIRcat
+    bulkhead: null
+    split_count: 1
+  - signal: CHC
+    direction: Output
+    connected_to: DIO 1
+    connected_device: HF2LI
+    bulkhead: null
+    split_count: 1
+  - signal: CHD
+    direction: Output
+    connected_to: TRIG IN
+    connected_device: T660-1
+    bulkhead: null
+    split_count: 1
+  t660_1:
+  - signal: Clock
+    direction: Input
+    connected_to: Clock
+    connected_device: T660-2
+    bulkhead: null
+    split_count: 3
+  - signal: TRIG IN
+    direction: Input
+    connected_to: CHD
+    connected_device: T660-2
+    bulkhead: null
+    split_count: 1
+  - signal: CHA
+    direction: Output
+    connected_to: DB9 EXT pin 7 - TTL Fire Command
+    connected_device: YAG
+    bulkhead: null
+    split_count: 1
+  - signal: CHB
+    direction: Output
+    connected_to: DB9 EXT pin 6 - TTL Q-Switch Command
+    connected_device: YAG
+    bulkhead: null
+    split_count: 1
+  - signal: CHC
+    direction: Output
+    connected_to: DB9 4
+    connected_device: MIRcat
+    bulkhead: Back BNC
+    split_count: 1
+  - signal: CHD
+    direction: Output
+    connected_to: DISCONNECTED
+    connected_device: UNUSED
+    bulkhead: null
+    split_count: 0
+  surelite_ndyag:
+  - signal: DB9 EXT pin 7 - TTL Fire Command
+    direction: Input
+    connected_to: CHA
+    connected_device: T660-1
+    bulkhead: null
+    split_count: 1
+  - signal: DB9 EXT pin 6 - TTL Q-Switch Command
+    direction: Input
+    connected_to: CHB
+    connected_device: T660-1
+    bulkhead: null
+    split_count: 1
+  - signal: Fixed Sync OUT
+    direction: Output
+    connected_to: DIO 16
+    connected_device: HF2LI
+    bulkhead: Back BNC
+    split_count: 1
+  - signal: Variable Sync OUT
+    direction: Output
+    connected_to: DIO 17
+    connected_device: HF2LI
+    bulkhead: Back BNC
+    split_count: 1
+  - signal: Flashlamp Sync OUT
+    direction: Output
+    connected_to: DIO 18
+    connected_device: HF2LI
+    bulkhead: Back BNC
+    split_count: 1
+  mircat:
+  - signal: TRIG IN
+    direction: Input
+    connected_to: CHB
+    connected_device: T660-2
+    bulkhead: null
+    split_count: 1
+  - signal: TRIG OUT
+    direction: Output
+    connected_to: DIO 19
+    connected_device: HF2LI
+    bulkhead: Back BNC
+    split_count: 1
+  - signal: DB9 1 - Scan Direction
+    direction: Output
+    connected_to: DIO 20
+    connected_device: HF2LI
+    bulkhead: null
+    split_count: 1
+  - signal: DB9 2 - Tuned / Sweep Active
+    direction: Output
+    connected_to: DIO 21
+    connected_device: HF2LI
+    bulkhead: null
+    split_count: 1
+  - signal: DB9 3 - Wavelength Trigger
+    direction: Output
+    connected_to: DIO 22
+    connected_device: HF2LI
+    bulkhead: null
+    split_count: 1
+  - signal: DB9 4 - Process Trigger
+    direction: Input
+    connected_to: CHC
+    connected_device: T660-1
+    bulkhead: Back Terminal
+    split_count: 1
+  - signal: DB9 5 - Reserved (Laser Output On/Off)
+    direction: Input
+    connected_to: DISCONNECTED
+    connected_device: UNUSED
+    bulkhead: Back Terminal
+    split_count: 0
+  - signal: DB9 6 - Interlock
+    direction: Output
+    connected_to: UNUSED
+    connected_device: UNUSED
+    bulkhead: null
+    split_count: 1
+  - signal: DB9 7 - Ground
+    direction: Input/Output
+    connected_to: Ground Bus
+    connected_device: Ground Bus
+    bulkhead: null
+    split_count: 1
+  - signal: DB9 8 - Remote ON/OFF
+    direction: Input
+    connected_to: UNUSED
+    connected_device: UNUSED
+    bulkhead: null
+    split_count: 1
+  - signal: DB9 9 - Ground
+    direction: Input/Output
+    connected_to: Ground Bus
+    connected_device: Ground Bus
+    bulkhead: null
+    split_count: 1
+  hf2li:
+  - signal: Clock
+    direction: Input
+    connected_to: Clock
+    connected_device: T660-2
+    bulkhead: null
+    split_count: 3
+  - signal: Signal 1 +
+    direction: Input
+    connected_to: Detector 1
+    connected_device: Sample Detector
+    bulkhead: null
+    split_count: 1
+  - signal: Signal 2 +
+    direction: Input
+    connected_to: Detector 2
+    connected_device: Reference Detector
+    bulkhead: null
+    split_count: 1
+  - signal: DIO 0 (Ext Ref)
+    direction: Input
+    connected_to: CHA
+    connected_device: T660-2
+    bulkhead: null
+    split_count: 1
+  - signal: DIO 1 (DAQ Trigger)
+    direction: Input
+    connected_to: CHC
+    connected_device: T660-2
+    bulkhead: null
+    split_count: 1
+  - signal: DIO 2-8
+    direction: Output
+    connected_to: UNUSED
+    connected_device: UNUSED
+    bulkhead: null
+    split_count: 0
+  - signal: DIO 9
+    direction: Output
+    connected_to: DIO 16 / C0
+    connected_device: HF2LI / DMB 1-3
+    bulkhead: null
+    split_count: 3
+  - signal: DIO 10
+    direction: Output
+    connected_to: DIO 17 / C1
+    connected_device: HF2LI / DMB 1-3
+    bulkhead: null
+    split_count: 3
+  - signal: DIO 11
+    direction: Output
+    connected_to: DIO 18 / C2
+    connected_device: HF2LI / DMB 1-3
+    bulkhead: null
+    split_count: 3
+  - signal: DIO 12
+    direction: Output
+    connected_to: DIO 19 / C3
+    connected_device: HF2LI / DMB 1-3
+    bulkhead: null
+    split_count: 3
+  - signal: DIO 13
+    direction: Output
+    connected_to: DIO 20 / C4
+    connected_device: HF2LI / DMB 1-3
+    bulkhead: null
+    split_count: 3
+  - signal: DIO 14
+    direction: Output
+    connected_to: DIO 21 / C5
+    connected_device: HF2LI / DMB 1-3
+    bulkhead: null
+    split_count: 3
+  - signal: DIO 15
+    direction: Output
+    connected_to: DIO 22 / C6
+    connected_device: HF2LI / DMB 1-3
+    bulkhead: null
+    split_count: 3
+  - signal: DIO 16
+    direction: Input
+    connected_to: Fixed Sync OUT
+    connected_device: YAG
+    bulkhead: Back Terminal
+    split_count: 1
+  - signal: DIO 17
+    direction: Input
+    connected_to: Variable Sync OUT
+    connected_device: YAG
+    bulkhead: Back Terminal
+    split_count: 1
+  - signal: DIO 18
+    direction: Input
+    connected_to: Flashlamp Sync OUT
+    connected_device: YAG
+    bulkhead: Back Terminal
+    split_count: 1
+  - signal: DIO 19
+    direction: Input
+    connected_to: TRIG OUT
+    connected_device: MIRcat
+    bulkhead: Back Terminal
+    split_count: 1
+  - signal: DIO 20
+    direction: Input
+    connected_to: DB9 1 - Scan Direction
+    connected_device: MIRcat
+    bulkhead: null
+    split_count: 1
+  - signal: DIO 21
+    direction: Input
+    connected_to: DB9 2 - Tuned / Scan Firing
+    connected_device: MIRcat
+    bulkhead: null
+    split_count: 1
+  - signal: DIO 22
+    direction: Input
+    connected_to: DB9 3 - Wavelength Trigger
+    connected_device: MIRcat
+    bulkhead: null
+    split_count: 1
+  - signal: DIO 23-31
+    direction: Input
+    connected_to: UNUSED
+    connected_device: UNUSED
+    bulkhead: null
+    split_count: 0
+  - signal: GND
+    direction: Input/Output
+    connected_to: Ground Bus
+    connected_device: Ground Bus
+    bulkhead: null
+    split_count: 1
+  - signal: AUX 1 (X)
+    direction: Output
+    connected_to: C0
+    connected_device: AMB1-2
+    bulkhead: Back BNC
+    split_count: 2
+  - signal: AUX 2 (Y)
+    direction: Output
+    connected_to: C1
+    connected_device: AMB1-2
+    bulkhead: Back BNC
+    split_count: 2
+  - signal: AUX 3 (R)
+    direction: Output
+    connected_to: C2
+    connected_device: AMB1-2
+    bulkhead: Back BNC
+    split_count: 2
+  - signal: AUX 4 (Theta)
+    direction: Output
+    connected_to: C3
+    connected_device: AMB1-2
+    bulkhead: Back BNC
+    split_count: 2
+  picoscope_5244d:
+  - signal: Channel A
+    direction: Input
+    connected_to: SIG
+    connected_device: DMB1; AMB1
+    bulkhead: Front BNC
+    split_count: 2
+  - signal: Channel B
+    direction: Input
+    connected_to: SIG
+    connected_device: DMB2; AMB2
+    bulkhead: Front BNC
+    split_count: 2
+  - signal: EXT Trigger
+    direction: Input
+    connected_to: SIG
+    connected_device: DMB3
+    bulkhead: Front BNC
+    split_count: 1
+mux_subsystem:
+  active: false
+  status: inactive_bypassed
+  disabled_reason: HF2LI DIO input pins cannot be mapped through the HF2LI to DIO output pins.
+mux_boards:
+  dmb1:
+    active: false
+    role: arduino_mux_output_a_digital
+    mux_output: output_a
+    enable: arduino.D2
+    select_bus:
+      S0: arduino.D6
+      S1: arduino.D7
+      S2: arduino.D8
+      S3: arduino.D9
+    channels:
+      C0: hf2li.DIO 9
+      C1: hf2li.DIO 10
+      C2: hf2li.DIO 11
+      C3: hf2li.DIO 12
+      C4: hf2li.DIO 13
+      C5: hf2li.DIO 14
+      C6: hf2li.DIO 15
+    unused_channels: C7-C15
+  dmb2:
+    active: false
+    role: arduino_mux_output_b_digital
+    mux_output: output_b
+    enable: arduino.D3
+    select_bus:
+      S0: arduino.D10
+      S1: arduino.D11
+      S2: arduino.D12
+      S3: arduino.D13
+    channels:
+      C0: hf2li.DIO 9
+      C1: hf2li.DIO 10
+      C2: hf2li.DIO 11
+      C3: hf2li.DIO 12
+      C4: hf2li.DIO 13
+      C5: hf2li.DIO 14
+      C6: hf2li.DIO 15
+    unused_channels: C7-C15
+  dmb3:
+    active: false
+    role: arduino_mux_output_ext_digital
+    mux_output: output_ext
+    enable: arduino.A0
+    select_bus:
+      S0: arduino.A1
+      S1: arduino.A2
+      S2: arduino.A3
+      S3: arduino.A4
+    channels:
+      C0: hf2li.DIO 9
+      C1: hf2li.DIO 10
+      C2: hf2li.DIO 11
+      C3: hf2li.DIO 12
+      C4: hf2li.DIO 13
+      C5: hf2li.DIO 14
+      C6: hf2li.DIO 15
+    unused_channels: C7-C15
+  amb1:
+    active: false
+    role: arduino_mux_output_a_analog
+    mux_output: output_a
+    enable: arduino.D4
+    select_bus:
+      S0: arduino.D6
+      S1: arduino.D7
+      S2: arduino.D8
+      S3: arduino.D9
+    channels:
+      C0: hf2li.AUX1
+      C1: hf2li.AUX2
+      C2: hf2li.AUX3
+      C3: hf2li.AUX4
+    unused_channels: C4-C15
+  amb2:
+    active: false
+    role: arduino_mux_output_b_analog
+    mux_output: output_b
+    enable: arduino.D5
+    select_bus:
+      S0: arduino.D10
+      S1: arduino.D11
+      S2: arduino.D12
+      S3: arduino.D13
+    channels:
+      C0: hf2li.AUX1
+      C1: hf2li.AUX2
+      C2: hf2li.AUX3
+      C3: hf2li.AUX4
+    unused_channels: C4-C15
+arduino_mux_control:
+  active: false
+  status: inactive_bypassed
+  disabled_reason: Arduino MUX controls are disabled in software until the MUX is rewired and requalified.
+  power:
+    5V:
+    - dmb1.VCC
+    - dmb2.VCC
+    - dmb3.VCC
+    - amb1.VCC
+    - amb2.VCC
+    GND: ground_bus
+  enable_pins:
+    D2: dmb1.EN
+    D3: dmb2.EN
+    D4: amb1.EN
+    D5: amb2.EN
+    A0: dmb3.EN
+  select_buses:
+    output_a_bus:
+      D6: S0
+      D7: S1
+      D8: S2
+      D9: S3
+      boards:
+      - dmb1
+      - amb1
+    output_b_bus:
+      D10: S0
+      D11: S1
+      D12: S2
+      D13: S3
+      boards:
+      - dmb2
+      - amb2
+    output_ext_bus:
+      A1: S0
+      A2: S1
+      A3: S2
+      A4: S3
+      boards:
+      - dmb3
+  unused_pins:
+  - D0
+  - D1
+  - A5
+breakouts:
+  hf2li_dio_breakout:
+    note: Physical breakout labels are recorded below, but the corresponding complete-DIO-word bit indices for MIRcat DB9 pins 1-3 remain unverified and must be measured before calibrated sweep acquisition.
+    inputs:
+      DIO16: surelite_ndyag.fixed_sync_out
+      DIO17: surelite_ndyag.variable_sync_out
+      DIO18: surelite_ndyag.flashlamp_sync_out
+      DIO19: mircat.trig_out
+      DIO20: mircat.db9_1_scan_direction
+      DIO21: mircat.db9_2_tuned_sweep_active
+      DIO22: mircat.db9_3_wavelength_trigger
+      DIO23-DIO31: null
+    inactive_outputs_to_muxes:
+      DIO9: dmb1_dmb2_dmb3.C0
+      DIO10: dmb1_dmb2_dmb3.C1
+      DIO11: dmb1_dmb2_dmb3.C2
+      DIO12: dmb1_dmb2_dmb3.C3
+      DIO13: dmb1_dmb2_dmb3.C4
+      DIO14: dmb1_dmb2_dmb3.C5
+      DIO15: dmb1_dmb2_dmb3.C6
+    timing_inputs:
+      DIO0_EXT_REF: t660_2.CHA
+      DIO1_DAQ_TRIGGER: t660_2.CHC
+    analog_outputs:
+      AUX1: amb1_amb2.C0
+      AUX2: amb1_amb2.C1
+      AUX3: amb1_amb2.C2
+      AUX4: amb1_amb2.C3
+  mircat_db9_breakout:
+    pin_1:
+      signal: scan_direction
+      direction: output
+      destination: hf2li.DIO20
+    pin_2:
+      signal: tuned_sweep_active
+      direction: output
+      destination: hf2li.DIO21
+    pin_3:
+      signal: wavelength_trigger
+      direction: output
+      destination: hf2li.DIO22
+    pin_4:
+      signal: process_trigger
+      direction: input
+      source: t660_1.CHC
+    pin_5:
+      signal: reserved
+      connection: DISCONNECTED
+      direction: input
+      source: null
+    pin_6:
+      signal: interlock
+      direction: output
+      destination: null
+    pin_7:
+      signal: ground
+      direction: bidirectional
+      destination: ground_bus
+    pin_8:
+      signal: remote_on_off
+      direction: input
+      source: null
+    pin_9:
+      signal: ground
+      direction: bidirectional
+      destination: ground_bus
+generated_warnings:
+- issue: MIRcat TRIG IN appears inconsistent.
+  spreadsheet_rows:
+  - T660-2 CHB -> MIRcat TRIG IN
+  - MIRcat TRIG IN <- T660-1 CHA
+  recommended_resolution: 'Use the confirmed architecture: T660-2 CHB -> MIRcat TRIG
+    IN.'
+- issue: HF2LI DIO 0 / ExtRef appears inconsistent.
+  spreadsheet_rows:
+  - T660-2 CHA -> HF2LI DIO 0
+  - HF2LI DIO 0 (Ext Ref) <- T660-2 CHC
+  recommended_resolution: 'Use the confirmed architecture: T660-2 CHA -> HF2LI DIO
+    0 / ExtRef.'
+- issue: Arduino D5 row appears inconsistent.
+  spreadsheet_rows:
+  - AMB2 EN <- Arduino D5
+  - Arduino D5 -> EN AMB1
+  recommended_resolution: Use Arduino D5 -> AMB2 EN.

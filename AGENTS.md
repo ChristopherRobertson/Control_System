@@ -25,12 +25,13 @@ source/producer records for campaign provenance and aggregation.
 
 ## Unified repository hierarchy
 
-`campaigns/registry/phase_registry.yaml` is the sole prospective phase and hard-
+`campaigns/phase_registry.yaml` is the sole prospective phase and hard-
 dependency authority. Calibration and characterization sequence documents are
 detailed procedure catalogs and historical context, not independent schedules.
-Completed and in-progress evidence stays at the path registered in
-`campaigns/registry/evidence_locations.yaml`; never relocate it merely to match the
-new hierarchy.
+Completed and in-progress evidence stays in its canonical phase package registered
+in `campaigns/registries/evidence_locations.yaml`. Preserve every native, rejected,
+preview, diagnostic, excluded, superseded, closeout, and restoration record when
+maintaining those packages.
 
 The control application consumes explicitly promoted machine-readable bundles from
 `instrument/promoted_bundles/`, not raw campaign evidence or prose reports. Creating

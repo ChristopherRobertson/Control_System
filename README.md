@@ -1,37 +1,58 @@
-# Pump-probe control system and unified thesis campaigns
+# IR spectroscope control system and thesis campaigns
 
-This repository contains the control software and evidence architecture for a
-thesis-level pump-probe program.
+This repository is a single, structured workspace for instrument-control software,
+campaign procedure development, acquisition evidence, runtime configuration, and
+the scientific references needed to connect them. The boundaries are physical, but
+Git versions them together so the control system can consume promoted results
+without copying data between repositories.
 
-The repository is a monorepo with explicit boundaries:
+## Repository map
 
-1. `control_app/`, `recipes/`, and `software/` implement the control system.
-2. `campaigns/` is the sole prospective phase/dependency authority across
-   calibration, characterization, validation, HRP, and optional MbCO.
-3. `instrument/` contains the promoted runtime-bundle interface.
-4. `evidence/` is the default location for new immutable campaign records; the
-   unified evidence registry preserves all completed legacy locations.
-5. `references/` and `theory/` define external-reference and model boundaries.
+| Directory | Responsibility |
+| --- | --- |
+| `software/` | GUI application, device services, tests, tools, dependencies, and packaging |
+| `instrument/` | Installed hardware/wiring authority, runtime recipes, schemas, and explicitly promoted bundles |
+| `campaigns/` | Unified phase registry, dependency sequence, plans, procedures, reports, and promotion work |
+| `evidence/` | Completed/in-progress calibration and characterization phase packages plus generic experimental runs |
+| `references/` | Manufacturer manuals, SDKs/drivers, certificates, and their registry |
+| `theory/` | Versioned model/notebook derivatives and validation fixtures |
+| `docs/` | Architecture, operating procedures, and data contracts shared across boundaries |
 
-The control application continues to launch with `python -m control_app.ui.app`.
-`control_app.paths` preserves current configuration, recipe, run, and log locations
-while supporting the unified hierarchy.
+`campaigns/phase_registry.yaml` is the sole prospective ordering and hard-dependency
+authority. Calibration and characterization remain useful scientific domains, but
+they are phases in one instrument-readiness graph rather than competing schedules.
+`campaigns/master_sequence.md` is the human-readable view.
 
-The authoritative repository boundary is documented in
-`docs/repository_scope.md`. Generic UI runs under `runs/` are operational
-records, not campaign evidence unless an approved phase explicitly imports
-them. No hardware action is authorized merely because a recipe, workflow, or
-plan exists.
+Completed evidence was moved intact into canonical phase packages under
+`evidence/calibration/system_recalibration_001/phases/` and
+`evidence/characterization/system_characterization_001/phases/`. The relocation did
+not create new acquisitions, change measurement values, or change phase status.
+`campaigns/registries/evidence_locations.yaml` is the stable lookup authority, and
+`campaigns/migration/physical_restructure_20260827.md` records the old-to-new map.
 
-The retained biological pump path contains a permanently mounted,
-identity-bound Thorlabs ELL15 electronic iris and uses a Coherent WaveMaster as
-the visible/near-IR wavelength working reference. Their hardware identities,
-manufacturer sources, connection requirements, services, and qualification
-boundaries are documented in `docs/Iris/` and `docs/WaveMaster/`. The iris is a
-static optical conditioner and is never credited as a safety shutter or
-finite-event control. The shared component and per-acquisition contract is in
-`docs/opo_540_optical_configuration.md`.
+## Control application
 
-The Newport 1918-R / 919P-010-16 average-power working reference is registered
-in `hardware_configuration.yaml`; its source package and bounded OM-01
-measurement authority are documented in `docs/Power_Meter/`.
+For the existing local environment:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -e software
+.\run_gui.ps1
+```
+
+After the editable install, the original module command also works from the
+repository root:
+
+```powershell
+.venv\Scripts\python.exe -m control_app.ui.app
+```
+
+The GUI reads `instrument/hardware_configuration.yaml`,
+`instrument/wiring_map.yaml`, and `instrument/recipes/`; it writes ordinary runs and
+logs below `evidence/experiments/`. Runtime scientific values may come only from a
+bundle explicitly marked `PROMOTED` in both the promoted-bundle registry and its
+manifest. A plan, recipe, directory, or registry row never authorizes hardware or
+changes scientific status.
+
+The detailed boundary rules are in `docs/architecture/repository_scope.md`, and the
+shared acquisition/evidence rules are in
+`docs/data_contract/measurement_campaign_data_contract.md`.

@@ -1,0 +1,8 @@
+schema_version: "1.0"
+registry_id: REFERENCE-REGISTRY-001
+locations:
+  manuals: references/manuals
+  sdk_and_drivers: references/sdk
+  runtime_vendor_libraries: references/sdk/picosdk
+  calibration_certificates: references/certificates
+disposition: canonical_physical_layout

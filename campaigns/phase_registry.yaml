@@ -1,0 +1,159 @@
+schema_version: "1.0"
+registry_id: PHASE-REGISTRY-001
+authority: campaigns/phase_registry.yaml
+status_vocabulary:
+  historical_complete: completed evidence is immutable and imported
+  in_progress: resume the existing phase run
+  planned: no execution or observation is implied
+  optional: outside the HRP core promotion path
+
+campaigns:
+  instrument-readiness-001:
+    purpose: Unified calibration characterization validation and HRP-readiness path
+    core_path: true
+  hrp-001:
+    purpose: First biological campaign
+    core_path: true
+  mbco-cryo-001:
+    purpose: Optional cryogenic MbCO branch after HRP handoff
+    core_path: false
+
+titles:
+  P0: provenance and inventory baseline
+  S0: safe-idle and interlock verification
+  MS-01: PicoScope differential channel and path skew
+  MS-02: splitter branch skew and measurement-system sensitivities
+  T2-01: direct T660-2 routes
+  T1-01: T660-1 trigger and output routes
+  PT-01: MIRcat Process Trigger electrical timing
+  MC-01: MIRcat GUI process-trigger qualification
+  TR-01: retained identity and measurement-resource closure
+  OM-01: optical metrology readiness and transfer standards
+  CH-00: claim scope and calibration-import freeze
+  HF-01: HF2LI configuration and external-reference qualification
+  HF-01.1: experiment-specific HF2LI candidate optimization and targeted electrical confirmation
+  WM-01: visible and near-IR wavelength-metrology readiness
+  MD-01: MIRcat and HF2LI DIO mapping qualification
+  MSW-01: MIRcat sweep timing
+  HF-02: cross-stream alignment loss and endurance
+  DET-01: dark detector and electronics performance
+  SP-01: spectral-reference provenance
+  ATT-01: electronic iris optical attenuation and sample-plane transfer calibration
+  DET-02: illuminated detector and electronics transfer performance
+  DET-03: detector temporal response and latency correction
+  DET-04: installed sample-reference balance and normalization calibration
+  QB-01: MIRcat probe-source characterization
+  PB-02: 540 nm OPO output characterization
+  SC-01: sample-cell and temperature-stage qualification
+  OG-01: sample-plane optical transfer and beam geometry
+  OV-01: pump-probe overlap and placement repeatability
+  AR-01: joint scan-speed and HF2LI acquisition optimization
+  PF-00: pre-standard full-system noise and SNR readiness
+  SP-02: spectral-axis calibration
+  SV-01: independent FTIR reference acquisition
+  SV-02A: polystyrene spectral calibration and correction freeze
+  SV-02B: blind Mylar independent validation
+  OP-01: operational pump-command-to-sample timing
+  FE-01: finite emitted-pump-event control and reconciliation
+  CL-01: complete timing-chain closure
+  IR-01: system temporal instrument response
+  PF-01: platform sensitivity noise artifacts and stability
+  RP-01: between-run reproducibility and operational envelope
+  E2E-01: normal-wiring calibration validation
+  E2E-CH: bounded nonbiological full-system demonstration
+  RPT-01: calibration reporting uncertainty and reuse package
+  PROM-01: calibration promotion gate
+  RPT-CH: characterization reporting and thesis reuse package
+  PROM-CH: characterization promotion gate
+  PB-01: supplemental direct 355 nm OPO-drive characterization
+  R0: HRP requirements freeze
+  R1: HRP calibration completion
+  R2: HRP characterization completion
+  R3: HRP chemistry dry run
+  R4: HRP reference preparation
+  R5: HRP steady-state pilot
+  R6: HRP exposure and recovery pilot
+  R7: HRP minimum viable acquisition
+  R8: optional HRP fast branch
+  R9: HRP analysis closeout restoration and MbCO handoff
+  QB-01M: cryogenic MbCO MIRcat probe and acquisition optimization
+  MB-00: MbCO claims and dependency freeze
+  MB-01: MbCO safety and procurement readiness
+  MB-02: MbCO promoted platform imports
+  MB-03: MbCO blank and cell qualification
+  MB-04: MbCO sample chemistry pilot
+  MB-05: MbCO pump dose and overlap pilot
+  MB-06: MbCO timing IRF and discovery kinetics
+  MB-07: MbCO confirmatory minimum viable experiment
+  MB-08: optional MbCO mechanistic extension
+  MB-09: MbCO closeout restoration and retention
+
+phases:
+  - {phase_id: P0, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: P0}
+  - {phase_id: S0, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [P0], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: S0}
+  - {phase_id: MS-01, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [S0], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: MS-01}
+  - {phase_id: MS-02, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [MS-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: MS-02}
+  - {phase_id: T2-01, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [MS-02], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: T2-01}
+  - {phase_id: T1-01, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [T2-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: T1-01}
+  - {phase_id: PT-01, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [T1-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: PT-01}
+  - {phase_id: MC-01, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [PT-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: MC-01}
+  - {phase_id: TR-01, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [P0], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: TR-01}
+  - {phase_id: OM-01, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [TR-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: OM-01}
+  - {phase_id: CH-00, domain: characterization, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [P0, TR-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: CH-00}
+  - {phase_id: HF-01, domain: calibration, campaign_id: instrument-readiness-001, status: historical_complete, depends_on: [T2-01, TR-01], plan: campaigns/instrument_readiness_001/phases/HF-01/planning_basis.md, evidence_key: HF-01}
+  - {phase_id: HF-01.1, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [HF-01, CH-00], plan: campaigns/instrument_readiness_001/phases/HF-01.1/plan.md, evidence_key: HF-01.1}
+  - {phase_id: WM-01, domain: calibration, campaign_id: instrument-readiness-001, status: in_progress, depends_on: [OM-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: WM-01}
+  - {phase_id: MD-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [HF-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: MD-01}
+  - {phase_id: MSW-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [MC-01, MD-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: MSW-01}
+  - {phase_id: HF-02, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [HF-01, MD-01, MSW-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: HF-02}
+  - {phase_id: DET-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [HF-01, TR-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: DET-01}
+  - {phase_id: SP-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [TR-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: SP-01}
+  - {phase_id: ATT-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [WM-01, OM-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: ATT-01}
+  - {phase_id: DET-02, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [DET-01, ATT-01, HF-01.1], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: DET-02}
+  - {phase_id: DET-03, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [DET-02, HF-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: DET-03}
+  - {phase_id: DET-04, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [DET-02, ATT-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: DET-04}
+  - {phase_id: QB-01, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [MD-01, MSW-01, HF-02, DET-02], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: QB-01}
+  - {phase_id: PB-02, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [WM-01, ATT-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: PB-02}
+  - {phase_id: SC-01, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [TR-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: SC-01}
+  - {phase_id: OG-01, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [QB-01, PB-02, SC-01, OM-01, ATT-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: OG-01}
+  - {phase_id: OV-01, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [OG-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: OV-01}
+  - {phase_id: AR-01, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [HF-01.1, MSW-01, HF-02, DET-02, DET-03, DET-04, QB-01, OG-01, OV-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: AR-01}
+  - {phase_id: PF-00, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [AR-01, DET-04, SC-01, OG-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: PF-00}
+  - {phase_id: SP-02, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [SP-01, AR-01, DET-04], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: SP-02}
+  - {phase_id: SV-01, domain: validation, campaign_id: instrument-readiness-001, status: planned, depends_on: [SP-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: SV-01}
+  - {phase_id: SV-02A, domain: validation, campaign_id: instrument-readiness-001, status: planned, depends_on: [PF-00, SP-02, SV-01, AR-01, DET-04], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: SV-02A}
+  - {phase_id: SV-02B, domain: validation, campaign_id: instrument-readiness-001, status: planned, depends_on: [SV-02A], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: SV-02B}
+  - {phase_id: OP-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [ATT-01, PB-02, DET-03], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: OP-01}
+  - {phase_id: FE-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [OP-01, PT-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: FE-01}
+  - {phase_id: CL-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [OP-01, FE-01, DET-03, HF-02], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: CL-01}
+  - {phase_id: IR-01, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [SV-02B, CL-01, DET-03, AR-01, OV-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: IR-01}
+  - {phase_id: PF-01, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [SV-02B, IR-01, PF-00, PB-02, OV-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: PF-01}
+  - {phase_id: RP-01, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [PF-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: RP-01}
+  - {phase_id: E2E-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [CL-01, SP-02, DET-04, SV-02B], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: E2E-01}
+  - {phase_id: E2E-CH, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [E2E-01, SV-02B, IR-01, PF-01, RP-01], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: E2E-CH}
+  - {phase_id: RPT-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [E2E-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: RPT-01}
+  - {phase_id: PROM-01, domain: promotion, campaign_id: instrument-readiness-001, status: planned, depends_on: [RPT-01], plan: campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md, evidence_key: PROM-01}
+  - {phase_id: RPT-CH, domain: characterization, campaign_id: instrument-readiness-001, status: planned, depends_on: [E2E-CH], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: RPT-CH}
+  - {phase_id: PROM-CH, domain: promotion, campaign_id: instrument-readiness-001, status: planned, depends_on: [PROM-01, RPT-CH], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: PROM-CH}
+  - {phase_id: PB-01, domain: characterization, campaign_id: instrument-readiness-001, status: optional, depends_on: [PROM-CH], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: PB-01}
+  - {phase_id: R0, domain: experiment, campaign_id: hrp-001, status: planned, depends_on: [CH-00], plan: campaigns/hrp_001/requirements.md, evidence_key: R0}
+  - {phase_id: R1, domain: experiment, campaign_id: hrp-001, status: planned, depends_on: [PROM-01], plan: campaigns/hrp_001/requirements.md, evidence_key: R1}
+  - {phase_id: R2, domain: experiment, campaign_id: hrp-001, status: planned, depends_on: [PROM-CH], plan: campaigns/hrp_001/requirements.md, evidence_key: R2}
+  - {phase_id: R3, domain: experiment, campaign_id: hrp-001, status: planned, depends_on: [R0], plan: campaigns/hrp_001/requirements.md, evidence_key: R3}
+  - {phase_id: R4, domain: experiment, campaign_id: hrp-001, status: planned, depends_on: [R1, R2, R3], plan: campaigns/hrp_001/requirements.md, evidence_key: R4}
+  - {phase_id: R5, domain: experiment, campaign_id: hrp-001, status: planned, depends_on: [R4], plan: campaigns/hrp_001/requirements.md, evidence_key: R5}
+  - {phase_id: R6, domain: experiment, campaign_id: hrp-001, status: planned, depends_on: [R5], plan: campaigns/hrp_001/requirements.md, evidence_key: R6}
+  - {phase_id: R7, domain: experiment, campaign_id: hrp-001, status: planned, depends_on: [R6], plan: campaigns/hrp_001/requirements.md, evidence_key: R7}
+  - {phase_id: R8, domain: experiment, campaign_id: hrp-001, status: optional, depends_on: [R7, IR-01, PF-01], plan: campaigns/hrp_001/requirements.md, evidence_key: R8}
+  - {phase_id: R9, domain: experiment, campaign_id: hrp-001, status: planned, depends_on: [R7], optional_dependencies: [R8], plan: campaigns/hrp_001/requirements.md, evidence_key: R9}
+  - {phase_id: QB-01M, domain: characterization, campaign_id: mbco-cryo-001, status: optional, depends_on: [R9], plan: campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md, evidence_key: QB-01M}
+  - {phase_id: MB-00, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [R9, QB-01M], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-00}
+  - {phase_id: MB-01, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [MB-00, R9], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-01}
+  - {phase_id: MB-02, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [MB-01, PROM-01, PROM-CH, QB-01M], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-02}
+  - {phase_id: MB-03, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [MB-02], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-03}
+  - {phase_id: MB-04, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [MB-03], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-04}
+  - {phase_id: MB-05, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [MB-04], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-05}
+  - {phase_id: MB-06, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [MB-05], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-06}
+  - {phase_id: MB-07, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [MB-06], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-07}
+  - {phase_id: MB-08, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [MB-07], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-08}
+  - {phase_id: MB-09, domain: experiment, campaign_id: mbco-cryo-001, status: optional, depends_on: [MB-07], optional_dependencies: [MB-08], plan: campaigns/mbco_cryo_001/requirements.md, evidence_key: MB-09}

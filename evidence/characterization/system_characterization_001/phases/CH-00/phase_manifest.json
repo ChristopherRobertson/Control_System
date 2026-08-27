@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0.0",
+  "campaign_id": "system_characterization_001",
+  "phase_id": "CH-00",
+  "phase_run_id": "system_characterization_001_CH-00_001",
+  "status": "PASS",
+  "operator_ids": ["Christopher_Robertson", "Codex_analysis"],
+  "start_utc": "2026-08-17T16:18:00Z",
+  "end_utc": "2026-08-17T17:20:42.1465097Z",
+  "configuration_id": "CH00-MINIMUM-THREE-BRIEF-UNION-v1",
+  "repository": {
+    "path": "C:/Users/Chris/Documents/GitHub/Control_System",
+    "branch": "main",
+    "dirty_files": [
+      "campaigns/instrument_readiness_001/procedures/calibration/legacy_campaign_readme.md",
+      "campaigns/instrument_readiness_001/planning/calibration/calibration_matrix.csv",
+      "campaigns/instrument_readiness_001/planning/calibration/expansion_gap_map.md",
+      "campaigns/instrument_readiness_001/planning/calibration/gap_analysis.md",
+      "campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md",
+      "campaigns/instrument_readiness_001/procedures/characterization/legacy_campaign_readme.md",
+      "campaigns/instrument_readiness_001/planning/characterization/characterization_matrix.csv",
+      "campaigns/instrument_readiness_001/procedures/characterization/legacy_sequence.md",
+      "campaigns/instrument_readiness_001/phases/SV-02B/requirement_brief.md",
+      "campaigns/instrument_readiness_001/planning/experiment_requirement_campaign_crosswalk.md",
+      "campaigns/experiment_campaigns.md",
+      "campaigns/hrp_001/requirements.md",
+      "campaigns/mbco_cryo_001/requirements.md"
+    ]
+  },
+  "device_ids": [],
+  "component_ids": [],
+  "sample_ids": [],
+  "calibration_bundle_ids": ["CAL-system_recalibration_001-WORKING-EVIDENCE"],
+  "artifact_index": "artifacts.csv",
+  "acquisition_index": "acquisition_index.csv",
+  "conditions_table": "conditions.csv",
+  "measurements_table": "measurements.csv",
+  "exclusions_table": "exclusions.csv",
+  "calibration_links_table": "calibration_links.csv",
+  "criterion_versions": {
+    "scope_freeze": "CH00-SCOPE-v1",
+    "acceptance_uncertainty": "CH00-AU-v1",
+    "exposure_policy": "CH00-EXPOSURE-v1"
+  },
+  "deviations": [],
+  "user_input_required": [],
+  "restoration_artifact_id": "CH00-RESTORATION-001",
+  "promotion_performed": false,
+  "promotion_approval_reference": null,
+  "notes": "Analysis-only phase. No equipment operated, no samples handled, and no characterization hardware phase authorized."
+}

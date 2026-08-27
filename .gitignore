@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
 
 # Local/editor files
 .DS_Store
@@ -17,22 +18,19 @@ Thumbs.db
 archive/
 
 # Generated operational hardware artifacts
-runs/
-logs/
+evidence/experiments/runs/
+evidence/experiments/logs/
 
 # Campaign metadata and analyzed results are versionable. Canonical outputs
 # remain local until explicit promotion, and large raw acquisitions remain
 # local for campaign archival rather than Git history.
-calibration/timing_calibration.csv
-calibration/timing_offsets.yaml
-calibration/**/raw_pico_traces/**
-calibration/**/raw_hf2li/**
-calibration/**/raw_mircat/**
-calibration/**/readbacks/**/raw/**
-!calibration/**/raw_pico_traces/.gitkeep
-!calibration/**/raw_hf2li/.gitkeep
-!calibration/**/raw_mircat/.gitkeep
-!calibration/**/readbacks/**/raw/.gitkeep
-
-#MIRcat SDK files
-/docs/MIRcat/SDK/docs/*
+evidence/calibration/**/timing_calibration.csv
+evidence/calibration/**/timing_offsets.yaml
+evidence/calibration/**/shared/staging/raw_pico_traces/**
+evidence/calibration/**/shared/staging/raw_hf2li/**
+evidence/calibration/**/shared/staging/raw_mircat/**
+evidence/calibration/**/phases/**/raw/**
+!evidence/calibration/**/shared/staging/raw_pico_traces/.gitkeep
+!evidence/calibration/**/shared/staging/raw_hf2li/.gitkeep
+!evidence/calibration/**/shared/staging/raw_mircat/.gitkeep
+!evidence/calibration/**/phases/**/raw/.gitkeep

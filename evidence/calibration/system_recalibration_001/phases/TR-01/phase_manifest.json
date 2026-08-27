@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0.0",
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "TR-01",
+  "phase_run_id": "system_recalibration_001_TR-01_001",
+  "status": "PASS",
+  "operator_ids": ["Christopher_Robertson", "Codex_orchestration"],
+  "start_utc": "2026-08-18T16:21:48.8810815Z",
+  "end_utc": "2026-08-18T16:21:48.8810815Z",
+  "configuration_id": "TR01-RECORD-AUDIT-v1",
+  "repository": {
+    "path": "C:/Users/Chris/Documents/GitHub/Control_System",
+    "branch": "main",
+    "dirty_files": [
+      "Pre-existing modified and untracked user work preserved",
+      "calibration/AGENTS.md",
+      "campaigns/instrument_readiness_001/procedures/calibration/legacy_campaign_readme.md",
+      "campaigns/instrument_readiness_001/planning/calibration/calibration_matrix.csv",
+      "campaigns/instrument_readiness_001/planning/calibration/expansion_gap_map.md",
+      "campaigns/instrument_readiness_001/planning/calibration/gap_analysis.md",
+      "evidence/calibration/system_recalibration_001/phases/P0/p0_physical_inventory.md",
+      "evidence/calibration/system_recalibration_001/phases/P0/p0_requirement_decisions.md",
+      "campaigns/instrument_readiness_001/procedures/calibration/legacy_sequence.md",
+      "evidence/calibration/system_recalibration_001/phases/MC-01/ (untracked completed evidence)",
+      "evidence/calibration/system_recalibration_001/phases/PT-01/ (modified/untracked completed evidence)",
+      "characterization/system_characterization_001/ (modified/untracked completed/planning evidence)",
+      "control_app/devices/hf2li_service.py",
+      "docs/ (modified/untracked records)",
+      "experiments/ (modified/untracked requirement briefs)",
+      "hardware_configuration.yaml",
+      "wiring_map.yaml"
+    ]
+  },
+  "device_ids": [
+    "PICOSCOPE-5244D-10261",
+    "T660-1-00369",
+    "T660-2-00431",
+    "MIRCAT-10524",
+    "HF2LI-dev18500",
+    "VIGO-SAMPLE-SIP-445160800",
+    "VIGO-REFERENCE-SIP-445161066",
+    "NDYAG-SLEX-24366-1",
+    "OPO-SLOPOPLUS-24366-2",
+    "ENV-TAGPLUS-TN-250105084H"
+  ],
+  "component_ids": [
+    "POLYSTYRENE-CARD-L120-2057",
+    "MYLAR-3517-01",
+    "MIRCAT-DB9-BOARD-01",
+    "MIRCAT-DB9-CABLE-01",
+    "NDYAG-DB9-BNC-01",
+    "NDYAG-2WIRE-BNC-01"
+  ],
+  "sample_ids": ["NO-SAMPLE-TR01"],
+  "calibration_bundle_ids": [
+    "CAL-system_recalibration_001-WORKING-EVIDENCE",
+    "CAL-system_characterization_001-CH00"
+  ],
+  "artifact_index": "artifacts.csv",
+  "acquisition_index": "acquisition_index.csv",
+  "conditions_table": "conditions.csv",
+  "measurements_table": "measurements.csv",
+  "exclusions_table": "exclusions.csv",
+  "calibration_links_table": "calibration_links.csv",
+  "criterion_versions": {
+    "measurement_contract": "1.0.0",
+    "tr01_acceptance": "TR01-ACCEPT-v1",
+    "resource_register": "TR01-RESOURCE-REGISTER-v1",
+    "analysis": "TR01-RECORD-AUDIT-v1"
+  },
+  "deviations": [],
+  "user_input_required": [],
+  "restoration_artifact_id": "TR01-RESTORATION-001",
+  "promotion_performed": false,
+  "promotion_approval_reference": null,
+  "notes": "Records-only PASS. No physical transition or acquisition. Exact next phase OM-01 requires separate authorization."
+}

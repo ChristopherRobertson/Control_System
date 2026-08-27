@@ -1,10 +1,12 @@
 # Control-system software
 
-The importable package remains at repository-root `control_app/` during migration so
-`python -m control_app.ui.app` and existing deployments continue to work. This
-directory defines the logical software boundary and may later receive packaging and
-deployment files after the compatibility layer is proven.
+The importable application is `software/control_app/`; tests, utilities,
+dependencies, and packaging live beside it. From the repository root, install the
+package once with `.venv\Scripts\python.exe -m pip install -e software`, then launch
+with `.\run_gui.ps1` or `.venv\Scripts\python.exe -m control_app.ui.app`.
 
-Scientific phase ordering, evidence status, and acceptance decisions do not belong in
-the application. The application may load a promoted bundle from `instrument/` and
-write a new run package to `runs/` or an explicitly approved evidence destination.
+Scientific phase ordering, evidence status, and acceptance decisions do not belong
+in the application. The application may load an explicitly promoted bundle from
+`instrument/promoted_bundles/` and writes ordinary run packages under
+`evidence/experiments/runs/`. A campaign imports such a run only through its approved
+phase procedure and stable evidence identifiers.
