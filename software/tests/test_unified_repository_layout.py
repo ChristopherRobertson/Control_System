@@ -54,6 +54,35 @@ def test_unified_phase_registry_is_complete_and_acyclic():
     assert positions["R9"] < positions["QB-01M"] < positions["MB-01"]
 
 
+def test_master_plan_describes_every_phase_in_dependency_safe_order():
+    registry = yaml.safe_load(
+        (CAMPAIGNS_ROOT / "phase_registry.yaml").read_text(encoding="utf-8")
+    )
+    master = (CAMPAIGNS_ROOT / "master_sequence.md").read_text(encoding="utf-8")
+    heading_positions = {}
+
+    for phase in registry["phases"]:
+        phase_id = phase["phase_id"]
+        marker = f"### {phase_id} —"
+        assert master.count(marker) == 1, phase_id
+        start = master.index(marker)
+        end = master.find("\n### ", start + len(marker))
+        block = master[start : end if end >= 0 else len(master)]
+        heading_positions[phase_id] = start
+
+        assert "**Status:**" in block, phase_id
+        assert "**Prerequisites:**" in block, phase_id
+        assert "**Purpose:**" in block, phase_id
+        assert "**Primary products:**" in block, phase_id
+        assert "**Detailed plan:**" in block, phase_id
+        expected_plan_link = phase["plan"].removeprefix("campaigns/")
+        assert f"({expected_plan_link})" in block, phase_id
+
+    for phase in registry["phases"]:
+        for dependency in phase.get("depends_on", []):
+            assert heading_positions[dependency] < heading_positions[phase["phase_id"]]
+
+
 def test_every_registered_phase_has_one_canonical_phase_home():
     registry = yaml.safe_load(
         (CAMPAIGNS_ROOT / "phase_registry.yaml").read_text(encoding="utf-8")
