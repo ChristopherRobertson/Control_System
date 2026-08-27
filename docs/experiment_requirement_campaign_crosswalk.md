@@ -1,5 +1,10 @@
 # Experiment-requirement campaign crosswalk
 
+> **2026-08-26 amendment:** `campaign_reconstruction_20260826.md` is authoritative
+> for HF-01.1, expanded AR-01, PF-00, SV-02A/SV-02B, three acquisition modes, and
+> optional QB-01M/MbCO. Earlier completed evidence and this historical audit remain
+> valid; old configuration-count wording does not limit new mode identities.
+
 Status: **BRIEFS VERIFIED; MINIMUM CAMPAIGN MAPPING DEFINED; NO PHASE EXECUTION AUTHORIZED**
 
 This crosswalk records the 2026-08-16 audit of:

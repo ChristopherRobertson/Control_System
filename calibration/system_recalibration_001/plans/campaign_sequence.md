@@ -1,5 +1,9 @@
 # Complete calibration sequence (expanded)
 
+> **2026-08-26 prospective reconstruction:** Future dependencies are governed by
+> `docs/campaign_reconstruction_20260826.md`. Completed statuses/readbacks remain
+> unchanged. Planned HF-01.1 follows completed HF-01 and does not reopen it.
+
 Campaign: `system_recalibration_001`
 
 Status: **WM-01 OPEN / DEFERRED PENDING REPLACEMENT SPECTROMETER; 540 NM / ATT-01 DEPENDENCY CHAIN DEFERRED; INDEPENDENT PHASES MAY PROCEED WITH SEPARATE AUTHORIZATION; PROMOTION BLOCKED**

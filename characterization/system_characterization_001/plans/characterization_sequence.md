@@ -1,5 +1,9 @@
 # Pump-probe instrument characterization sequence
 
+> **2026-08-26 prospective reconstruction:** The dependency order, PF-00 gate, split
+> SV-02A/SV-02B firewall, expanded AR-01, and optional QB-01M branch are governed by
+> `docs/campaign_reconstruction_20260826.md`. Completed CH-00 remains PASS.
+
 Campaign: `system_characterization_001`
 
 Status: **PLAN ONLY; WM-01 / ATT-01 / OPO-540 CHAIN DEFERRED; SV-01 MAY PROCEED AFTER SP-01 WITH SEPARATE AUTHORIZATION; PROMOTION BLOCKED**
@@ -326,7 +330,20 @@ Mandatory deliverables:
 - Final fiducial/alignment procedure and sample-position record suitable for
   later biological campaigns.
 
-### AR-01 — acquisition settling and scan-dwell response
+### AR-01 — joint scan-speed/HF2LI acquisition optimization and optical validation
+
+The 2026-08-26 reconstruction expands this phase. Freeze a deterministic candidate
+rule before optical results and use a stable nonbiological target that is not Mylar.
+Jointly select scan speed (1-10000 cm-1/s), window, direction, HF2LI time constant,
+order, output rate, range and phase, record length/padding, exclusions, SNR,
+throughput, and data volume. For every tuple report native spacing
+`scan_speed/output_rate`, retained-model lag/broadening, order-specific settling,
+effective noise bandwidth, duration `window_width/scan_speed`, hysteresis,
+clipping/range and loss/throughput margins, total uncertainty, and robustness.
+Approximate `scan_speed*n*tau` or `scan_speed*sqrt(n)*tau` metrics must be labeled
+model-derived and checked against HF-01. Enforce rate/bandwidth constraints. Select
+one bounded speed envelope or named slow/high-resolution, normal analytical, and
+rapid/stroboscopic modes; do not optimize noise at the expense of required features.
 
 Using an optically stable nonbiological signal and the qualified HF2LI setup,
 validate exactly three experiment-specific acquisition configurations across
@@ -357,6 +374,16 @@ Mandatory deliverables:
   noise bandwidth, settling, temporal attenuation/bias, and any explicit
   biological equivalence alias.
 
+### PF-00 — pre-standard full-system noise and SNR readiness
+
+Before QCL polystyrene calibration, use a blank, stable nonbiological signal, or
+qualified transfer condition—never Mylar—to measure normalized baseline noise,
+common-mode rejection, drift, saturation margin, and sufficient SNR. Import detector
+response, sample/reference balance and normalization covariance, MIRcat source and
+beam transfer, cell/blank/temperature readiness, and AR-01 selection. PF-00 must pass
+before SV-02A. PF-01 remains later for pump artifacts, experiment-length stability,
+and biological-anchor operating envelopes.
+
 ### SV-01 — independent FTIR reference-data acquisition
 
 Acquire or register one specimen-matched high-resolution FTIR reference set for
@@ -378,7 +405,12 @@ Mandatory deliverables:
 - Separation of calibration, independent validation, and illustrative-only
   records.
 
-### SV-02 — polystyrene alignment, Mylar validation, and forward-model comparison
+### SV-02A — polystyrene spectral calibration and correction freeze
+
+This phase contains no Mylar. It freezes scan/HF2LI settings, normalization,
+baseline/fitting methods, feature windows, tolerances, and software/analysis versions
+with the correction and covariance, tests the declared polystyrene holdout without
+refitting, and issues the formal Mylar unlock only after every freeze gate passes.
 
 Start from the frozen SP-02 instrument-axis result, then use only the declared
 polystyrene alignment partition to fit the final wavenumber correction against
@@ -387,9 +419,8 @@ a higher order is justified by predeclared residual criteria and uncertainty.
 Freeze the fitted function, coefficients, covariance, validity range, and
 software version before opening the Mylar data or any later biological data.
 
-Apply that frozen correction to an independent polystyrene holdout partition
-and to Mylar. Mylar is the independent external validation standard and may
-not refit or tune the correction. Biological samples are outside this phase
+Apply that frozen correction to an independent polystyrene holdout partition without
+refitting. Mylar is not opened in SV-02A. Biological samples are outside this phase
 and may never define or revise the alignment. Compare corrected QCL spectra
 with high-resolution FTIR forward predictions. Apply the DET-04 background-
 ratio correction with its uncertainty; never force or assume equal
@@ -404,16 +435,22 @@ Mandatory deliverables:
   direction hysteresis, repeatability, and uncertainty.
 - Predeclared polystyrene alignment/holdout assignment; authoritative feature
   table; frozen correction function, coefficients, covariance, residuals,
-  validity range, and software version; independent Mylar result; and proof
-  that neither Mylar nor biological data influenced the correction.
+  validity range, software version, and proof that neither Mylar nor biological data
+  influenced the correction.
 - DET-04 correction ID, raw-ratio versus normalized-result audit, forward-model
   inputs/outputs, figures/tables, and thesis-claim acceptance decision.
 
-The minimum acquisition is the predeclared polystyrene alignment and holdout
-sets plus three accepted Mylar scans per direction. The post-freeze Mylar
-heterogeneity pilot may increase coupon/site/remount counts prospectively, but
-no extra scan, material, orientation, or spectral window is added merely to
-improve the appearance of the result.
+The minimum acquisition is the predeclared polystyrene alignment and holdout sets.
+
+### SV-02B — blind Mylar independent validation
+
+After the SV-02A unlock, apply every frozen choice to specimen-matched Mylar FTIR
+comparison. Acquire forward and reverse scans and assess peak position, FWHM,
+normalized line shape, hysteresis, repeatability, baseline behavior, SNR, and total
+uncertainty. Mylar cannot fit, tune, select, or revise calibration, acquisition,
+analysis, windows, or acceptance rules. Failure opens a cause-coded investigation or
+narrows the claim and never automatically refits. The minimum is three accepted
+Mylar scans per direction.
 
 ### IR-01 — system temporal instrument response
 
@@ -481,6 +518,20 @@ Mandatory deliverables:
   envelope.
 - Explicit distinction between detector/electronics limits and complete-
   platform optical limits.
+
+### QB-01M — cryogenic MbCO MIRcat probe and acquisition optimization
+
+This gate belongs only to the optional branch after HRP closeout, restoration, and
+handoff. Qualify cryostat geometry/windows/transmission, temperature stability,
+gradients, condensation and recovery; MIRcat 20-25 ns through 1005 ns pulse widths,
+T660-2 rate, current, wavelength/linewidth, latency/jitter, power stability;
+detector/Pico response/saturation; HF2LI only inside its measured envelope; and all
+three acquisition modes in `experiments/time_resolved_acquisition_modes.md`.
+
+Enforce `rate_Hz*pulse_width_s <= 0.30` with a lower documented operating margin.
+At 2 MHz the ceiling is 150 ns, so 1005 ns is prohibited. Use direct
+detector/PicoScope for pulse-level resolution. If the slowed feature remains outside
+HF2LI support, retain the direct path, narrow the claim, or stop the branch.
 
 ### RP-01 — between-run reproducibility and operational envelope
 

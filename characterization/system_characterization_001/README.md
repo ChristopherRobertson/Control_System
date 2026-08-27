@@ -1,5 +1,8 @@
 # Pump-probe system characterization run
 
+The prospective reconstruction is `../../docs/campaign_reconstruction_20260826.md`.
+Completed CH-00 remains PASS; all added work is unexecuted.
+
 Campaign: `system_characterization_001`
 
 Status: **CH-00 COMPLETE; WM-01 / ATT-01 / OPO-540 DEPENDENCY CHAIN DEFERRED; SV-01 MAY PROCEED AFTER SP-01 WITH SEPARATE AUTHORIZATION; CHARACTERIZATION PROMOTION BLOCKED**

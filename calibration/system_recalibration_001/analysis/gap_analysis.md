@@ -1,5 +1,8 @@
 # Calibration-gap analysis
 
+The prospective gap disposition is authoritative in
+`docs/campaign_reconstruction_20260826.md`; completed decisions remain historical.
+
 ## Conclusion
 
 The installed system is **not presently demonstrated fully calibrated**.

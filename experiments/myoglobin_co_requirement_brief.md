@@ -1,5 +1,11 @@
 # Myoglobin–CO spectroscopy and photolysis/rebinding experiment: requirements brief
 
+> **2026-08-26 optional cryogenic branch:** MbCO follows HRP closeout, verified
+> restoration, explicit handoff, QB-01M, and MbCO-specific promotion and uses all
+> modes in `time_resolved_acquisition_modes.md`. No slowed timescale is asserted in
+> advance. HF-01's approximately 1 us uncooled limitation remains valid. At 2 MHz,
+> the 30% duty ceiling is 150 ns; 1005 ns at 2 MHz is prohibited.
+
 **Document status:** requirements-level design; **not an executable recipe and not authorization to energize hardware, handle CO, or prepare samples**
 **Prepared:** 2026-08-15
 **Planning basis:** dependency- and gate-driven minimum defensible thesis data package; no calendar deadline controls advancement

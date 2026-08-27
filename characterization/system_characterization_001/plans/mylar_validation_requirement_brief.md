@@ -1,5 +1,12 @@
 # Mylar independent spectral-validation requirement brief
 
+> **2026-08-26 material firewall:** SV-02A uses polystyrene calibration and holdout,
+> then freezes correction/covariance, scan/HF2LI settings, normalization, analysis,
+> windows, tolerances, and versions before issuing a Mylar unlock. SV-02B applies
+> those frozen choices blindly. Mylar never tunes them; failure opens a cause-coded
+> investigation or narrows the claim, never automatic refitting. See
+> `docs/campaign_reconstruction_20260826.md`.
+
 Status: **REQUIREMENTS-LEVEL DESIGN ONLY — NOT AN EXECUTABLE RECIPE**  
 Campaign phase: `SV-02` in `system_characterization_001`  
 Material class: nonbiological characterization material  

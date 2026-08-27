@@ -1,5 +1,8 @@
 # Complete system recalibration run
 
+Prospective amendments are in `../../docs/campaign_reconstruction_20260826.md`.
+They preserve all completed identities/statuses and add planned HF-01.1.
+
 Campaign: `system_recalibration_001`
 
 Status: **WM-01 OPEN / DEFERRED PENDING REPLACEMENT SPECTROMETER; 540 NM / ATT-01 CHAIN DEFERRED; INDEPENDENT PHASES MAY PROCEED WITH SEPARATE AUTHORIZATION; PROMOTION BLOCKED**

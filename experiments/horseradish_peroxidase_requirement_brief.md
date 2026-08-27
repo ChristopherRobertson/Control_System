@@ -1,5 +1,10 @@
 # Horseradish peroxidase–CO spectroscopy and time-resolved kinetics: requirements brief
 
+> **2026-08-26 acquisition amendment:** HRP remains first biological use and covers
+> fixed-wavelength kinetics plus both stroboscopic reconstructions in
+> `time_resolved_acquisition_modes.md`. Settings remain prospective until required
+> promotion; a single rapid scan is never an instantaneous spectrum.
+
 - **Document class:** requirements-level experimental procedure; not an executable recipe
 - **Selected system:** native, glycosylated horseradish peroxidase isoenzyme C in the ferrous carbonmonoxy state, HRP-C(FeII)–CO
 - **Target environment:** room-temperature aqueous 0.10 M sodium phosphate, pH 6.00

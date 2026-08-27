@@ -1,5 +1,10 @@
 # HF-01 PicoScope-AWG parameter-characterization design
 
+> **Prospective downstream amendment (2026-08-26):** HF-01 remains PASS. Its shared
+> sweep/HRP numerical choice is historically valid provisional electrical evidence.
+> Planned `hf01_1_experiment_specific_optimization.md` performs future selection;
+> HF-01 evidence, decisions, and configuration identities are unchanged.
+
 ## Purpose and boundary
 
 HF-01 uses the registered PicoScope 5244D arbitrary-waveform/function generator
