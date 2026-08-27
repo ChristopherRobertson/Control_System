@@ -1,0 +1,198 @@
+campaign_id,phase_id,acquisition_id,condition_set_id,condition_name,value_text,value_number,unit,source,uncertainty_value,uncertainty_unit,uncertainty_type,notes
+system_recalibration_001,HF-01,HF01-TIMING10-001,HF01-COND-TIMING10,cadence,,10,Hz,T660-2 readback,,,,Digital-only check
+system_recalibration_001,HF-01,HF01-TIMING10-001,HF01-COND-TIMING10,event_count,,10,count,T660-2 elapsed-shot readback,,,,Counter before zero after ten
+system_recalibration_001,HF-01,HF01-TIMING10-001,HF01-COND-TIMING10,awg_state,PROGRAMMED_ZERO_OUTPUT,,,PicoSDK accepted settings,,,,Zero before and after
+system_recalibration_001,HF-01,HF01-TIMING10-001,HF01-COND-TIMING10,hf2_external_clock,enabled,,boolean,HF2 node readback,,,,system/extclk read back one and dcm lock flag one
+system_recalibration_001,HF-01,HF01-TIMING10-R1-001,HF01-COND-TIMING10-R1,cadence,,10,Hz,T660-2 readback,,,,Digital-only check
+system_recalibration_001,HF-01,HF01-TIMING10-R1-001,HF01-COND-TIMING10-R1,event_count,,10,count,T660-2 elapsed-shot readback,,,,Counter before zero after ten
+system_recalibration_001,HF-01,HF01-TIMING10-R1-001,HF01-COND-TIMING10-R1,pulse_width,,150,ns,T660-2 readback,,,,Below one HF2 DIO sample interval
+system_recalibration_001,HF-01,HF01-TIMING10-R1-001,HF01-COND-TIMING10-R1,hf2_dio_sample_rate,,3597.8618421052633,Sa/s,HF2 node readback,,,,Requested 5000 Sa/s quantized by device
+system_recalibration_001,HF-01,HF01-TIMING10-R1-001,HF01-COND-TIMING10-R1,awg_state,PROGRAMMED_ZERO_OUTPUT,,,PicoSDK accepted settings,,,,Zero before and after
+system_recalibration_001,HF-01,HF01-TIMING10-R2-001,HF01-COND-TIMING10-R2,cadence,,10,Hz,T660-2 readback,,,,Digital-only check
+system_recalibration_001,HF-01,HF01-TIMING10-R2-001,HF01-COND-TIMING10-R2,event_count,,10,count,T660-2 elapsed-shot readback,,,,Counter before zero after ten
+system_recalibration_001,HF-01,HF01-TIMING10-R2-001,HF01-COND-TIMING10-R2,pulse_width,,1,ms,T660-2 readback,,,,Prospectively declared R2 width
+system_recalibration_001,HF-01,HF01-TIMING10-R2-001,HF01-COND-TIMING10-R2,hf2_dio_sample_rate,,460526.3157894737,Sa/s,HF2 node readback,,,,Requested 460000 Sa/s and retained device-quantized rate
+system_recalibration_001,HF-01,HF01-TIMING10-R2-001,HF01-COND-TIMING10-R2,awg_state,PROGRAMMED_ZERO_OUTPUT,,,PicoSDK accepted settings,,,,Zero before and after
+system_recalibration_001,HF-01,HF01-TIMING10-R3-001,HF01-COND-TIMING10-R3,cadence,,10,Hz,T660-2 readback,,,,Digital-only check
+system_recalibration_001,HF-01,HF01-TIMING10-R3-001,HF01-COND-TIMING10-R3,event_count,,10,count,T660-2 elapsed-shot readback,,,,Counter before zero after ten
+system_recalibration_001,HF-01,HF01-TIMING10-R3-001,HF01-COND-TIMING10-R3,pulse_width,,1,ms,T660-2 readback,,,,Authorized R3 width
+system_recalibration_001,HF-01,HF01-TIMING10-R3-001,HF01-COND-TIMING10-R3,hf2_dio_sample_rate,,460526.3157894737,Sa/s,HF2 node readback,,,,Requested 460000 Sa/s and retained device-quantized rate
+system_recalibration_001,HF-01,HF01-TIMING10-R3-001,HF01-COND-TIMING10-R3,awg_state,PROGRAMMED_ZERO_OUTPUT,,,PicoSDK accepted settings,,,,Zero before and after
+system_recalibration_001,HF-01,HF01-TIMING10-R3-001,HF01-COND-TIMING10-R3,hf2_external_clock,enabled,,boolean,HF2 node readback,,,,system/extclk one and dcm lock flag one
+system_recalibration_001,HF-01,HF01-AWG-FIRST-ENABLE-R1-001,HF01-COND-AWG-FIRST-ENABLE-R1,waveform,SINE,,,PicoSDK accepted settings,,,,Continuous output during bounded capture
+system_recalibration_001,HF-01,HF01-AWG-FIRST-ENABLE-R1-001,HF01-COND-AWG-FIRST-ENABLE-R1,frequency,,2000000,Hz,PicoSDK accepted settings,,,,Carrier-only electrical stimulus
+system_recalibration_001,HF-01,HF01-AWG-FIRST-ENABLE-R1-001,HF01-COND-AWG-FIRST-ENABLE-R1,programmed_amplitude,,0.05,Vpp,PicoSDK accepted settings,,,,Programmed value is not measurement authority
+system_recalibration_001,HF-01,HF01-AWG-FIRST-ENABLE-R1-001,HF01-COND-AWG-FIRST-ENABLE-R1,programmed_offset,,0,V,PicoSDK accepted settings,,,,
+system_recalibration_001,HF-01,HF01-AWG-FIRST-ENABLE-R1-001,HF01-COND-AWG-FIRST-ENABLE-R1,hf2_input1_impedance,HIGH_Z,,,HF2 node readback,,,,imp50 zero
+system_recalibration_001,HF-01,HF01-AWG-FIRST-ENABLE-R1-001,HF01-COND-AWG-FIRST-ENABLE-R1,hf2_input1_coupling,DC,,,HF2 node readback,,,,ac zero
+system_recalibration_001,HF-01,HF01-TIMING10-R5-001,HF01-COND-TIMING10-R5,cadence,,10,Hz,T660-2 readback,,,,Exactly ten events
+system_recalibration_001,HF-01,HF01-TIMING10-R5-001,HF01-COND-TIMING10-R5,hf2_external_clock,selected_and_locked,,,HF2 node readback,,,,system extclk one with PLL and DCM lock flags zero before and after
+system_recalibration_001,HF-01,HF01-TIMING10-R5-001,HF01-COND-TIMING10-R5,awg_state,PROGRAMMED_ZERO_OUTPUT,,,PicoSDK accepted settings,,,,Zero before and after
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-R2-001,HF01-COND-ANCHOR-FAST-R2,filter_order,,1,count,HF2 node readback,,,,Primary fast anchor
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-R2-001,HF01-COND-ANCHOR-FAST-R2,timeconstant,,0.000004000020242619828,s,HF2 node readback,,,,Installed readback
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-R2-001,HF01-COND-ANCHOR-FAST-R2,output_rate,,460526.3157894737,Sa/s,HF2 node readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-R1-001,HF01-COND-ANCHOR-INTERMEDIATE-R1,filter_order,,4,count,HF2 node readback,,,,Primary intermediate anchor
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-R1-001,HF01-COND-ANCHOR-INTERMEDIATE-R1,timeconstant,,0.0010018887078828383,s,HF2 node readback,,,,Installed readback
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-R1-001,HF01-COND-ANCHOR-INTERMEDIATE-R1,output_rate,,1798.9309210526317,Sa/s,HF2 node readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-R3-001,HF01-COND-ANCHOR-SLOW-R3,filter_order,,8,count,HF2 node readback,,,,Primary slow anchor
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-R3-001,HF01-COND-ANCHOR-SLOW-R3,timeconstant,,0.07115309999965486,s,HF2 node readback,,,,Nearest installed node readback to requested 100 ms
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-R3-001,HF01-COND-ANCHOR-SLOW-R3,output_rate,,112.43318256578948,Sa/s,HF2 node readback,,,,
+system_recalibration_001,HF-01,HF01-TARGET-HIGHORDER-001,HF01-COND-TARGET-HIGHORDER,filter_order,,8,count,HF2 node readback,,,,Diagnostic only
+system_recalibration_001,HF-01,HF01-TARGET-HIGHORDER-001,HF01-COND-TARGET-HIGHORDER,timeconstant,,0.010164495915951307,s,HF2 node readback,,,,Diagnostic only
+system_recalibration_001,HF-01,HF01-AMENDMENT-STOP-SAFE-STATE-001,HF01-COND-AMENDMENT-STOP,electronic_safe_idle,PASS,,,Device readbacks,,,,Physical restoration not inferred
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V2-001,HF01-COND-ANCHOR-FAST-V2,filter_order,,1,count,HF2 node readback,,,,Superseded exploratory record
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V2-001,HF01-COND-ANCHOR-FAST-V2,timeconstant,,0.000004000020242619828,s,HF2 node readback,,,,Superseded exploratory record
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V2-001,HF01-COND-ANCHOR-FAST-V2,reference_timeconstant,,0.0000007831859283193598,s,HF2 node readback,,,,Superseded exploratory record
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V2-001,HF01-COND-ANCHOR-FAST-V2,paired_output_rate,,230263.15789473685,Sa/s,HF2 node readback,,,,Superseded exploratory record
+system_recalibration_001,HF-01,HF01-HF2-MASTER-CLOCK-DIAG-001,HF01-COND-HF2-MASTER-CLOCK-DIAG,acquisition_status,DIAGNOSED_EXTERNAL_MASTER_CLOCK_UNLOCKED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-HF2-MASTER-CLOCK-DIAG-001,HF01-COND-HF2-MASTER-CLOCK-DIAG,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-CLOCK-DISTRIBUTION-RECOVERY-001,HF01-COND-CLOCK-RECOVERY,acquisition_status,PASS_CLOCK_DISTRIBUTION_RESTORED_AND_LOCKED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-CLOCK-DISTRIBUTION-RECOVERY-001,HF01-COND-CLOCK-RECOVERY,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-PLL-ANALOG-REFERENCE-DIAG-001,HF01-COND-PLL-ANALOG-DIAG,acquisition_status,FAIL_PLL_DID_NOT_LOCK_TO_ANALOG_REFERENCE,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-PLL-ANALOG-REFERENCE-DIAG-001,HF01-COND-PLL-ANALOG-DIAG,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,filter_order_requested,,1,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,timeconstant_requested,,4e-06,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,output_rate_requested,,230000.0,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,signal_input_index,,0,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,range_requested,,,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,filter_order_readback,,1,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,timeconstant_readback,,4.000020242619828e-06,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,output_rate_readback,,230263.15789473685,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,range_readback,,0.10052040974795148,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-FAST-V3-001,HF01-COND-ANCHOR-FAST-V3,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,filter_order_requested,,4,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,timeconstant_requested,,0.001,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,output_rate_requested,,2000.0,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,signal_input_index,,0,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,range_requested,,,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,filter_order_readback,,4,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,timeconstant_readback,,0.0010018887078828383,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,output_rate_readback,,1798.9309210526317,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,range_readback,,0.10052040974795148,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-INTERMEDIATE-V3-001,HF01-COND-ANCHOR-INTERMEDIATE-V3,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,filter_order_requested,,8,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,timeconstant_requested,,0.1,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,output_rate_requested,,100.0,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,signal_input_index,,0,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,range_requested,,,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,filter_order_readback,,8,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,timeconstant_readback,,0.07115309999965486,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,output_rate_readback,,112.43318256578948,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,range_readback,,0.10052040974795148,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-001,HF01-COND-ANCHOR-SLOW-V3,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,filter_order_requested,,8,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,timeconstant_requested,,0.1,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,output_rate_requested,,100.0,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,signal_input_index,,0,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,range_requested,,,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,filter_order_readback,,8,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,timeconstant_readback,,0.07115309999965486,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,output_rate_readback,,112.43318256578948,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,range_readback,,0.10052040974795148,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-ANCHOR-SLOW-V3-R1-001,HF01-COND-ANCHOR-SLOW-V3-R1,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-HF2-SUPPORTED-SPACE-001,HF01-COND-SUPPORTED-SPACE,acquisition_status,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-HF2-SUPPORTED-SPACE-001,HF01-COND-SUPPORTED-SPACE,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,filter_order_requested,,4,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,timeconstant_requested,,0.001,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,output_rate_requested,,899.4654605263158,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,signal_input_index,,0,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,range_requested,,1.0,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,filter_order_readback,,4,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,timeconstant_readback,,0.0010018887078828383,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,output_rate_readback,,899.4654605263158,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,range_readback,,1.014444200633764,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN1-001,HF01-COND-SELECTED-SWEEP-HRP-IN1,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,filter_order_requested,,4,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,timeconstant_requested,,0.001,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,output_rate_requested,,449.7327302631579,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,signal_input_index,,0,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,range_requested,,1.0,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,filter_order_readback,,4,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,timeconstant_readback,,0.0010018887078828383,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,output_rate_readback,,449.7327302631579,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,range_readback,,1.014444200633764,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-SWEEP-HRP-IN1-001,HF01-COND-LOWER-SWEEP-HRP-IN1,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,filter_order_requested,,1,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,timeconstant_requested,,5.6e-06,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,output_rate_requested,,230263.15789473685,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,signal_input_index,,0,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,range_requested,,1.0,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,filter_order_readback,,1,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,timeconstant_readback,,5.600017467592051e-06,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,output_rate_readback,,230263.15789473685,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,range_readback,,1.014444200633764,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN1-001,HF01-COND-SELECTED-MBCO-IN1,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,filter_order_requested,,1,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,timeconstant_requested,,5.6e-06,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,output_rate_requested,,115131.57894736843,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,signal_input_index,,0,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,range_requested,,1.0,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,filter_order_readback,,1,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,timeconstant_readback,,5.600017467592051e-06,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,output_rate_readback,,115131.57894736843,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,range_readback,,1.014444200633764,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-LOWER-MBCO-IN1-001,HF01-COND-LOWER-MBCO-IN1,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,filter_order_requested,,4,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,timeconstant_requested,,0.001,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,output_rate_requested,,899.4654605263158,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,signal_input_index,,1,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,range_requested,,1.0,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,filter_order_readback,,4,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,timeconstant_readback,,0.0010018887078828383,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,output_rate_readback,,899.4654605263158,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,range_readback,,1.0144783062439409,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-SWEEP-HRP-IN2-001,HF01-COND-SELECTED-SWEEP-HRP-IN2,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,filter_order_requested,,1,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,timeconstant_requested,,5.6e-06,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,output_rate_requested,,230263.15789473685,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,signal_input_index,,1,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,range_requested,,1.0,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,filter_order_readback,,1,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,timeconstant_readback,,5.600017467592051e-06,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,output_rate_readback,,230263.15789473685,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,range_readback,,1.0144783062439409,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-SELECTED-MBCO-IN2-001,HF01-COND-SELECTED-MBCO-IN2,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,filter_order_requested,,4,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,timeconstant_requested,,0.001,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,output_rate_requested,,899.4654605263158,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,signal_input_index,,1,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,range_requested,,1.0,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,filter_order_readback,,4,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,timeconstant_readback,,0.0010018887078828383,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,output_rate_readback,,899.4654605263158,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,range_readback,,1.0144783062439409,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-LOW-IN2-001,HF01-COND-RANGE-LOW-IN2,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,acquisition_status,CAPTURED,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,filter_order_requested,,4,count,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,timeconstant_requested,,0.001,s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,output_rate_requested,,899.4654605263158,Sa/s,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,signal_input_index,,1,index,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,range_requested,,1.0,V,prospective plan,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,filter_order_readback,,4,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,timeconstant_readback,,0.0010018887078828383,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,output_rate_readback,,899.4654605263158,Sa/s,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,range_readback,,1.0144783062439409,V,device readback,,,,
+system_recalibration_001,HF-01,HF01-RANGE-HIGH-IN2-001,HF01-COND-RANGE-HIGH-IN2,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-CONFIG-RELOAD-001,HF01-COND-CONFIG-RELOAD,acquisition_status,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-CONFIG-RELOAD-001,HF01-COND-CONFIG-RELOAD,t660_safe_idle_after,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-PRE-RESTORATION-SAFE-STATE-001,HF01-COND-PRE-RESTORATION-SAFE,acquisition_status,PASS_ELECTRONIC_SAFE_IDLE,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-PRE-RESTORATION-SAFE-STATE-001,HF01-COND-PRE-RESTORATION-SAFE,t660_safe_idle,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-FINAL-RESTORATION-STATE-001,HF01-COND-FINAL-RESTORATION,acquisition_status,FAIL,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-FINAL-RESTORATION-STATE-R1-001,HF01-COND-FINAL-RESTORATION-R1,acquisition_status,PASS_FINAL_RESTORATION,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-FINAL-RESTORATION-STATE-R1-001,HF01-COND-FINAL-RESTORATION-R1,t660_safe_idle,PASS,,,device readback,,,,
+system_recalibration_001,HF-01,HF01-HF2-SUPPORTED-SPACE-001,HF01-COND-SUPPORTED-SPACE,supported_range_count,,11,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-HF2-SUPPORTED-SPACE-001,HF01-COND-SUPPORTED-SPACE,supported_order_count,,8,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-HF2-SUPPORTED-SPACE-001,HF01-COND-SUPPORTED-SPACE,dual_channel_rate_count,,21,count,device readback,,,,
+system_recalibration_001,HF-01,HF01-HF2-SUPPORTED-SPACE-001,HF01-COND-SUPPORTED-SPACE,timeconstant_minimum,,7.831859283193598e-07,s,device readback,,,,
+system_recalibration_001,HF-01,HF01-HF2-SUPPORTED-SPACE-001,HF01-COND-SUPPORTED-SPACE,timeconstant_maximum,,582.8884184714285,s,device readback,,,,

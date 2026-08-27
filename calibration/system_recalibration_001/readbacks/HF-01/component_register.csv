@@ -1,0 +1,5 @@
+component_id,component_type,operator_label,status,connected_from,connected_to,observed_attributes,notes
+HF01-STIMULUS-TEE-01,BNC tee,STIMULUS-TEE,DISCONNECTED,,,Operator confirmed the isolated tee and temporary cables removed from all instruments under HF01-OPCONF-014,Exact manufacturer marking not reported; retained connected measurements are the stimulus authority
+HF01-SPARE-TEE-01,BNC tee,SPARE-TEE,DISCONNECTED,,,Operator confirmed default wiring under HF01-OPCONF-014,Spare tee never entered an accepted stimulus path
+HF01-RG58-01,RG-58 BNC male-to-male cable,RG58-01,DISCONNECTED,,,Operator confirmed removal from HF2LI and final default wiring under HF01-OPCONF-007 and HF01-OPCONF-014,Exact length/marking not reported; common-path channel comparison bounds applicable asymmetry
+HF01-RG58-02,RG-58 BNC male-to-male cable,RG58-02,DISCONNECTED,,,Operator confirmed removal from PicoScope A and final default wiring under HF01-OPCONF-009 and HF01-OPCONF-014,Exact length/marking not reported; connected monitor captures remain voltage authority

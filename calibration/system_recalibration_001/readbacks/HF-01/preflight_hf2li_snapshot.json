@@ -1,0 +1,597 @@
+{
+  "device_id": "dev18500",
+  "manufacturer_constraints": {
+    "coupling_modes": [
+      "DC",
+      "AC"
+    ],
+    "demodulator_count": 6,
+    "filter_model": "H_n(f)=(1+i*2*pi*f*tau)^(-n)",
+    "filter_orders": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "input_impedance_modes": [
+      "HIGH_Z",
+      "50_OHM"
+    ],
+    "maximum_cumulative_usb_rate_sps": 700000.0,
+    "maximum_native_rate_sps_by_active_demodulators": {
+      "1": 460000.0,
+      "2-3": 230000.0,
+      "4-6": 115000.0
+    },
+    "minimum_rate_rule": "at_least_8x_filter_bandwidth_where_device_and_aggregate_throughput_permit",
+    "rate_quantization": "submultiples_of_460000_sps",
+    "signal_input_ranges_v": [
+      0.001,
+      0.002,
+      0.005,
+      0.01,
+      0.02,
+      0.05,
+      0.1,
+      0.2,
+      0.5,
+      1.0,
+      1.5
+    ],
+    "source": "Zurich Instruments HF2LI User Manual; installed node readback"
+  },
+  "node_inventory": [
+    "/dev18500/clockbase",
+    "/dev18500/system/extclk",
+    "/dev18500/system/syncenable",
+    "/dev18500/system/syncreset",
+    "/dev18500/system/synctime",
+    "/dev18500/system/hwrevision",
+    "/dev18500/system/activeinterface",
+    "/dev18500/system/properties/minfreq",
+    "/dev18500/system/properties/maxfreq",
+    "/dev18500/system/properties/negativefreq",
+    "/dev18500/system/properties/mintimeconstant",
+    "/dev18500/system/properties/maxtimeconstant",
+    "/dev18500/system/properties/timebase",
+    "/dev18500/system/properties/freqresolution",
+    "/dev18500/features/serial",
+    "/dev18500/features/devtype",
+    "/dev18500/features/options",
+    "/dev18500/features/code",
+    "/dev18500/status/time",
+    "/dev18500/status/flags/binary",
+    "/dev18500/status/flags/plllock",
+    "/dev18500/status/flags/dcmlock",
+    "/dev18500/status/flags/fx2rx",
+    "/dev18500/status/flags/pkgloss",
+    "/dev18500/status/flags/mixerclip/0",
+    "/dev18500/status/flags/mixerclip/1",
+    "/dev18500/status/flags/adcclip/0",
+    "/dev18500/status/flags/adcclip/1",
+    "/dev18500/status/flags/scopeskipped",
+    "/dev18500/status/flags/demodsampleloss",
+    "/dev18500/status/fifolevel",
+    "/dev18500/status/adc0min",
+    "/dev18500/status/adc0max",
+    "/dev18500/status/adc1min",
+    "/dev18500/status/adc1max",
+    "/dev18500/status/echowrite",
+    "/dev18500/status/echoread",
+    "/dev18500/stats/bytessent",
+    "/dev18500/stats/bytesreceived",
+    "/dev18500/stats/meanmsgcnt",
+    "/dev18500/stats/meanpollcnt",
+    "/dev18500/stats/physical/1v2",
+    "/dev18500/stats/physical/1v8",
+    "/dev18500/stats/physical/2v5",
+    "/dev18500/stats/physical/3v3",
+    "/dev18500/stats/physical/5v0",
+    "/dev18500/stats/physical/temp",
+    "/dev18500/stats/physical/overtemperature",
+    "/dev18500/demods/0/adcselect",
+    "/dev18500/demods/0/order",
+    "/dev18500/demods/0/timeconstant",
+    "/dev18500/demods/0/rate",
+    "/dev18500/demods/0/trigger",
+    "/dev18500/demods/0/enable",
+    "/dev18500/demods/0/oscselect",
+    "/dev18500/demods/0/harmonic",
+    "/dev18500/demods/0/freq",
+    "/dev18500/demods/0/phaseshift",
+    "/dev18500/demods/0/sinc",
+    "/dev18500/demods/0/sample",
+    "/dev18500/demods/1/adcselect",
+    "/dev18500/demods/1/order",
+    "/dev18500/demods/1/timeconstant",
+    "/dev18500/demods/1/rate",
+    "/dev18500/demods/1/trigger",
+    "/dev18500/demods/1/enable",
+    "/dev18500/demods/1/oscselect",
+    "/dev18500/demods/1/harmonic",
+    "/dev18500/demods/1/freq",
+    "/dev18500/demods/1/phaseshift",
+    "/dev18500/demods/1/sinc",
+    "/dev18500/demods/1/sample",
+    "/dev18500/demods/2/adcselect",
+    "/dev18500/demods/2/order",
+    "/dev18500/demods/2/timeconstant",
+    "/dev18500/demods/2/rate",
+    "/dev18500/demods/2/trigger",
+    "/dev18500/demods/2/enable",
+    "/dev18500/demods/2/oscselect",
+    "/dev18500/demods/2/harmonic",
+    "/dev18500/demods/2/freq",
+    "/dev18500/demods/2/phaseshift",
+    "/dev18500/demods/2/sinc",
+    "/dev18500/demods/2/sample",
+    "/dev18500/demods/3/adcselect",
+    "/dev18500/demods/3/order",
+    "/dev18500/demods/3/timeconstant",
+    "/dev18500/demods/3/rate",
+    "/dev18500/demods/3/trigger",
+    "/dev18500/demods/3/enable",
+    "/dev18500/demods/3/oscselect",
+    "/dev18500/demods/3/harmonic",
+    "/dev18500/demods/3/freq",
+    "/dev18500/demods/3/phaseshift",
+    "/dev18500/demods/3/sinc",
+    "/dev18500/demods/3/sample",
+    "/dev18500/demods/4/adcselect",
+    "/dev18500/demods/4/order",
+    "/dev18500/demods/4/timeconstant",
+    "/dev18500/demods/4/rate",
+    "/dev18500/demods/4/trigger",
+    "/dev18500/demods/4/enable",
+    "/dev18500/demods/4/oscselect",
+    "/dev18500/demods/4/harmonic",
+    "/dev18500/demods/4/freq",
+    "/dev18500/demods/4/phaseshift",
+    "/dev18500/demods/4/sinc",
+    "/dev18500/demods/4/sample",
+    "/dev18500/demods/5/adcselect",
+    "/dev18500/demods/5/order",
+    "/dev18500/demods/5/timeconstant",
+    "/dev18500/demods/5/rate",
+    "/dev18500/demods/5/trigger",
+    "/dev18500/demods/5/enable",
+    "/dev18500/demods/5/oscselect",
+    "/dev18500/demods/5/harmonic",
+    "/dev18500/demods/5/freq",
+    "/dev18500/demods/5/phaseshift",
+    "/dev18500/demods/5/sinc",
+    "/dev18500/demods/5/sample",
+    "/dev18500/oscs/0/freq",
+    "/dev18500/oscs/1/freq",
+    "/dev18500/plls/0/adcselect",
+    "/dev18500/plls/0/freqcenter",
+    "/dev18500/plls/0/rate",
+    "/dev18500/plls/0/enable",
+    "/dev18500/plls/0/error",
+    "/dev18500/plls/0/adcthreshold",
+    "/dev18500/plls/0/oscselect",
+    "/dev18500/plls/0/demodselect",
+    "/dev18500/plls/0/locked",
+    "/dev18500/plls/0/harmonic",
+    "/dev18500/plls/0/order",
+    "/dev18500/plls/1/adcselect",
+    "/dev18500/plls/1/freqcenter",
+    "/dev18500/plls/1/rate",
+    "/dev18500/plls/1/enable",
+    "/dev18500/plls/1/error",
+    "/dev18500/plls/1/adcthreshold",
+    "/dev18500/plls/1/oscselect",
+    "/dev18500/plls/1/demodselect",
+    "/dev18500/plls/1/locked",
+    "/dev18500/plls/1/harmonic",
+    "/dev18500/plls/1/order",
+    "/dev18500/sigins/0/range",
+    "/dev18500/sigins/0/ac",
+    "/dev18500/sigins/0/imp50",
+    "/dev18500/sigins/0/diff",
+    "/dev18500/sigins/1/range",
+    "/dev18500/sigins/1/ac",
+    "/dev18500/sigins/1/imp50",
+    "/dev18500/sigins/1/diff",
+    "/dev18500/sigouts/0/on",
+    "/dev18500/sigouts/0/add",
+    "/dev18500/sigouts/0/range",
+    "/dev18500/sigouts/0/offset",
+    "/dev18500/sigouts/0/enables/6",
+    "/dev18500/sigouts/0/enables/7",
+    "/dev18500/sigouts/0/amplitudes/6",
+    "/dev18500/sigouts/0/amplitudes/7",
+    "/dev18500/sigouts/0/waveforms/6",
+    "/dev18500/sigouts/0/waveforms/7",
+    "/dev18500/sigouts/1/on",
+    "/dev18500/sigouts/1/add",
+    "/dev18500/sigouts/1/range",
+    "/dev18500/sigouts/1/offset",
+    "/dev18500/sigouts/1/enables/6",
+    "/dev18500/sigouts/1/enables/7",
+    "/dev18500/sigouts/1/amplitudes/6",
+    "/dev18500/sigouts/1/amplitudes/7",
+    "/dev18500/sigouts/1/waveforms/6",
+    "/dev18500/sigouts/1/waveforms/7",
+    "/dev18500/scopes/0/wave",
+    "/dev18500/scopes/0/channel",
+    "/dev18500/scopes/0/time",
+    "/dev18500/scopes/0/bwlimit",
+    "/dev18500/scopes/0/trigchannel",
+    "/dev18500/scopes/0/enable",
+    "/dev18500/scopes/0/trigedge",
+    "/dev18500/scopes/0/triglevel",
+    "/dev18500/scopes/0/trigholdoff",
+    "/dev18500/dios/0/extclk",
+    "/dev18500/dios/0/decimation",
+    "/dev18500/dios/0/drive",
+    "/dev18500/dios/0/output",
+    "/dev18500/dios/0/syncselect0",
+    "/dev18500/dios/0/syncselect1",
+    "/dev18500/dios/0/input",
+    "/dev18500/auxins/0/averaging",
+    "/dev18500/auxins/0/sample",
+    "/dev18500/auxins/0/values/0",
+    "/dev18500/auxins/0/values/1",
+    "/dev18500/auxouts/0/value",
+    "/dev18500/auxouts/0/outputselect",
+    "/dev18500/auxouts/0/demodselect",
+    "/dev18500/auxouts/0/scale",
+    "/dev18500/auxouts/0/offset",
+    "/dev18500/auxouts/1/value",
+    "/dev18500/auxouts/1/outputselect",
+    "/dev18500/auxouts/1/demodselect",
+    "/dev18500/auxouts/1/scale",
+    "/dev18500/auxouts/1/offset",
+    "/dev18500/auxouts/2/value",
+    "/dev18500/auxouts/2/outputselect",
+    "/dev18500/auxouts/2/demodselect",
+    "/dev18500/auxouts/2/scale",
+    "/dev18500/auxouts/2/offset",
+    "/dev18500/auxouts/3/value",
+    "/dev18500/auxouts/3/outputselect",
+    "/dev18500/auxouts/3/demodselect",
+    "/dev18500/auxouts/3/scale",
+    "/dev18500/auxouts/3/offset",
+    "/dev18500/zctrls/0/camp/available",
+    "/dev18500/zctrls/0/camp/r",
+    "/dev18500/zctrls/0/camp/gain",
+    "/dev18500/zctrls/0/camp/dc",
+    "/dev18500/zctrls/0/camp/singleended",
+    "/dev18500/zctrls/0/tamp/available",
+    "/dev18500/zctrls/0/tamp/0/currentgain",
+    "/dev18500/zctrls/0/tamp/0/dc",
+    "/dev18500/zctrls/0/tamp/0/voltagegain",
+    "/dev18500/zctrls/0/tamp/0/offset",
+    "/dev18500/zctrls/0/tamp/1/currentgain",
+    "/dev18500/zctrls/0/tamp/1/dc",
+    "/dev18500/zctrls/0/tamp/1/voltagegain",
+    "/dev18500/zctrls/0/tamp/1/offset",
+    "/dev18500/zctrls/0/tamp/extbias",
+    "/dev18500/zctrls/0/tamp/biasout",
+    "/dev18500/zctrls/1/camp/available",
+    "/dev18500/zctrls/1/camp/r",
+    "/dev18500/zctrls/1/camp/gain",
+    "/dev18500/zctrls/1/camp/dc",
+    "/dev18500/zctrls/1/camp/singleended",
+    "/dev18500/zctrls/1/tamp/available",
+    "/dev18500/zctrls/1/tamp/0/currentgain",
+    "/dev18500/zctrls/1/tamp/0/dc",
+    "/dev18500/zctrls/1/tamp/0/voltagegain",
+    "/dev18500/zctrls/1/tamp/0/offset",
+    "/dev18500/zctrls/1/tamp/1/currentgain",
+    "/dev18500/zctrls/1/tamp/1/dc",
+    "/dev18500/zctrls/1/tamp/1/voltagegain",
+    "/dev18500/zctrls/1/tamp/1/offset",
+    "/dev18500/zctrls/1/tamp/extbias",
+    "/dev18500/zctrls/1/tamp/biasout"
+  ],
+  "nodes": {
+    "/dev18500/clockbase": {
+      "type": "int",
+      "value": 210000000
+    },
+    "/dev18500/demods/0/adcselect": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/0/enable": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/0/harmonic": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/0/order": {
+      "type": "int",
+      "value": 4
+    },
+    "/dev18500/demods/0/oscselect": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/0/rate": {
+      "type": "double",
+      "value": 224.86636513157896
+    },
+    "/dev18500/demods/0/timeconstant": {
+      "type": "double",
+      "value": 0.010164495915951307
+    },
+    "/dev18500/demods/0/trigger": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/1/adcselect": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/1/enable": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/1/harmonic": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/1/order": {
+      "type": "int",
+      "value": 4
+    },
+    "/dev18500/demods/1/oscselect": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/1/rate": {
+      "type": "double",
+      "value": 0.0
+    },
+    "/dev18500/demods/1/timeconstant": {
+      "type": "double",
+      "value": 0.010164495915951307
+    },
+    "/dev18500/demods/1/trigger": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/2/adcselect": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/2/enable": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/2/harmonic": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/2/order": {
+      "type": "int",
+      "value": 4
+    },
+    "/dev18500/demods/2/oscselect": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/2/rate": {
+      "type": "double",
+      "value": 0.0
+    },
+    "/dev18500/demods/2/timeconstant": {
+      "type": "double",
+      "value": 0.010164495915951307
+    },
+    "/dev18500/demods/2/trigger": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/3/adcselect": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/3/enable": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/3/harmonic": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/3/order": {
+      "type": "int",
+      "value": 4
+    },
+    "/dev18500/demods/3/oscselect": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/3/rate": {
+      "type": "double",
+      "value": 0.0
+    },
+    "/dev18500/demods/3/timeconstant": {
+      "type": "double",
+      "value": 0.010164495915951307
+    },
+    "/dev18500/demods/3/trigger": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/4/adcselect": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/4/enable": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/4/harmonic": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/4/order": {
+      "type": "int",
+      "value": 4
+    },
+    "/dev18500/demods/4/oscselect": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/4/rate": {
+      "type": "double",
+      "value": 0.0
+    },
+    "/dev18500/demods/4/timeconstant": {
+      "type": "double",
+      "value": 0.010164495915951307
+    },
+    "/dev18500/demods/4/trigger": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/5/adcselect": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/5/enable": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/demods/5/harmonic": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/5/order": {
+      "type": "int",
+      "value": 4
+    },
+    "/dev18500/demods/5/oscselect": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/demods/5/rate": {
+      "type": "double",
+      "value": 0.0
+    },
+    "/dev18500/demods/5/timeconstant": {
+      "type": "double",
+      "value": 0.010164495915951307
+    },
+    "/dev18500/demods/5/trigger": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/dios/0/decimation": {
+      "type": "int",
+      "value": 256
+    },
+    "/dev18500/dios/0/extclk": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/features/devtype": {
+      "type": "string",
+      "value": "HF2LI"
+    },
+    "/dev18500/features/options": {
+      "type": "string",
+      "value": ""
+    },
+    "/dev18500/features/serial": {
+      "type": "string",
+      "value": "18500"
+    },
+    "/dev18500/sigins/0/ac": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/sigins/0/diff": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/sigins/0/imp50": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/sigins/0/range": {
+      "type": "double",
+      "value": 1.1420289874802965
+    },
+    "/dev18500/sigins/1/ac": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/sigins/1/diff": {
+      "type": "int",
+      "value": 1
+    },
+    "/dev18500/sigins/1/imp50": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/sigins/1/range": {
+      "type": "double",
+      "value": 1.1431031724104412
+    },
+    "/dev18500/status/flags/adcclip/0": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/status/flags/adcclip/1": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/status/flags/dcmlock": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/status/flags/demodsampleloss": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/status/flags/plllock": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/system/extclk": {
+      "type": "int",
+      "value": 0
+    },
+    "/dev18500/system/hwrevision": {
+      "type": "int",
+      "value": 6
+    },
+    "/dev18500/system/properties/freqresolution": {
+      "type": "double",
+      "value": 48.0
+    },
+    "/dev18500/system/properties/maxfreq": {
+      "type": "double",
+      "value": 100000000.0
+    },
+    "/dev18500/system/properties/maxtimeconstant": {
+      "type": "double",
+      "value": 582.8884184714285
+    },
+    "/dev18500/system/properties/minfreq": {
+      "type": "double",
+      "value": 0.0
+    },
+    "/dev18500/system/properties/mintimeconstant": {
+      "type": "double",
+      "value": 7.831859283193598e-07
+    },
+    "/dev18500/system/properties/timebase": {
+      "type": "double",
+      "value": 4.761904761904762e-09
+    }
+  },
+  "read_errors": {},
+  "timestamp_utc": "2026-08-26T19:27:00.069665Z"
+}

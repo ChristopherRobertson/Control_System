@@ -1,0 +1,44 @@
+{
+  "capture_timing_validation": {
+    "max_samples": 268435392,
+    "requested_samples": 100000,
+    "sample_interval_ns": 2.0,
+    "timebase": 1
+  },
+  "configured_model": "5244D",
+  "configured_serial": "10261",
+  "exclusive_open": true,
+  "final_zero": {
+    "claim_limit": "API acceptance only until the connected output is measured on PicoScope channel A",
+    "electrical_state": "PROGRAMMED_ZERO_OUTPUT",
+    "frequency_hz": 1.0,
+    "offset_v": 0.0,
+    "pk_to_pk_v": 0.0,
+    "shots": 0,
+    "sweeps": 0,
+    "trigger_source": "NONE",
+    "waveform": "SINE"
+  },
+  "first_zero": {
+    "claim_limit": "API acceptance only until the connected output is measured on PicoScope channel A",
+    "electrical_state": "PROGRAMMED_ZERO_OUTPUT",
+    "frequency_hz": 1.0,
+    "offset_v": 0.0,
+    "pk_to_pk_v": 0.0,
+    "shots": 0,
+    "sweeps": 0,
+    "trigger_source": "NONE",
+    "waveform": "SINE"
+  },
+  "generator_readback_limit": "PicoSDK exposes set/status return but no generator settings getter; exact accepted settings are preserved for mandatory reapply and monitor measurement.",
+  "required_symbols": {
+    "ps5000aGetValues": true,
+    "ps5000aRunBlock": true,
+    "ps5000aSetSigGenArbitrary": true,
+    "ps5000aSetSigGenBuiltInV2": true,
+    "ps5000aSigGenArbitraryMinMaxValues": true
+  },
+  "sdk_serial": "10261/0071",
+  "single_handle_capture_and_generator": true,
+  "status": "PASS"
+}

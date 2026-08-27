@@ -1,0 +1,37 @@
+{
+  "analysis_artifact_id": "HF01-ANALYSIS-TIMING10-R1-001",
+  "acquisition_id": "HF01-TIMING10-R1-001",
+  "analysis_utc": "2026-08-26T19:49:21.1371296Z",
+  "criterion_version": "HF01-TIMING-COPY-v1",
+  "disposition": "REJECTED_PARTIAL_PULSE_WIDTH_BELOW_DIO_SAMPLE_INTERVAL",
+  "t660": {
+    "cadence_hz": 10.0,
+    "pulse_width_ns": 150.0,
+    "shot_count_before": 0,
+    "shot_count_after": 10,
+    "final_safe_idle_matches": true
+  },
+  "picoscope": {
+    "processed_captures": 10,
+    "sample_interval_ns": 2.0,
+    "overflow_count": 0,
+    "b_rising_relative_to_ext_trigger_ns": [12.0, 10.0, 12.0, 12.0, 12.0, 12.0, 10.0, 12.0, 10.0, 12.0],
+    "mean_ns": 11.4,
+    "sample_standard_deviation_ns": 0.9660917830792959
+  },
+  "hf2li": {
+    "exported_path": "/dev18500/demods/2/sample.dio",
+    "sample_count": 5576,
+    "sample_rate_sps": 3597.8618421052633,
+    "sample_interval_us": 277.9428571428571,
+    "dio0_high_sample_count": 0,
+    "dio1_high_sample_count": 0,
+    "dio0_rising_edge_count": 0,
+    "dio1_rising_edge_count": 0,
+    "external_clock_selected": true,
+    "dcm_lock_flag": 1
+  },
+  "manufacturer_constraint": "A DIO marker state transferred with demodulator data must be at least one inverse sample-rate interval wide to be reliably captured.",
+  "conclusion": "The DIO exporter repair passed, but the 150 ns pulse cannot be sampled at the retained streamed rate. No A/B or C/D composed copy-offset acceptance is available.",
+  "next_step": "No further run without prospective authorization of HF01-TIMING10-R2-001 and HF01-TIMING-COPY-v2."
+}

@@ -1,0 +1,16 @@
+{
+  "analysis_artifact_id": "HF01-ANALYSIS-AWG-FIRST-ENABLE-001",
+  "acquisition_id": "HF01-AWG-FIRST-ENABLE-001",
+  "analysis_utc": "2026-08-26T20:05:59.4008047Z",
+  "disposition": "REJECTED_BEFORE_NONZERO_ENABLE_PICOSCOPE_BUSY",
+  "sdk_status_decimal": 39,
+  "sdk_status_name": "PICO_BUSY",
+  "cause": "The utility armed ps5000aRunBlock before calling ps5000aSetSigGenBuiltInV2. The PicoScope driver does not permit the signal-generator configuration while the device is busy with a block acquisition.",
+  "nonzero_output_applied": false,
+  "evidence": [
+    "The status record contains no pico_generator_applied field because the SDK call raised before returning success.",
+    "The final zero-output command succeeded.",
+    "HF2LI settings were restored and both T660 units matched safe idle."
+  ],
+  "prospective_correction": "Keep the confirmed electrical settings unchanged; configure the generator before ps5000aRunBlock, then immediately acquire the channel-A-triggered block and force zero afterward."
+}

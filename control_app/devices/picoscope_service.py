@@ -9,6 +9,7 @@ from ctypes import (
     c_int16,
     c_int32,
     c_uint32,
+    c_double,
     cdll,
     create_string_buffer,
 )
@@ -31,6 +32,7 @@ PICO_STATUS_NAMES = {
     13: "PICO_INVALID_PARAMETER",
     15: "PICO_INVALID_VOLTAGE_RANGE",
     17: "PICO_INVALID_TRIGGER_CHANNEL",
+    39: "PICO_BUSY",
     282: "PICO_POWER_SUPPLY_NOT_CONNECTED",
     286: "PICO_USB3_0_DEVICE_NON_USB3_0_PORT",
     288: "PICO_INVALID_DEVICE_RESOLUTION",
@@ -53,6 +55,18 @@ RANGES = {
     "50V": 11,
 }
 RESOLUTIONS = {"8BIT": 0, "12BIT": 1, "14BIT": 2, "15BIT": 3, "16BIT": 4}
+SIGGEN_WAVE_TYPES = {
+    "SINE": 0,
+    "SQUARE": 1,
+    "TRIANGLE": 2,
+    "RAMP_UP": 3,
+    "RAMP_DOWN": 4,
+    "SINC": 5,
+    "GAUSSIAN": 6,
+    "HALF_SINE": 7,
+    "DC": 8,
+    "WHITE_NOISE": 9,
+}
 
 
 class PicoScopeError(RuntimeError):
@@ -201,6 +215,88 @@ class PicoScopeService:
         self.configure_channels()
         self.set_external_trigger()
 
+    def configure_builtin_signal_generator(
+        self,
+        *,
+        waveform: str,
+        frequency_hz: float,
+        pk_to_pk_v: float,
+        offset_v: float = 0.0,
+    ) -> dict[str, Any]:
+        """Configure the built-in generator through the same open capture handle.
+
+        Values are recorded in engineering units here and converted to the
+        microvolt integer units required by the PicoSDK.  This method does not
+        make a programmed value the measurement authority; HF-01 separately
+        measures the connected voltage on a PicoScope input.
+        """
+
+        self._require_open()
+        wave_name = str(waveform).strip().upper()
+        wave_type = SIGGEN_WAVE_TYPES.get(wave_name)
+        if wave_type is None:
+            raise PicoScopeConfigurationError(
+                f"unsupported signal-generator waveform {waveform!r}"
+            )
+        frequency = float(frequency_hz)
+        pk_to_pk = float(pk_to_pk_v)
+        offset = float(offset_v)
+        if frequency < 0.0:
+            raise PicoScopeConfigurationError("signal-generator frequency must be nonnegative")
+        if pk_to_pk < 0.0:
+            raise PicoScopeConfigurationError("signal-generator peak-to-peak voltage must be nonnegative")
+        if abs(offset) + pk_to_pk / 2.0 > 2.0:
+            raise PicoScopeConfigurationError(
+                "signal-generator offset plus half amplitude exceeds the +/-2 V capability"
+            )
+        function = getattr(self._driver, "ps5000aSetSigGenBuiltInV2", None)
+        if function is None:
+            raise PicoScopeError("PicoSDK does not export ps5000aSetSigGenBuiltInV2")
+        status = function(
+            self._handle,
+            c_int32(round(offset * 1_000_000.0)),
+            c_uint32(round(pk_to_pk * 1_000_000.0)),
+            wave_type,
+            c_double(frequency),
+            c_double(frequency),
+            c_double(0.0),
+            c_double(0.0),
+            0,
+            0,
+            c_uint32(0),
+            c_uint32(0),
+            0,
+            0,
+            c_int16(0),
+        )
+        self._check(status, "ps5000aSetSigGenBuiltInV2")
+        applied = {
+            "waveform": wave_name,
+            "frequency_hz": frequency,
+            "pk_to_pk_v": pk_to_pk,
+            "offset_v": offset,
+            "trigger_source": "NONE",
+            "shots": 0,
+            "sweeps": 0,
+        }
+        self._log(f"signal_generator_configured {applied}")
+        return applied
+
+    def disable_signal_generator(self) -> dict[str, Any]:
+        """Force the generator to a zero-amplitude, zero-offset configuration."""
+
+        applied = self.configure_builtin_signal_generator(
+            waveform="SINE",
+            frequency_hz=1.0,
+            pk_to_pk_v=0.0,
+            offset_v=0.0,
+        )
+        applied["electrical_state"] = "PROGRAMMED_ZERO_OUTPUT"
+        applied["claim_limit"] = (
+            "API acceptance only until the connected output is measured on PicoScope channel A"
+        )
+        return applied
+
     def validate_sample_timing(self) -> dict[str, Any]:
         """Ask the device to validate recipe sample count and timebase."""
 
@@ -321,6 +417,162 @@ class PicoScopeService:
             "raw_data_file": str(raw_path),
         }
         return summary
+
+    def capture_rapid_blocks(
+        self,
+        raw_csv_path: str | Path,
+        *,
+        capture_count: int,
+        after_arm: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Capture a fixed number of externally triggered rapid-block segments."""
+
+        self._require_open()
+        captures = int(capture_count)
+        if captures <= 0:
+            raise PicoScopeConfigurationError("rapid-block capture_count must be positive")
+        self.configure_channels()
+        self.set_external_trigger()
+        total_samples = int(self.capture_settings.get("total_samples", 0))
+        pre_trigger = int(self.capture_settings.get("pre_trigger_samples", 0))
+        post_trigger = total_samples - pre_trigger
+        if total_samples <= 0 or post_trigger <= 0:
+            raise PicoScopeConfigurationError("rapid-block sample counts are invalid")
+        timebase = int(self.capture_settings.get("timebase", 1))
+
+        max_samples = c_int32()
+        status = self._driver.ps5000aMemorySegments(
+            self._handle, c_uint32(captures), byref(max_samples)
+        )
+        self._check(status, "ps5000aMemorySegments")
+        if int(max_samples.value) < total_samples:
+            raise PicoScopeConfigurationError(
+                f"rapid-block segment permits {max_samples.value} samples, needs {total_samples}"
+            )
+        status = self._driver.ps5000aSetNoOfCaptures(
+            self._handle, c_uint32(captures)
+        )
+        self._check(status, "ps5000aSetNoOfCaptures")
+
+        buffers: dict[tuple[int, str], Any] = {}
+        for segment in range(captures):
+            for channel_name in ("A", "B"):
+                buffer = (c_int16 * total_samples)()
+                buffers[(segment, channel_name)] = buffer
+                status = self._driver.ps5000aSetDataBuffer(
+                    self._handle,
+                    CHANNELS[channel_name],
+                    buffer,
+                    total_samples,
+                    segment,
+                    0,
+                )
+                self._check(
+                    status, f"ps5000aSetDataBuffer {channel_name} segment={segment}"
+                )
+
+        time_indisposed = c_int32()
+        status = self._driver.ps5000aRunBlock(
+            self._handle,
+            pre_trigger,
+            post_trigger,
+            timebase,
+            byref(time_indisposed),
+            0,
+            None,
+            None,
+        )
+        self._check(status, "ps5000aRunBlock rapid")
+        if after_arm is not None:
+            self._log("PicoScope rapid block armed; invoking start callback")
+            after_arm()
+
+        ready = c_int16(0)
+        deadline = time.time() + float(self.capture_settings.get("timeout_s", 10.0))
+        while time.time() < deadline and not ready.value:
+            status = self._driver.ps5000aIsReady(self._handle, byref(ready))
+            self._check(status, "ps5000aIsReady rapid")
+            time.sleep(0.005)
+        if not ready.value:
+            raise PicoScopeError("PicoScope rapid-block capture timed out before ready")
+
+        processed = c_uint32()
+        get_processed = getattr(self._driver, "ps5000aGetNoOfProcessedCaptures", None)
+        if get_processed is not None:
+            status = get_processed(self._handle, byref(processed))
+            self._check(status, "ps5000aGetNoOfProcessedCaptures")
+        sample_count = c_uint32(total_samples)
+        overflow = (c_int16 * captures)()
+        status = self._driver.ps5000aGetValuesBulk(
+            self._handle,
+            byref(sample_count),
+            0,
+            captures - 1,
+            1,
+            0,
+            overflow,
+        )
+        self._check(status, "ps5000aGetValuesBulk")
+
+        interval = c_float()
+        timebase_max = c_int32()
+        status = self._driver.ps5000aGetTimebase2(
+            self._handle,
+            timebase,
+            total_samples,
+            byref(interval),
+            byref(timebase_max),
+            0,
+        )
+        self._check(status, "ps5000aGetTimebase2 rapid")
+        raw_path = Path(raw_csv_path)
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        with raw_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(
+                ["segment_index", "sample_index", "time_from_trigger_ns", "ch_a_adc", "ch_b_adc"]
+            )
+            for segment in range(captures):
+                a = buffers[(segment, "A")]
+                b = buffers[(segment, "B")]
+                for index in range(sample_count.value):
+                    writer.writerow(
+                        [
+                            segment,
+                            index,
+                            (index - pre_trigger) * float(interval.value),
+                            int(a[index]),
+                            int(b[index]),
+                        ]
+                    )
+        return {
+            "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+            "picoscope_model": self.device_config.get("model"),
+            "picoscope_serial": self.device_config.get("serial_number"),
+            "resolution": self.capture_settings.get("resolution"),
+            "requested_captures": captures,
+            "processed_captures": int(processed.value) if get_processed is not None else None,
+            "samples_per_capture": int(sample_count.value),
+            "sample_interval_ns": float(interval.value),
+            "overflow_by_capture": [int(value) for value in overflow],
+            "raw_data_file": str(raw_path),
+        }
+
+    def get_maximum_adc_value(self) -> int:
+        """Read the active-resolution ADC full-scale code from the device."""
+
+        self._require_open()
+        maximum = c_int16()
+        function = getattr(self._driver, "ps5000aMaximumValue", None)
+        if function is None:
+            raise PicoScopeError("PicoSDK does not export ps5000aMaximumValue")
+        status = function(self._handle, byref(maximum))
+        self._check(status, "ps5000aMaximumValue")
+        if maximum.value <= 0:
+            raise PicoScopeError(
+                f"PicoScope returned invalid maximum ADC value {maximum.value}"
+            )
+        return int(maximum.value)
 
     def stop(self) -> None:
         """Stop the PicoScope if it is open."""

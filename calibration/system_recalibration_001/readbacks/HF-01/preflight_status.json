@@ -1,0 +1,54 @@
+{
+  "authorization_id": "HF01-AUTH-001",
+  "campaign_id": "system_recalibration_001",
+  "checks": {
+    "dependencies": {
+      "CH-00": {
+        "source": "characterization\\system_characterization_001\\readbacks\\CH-00\\phase_manifest.json",
+        "status": "PASS"
+      },
+      "MS-01": {
+        "source": "calibration\\system_recalibration_001\\readbacks\\MS-01\\ms01_results.json",
+        "status": "PASS"
+      },
+      "MS-02": {
+        "source": "calibration\\system_recalibration_001\\readbacks\\MS-02\\ms02_results.json",
+        "status": "PASS"
+      },
+      "S0": {
+        "source": "calibration\\system_recalibration_001\\readbacks\\S0\\s0_record.json",
+        "status": "PASS"
+      },
+      "T2-01": {
+        "source": "calibration\\system_recalibration_001\\readbacks\\T2-01\\t2_01_results.json",
+        "status": "PASS"
+      }
+    },
+    "hf2li_external_clock": {
+      "dcm_lock_flag": 0,
+      "selection": 0,
+      "status": "RECORDED_PENDING_OPERATOR_CLOCK_WIRING_OBSERVATION"
+    },
+    "hf2li_identity_and_supported_space": "PASS",
+    "mandatory_records": "PASS",
+    "phase_manifest_schema": "PASS",
+    "picoscope_capture_awg_single_owner": "PASS",
+    "t660_safe_idle": {
+      "mismatch_count": 0,
+      "status": "PASS"
+    }
+  },
+  "execution_gate": "WAITING_FOR_OPERATOR_OBSERVATION",
+  "finished_utc": "2026-08-26T19:27:00.217773Z",
+  "phase_authorized_after_preflight": true,
+  "phase_id": "HF-01",
+  "phase_run_id": "system_recalibration_001_HF-01_001",
+  "safety_boundary": "NON_EMITTING_ELECTRICAL_ONLY",
+  "started_utc": "2026-08-26T19:26:50.889477Z",
+  "status": "READY_FOR_PHASE_APPROVAL",
+  "value_required_fields": [
+    "HF01-UIR-001 current laser inhibit/shutter observations, one action at a time",
+    "HF01-UIR-002 tee/cable inspection after safe-state observations",
+    "operator confirmation that competing PicoScope and LabOne clients are closed before configuration changes"
+  ]
+}

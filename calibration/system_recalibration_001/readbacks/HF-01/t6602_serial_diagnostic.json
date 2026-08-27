@@ -1,0 +1,56 @@
+{
+  "timestamp_utc_recorded": "2026-08-26T18:50:22.7592583Z",
+  "phase_id": "HF-01",
+  "device": "T660-2",
+  "configured_serial_number": "00431",
+  "configured_port": "COM7",
+  "configured_baudrate": 38400,
+  "windows_port_present": true,
+  "windows_friendly_name": "USB Serial Port (COM7)",
+  "windows_instance_id": "FTDIBUS\\VID_0403+PID_6001+BG02PP5YA\\0000",
+  "competing_client_process_observed": false,
+  "registered_service_attempt": {
+    "commands": ["ZM P500", "ZMode P500"],
+    "response": "NO_BYTES",
+    "result": "USER_INPUT_REQUIRED"
+  },
+  "read_only_identity_attempts": [
+    {"baudrate": 38400, "command": "*IDN?", "response": "NO_BYTES"},
+    {"baudrate": 9600, "command": "*IDN?", "response": "NO_BYTES"},
+    {"baudrate": 19200, "command": "*IDN?", "response": "NO_BYTES"},
+    {"baudrate": 57600, "command": "*IDN?", "response": "NO_BYTES"},
+    {"baudrate": 115200, "command": "*IDN?", "response": "NO_BYTES"}
+  ],
+  "control_comparison": {
+    "device": "T660-1",
+    "port": "COM3",
+    "configured_baudrate": 38400,
+    "identity_response": "HTI,T660-1,00369,28E660-1-1.7",
+    "result": "PASS"
+  },
+  "post_reconnect_retry": {
+    "operator_reported_action_utc": "2026-08-26T19:23:50.2582079Z",
+    "operator_report": "T660-2 has been disconnected and reconnected",
+    "preflight_finished_utc": "2026-08-26T19:24:12.568425Z",
+    "registered_baudrate_response": "NO_BYTES",
+    "identity_rate_sweep": [
+      {"baudrate": 38400, "response": "NO_BYTES"},
+      {"baudrate": 9600, "response": "NO_BYTES"},
+      {"baudrate": 19200, "response": "NO_BYTES"},
+      {"baudrate": 57600, "response": "NO_BYTES"},
+      {"baudrate": 115200, "response": "NO_BYTES"}
+    ],
+    "result": "USER_INPUT_REQUIRED"
+  },
+  "post_power_cycle_resolution": {
+    "operator_observation_utc": "2026-08-26T19:26:40.1499117Z",
+    "operator_action": "Power-cycled T660-2",
+    "operator_observation": "Power LED indicates that T660-2 is receiving power and data",
+    "preflight_finished_utc": "2026-08-26T19:27:00.217773Z",
+    "identity_and_safe_idle": "PASS",
+    "safe_idle_mismatch_count": 0,
+    "result": "RESOLVED"
+  },
+  "diagnosis": "The post-power-cycle retry restored T660-2 command communication. Both T660 units accepted and matched the safe-idle recipe with zero mismatches.",
+  "safety": "No output command, trigger, laser command, cable move, or nonzero PicoScope generator output occurred."
+}

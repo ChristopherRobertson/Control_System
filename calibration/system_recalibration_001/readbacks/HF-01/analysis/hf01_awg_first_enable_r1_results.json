@@ -1,0 +1,34 @@
+{
+  "analysis_artifact_id": "HF01-ANALYSIS-AWG-FIRST-ENABLE-R1-001",
+  "acquisition_id": "HF01-AWG-FIRST-ENABLE-R1-001",
+  "analysis_utc": "2026-08-26T20:07:06.115602Z",
+  "disposition": "ACCEPTED",
+  "programmed": {
+    "waveform": "SINE",
+    "frequency_hz": 2000000.0,
+    "pk_to_pk_v": 0.05,
+    "offset_v": 0.0
+  },
+  "measured_connected": {
+    "sine_fit_vpp": 0.051247817269791676,
+    "dc_offset_v": -0.001485368479330709,
+    "sample_peak_to_peak_v": 0.05337413877952756,
+    "observed_peak_absolute_v": 0.02809116633858268,
+    "fit_residual_rms_v": 0.00043842293492633237,
+    "connected_to_programmed_vpp_ratio": 1.0249563453958335,
+    "picoscope_range_v": 0.1,
+    "picoscope_maximum_adc": 32512,
+    "retained_cycles": 16.0
+  },
+  "nonzero_interval_ms": 306.806,
+  "acceptance": {
+    "vpp_inside_0_040_to_0_110": true,
+    "offset_magnitude_at_most_0_005": true,
+    "picoscope_overflow": false,
+    "hf2li_adcclip": false,
+    "hard_stop_invoked": false,
+    "awg_zero_before_and_after": true,
+    "t660_safe_idle_before_and_after": true
+  },
+  "conclusion": "The measured PicoScope channel-A voltage is the HF01 connected-stimulus authority. The first nonzero enable passes the declared envelope and later bounded response acquisitions may proceed under HF01-AUTH-AMEND-004."
+}

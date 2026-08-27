@@ -1,0 +1,90 @@
+{
+  "analysis_id": "HF01-ANALYSIS-SUPPORTED-CONFIGURATIONS-001",
+  "common": {
+    "demodulator_assignments": {
+      "reference": 3,
+      "sample": 0
+    },
+    "device_id": "dev18500",
+    "external_master_clock": 1,
+    "harmonic": 1,
+    "oscselect": 0,
+    "readout": "continuous_timestamped_xy_plus_full_dio",
+    "reference": {
+      "center_hz": 2000000.0,
+      "pll": 0,
+      "source": "DIO0"
+    },
+    "signal_inputs": {
+      "0": {
+        "ac": 0,
+        "differential": 0,
+        "impedance_50ohm": 0,
+        "range_requested_v": 1.0
+      },
+      "1": {
+        "ac": 0,
+        "differential": 0,
+        "impedance_50ohm": 0,
+        "range_requested_v": 1.0
+      }
+    },
+    "trigger": 0
+  },
+  "configurations": {
+    "HF01-HRP-SELECTED-001": {
+      "alias_of_numeric_settings": "HF01-SWEEP-SELECTED-001",
+      "immediately_lower_rate_sps": 449.7327302631579,
+      "order": 4,
+      "rate_readback_sps": 899.4654605263158,
+      "status": "SELECTED_WITH_EARLY_FEATURE_VALIDITY_ENVELOPE",
+      "timeconstant_readback_s": 0.0010018887078828383,
+      "timeconstant_requested_s": 0.001
+    },
+    "HF01-MBCO-SELECTED-001": {
+      "immediately_lower_rate_sps": 115131.57894736843,
+      "order": 1,
+      "rate_readback_sps": 230263.15789473685,
+      "status": "BOUNDARY_CONFIGURATION_OUTSIDE_MANDATORY_1US_ENVELOPE",
+      "timeconstant_readback_s": 5.600017467592051e-06,
+      "timeconstant_requested_s": 5.6e-06
+    },
+    "HF01-SWEEP-SELECTED-001": {
+      "immediately_lower_rate_sps": 449.7327302631579,
+      "order": 4,
+      "rate_readback_sps": 899.4654605263158,
+      "status": "SELECTED_WITH_DYNAMIC_VALIDITY_ENVELOPE",
+      "timeconstant_readback_s": 0.0010018887078828383,
+      "timeconstant_requested_s": 0.001
+    }
+  },
+  "generated_utc": "2026-08-26T22:35:32.004175Z",
+  "confirmation_evidence": {
+    "analysis_id": "HF01-ANALYSIS-SELECTED-CONFIRMATION-001",
+    "configuration_reload_acquisition_id": "HF01-CONFIG-RELOAD-001",
+    "mbco_input_1_acquisition_id": "HF01-SELECTED-MBCO-IN1-001",
+    "mbco_input_2_acquisition_id": "HF01-SELECTED-MBCO-IN2-001",
+    "range_high_input_2_acquisition_id": "HF01-RANGE-HIGH-IN2-001",
+    "range_low_input_2_acquisition_id": "HF01-RANGE-LOW-IN2-001",
+    "sweep_hrp_input_1_acquisition_id": "HF01-SELECTED-SWEEP-HRP-IN1-001",
+    "sweep_hrp_input_2_acquisition_id": "HF01-SELECTED-SWEEP-HRP-IN2-001"
+  },
+  "downstream_validity": {
+    "HF01-HRP-SELECTED-001": "provisional electrical validity within the retained early-feature, duration, range, and noise envelope; downstream biological thresholds remain required",
+    "HF01-MBCO-SELECTED-001": "boundary configuration only; invalid for the mandatory 1 us feature because there are 0.230263 samples per 1 us and modeled attenuation is 82.420989 percent",
+    "HF01-SWEEP-SELECTED-001": "provisional electrical validity at the analyzed scan-response coefficients; AR-01 retains final optical distortion authority"
+  },
+  "promotion": {
+    "performed": false,
+    "status": "PROVISIONAL_PHASE_OUTPUT_ONLY"
+  },
+  "reload_equivalence": {
+    "acquisition_id": "HF01-CONFIG-RELOAD-001",
+    "doubles": "relative difference <= 1e-9 or identical observed device quantization",
+    "integers_and_strings": "exact",
+    "observed_maximum_double_relative_difference": 0.0,
+    "status": "PASS"
+  },
+  "revalidation_trigger_record": "revalidation_triggers.md",
+  "schema_version": "HF01-SELECTED-CONFIG-v1"
+}

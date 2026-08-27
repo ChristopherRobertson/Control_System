@@ -1,0 +1,37 @@
+{
+  "campaign_id": "system_recalibration_001",
+  "electronic_final_readback": {
+    "accepted_acquisition_id": "HF01-FINAL-RESTORATION-STATE-R1-001",
+    "hf2li_matches_prechange_configuration": true,
+    "hf2li_status_flags_clean": true,
+    "picoscope_awg_programmed_vpp": 0.0,
+    "rejected_preceding_acquisition_id": "HF01-FINAL-RESTORATION-STATE-001",
+    "rejected_preceding_reason": "Windows COM3 access denied before T660 readback",
+    "status": "PASS_FINAL_RESTORATION",
+    "t660_safe_idle_matches_recipe": true
+  },
+  "laser_state_authority": {
+    "nonemitting_confirmation_id": "HF01-OPCONF-001",
+    "scope": "No laser arming firing emission shutter opening or optical work occurred in HF-01",
+    "shutter_confirmation_id": "HF01-OPCONF-002"
+  },
+  "operator_confirmation_id": "HF01-OPCONF-014",
+  "operator_id": "Christopher_Robertson",
+  "operator_confirmation_recorded_utc": "2026-08-26T23:48:22.5562080Z",
+  "phase_id": "HF-01",
+  "phase_run_id": "system_recalibration_001_HF-01_001",
+  "physical_state": {
+    "clock_splitter_01": "UNCHANGED_NORMAL_DISTRIBUTION",
+    "hf01_spare_tee_01": "DISCONNECTED",
+    "hf01_stimulus_assembly": "DISCONNECTED_FROM_INSTRUMENTS",
+    "standing_default_exclusions": "IMPORTED_FROM_docs/default_wiring_state.md",
+    "t660_2_a": "HF2LI_DIO0",
+    "t660_2_b": "MIRCAT_TRIG_IN",
+    "t660_2_c": "HF2LI_DIO1",
+    "t660_2_d": "T660_1_TRIG_IN"
+  },
+  "photograph_disposition": "HF01-DEV-001_OPERATOR_DECLINED",
+  "promotion_performed": false,
+  "recorded_utc": "2026-08-26T23:57:43.2659273Z",
+  "status": "PASS_DEFAULT_WIRING_AND_ELECTRONIC_SAFE_STATE"
+}

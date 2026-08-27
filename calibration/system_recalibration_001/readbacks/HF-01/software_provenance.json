@@ -1,0 +1,22 @@
+{
+  "executable": "C:\\Users\\Chris\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+  "ownership_note": "Successful Pico open is the SDK exclusivity test. HF2 process scan is advisory; operator must close competing LabOne clients before settings changes.",
+  "packages": {
+    "jsonschema": "4.26.0",
+    "pyserial": "3.5",
+    "zhinst": "26.4.0",
+    "zhinst-core": "26.4.0.940"
+  },
+  "picosdk_driver": {
+    "file_version": "2.2.8.5060",
+    "path": "C:/Program Files/Pico Technology/SDK/lib/ps5000a.dll"
+  },
+  "process_names_matching_device_software": [
+    "python.exe",
+    "ziDataServer.exe",
+    "ziServer.exe",
+    "ziService.exe"
+  ],
+  "python": "3.12.4",
+  "timestamp_utc": "2026-08-26T19:26:50.905698Z"
+}

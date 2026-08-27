@@ -1,0 +1,25 @@
+result_id,scope,quantity,value,unit,standard_uncertainty,acceptance_limit,limit_unit,decision,authority,notes
+HF01-UA-001,fast model anchor,normalized RMS corrected complex residual,0.00005359802270908416,ratio,,0.05,ratio,PASS,HF01-MODEL-RESIDUAL-v3,Per-offset combined uncertainty is retained in the native analysis JSON
+HF01-UA-002,intermediate model anchor,normalized RMS corrected complex residual,0.00024148850586392813,ratio,,0.05,ratio,PASS,HF01-MODEL-RESIDUAL-v3,Per-offset combined uncertainty is retained in the native analysis JSON
+HF01-UA-003,slow model anchor,normalized RMS corrected complex residual,0.017673905493791883,ratio,,0.05,ratio,PASS,HF01-MODEL-RESIDUAL-v3,Accepted repeat HF01-ANCHOR-SLOW-V3-R1-001
+HF01-UA-004,fast model anchor,paired-pipeline delay,0.0000005679829846305412,s,0.000000000020014285609448848,0.000004342857142857143,s,PASS,HF01-MODEL-RESIDUAL-v3,Delay is bounded below one native output-sample interval
+HF01-UA-005,intermediate model anchor,paired-pipeline delay,0.0000012149249768564691,s,0.0000022726993460568806,0.0011117714285714285,s,PASS,HF01-MODEL-RESIDUAL-v3,Delay is bounded below one native output-sample interval
+HF01-UA-006,slow model anchor,paired-pipeline delay,0.0026462868830082835,s,0.00060531065938779465,0.008894171428571428,s,PASS,HF01-MODEL-RESIDUAL-v3,Delay is bounded below one native output-sample interval
+HF01-UA-007,sweep and HRP selected rate,rate to cutoff ratio,13.017126021595887,ratio,,8,ratio,PASS,HF01-RATE-GUARD-v1,Selected 899.4654605263158 Sa/s
+HF01-UA-008,sweep and HRP immediately lower rate,rate to cutoff ratio,6.5085630107979435,ratio,,8,ratio,REJECT,HF01-RATE-GUARD-v1,Lower 449.7327302631579 Sa/s is not retained
+HF01-UA-009,MbCO selected boundary rate,rate to cutoff ratio,8.102027378495523,ratio,,8,ratio,PASS,HF01-RATE-GUARD-v1,Selected maximum dual-channel rate 230263.15789473685 Sa/s
+HF01-UA-010,MbCO immediately lower rate,rate to cutoff ratio,4.051013689247761,ratio,,8,ratio,REJECT,HF01-RATE-GUARD-v1,Lower 115131.57894736843 Sa/s is not retained
+HF01-UA-011,sweep and HRP input equivalence,gain fractional difference,0.00011708685931832719,ratio,,0.03,ratio,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-012,sweep and HRP input equivalence,phase difference,0.0011837656415342008,rad,,0.08726646259971647,rad,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-013,sweep and HRP input equivalence,cutoff fractional difference,0.0008785037203918877,ratio,,0.05,ratio,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-014,sweep and HRP input equivalence,settling fractional difference,0.005708642841065759,ratio,,0.05,ratio,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-015,sweep and HRP input equivalence,zero-noise fractional difference,0.07136726705497942,ratio,,0.2,ratio,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-016,MbCO input equivalence,gain fractional difference,0.000001858816356392623,ratio,,0.03,ratio,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-017,MbCO input equivalence,phase difference,0.0000006546554629037006,rad,,0.08726646259971647,rad,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-018,MbCO input equivalence,cutoff fractional difference,0,ratio,,0.05,ratio,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-019,MbCO input equivalence,settling fractional difference,0.018507089909172603,ratio,,0.05,ratio,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-020,MbCO input equivalence,zero-noise fractional difference,0.003962100299646831,ratio,,0.2,ratio,PASS,HF01-CHANNEL-EQUIVALENCE-v1,Signal Input 1 versus Signal Input 2
+HF01-UA-021,Signal Input 2 range endpoints,measured high to low amplitude ratio,9.755395340224382,ratio,,0.03,fractional error from 10x,PASS,HF01-RANGE-ENDPOINT-v1,Fractional error from 10x is 0.024460465977561796
+HF01-UA-022,selected configuration reload,maximum relative difference,0,ratio,,0.000000001,ratio,PASS,HF01-SELECTED-CONFIG-v1,All integer nodes exact and all observed double-node differences zero across two loads
+HF01-UA-023,MbCO mandatory 1 us feature,samples per feature,0.23026315789473684,sample/feature,,, ,LIMITATION,HF01-SELECTION-v1,Fastest valid two-channel rate cannot provide even one sample across 1 us
+HF01-UA-024,MbCO mandatory 1 us feature,modeled attenuation,0.8242098928985472,fraction,,, ,FAIL_REQUIRED_ENVELOPE,HF01-SELECTION-v1,Only 17.579% of response magnitude remains at the mandatory characteristic scale

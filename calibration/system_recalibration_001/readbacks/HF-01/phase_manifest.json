@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0.0",
+  "campaign_id": "system_recalibration_001",
+  "phase_id": "HF-01",
+  "phase_run_id": "system_recalibration_001_HF-01_001",
+  "status": "PASS",
+  "operator_ids": ["Christopher_Robertson"],
+  "start_utc": "2026-08-26T18:40:43.9235004Z",
+  "end_utc": "2026-08-27T00:01:20.8656533Z",
+  "configuration_id": "HF01-PLAN-v3",
+  "repository": {
+    "path": "C:/Users/Chris/Documents/GitHub/Control_System",
+    "branch": "main",
+    "dirty_files": [
+      "control_app/devices/picoscope_service.py",
+      "calibration/system_recalibration_001/readbacks/HF-01/",
+      "tests/test_picoscope_signal_generator.py",
+      "tmp/"
+    ]
+  },
+  "device_ids": ["HF2-DEV18500", "PICOSCOPE-10261", "T660-2-00431"],
+  "component_ids": [
+    "CLOCK-SPLITTER-01",
+    "HF01-STIMULUS-TEE-01",
+    "HF01-SPARE-TEE-01",
+    "HF01-RG58-01",
+    "HF01-RG58-02"
+  ],
+  "sample_ids": [],
+  "calibration_bundle_ids": [
+    "MS01-PICO-CHANNEL-PATH-SKEW",
+    "MS02-SPLITTER-AND-PATH-CORRECTIONS",
+    "T2-01-DIRECT-ROUTES",
+    "CH00-FROZEN-REQUIREMENT-GRID",
+    "HF01-PROVISIONAL-ELECTRICAL-RESPONSE-v1"
+  ],
+  "artifact_index": "artifacts.csv",
+  "acquisition_index": "acquisition_index.csv",
+  "conditions_table": "conditions.csv",
+  "measurements_table": "measurements.csv",
+  "exclusions_table": "exclusions.csv",
+  "calibration_links_table": "calibration_links.csv",
+  "criterion_versions": {
+    "model_residual": "HF01-MODEL-RESIDUAL-v3",
+    "selection": "HF01-SELECTION-v1",
+    "channel_equivalence": "HF01-CHANNEL-EQUIVALENCE-v1",
+    "timing_copy": "HF01-TIMING-COPY-v3",
+    "rate_guard": "HF01-RATE-GUARD-v1",
+    "range_endpoint": "HF01-RANGE-ENDPOINT-v1",
+    "reload_equivalence": "HF01-SELECTED-CONFIG-v1",
+    "final_restoration": "HF01-FINAL-RESTORATION-v1"
+  },
+  "deviations": ["HF01-DEV-001"],
+  "user_input_required": [
+    "HF01-UIR-003",
+    "HF01-UIR-004"
+  ],
+  "restoration_artifact_id": "HF01-ART-0523",
+  "promotion_performed": false,
+  "promotion_approval_reference": null,
+  "notes": "HF-01 completed under HF01-AUTH-AMEND-005 and governing plan HF01-PLAN-v3. Timing R5 and all three accepted v3 anchors pass. The complete supported parameter space was evaluated computationally; sweep and HRP configurations were selected and confirmed, while the fastest valid MbCO configuration is explicitly outside the mandatory 1 us envelope. Both signal inputs, range endpoints, lower-rate decisions, and reload equivalence are retained. Default wiring and final electronic safe state pass under HF01-OPCONF-014 and HF01-FINAL-RESTORATION-STATE-R1-001. All failed and superseded attempts remain indexed. No later phase or canonical promotion occurred. Requested commit 93d81be is provenance only and is not a hash gate."
+}

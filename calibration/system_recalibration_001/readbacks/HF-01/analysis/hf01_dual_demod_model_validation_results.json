@@ -1,0 +1,1792 @@
+{
+  "analysis_id": "HF01-ANALYSIS-DUAL-DEMOD-MODEL-001",
+  "anchors": [
+    {
+      "acquisition_id": "HF01-ANCHOR-FAST-V3-001",
+      "anchor_pass": true,
+      "carrier_repeatability_pass": true,
+      "carrier_results": [
+        {
+          "acceptance_threshold": 0.05,
+          "baseline_model_ratio_complex": {
+            "imag": -5.933372021079025e-07,
+            "real": 0.9999999999995624
+          },
+          "combined_standard_uncertainty": 1.5068209184655668e-05,
+          "commanded_offset_hz": 0.0,
+          "input_vpp": 0.05088244334491216,
+          "kind": "carrier",
+          "label": "step_rise_1",
+          "model_corrected_gain_complex": {
+            "imag": -3.958666515862808e-06,
+            "real": 1.0000055660531795
+          },
+          "model_corrected_gain_standard_uncertainty": 1.2278338107545025e-05,
+          "normalized_complex_deviation": 5.213031163030218e-06,
+          "observed_alias_frequency_hz": 0.029355739030772644,
+          "observed_frequency_hz": 0.029355739030772644,
+          "pass": true,
+          "ratio_complex_standard_uncertainty": 1.2278338107541811e-05,
+          "ratio_complex_std": 0.001262461566311575,
+          "ratio_mean_complex": {
+            "imag": -4.552007020515398e-06,
+            "real": 1.0000055660503928
+          },
+          "reference_gated_run_end_timestamp": 851241491056,
+          "reference_gated_run_start_timestamp": 851222208640,
+          "reference_phase_fit_rms_rad": 0.014859378671953942,
+          "retained_samples": 10572
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "baseline_model_ratio_complex": {
+            "imag": -6.78549868102998e-07,
+            "real": 0.9999999999994276
+          },
+          "combined_standard_uncertainty": 1.4541345922969928e-05,
+          "commanded_offset_hz": 0.0,
+          "input_vpp": 0.0508558304106755,
+          "kind": "carrier",
+          "label": "step_rise_2",
+          "model_corrected_gain_complex": {
+            "imag": 2.578516255565745e-06,
+            "real": 0.9999920460456797
+          },
+          "model_corrected_gain_standard_uncertainty": 1.1625809693465384e-05,
+          "normalized_complex_deviation": 1.027825418226247e-05,
+          "observed_alias_frequency_hz": 0.033571690392300194,
+          "observed_frequency_hz": 0.033571690392300194,
+          "pass": true,
+          "ratio_complex_standard_uncertainty": 1.1625809693461404e-05,
+          "ratio_complex_std": 0.0012667332010377385,
+          "ratio_mean_complex": {
+            "imag": 1.8999717846159259e-06,
+            "real": 0.9999920460468569
+          },
+          "reference_gated_run_end_timestamp": 851303176912,
+          "reference_gated_run_start_timestamp": 851281524208,
+          "reference_phase_fit_rms_rad": 0.014869903612592134,
+          "retained_samples": 11872
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "baseline_model_ratio_complex": {
+            "imag": -6.714423659670558e-07,
+            "real": 0.9999999999994394
+          },
+          "combined_standard_uncertainty": 1.4751819317768783e-05,
+          "commanded_offset_hz": 0.0,
+          "input_vpp": 0.05086253937292412,
+          "kind": "carrier",
+          "label": "step_rise_3",
+          "model_corrected_gain_complex": {
+            "imag": -8.935166577761504e-06,
+            "real": 1.0000035250292207
+          },
+          "model_corrected_gain_standard_uncertainty": 1.1887940785060954e-05,
+          "normalized_complex_deviation": 6.333341573008273e-06,
+          "observed_alias_frequency_hz": 0.033220042160700236,
+          "observed_frequency_hz": 0.033220042160700236,
+          "pass": true,
+          "ratio_complex_standard_uncertainty": 1.1887940785056969e-05,
+          "ratio_complex_std": 0.0012686722181657637,
+          "ratio_mean_complex": {
+            "imag": -9.60661131057751e-06,
+            "real": 1.0000035250226607
+          },
+          "reference_gated_run_end_timestamp": 851363196544,
+          "reference_gated_run_start_timestamp": 851342424832,
+          "reference_phase_fit_rms_rad": 0.014790515582733896,
+          "retained_samples": 11389
+        }
+      ],
+      "complex_gain": {
+        "imag": -3.438438946019522e-06,
+        "real": 1.0000003790426932
+      },
+      "complex_gain_standard_uncertainty": 8.73457051100465e-06,
+      "cutoff_acceptance_threshold": 0.1,
+      "cutoff_pass": true,
+      "cutoff_relative_residual": -1.8286568532384864e-16,
+      "fitted_cutoff_hz": 39788.5344169299,
+      "fitted_cutoff_standard_uncertainty_hz": 8.43958497111479e-12,
+      "fitted_timeconstant_s": 4.000020242619829e-06,
+      "fitted_timeconstant_standard_uncertainty_s": 8.484482079693065e-22,
+      "integrity": {
+        "acquisition_and_safe_idle_pass": true,
+        "clock_lock_pass": true,
+        "demodulator_settings_pass": true,
+        "pass": true,
+        "picoscope_segments": [
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "zero_baseline",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_rise_1",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.028530617631829607,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_fall_1",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_rise_2",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.02853034275298701,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_fall_2",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_rise_3",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027638564334215614,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_fall_3",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_1",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.02853079568855737,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_2",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.02763897882393967,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_3",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027638585599677856,
+            "range_margin_pass": true
+          }
+        ],
+        "picoscope_voltage_and_overflow_pass": true,
+        "timestamp_stream": {
+          "exact_retained_test_reference_timestamp_match": true,
+          "first_timestamp": 851072377984,
+          "last_timestamp": 852339768880,
+          "reference_endpoint_samples_not_in_overlap": 922,
+          "reference_raw_sample_count": 1390606,
+          "sample_count_per_complex_stream": 1389684,
+          "strictly_monotonic_timestamps": true,
+          "test_endpoint_samples_not_in_overlap": 0,
+          "test_raw_sample_count": 1389684
+        }
+      },
+      "magnitude_pass": true,
+      "name": "fast",
+      "normalized_rms_complex_residual": 5.359802270908416e-05,
+      "normalized_rms_complex_residual_pass": true,
+      "order_readback": 1,
+      "phase_pass": true,
+      "pipeline_delay": {
+        "bound_pass": true,
+        "fitted_s": 5.679829846305412e-07,
+        "interpretation": "constant paired-demodulator pipeline nuisance",
+        "one_sample_bound_s": 4.342857142857142e-06,
+        "standard_uncertainty_s": 2.0014285609448848e-11
+      },
+      "predicted_cutoff_hz_from_readback": 39788.534416929906,
+      "rate_readback_sps": 230263.15789473685,
+      "raw_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_fast_v3_001_hf2_raw.csv",
+      "reference_connected_run_count": 6,
+      "reference_connected_threshold_v": 0.008866399593204687,
+      "reference_timeconstant_readback_s": 7.831859283193598e-07,
+      "response_results": [
+        {
+          "commanded_offset_hz": 3980.0,
+          "complex_standard_uncertainty": 3.057584341210459e-05,
+          "input_vpp": 0.05087410014564239,
+          "kind": "offset_carrier",
+          "label": "offset_1",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": 2.0432284842941684e-05,
+          "measured_normalized_magnitude": 0.995054607744933,
+          "measured_phase_rad": -0.09969380671180887,
+          "measured_response_complex": {
+            "imag": -0.09903653967318289,
+            "real": 0.99011385012229
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": -0.08496359652602094,
+            "real": 0.9914206270094374
+          },
+          "normalized_ratio_complex": {
+            "imag": -0.06554608843672902,
+            "real": 0.9930846849056464
+          },
+          "observed_alias_frequency_hz": 3980.0708235701472,
+          "observed_frequency_hz": 3980.0708235701472,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": 5.139052458177917e-06,
+          "phase_residual_uncorrected_rad": 0.014208986331691239,
+          "phase_standard_uncertainty_rad": 3.072780445828782e-05,
+          "predicted_normalized_magnitude": 0.9950341754600901,
+          "predicted_phase_rad": -0.09969894576426705,
+          "predicted_ratio_complex": {
+            "imag": -0.07964808821454566,
+            "real": 0.9920327542418609
+          },
+          "predicted_response_complex": {
+            "imag": -0.09903959421467241,
+            "real": 0.9900930103335416
+          },
+          "ratio_complex_standard_uncertainty": 2.9315941441779202e-05,
+          "ratio_complex_std": 0.0031659859508519177,
+          "ratio_mean_complex": {
+            "imag": -0.06554952794255219,
+            "real": 0.9930848359509167
+          },
+          "reference_gated_run_end_timestamp": 851423777968,
+          "reference_gated_run_start_timestamp": 851402505568,
+          "reference_phase_fit_rms_rad": 0.014861178186184954,
+          "reference_response_complex": {
+            "imag": -0.01957802973759797,
+            "real": 0.9996165537205444
+          },
+          "retained_samples": 11663
+        },
+        {
+          "commanded_offset_hz": 39800.0,
+          "complex_standard_uncertainty": 1.066918358592117e-05,
+          "input_vpp": 0.050857543952948794,
+          "kind": "offset_carrier",
+          "label": "offset_2",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": 1.0258970459697814e-05,
+          "measured_normalized_magnitude": 0.7070124535000061,
+          "measured_phase_rad": -0.7855825280331208,
+          "measured_response_complex": {
+            "imag": -0.5000254617769864,
+            "real": 0.4998411217365072
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": -0.4242325758272633,
+            "real": 0.5655911341340699
+          },
+          "normalized_ratio_complex": {
+            "imag": -0.3134596207706792,
+            "real": 0.6486785328211095
+          },
+          "observed_alias_frequency_hz": 39800.30536228525,
+          "observed_frequency_hz": 39800.30536228525,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": -3.6467703110276695e-05,
+          "phase_residual_uncorrected_rad": 0.14200056733780053,
+          "phase_standard_uncertainty_rad": 1.5090517194010188e-05,
+          "predicted_normalized_magnitude": 0.7070021945295464,
+          "predicted_phase_rad": -0.7855460603300105,
+          "predicted_ratio_complex": {
+            "imag": -0.40210223679602236,
+            "real": 0.5977788062349426
+          },
+          "predicted_response_complex": {
+            "imag": -0.4999999781264975,
+            "real": 0.4998521030695945
+          },
+          "ratio_complex_standard_uncertainty": 8.09918608756056e-06,
+          "ratio_complex_std": 0.0009201402582383961,
+          "ratio_mean_complex": {
+            "imag": -0.3134619700267887,
+            "real": 0.6486777008861996
+          },
+          "reference_gated_run_end_timestamp": 851457775504,
+          "reference_gated_run_start_timestamp": 851434234048,
+          "reference_phase_fit_rms_rad": 0.014837610450179898,
+          "reference_response_complex": {
+            "imag": -0.1886182889219414,
+            "real": 0.9630584640022888
+          },
+          "retained_samples": 12907
+        },
+        {
+          "commanded_offset_hz": 199000.0,
+          "complex_standard_uncertainty": 7.182950772517732e-06,
+          "input_vpp": 0.050821027864777595,
+          "kind": "offset_carrier",
+          "label": "offset_3",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": 8.59029622698182e-05,
+          "measured_normalized_magnitude": 0.1961463678778496,
+          "measured_phase_rad": -1.3734318940867554,
+          "measured_response_complex": {
+            "imag": -0.19233853523711963,
+            "real": 0.038461480659381625
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": -0.12076316026546347,
+            "real": 0.15456279227023134
+          },
+          "normalized_ratio_complex": {
+            "imag": 0.030595011833955573,
+            "real": 0.2728221153987393
+          },
+          "observed_alias_frequency_hz": -31261.737990796646,
+          "observed_frequency_hz": 199001.4199039402,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": 2.5645246257699483e-05,
+          "phase_residual_uncorrected_rad": 0.7102104389255395,
+          "phase_standard_uncertainty_rad": 3.662036085720907e-05,
+          "predicted_normalized_magnitude": 0.19606046491557977,
+          "predicted_phase_rad": -1.373457539333013,
+          "predicted_ratio_complex": {
+            "imag": -0.154612567665396,
+            "real": 0.22670887602947007
+          },
+          "predicted_response_complex": {
+            "imag": -0.1922552857869214,
+            "real": 0.03843970590291329
+          },
+          "ratio_complex_standard_uncertainty": 6.937045656965483e-06,
+          "ratio_complex_std": 0.0007816114367525763,
+          "ratio_mean_complex": {
+            "imag": 0.03059408534858433,
+            "real": 0.2728223240090489
+          },
+          "reference_gated_run_end_timestamp": 851490888400,
+          "reference_gated_run_start_timestamp": 851467733632,
+          "reference_phase_fit_rms_rad": 0.0148595055394658,
+          "reference_response_complex": {
+            "imag": -0.4998902796988242,
+            "real": 0.5104741712145305
+          },
+          "retained_samples": 12695
+        }
+      ],
+      "status_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_fast_v3_001_status.json",
+      "step_response": {
+        "evaluated_transition_count": 6,
+        "group_delay_pass": true,
+        "pipeline_delay_correction_s": 5.679829846305412e-07,
+        "pipeline_delay_standard_uncertainty_s": 2.0014285609448848e-11,
+        "predicted_1_percent_s": 4.020154685913341e-08,
+        "predicted_1_to_99_s": 1.838057241780253e-05,
+        "predicted_99_percent_s": 1.8420773964661664e-05,
+        "predicted_relative_group_delay_s": 2.229739635285855e-06,
+        "reference_edges_identified_pass": true,
+        "rising_falling_final_gain_fractional_span": 0.0007523181806622847,
+        "rising_falling_final_gain_pass": true,
+        "sample_interval_s": 4.342857142857142e-06,
+        "settling_and_overshoot_pass": true,
+        "transitions": [
+          {
+            "absolute_overshoot": 0.0018784565463592084,
+            "group_delay_pass": true,
+            "group_delay_residual_s": 1.843985751223157e-07,
+            "group_delay_standard_uncertainty_s": 8.253328484617068e-06,
+            "group_delay_threshold_s": 2.4759985453851203e-05,
+            "label": "step_rise_1",
+            "observed_1_to_99_s": 2.1373099277161023e-05,
+            "observed_relative_group_delay_s": 2.4141382104081706e-06,
+            "observed_relative_group_delay_uncorrected_s": 2.9821211950387116e-06,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "predicted_relative_group_delay_s": 2.229739635285855e-06,
+            "reference_edge_50_s": 0.07852162075448164,
+            "settling_limit_s": 2.2056686901363037e-05,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 1.1801777630794812e-05,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.07852460287567668
+          },
+          {
+            "absolute_overshoot": 0.002610686079371561,
+            "group_delay_pass": true,
+            "group_delay_residual_s": 1.8075751210872267e-07,
+            "group_delay_standard_uncertainty_s": 8.09804525194668e-06,
+            "group_delay_threshold_s": 2.429413575584004e-05,
+            "label": "step_fall_1",
+            "observed_1_to_99_s": 2.121476020613272e-05,
+            "observed_relative_group_delay_s": 2.4104971473945776e-06,
+            "observed_relative_group_delay_uncorrected_s": 2.9784801320251186e-06,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "predicted_relative_group_delay_s": 2.229739635285855e-06,
+            "reference_edge_50_s": 0.039262510156731656,
+            "settling_limit_s": 2.2056686901363037e-05,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 1.1650801259862893e-05,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.03926548863686368
+          },
+          {
+            "absolute_overshoot": 0.0020523204777274096,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -7.945274248267162e-07,
+            "group_delay_standard_uncertainty_s": 9.073466172784353e-06,
+            "group_delay_threshold_s": 2.7220398518353056e-05,
+            "label": "step_rise_2",
+            "observed_1_to_99_s": 2.059146599217576e-05,
+            "observed_relative_group_delay_s": 1.4352122104591387e-06,
+            "observed_relative_group_delay_uncorrected_s": 2.00319519508968e-06,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "predicted_relative_group_delay_s": 2.229739635285855e-06,
+            "reference_edge_50_s": 0.0332685967027375,
+            "settling_limit_s": 2.2056686901363037e-05,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 1.2783809679859984e-05,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.03327059989793259
+          },
+          {
+            "absolute_overshoot": 0.0034770001588688404,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -1.6910273584284072e-06,
+            "group_delay_standard_uncertainty_s": 9.38449477829019e-06,
+            "group_delay_threshold_s": 2.815348433487057e-05,
+            "label": "step_fall_2",
+            "observed_1_to_99_s": 1.976210859094829e-05,
+            "observed_relative_group_delay_s": 5.387122768574476e-07,
+            "observed_relative_group_delay_uncorrected_s": 1.1066952614879888e-06,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "predicted_relative_group_delay_s": 2.229739635285855e-06,
+            "reference_edge_50_s": 0.07084287907673616,
+            "settling_limit_s": 2.2056686901363037e-05,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 1.4975659268066447e-05,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.07084398577199764
+          },
+          {
+            "absolute_overshoot": 0.0021233028236680163,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -1.1027629218346183e-07,
+            "group_delay_standard_uncertainty_s": 8.562560689033448e-06,
+            "group_delay_threshold_s": 2.5687682067100343e-05,
+            "label": "step_rise_3",
+            "observed_1_to_99_s": 2.1023744403117495e-05,
+            "observed_relative_group_delay_s": 2.119463343102393e-06,
+            "observed_relative_group_delay_uncorrected_s": 2.687446327732934e-06,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "predicted_relative_group_delay_s": 2.229739635285855e-06,
+            "reference_edge_50_s": 0.06110647935725879,
+            "settling_limit_s": 2.2056686901363037e-05,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 1.2176648862330882e-05,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.06110916680358652
+          },
+          {
+            "absolute_overshoot": 0.0024115992454913806,
+            "group_delay_pass": true,
+            "group_delay_residual_s": 8.914901771081815e-08,
+            "group_delay_standard_uncertainty_s": 8.008083304347565e-06,
+            "group_delay_threshold_s": 2.4024249913042693e-05,
+            "label": "step_fall_3",
+            "observed_1_to_99_s": 2.1080838267992924e-05,
+            "observed_relative_group_delay_s": 2.318888652996673e-06,
+            "observed_relative_group_delay_uncorrected_s": 2.886871637627214e-06,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "predicted_relative_group_delay_s": 2.229739635285855e-06,
+            "reference_edge_50_s": 0.028944120739656576,
+            "settling_limit_s": 2.2056686901363037e-05,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 1.159754664628013e-05,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.028947007611294203
+          }
+        ]
+      },
+      "timeconstant_readback_s": 4.000020242619828e-06,
+      "zero_noise": {
+        "manufacturer_enbw_hz": 62499.68371066581,
+        "median_complex_output_rms_v": 1.267129112765313e-05,
+        "window_count": 6,
+        "windows": [
+          {
+            "complex_rms_v": 1.2567899666608481e-05,
+            "label": "zero_baseline",
+            "samples": 45275
+          },
+          {
+            "complex_rms_v": 1.2684287461289357e-05,
+            "label": "step_fall_1",
+            "samples": 22638
+          },
+          {
+            "complex_rms_v": 1.2702082437822558e-05,
+            "label": "step_fall_2",
+            "samples": 15092
+          },
+          {
+            "complex_rms_v": 1.2572289117803445e-05,
+            "label": "step_fall_3",
+            "samples": 22638
+          },
+          {
+            "complex_rms_v": 0.014600002315942414,
+            "label": "offset_1_end_zero",
+            "samples": 7546
+          },
+          {
+            "complex_rms_v": 1.2658294794016907e-05,
+            "label": "offset_3_end_zero",
+            "samples": 470821
+          }
+        ]
+      }
+    },
+    {
+      "acquisition_id": "HF01-ANCHOR-INTERMEDIATE-V3-001",
+      "anchor_pass": true,
+      "carrier_repeatability_pass": true,
+      "carrier_results": [
+        {
+          "acceptance_threshold": 0.05,
+          "baseline_model_ratio_complex": {
+            "imag": 0.0002962172885771618,
+            "real": 0.9999999451552855
+          },
+          "combined_standard_uncertainty": 0.0014665129740751212,
+          "commanded_offset_hz": 0.0,
+          "input_vpp": 0.05073986740090384,
+          "kind": "carrier",
+          "label": "step_rise_1",
+          "model_corrected_gain_complex": {
+            "imag": 0.00033440445623367183,
+            "real": 0.9997881299266942
+          },
+          "model_corrected_gain_standard_uncertainty": 0.0012089022176185915,
+          "normalized_complex_deviation": 0.0005934972020422599,
+          "observed_alias_frequency_hz": -0.011766192628180527,
+          "observed_frequency_hz": -0.011766192628180527,
+          "pass": true,
+          "ratio_complex_standard_uncertainty": 0.0012089022043540666,
+          "ratio_complex_std": 0.015575615351853428,
+          "ratio_mean_complex": {
+            "imag": 0.0006305589668918714,
+            "real": 0.9997879760372183
+          },
+          "reference_gated_run_end_timestamp": 864799696896,
+          "reference_gated_run_start_timestamp": 864761174016,
+          "reference_phase_fit_rms_rad": 0.015131110811592872,
+          "retained_samples": 166
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "baseline_model_ratio_complex": {
+            "imag": 0.00039692378273914155,
+            "real": 0.9999999015244913
+          },
+          "combined_standard_uncertainty": 0.0014549880463814245,
+          "commanded_offset_hz": 0.0,
+          "input_vpp": 0.050723768193084696,
+          "kind": "carrier",
+          "label": "step_rise_2",
+          "model_corrected_gain_complex": {
+            "imag": -0.001186124939456705,
+            "real": 0.9998528017898781
+          },
+          "model_corrected_gain_standard_uncertainty": 0.0011948625199360704,
+          "normalized_complex_deviation": 0.0009288042792792544,
+          "observed_alias_frequency_hz": -0.01576640516407352,
+          "observed_frequency_hz": -0.01576640516407352,
+          "pass": true,
+          "ratio_complex_standard_uncertainty": 0.0011948624963957738,
+          "ratio_complex_std": 0.015761318823023868,
+          "ratio_mean_complex": {
+            "imag": -0.0007892594663836804,
+            "real": 0.9998531741300625
+          },
+          "reference_gated_run_end_timestamp": 864897171456,
+          "reference_gated_run_start_timestamp": 864856664064,
+          "reference_phase_fit_rms_rad": 0.015194340213758055,
+          "retained_samples": 174
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "baseline_model_ratio_complex": {
+            "imag": 5.712079711481239e-05,
+            "real": 0.9999999979605999
+          },
+          "combined_standard_uncertainty": 0.0014162271694726921,
+          "commanded_offset_hz": 0.0,
+          "input_vpp": 0.0506679606734674,
+          "kind": "carrier",
+          "label": "step_rise_3",
+          "model_corrected_gain_complex": {
+            "imag": 7.782622405259798e-05,
+            "real": 0.999827940818831
+          },
+          "model_corrected_gain_standard_uncertainty": 0.001147379720341619,
+          "normalized_complex_deviation": 0.0003358874076297897,
+          "observed_alias_frequency_hz": -0.0022689232198743548,
+          "observed_frequency_hz": -0.0022689232198743548,
+          "pass": true,
+          "ratio_complex_standard_uncertainty": 0.0011473797198734796,
+          "ratio_complex_std": 0.015221712091533668,
+          "ratio_mean_complex": {
+            "imag": 0.00013493719285111226,
+            "real": 0.9998279343342859
+          },
+          "reference_gated_run_end_timestamp": 864996630528,
+          "reference_gated_run_start_timestamp": 864955772928,
+          "reference_phase_fit_rms_rad": 0.01470288412640954,
+          "retained_samples": 176
+        }
+      ],
+      "complex_gain": {
+        "imag": -0.00025796475305681164,
+        "real": 0.9998229575118011
+      },
+      "complex_gain_standard_uncertainty": 0.0008297604230188213,
+      "cutoff_acceptance_threshold": 0.1,
+      "cutoff_pass": true,
+      "cutoff_relative_residual": -1.0283023352232572e-15,
+      "fitted_cutoff_hz": 69.09862123436993,
+      "fitted_cutoff_standard_uncertainty_hz": 0.040439895012483684,
+      "fitted_timeconstant_s": 0.0010018887078828392,
+      "fitted_timeconstant_standard_uncertainty_s": 5.863543068905981e-07,
+      "integrity": {
+        "acquisition_and_safe_idle_pass": true,
+        "clock_lock_pass": true,
+        "demodulator_settings_pass": true,
+        "pass": true,
+        "picoscope_segments": [
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "zero_baseline",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_rise_1",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027638613220128973,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_fall_1",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0017808809055118112,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_rise_2",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027638834842698645,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_fall_2",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_rise_3",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.028530533684827133,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_fall_3",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_1",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027638906063957563,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_2",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027638833695197138,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_3",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0276384938993394,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_4",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.02763867931376003,
+            "range_margin_pass": true
+          }
+        ],
+        "picoscope_voltage_and_overflow_pass": true,
+        "timestamp_stream": {
+          "exact_retained_test_reference_timestamp_match": true,
+          "first_timestamp": 864579182592,
+          "last_timestamp": 866269403136,
+          "reference_endpoint_samples_not_in_overlap": 17,
+          "reference_raw_sample_count": 14497,
+          "sample_count_per_complex_stream": 14480,
+          "strictly_monotonic_timestamps": true,
+          "test_endpoint_samples_not_in_overlap": 0,
+          "test_raw_sample_count": 14480
+        }
+      },
+      "magnitude_pass": true,
+      "name": "intermediate",
+      "normalized_rms_complex_residual": 0.00024148850586392813,
+      "normalized_rms_complex_residual_pass": true,
+      "order_readback": 4,
+      "phase_pass": true,
+      "pipeline_delay": {
+        "bound_pass": true,
+        "fitted_s": 1.214924976856469e-06,
+        "interpretation": "constant paired-demodulator pipeline nuisance",
+        "one_sample_bound_s": 0.0005558857142857142,
+        "standard_uncertainty_s": 2.2726993460568806e-06
+      },
+      "predicted_cutoff_hz_from_readback": 69.09862123437,
+      "rate_readback_sps": 1798.9309210526317,
+      "raw_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_intermediate_v3_001_hf2_raw.csv",
+      "reference_connected_run_count": 7,
+      "reference_connected_threshold_v": 0.008875374507966001,
+      "reference_timeconstant_readback_s": 7.831859283193598e-07,
+      "response_results": [
+        {
+          "commanded_offset_hz": 6.92,
+          "complex_standard_uncertainty": 0.0010908075673859495,
+          "input_vpp": 0.05070486605972376,
+          "kind": "offset_carrier",
+          "label": "offset_1",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": -6.229004018598605e-05,
+          "measured_normalized_magnitude": 0.9961646709802127,
+          "measured_phase_rad": -0.17378465835461152,
+          "measured_response_complex": {
+            "imag": -0.17224805867373016,
+            "real": 0.9811598534348246
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": -0.17219630776848863,
+            "real": 0.9811689371866678
+          },
+          "normalized_ratio_complex": {
+            "imag": -0.17216294705145307,
+            "real": 0.9811747920319246
+          },
+          "observed_alias_frequency_hz": 6.909503512626641,
+          "observed_frequency_hz": 6.909503512626641,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": 8.849508774963488e-05,
+          "phase_residual_uncorrected_rad": 0.00014123946522284772,
+          "phase_standard_uncertainty_rad": 0.0010950072805860596,
+          "predicted_normalized_magnitude": 0.9962269610203986,
+          "predicted_phase_rad": -0.17387315344236115,
+          "predicted_ratio_complex": {
+            "imag": -0.1723122999274795,
+            "real": 0.9812118172469192
+          },
+          "predicted_response_complex": {
+            "imag": -0.17234566190323644,
+            "real": 0.9812059573234736
+          },
+          "ratio_complex_standard_uncertainty": 0.0007046642117774355,
+          "ratio_complex_std": 0.015178931656444081,
+          "ratio_mean_complex": {
+            "imag": -0.1723855754078635,
+            "real": 0.9809566704332635
+          },
+          "reference_gated_run_end_timestamp": 865163096064,
+          "reference_gated_run_start_timestamp": 865054998528,
+          "reference_phase_fit_rms_rad": 0.014812636052746927,
+          "reference_response_complex": {
+            "imag": -3.400099180948384e-05,
+            "real": 0.9999999988439325
+          },
+          "retained_samples": 464
+        },
+        {
+          "commanded_offset_hz": 69.2,
+          "complex_standard_uncertainty": 0.0013442870114629302,
+          "input_vpp": 0.05062386180859471,
+          "kind": "offset_carrier",
+          "label": "offset_2",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": -6.0039016148261126e-05,
+          "measured_normalized_magnitude": 0.706437041783142,
+          "measured_phase_rad": -1.6437149881267303,
+          "measured_response_complex": {
+            "imag": -0.7045597646076753,
+            "real": -0.05146680580037992
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": -0.7045868503618936,
+            "real": -0.05109466019481211
+          },
+          "normalized_ratio_complex": {
+            "imag": -0.7046042474927201,
+            "real": -0.05085475665953774
+          },
+          "observed_alias_frequency_hz": 69.19223673484154,
+          "observed_frequency_hz": 69.19223673484154,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": -0.0005617300669138459,
+          "phase_residual_uncorrected_rad": -3.35442941026276e-05,
+          "phase_standard_uncertainty_rad": 0.0019029112744000072,
+          "predicted_normalized_magnitude": 0.7064970807992903,
+          "predicted_phase_rad": -1.6431532580598165,
+          "predicted_ratio_complex": {
+            "imag": -0.7046658363778959,
+            "real": -0.05083544123896644
+          },
+          "predicted_response_complex": {
+            "imag": -0.704648445816602,
+            "real": -0.05107536574676866
+          },
+          "ratio_complex_standard_uncertainty": 0.0009878477691560425,
+          "ratio_complex_std": 0.010776146926808384,
+          "ratio_mean_complex": {
+            "imag": -0.704466383868805,
+            "real": -0.051027516267589224
+          },
+          "reference_gated_run_end_timestamp": 865200334848,
+          "reference_gated_run_start_timestamp": 865172668416,
+          "reference_phase_fit_rms_rad": 0.014729173744919723,
+          "reference_response_complex": {
+            "imag": -0.0003404881986352655,
+            "real": 0.9999998840677732
+          },
+          "retained_samples": 119
+        },
+        {
+          "commanded_offset_hz": 346.0,
+          "complex_standard_uncertainty": 0.0003102551004870205,
+          "input_vpp": 0.050686145519717694,
+          "kind": "offset_carrier",
+          "label": "offset_3",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": -4.2789466020504846e-05,
+          "measured_normalized_magnitude": 0.030264825827722934,
+          "measured_phase_rad": 1.723163000906235,
+          "measured_response_complex": {
+            "imag": 0.029914196858055183,
+            "real": -0.004593529005016359
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": 0.029901959907724925,
+            "real": -0.004672523521526286
+          },
+          "normalized_ratio_complex": {
+            "imag": 0.02989400426824598,
+            "real": -0.0047234358843305894
+          },
+          "observed_alias_frequency_hz": 346.00219488642887,
+          "observed_frequency_hz": 346.00219488642887,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": 0.0015296792163443929,
+          "phase_residual_uncorrected_rad": 0.004170921143539674,
+          "phase_standard_uncertainty_rad": 0.010251342672615786,
+          "predicted_normalized_magnitude": 0.03030761529374344,
+          "predicted_phase_rad": 1.7216333216898907,
+          "predicted_ratio_complex": {
+            "imag": 0.029955737935261934,
+            "real": -0.004605211441631938
+          },
+          "predicted_response_complex": {
+            "imag": 0.02996349210233935,
+            "real": -0.004554194311467032
+          },
+          "ratio_complex_standard_uncertainty": 0.0002706313593550958,
+          "ratio_complex_std": 0.0030378294744710013,
+          "ratio_mean_complex": {
+            "imag": 0.02988993023931958,
+            "real": -0.004714888036059842
+          },
+          "reference_gated_run_end_timestamp": 865239324672,
+          "reference_gated_run_start_timestamp": 865210140672,
+          "reference_phase_fit_rms_rad": 0.014983913834795377,
+          "reference_response_complex": {
+            "imag": -0.0017026380667772242,
+            "real": 0.9999971010152096
+          },
+          "retained_samples": 126
+        },
+        {
+          "commanded_offset_hz": -69.2,
+          "complex_standard_uncertainty": 0.0014177033393943724,
+          "input_vpp": 0.0506270540734221,
+          "kind": "offset_carrier",
+          "label": "offset_4",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": -1.4720907241083658e-05,
+          "measured_normalized_magnitude": 0.706331557838616,
+          "measured_phase_rad": 1.643307260976797,
+          "measured_response_complex": {
+            "imag": 0.7044754837002385,
+            "real": -0.05117189134711544
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": 0.7045024226752973,
+            "real": -0.05079966578003131
+          },
+          "normalized_ratio_complex": {
+            "imag": 0.7045197251519898,
+            "real": -0.05055971072204138
+          },
+          "observed_alias_frequency_hz": -69.21539054724218,
+          "observed_frequency_hz": -69.21539054724218,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": -0.00033601714514341907,
+          "phase_residual_uncorrected_rad": -0.0008643796648684089,
+          "phase_standard_uncertainty_rad": 0.0020071357759131755,
+          "predicted_normalized_magnitude": 0.7063462787458571,
+          "predicted_phase_rad": 1.6436432781219403,
+          "predicted_ratio_complex": {
+            "imag": 0.7044904414097867,
+            "real": -0.05116973070656349
+          },
+          "predicted_response_complex": {
+            "imag": 0.7044729311623814,
+            "real": -0.051409675719679956
+          },
+          "ratio_complex_standard_uncertainty": 0.0010855730194247667,
+          "ratio_complex_std": 0.011742267554388787,
+          "ratio_mean_complex": {
+            "imag": 0.7044080378501547,
+            "real": -0.05036901824813004
+          },
+          "reference_gated_run_end_timestamp": 865276213248,
+          "reference_gated_run_start_timestamp": 865249013760,
+          "reference_phase_fit_rms_rad": 0.015831631768822126,
+          "reference_response_complex": {
+            "imag": 0.00034060213624472884,
+            "real": 0.9999998839901713
+          },
+          "retained_samples": 117
+        }
+      ],
+      "status_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_intermediate_v3_001_status.json",
+      "step_response": {
+        "evaluated_transition_count": 6,
+        "group_delay_pass": true,
+        "pipeline_delay_correction_s": 1.214924976856469e-06,
+        "pipeline_delay_standard_uncertainty_s": 2.2726993460568806e-06,
+        "predicted_1_percent_s": 0.000824803562628821,
+        "predicted_1_to_99_s": 0.009239286244837087,
+        "predicted_99_percent_s": 0.010064089807465908,
+        "predicted_relative_group_delay_s": 0.0036784533358154427,
+        "reference_edges_identified_pass": true,
+        "rising_falling_final_gain_fractional_span": 0.00040434245056780087,
+        "rising_falling_final_gain_pass": true,
+        "sample_interval_s": 0.0005558857142857142,
+        "settling_and_overshoot_pass": true,
+        "transitions": [
+          {
+            "absolute_overshoot": 0.0005753471553258116,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -5.8280140887120076e-05,
+            "group_delay_standard_uncertainty_s": 0.0009757946469750771,
+            "group_delay_threshold_s": 0.0029273839409252314,
+            "label": "step_rise_1",
+            "observed_1_to_99_s": 0.009501216524536421,
+            "observed_relative_group_delay_s": 0.0036201731949283226,
+            "observed_relative_group_delay_uncorrected_s": 0.0036213881199051792,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "predicted_relative_group_delay_s": 0.0036784533358154427,
+            "reference_edge_50_s": 0.05642232578914041,
+            "settling_limit_s": 0.011087143493804505,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.0013253481048692284,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.06004371390904559
+          },
+          {
+            "absolute_overshoot": 0.00011988669746744171,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -0.00019438290453271728,
+            "group_delay_standard_uncertainty_s": 0.0009645920031459249,
+            "group_delay_threshold_s": 0.002893776009437775,
+            "label": "step_fall_1",
+            "observed_1_to_99_s": 0.009362233101886254,
+            "observed_relative_group_delay_s": 0.0034840704312827254,
+            "observed_relative_group_delay_uncorrected_s": 0.003485285356259582,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "predicted_relative_group_delay_s": 0.0036784533358154427,
+            "reference_edge_50_s": 0.044193131310173425,
+            "settling_limit_s": 0.011087143493804505,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.0012811834628332042,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.04767841666643301
+          },
+          {
+            "absolute_overshoot": 0.000755122601204139,
+            "group_delay_pass": true,
+            "group_delay_residual_s": 0.0002045620609850648,
+            "group_delay_standard_uncertainty_s": 0.0009646270517954277,
+            "group_delay_threshold_s": 0.002893881155386283,
+            "label": "step_rise_2",
+            "observed_1_to_99_s": 0.00948175821991707,
+            "observed_relative_group_delay_s": 0.0038830153968005075,
+            "observed_relative_group_delay_uncorrected_s": 0.003884230321777364,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "predicted_relative_group_delay_s": 0.0036784533358154427,
+            "reference_edge_50_s": 0.05253079452610331,
+            "settling_limit_s": 0.011087143493804505,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.001220194080703768,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.056415024847880677
+          },
+          {
+            "absolute_overshoot": 0.0002050061035910286,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -0.0001103831973328826,
+            "group_delay_standard_uncertainty_s": 0.0009663207909927185,
+            "group_delay_threshold_s": 0.0028989623729781555,
+            "label": "step_fall_2",
+            "observed_1_to_99_s": 0.00935598920434827,
+            "observed_relative_group_delay_s": 0.00356807013848256,
+            "observed_relative_group_delay_uncorrected_s": 0.0035692850634594167,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "predicted_relative_group_delay_s": 0.0036784533358154427,
+            "reference_edge_50_s": 0.049195725926376443,
+            "settling_limit_s": 0.011087143493804505,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.001311478408267952,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.05276501098983586
+          },
+          {
+            "absolute_overshoot": 0.00020272997153192307,
+            "group_delay_pass": true,
+            "group_delay_residual_s": 0.0002524350652721879,
+            "group_delay_standard_uncertainty_s": 0.0009684060941963518,
+            "group_delay_threshold_s": 0.0029052182825890552,
+            "label": "step_rise_3",
+            "observed_1_to_99_s": 0.009579711445067945,
+            "observed_relative_group_delay_s": 0.0039308884010876306,
+            "observed_relative_group_delay_uncorrected_s": 0.003932103326064487,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "predicted_relative_group_delay_s": 0.0036784533358154427,
+            "reference_edge_50_s": 0.06587330120121644,
+            "settling_limit_s": 0.011087143493804505,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.0012382406157814103,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.06980540452728093
+          },
+          {
+            "absolute_overshoot": 4.334331515831735e-05,
+            "group_delay_pass": true,
+            "group_delay_residual_s": 5.0304214072110446e-05,
+            "group_delay_standard_uncertainty_s": 0.000970421836846293,
+            "group_delay_threshold_s": 0.002911265510538879,
+            "label": "step_fall_3",
+            "observed_1_to_99_s": 0.009261641558831704,
+            "observed_relative_group_delay_s": 0.003728757549887553,
+            "observed_relative_group_delay_uncorrected_s": 0.0037299724748644097,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "predicted_relative_group_delay_s": 0.0036784533358154427,
+            "reference_edge_50_s": 0.0642046444459322,
+            "settling_limit_s": 0.011087143493804505,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.0011669267281985958,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.06793461692079661
+          }
+        ]
+      },
+      "timeconstant_readback_s": 0.0010018887078828383,
+      "zero_noise": {
+        "manufacturer_enbw_hz": 77.97772286014825,
+        "median_complex_output_rms_v": 5.312740406605835e-07,
+        "window_count": 7,
+        "windows": [
+          {
+            "complex_rms_v": 5.312740406605835e-07,
+            "label": "zero_baseline",
+            "samples": 531
+          },
+          {
+            "complex_rms_v": 5.140523316757568e-07,
+            "label": "step_fall_1",
+            "samples": 236
+          },
+          {
+            "complex_rms_v": 4.939815649130113e-07,
+            "label": "step_fall_2",
+            "samples": 236
+          },
+          {
+            "complex_rms_v": 5.338612356786862e-07,
+            "label": "step_fall_3",
+            "samples": 177
+          },
+          {
+            "complex_rms_v": 0.010163717500421443,
+            "label": "offset_2_end_zero",
+            "samples": 59
+          },
+          {
+            "complex_rms_v": 0.0006299216114600282,
+            "label": "offset_3_end_zero",
+            "samples": 59
+          },
+          {
+            "complex_rms_v": 5.011545303507274e-07,
+            "label": "offset_4_end_zero",
+            "samples": 4272
+          }
+        ]
+      }
+    },
+    {
+      "acquisition_id": "HF01-ANCHOR-SLOW-V3-R1-001",
+      "anchor_pass": true,
+      "carrier_repeatability_pass": true,
+      "carrier_results": [
+        {
+          "acceptance_threshold": 0.05,
+          "baseline_model_ratio_complex": {
+            "imag": 0.25714384082838826,
+            "real": 0.9619685074891441
+          },
+          "combined_standard_uncertainty": 0.009272830389815868,
+          "commanded_offset_hz": 0.0,
+          "input_vpp": 0.050623511643241734,
+          "kind": "carrier",
+          "label": "step_rise_1",
+          "model_corrected_gain_complex": {
+            "imag": -0.030778546580702632,
+            "real": 1.0011759645996818
+          },
+          "model_corrected_gain_standard_uncertainty": 0.0023559802764721483,
+          "normalized_complex_deviation": 0.008448123458409956,
+          "observed_alias_frequency_hz": -0.07305826735375374,
+          "observed_frequency_hz": -0.07305826735375374,
+          "pass": true,
+          "ratio_complex_standard_uncertainty": 0.0023459535210482016,
+          "ratio_complex_std": 0.016253242762602354,
+          "ratio_mean_complex": {
+            "imag": 0.22783824036530503,
+            "real": 0.9710142620828375
+          },
+          "reference_gated_run_end_timestamp": 911133835264,
+          "reference_gated_run_start_timestamp": 910694907904,
+          "reference_phase_fit_rms_rad": 0.01221586221720415,
+          "retained_samples": 48
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "baseline_model_ratio_complex": {
+            "imag": 0.18862436228632096,
+            "real": 0.9797493594882428
+          },
+          "combined_standard_uncertainty": 0.009673603433867918,
+          "commanded_offset_hz": 0.0,
+          "input_vpp": 0.05058760292801205,
+          "kind": "carrier",
+          "label": "step_rise_2",
+          "model_corrected_gain_complex": {
+            "imag": -0.056759328003694584,
+            "real": 0.9995526597568967
+          },
+          "model_corrected_gain_standard_uncertainty": 0.003638667478851333,
+          "normalized_complex_deviation": 0.01755814959466998,
+          "observed_alias_frequency_hz": -0.05318878800791791,
+          "observed_frequency_hz": -0.05318878800791791,
+          "pass": true,
+          "ratio_complex_standard_uncertainty": 0.0036304492869462636,
+          "ratio_complex_std": 0.02515249047717252,
+          "ratio_mean_complex": {
+            "imag": 0.13293006776163774,
+            "real": 0.990017270220086
+          },
+          "reference_gated_run_end_timestamp": 912047177728,
+          "reference_gated_run_start_timestamp": 911602647040,
+          "reference_phase_fit_rms_rad": 0.017381816986387025,
+          "retained_samples": 48
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "baseline_model_ratio_complex": {
+            "imag": 0.2037055980010347,
+            "real": 0.9763343299228591
+          },
+          "combined_standard_uncertainty": 0.00951500139237602,
+          "commanded_offset_hz": 0.0,
+          "input_vpp": 0.050615264248775806,
+          "kind": "carrier",
+          "label": "step_rise_3",
+          "model_corrected_gain_complex": {
+            "imag": -0.030065773769146986,
+            "real": 1.0004818540608085
+          },
+          "model_corrected_gain_standard_uncertainty": 0.0031978627604365853,
+          "normalized_complex_deviation": 0.009125090606152074,
+          "observed_alias_frequency_hz": -0.057524245657287726,
+          "observed_frequency_hz": -0.057524245657287726,
+          "pass": true,
+          "ratio_complex_standard_uncertainty": 0.0031894167552975624,
+          "ratio_complex_std": 0.022096927466747403,
+          "ratio_mean_complex": {
+            "imag": 0.1744495072841285,
+            "real": 0.982929347009447
+          },
+          "reference_gated_run_end_timestamp": 912958652416,
+          "reference_gated_run_start_timestamp": 912517857280,
+          "reference_phase_fit_rms_rad": 0.017809603749754516,
+          "retained_samples": 48
+        }
+      ],
+      "complex_gain": {
+        "imag": -0.03920121611784806,
+        "real": 1.0004034928057957
+      },
+      "complex_gain_standard_uncertainty": 0.008975488030212694,
+      "cutoff_acceptance_threshold": 0.1,
+      "cutoff_pass": true,
+      "cutoff_relative_residual": 0.0004395414855290475,
+      "fitted_cutoff_hz": 0.6732246305453102,
+      "fitted_cutoff_standard_uncertainty_hz": 0.0010203346812689316,
+      "fitted_timeconstant_s": 0.07112183900088684,
+      "fitted_timeconstant_standard_uncertainty_s": 0.00010779177652702661,
+      "integrity": {
+        "acquisition_and_safe_idle_pass": true,
+        "clock_lock_pass": true,
+        "demodulator_settings_pass": true,
+        "pass": true,
+        "picoscope_segments": [
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "zero_baseline",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_rise_1",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0276388940489424,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_fall_1",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0017808809055118112,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_rise_2",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027638706306084376,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_fall_2",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_rise_3",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.02763851431204397,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "step_fall_3",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.0026697834645669294,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_1",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027638454574341956,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_2",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027637958124459537,
+            "range_margin_pass": true
+          },
+          {
+            "eighty_percent_range_v": 0.08041632779836119,
+            "label": "offset_3",
+            "overflow": 0,
+            "peak_with_expanded_uncertainty_v": 0.027639084955683478,
+            "range_margin_pass": true
+          }
+        ],
+        "picoscope_voltage_and_overflow_pass": true,
+        "timestamp_stream": {
+          "exact_retained_test_reference_timestamp_match": true,
+          "first_timestamp": 909493927936,
+          "last_timestamp": 932185538560,
+          "reference_endpoint_samples_not_in_overlap": 1,
+          "reference_raw_sample_count": 12151,
+          "sample_count_per_complex_stream": 12150,
+          "strictly_monotonic_timestamps": true,
+          "test_endpoint_samples_not_in_overlap": 0,
+          "test_raw_sample_count": 12150
+        }
+      },
+      "magnitude_pass": true,
+      "name": "slow",
+      "normalized_rms_complex_residual": 0.017673905493791883,
+      "normalized_rms_complex_residual_pass": true,
+      "order_readback": 8,
+      "phase_pass": true,
+      "pipeline_delay": {
+        "bound_pass": true,
+        "fitted_s": 0.0026462868830082835,
+        "interpretation": "constant paired-demodulator pipeline nuisance",
+        "one_sample_bound_s": 0.008894171428571428,
+        "standard_uncertainty_s": 0.0006053106593877947
+      },
+      "predicted_cutoff_hz_from_readback": 0.6729288503987506,
+      "rate_readback_sps": 112.43318256578948,
+      "raw_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_slow_v3_r1_001_hf2_raw.csv",
+      "reference_connected_run_count": 6,
+      "reference_connected_threshold_v": 0.008885252047838245,
+      "reference_timeconstant_readback_s": 7.831859283193598e-07,
+      "response_results": [
+        {
+          "commanded_offset_hz": 0.0479,
+          "complex_standard_uncertainty": 0.009420202503441036,
+          "input_vpp": 0.05056429354332272,
+          "kind": "offset_carrier",
+          "label": "offset_1",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": -0.009463763749327225,
+          "measured_normalized_magnitude": 0.990222012281729,
+          "measured_phase_rad": -0.051777417737031914,
+          "measured_response_complex": {
+            "imag": -0.05124823304516627,
+            "real": 0.9888949652096652
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": -0.050922224280331156,
+            "real": 0.9889118063212817
+          },
+          "normalized_ratio_complex": {
+            "imag": -0.05092212779508212,
+            "real": 0.9889118112896151
+          },
+          "observed_alias_frequency_hz": 0.019827073481245315,
+          "observed_frequency_hz": 0.019827073481245315,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": 0.019133143658430496,
+          "phase_residual_uncorrected_rad": 0.019462810607270196,
+          "phase_standard_uncertainty_rad": 0.009513222677947181,
+          "predicted_normalized_magnitude": 0.9996857760310562,
+          "predicted_phase_rad": -0.07091056139546241,
+          "predicted_ratio_complex": {
+            "imag": -0.0708287892265106,
+            "real": 0.9971734720777178
+          },
+          "predicted_response_complex": {
+            "imag": -0.07082888651782566,
+            "real": 0.9971734651671493
+          },
+          "ratio_complex_standard_uncertainty": 0.0031545131114229584,
+          "ratio_complex_std": 0.11853584096734948,
+          "ratio_mean_complex": {
+            "imag": -0.08970922014316003,
+            "real": 0.9873146207541612
+          },
+          "reference_gated_run_end_timestamp": 926599020544,
+          "reference_gated_run_start_timestamp": 913421860864,
+          "reference_phase_fit_rms_rad": 0.25642881637465625,
+          "reference_response_complex": {
+            "imag": -9.756709184520372e-08,
+            "real": 0.9999999999999905
+          },
+          "retained_samples": 1412
+        },
+        {
+          "commanded_offset_hz": 0.479,
+          "complex_standard_uncertainty": 0.007702503262136963,
+          "input_vpp": 0.05051426759886483,
+          "kind": "offset_carrier",
+          "label": "offset_2",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": -0.0045095691649840175,
+          "measured_normalized_magnitude": 0.8288861621153657,
+          "measured_phase_rad": -1.6752067196899936,
+          "measured_response_complex": {
+            "imag": -0.8243722013668234,
+            "real": -0.08638717126956909
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": -0.8250392945109142,
+            "real": -0.07976485604120019
+          },
+          "normalized_ratio_complex": {
+            "imag": -0.8250394840714956,
+            "real": -0.0797628953415121
+          },
+          "observed_alias_frequency_hz": 0.48293835916505634,
+          "observed_frequency_hz": 0.48293835916505634,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": 0.02593163726140646,
+          "phase_residual_uncorrected_rad": 0.033961506898707805,
+          "phase_standard_uncertainty_rad": 0.009292594826869501,
+          "predicted_normalized_magnitude": 0.8333957312803497,
+          "predicted_phase_rad": -1.7011383569514,
+          "predicted_ratio_complex": {
+            "imag": -0.8263267068516269,
+            "real": -0.1083172122239904
+          },
+          "predicted_response_complex": {
+            "imag": -0.8263264494319186,
+            "real": -0.1083191759825925
+          },
+          "ratio_complex_standard_uncertainty": 0.0013400752720648772,
+          "ratio_complex_std": 0.016136643131270036,
+          "ratio_mean_complex": {
+            "imag": -0.8222455790693479,
+            "real": -0.11213763021679639
+          },
+          "reference_gated_run_end_timestamp": 927994249216,
+          "reference_gated_run_start_timestamp": 926649450496,
+          "reference_phase_fit_rms_rad": 0.01588929368124135,
+          "reference_response_complex": {
+            "imag": -2.3764924908627455e-06,
+            "real": 0.9999999999943523
+          },
+          "retained_samples": 145
+        },
+        {
+          "commanded_offset_hz": 2.395,
+          "complex_standard_uncertainty": 0.0006208252177248045,
+          "input_vpp": 0.05053980744760248,
+          "kind": "offset_carrier",
+          "label": "offset_3",
+          "magnitude_acceptance_threshold": 0.05,
+          "magnitude_pass": true,
+          "magnitude_residual": -0.0005110851273841949,
+          "measured_normalized_magnitude": 0.04802565404843878,
+          "measured_phase_rad": -0.25073613051504456,
+          "measured_response_complex": {
+            "imag": -0.011915987840640845,
+            "real": 0.04652389365220869
+          },
+          "measured_response_uncorrected_complex": {
+            "imag": -0.010067417163112043,
+            "real": 0.04695860473272392
+          },
+          "normalized_ratio_complex": {
+            "imag": -0.010066867594041464,
+            "real": 0.046958722554391
+          },
+          "observed_alias_frequency_hz": 2.3782765536662396,
+          "observed_frequency_hz": 2.3782765536662396,
+          "phase_acceptance_threshold_rad": 0.08726646259971647,
+          "phase_pass": true,
+          "phase_residual_rad": -0.005562712438043488,
+          "phase_residual_uncorrected_rad": 0.03398115548002185,
+          "phase_standard_uncertainty_rad": 0.012926949773523934,
+          "predicted_normalized_magnitude": 0.04853673917582298,
+          "predicted_phase_rad": -0.24517341807700108,
+          "predicted_ratio_complex": {
+            "imag": -0.0117805076327069,
+            "real": 0.04708539784328333
+          },
+          "predicted_response_complex": {
+            "imag": -0.011781058684057445,
+            "real": 0.04708525996641267
+          },
+          "ratio_complex_standard_uncertainty": 0.00010663444685108712,
+          "ratio_complex_std": 0.0008121037524871837,
+          "ratio_mean_complex": {
+            "imag": -0.011911768534165304,
+            "real": 0.04658303660892727
+          },
+          "reference_gated_run_end_timestamp": 928586334208,
+          "reference_gated_run_start_timestamp": 928046546944,
+          "reference_phase_fit_rms_rad": 0.015508644269118917,
+          "reference_response_complex": {
+            "imag": -1.1703266603241268e-05,
+            "real": 0.9999999998630336
+          },
+          "retained_samples": 58
+        }
+      ],
+      "status_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_slow_v3_r1_001_status.json",
+      "step_response": {
+        "evaluated_transition_count": 6,
+        "group_delay_pass": true,
+        "pipeline_delay_correction_s": 0.0026462868830082835,
+        "pipeline_delay_standard_uncertainty_s": 0.0006053106593877947,
+        "predicted_1_percent_s": 0.20677846755337687,
+        "predicted_1_to_99_s": 0.9316685321089091,
+        "predicted_99_percent_s": 1.138446999662286,
+        "predicted_relative_group_delay_s": 0.545690329641439,
+        "reference_edges_identified_pass": true,
+        "rising_falling_final_gain_fractional_span": 0.0018980049891145917,
+        "rising_falling_final_gain_pass": true,
+        "sample_interval_s": 0.008894171428571428,
+        "settling_and_overshoot_pass": true,
+        "transitions": [
+          {
+            "absolute_overshoot": 0.0007545964281643336,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -0.0049227570120153885,
+            "group_delay_standard_uncertainty_s": 0.015256797927360835,
+            "group_delay_threshold_s": 0.0457703937820825,
+            "label": "step_rise_1",
+            "observed_1_to_99_s": 0.9130016929995015,
+            "observed_relative_group_delay_s": 0.5407675726294237,
+            "observed_relative_group_delay_uncorrected_s": 0.5434138595124319,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "predicted_relative_group_delay_s": 0.545690329641439,
+            "reference_edge_50_s": 0.06670493933871602,
+            "settling_limit_s": 1.118002238530691,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.006265120013974052,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.610118798851148
+          },
+          {
+            "absolute_overshoot": 1.8230602710478114e-05,
+            "group_delay_pass": true,
+            "group_delay_residual_s": 0.0007058301995913618,
+            "group_delay_standard_uncertainty_s": 0.015246302649826632,
+            "group_delay_threshold_s": 0.04573890794947989,
+            "label": "step_fall_1",
+            "observed_1_to_99_s": 0.9339023955942232,
+            "observed_relative_group_delay_s": 0.5463961598410304,
+            "observed_relative_group_delay_uncorrected_s": 0.5490424467240387,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "predicted_relative_group_delay_s": 0.545690329641439,
+            "reference_edge_50_s": 0.06671091954421221,
+            "settling_limit_s": 1.118002238530691,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.00640450621077277,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.6157533662682508
+          },
+          {
+            "absolute_overshoot": 0.00045937775065429953,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -0.0016575062245230976,
+            "group_delay_standard_uncertainty_s": 0.015250000975105997,
+            "group_delay_threshold_s": 0.045750002925317994,
+            "label": "step_rise_2",
+            "observed_1_to_99_s": 0.9213306172810722,
+            "observed_relative_group_delay_s": 0.544032823416916,
+            "observed_relative_group_delay_uncorrected_s": 0.5466791102999242,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "predicted_relative_group_delay_s": 0.545690329641439,
+            "reference_edge_50_s": 0.06671551513752184,
+            "settling_limit_s": 1.118002238530691,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.006010150627434057,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.613394625437446
+          },
+          {
+            "absolute_overshoot": 2.7959975690050598e-05,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -0.002594314090866523,
+            "group_delay_standard_uncertainty_s": 0.01409349253455395,
+            "group_delay_threshold_s": 0.042280477603661853,
+            "label": "step_fall_2",
+            "observed_1_to_99_s": 0.9300905872851962,
+            "observed_relative_group_delay_s": 0.5430960155505725,
+            "observed_relative_group_delay_uncorrected_s": 0.5457423024335808,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "predicted_relative_group_delay_s": 0.545690329641439,
+            "reference_edge_50_s": 0.031136215719341966,
+            "settling_limit_s": 1.118002238530691,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.0062870329989696055,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.5768785181529228
+          },
+          {
+            "absolute_overshoot": 0.0006892544868473127,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -0.0063709250600559875,
+            "group_delay_standard_uncertainty_s": 0.014049138253439541,
+            "group_delay_threshold_s": 0.04214741476031862,
+            "label": "step_rise_3",
+            "observed_1_to_99_s": 0.916234806923192,
+            "observed_relative_group_delay_s": 0.539319404581383,
+            "observed_relative_group_delay_uncorrected_s": 0.5419656914643913,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "predicted_relative_group_delay_s": 0.545690329641439,
+            "reference_edge_50_s": 0.031128950233480796,
+            "settling_limit_s": 1.118002238530691,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.00618937358155991,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.5730946416978722
+          },
+          {
+            "absolute_overshoot": 1.751330452619827e-05,
+            "group_delay_pass": true,
+            "group_delay_residual_s": -0.005511795070319403,
+            "group_delay_standard_uncertainty_s": 0.015251310182451124,
+            "group_delay_threshold_s": 0.04575393054735337,
+            "label": "step_fall_3",
+            "observed_1_to_99_s": 0.9336073814726191,
+            "observed_relative_group_delay_s": 0.5401785345711196,
+            "observed_relative_group_delay_uncorrected_s": 0.5428248214541279,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "predicted_relative_group_delay_s": 0.545690329641439,
+            "reference_edge_50_s": 0.040019438848309816,
+            "settling_limit_s": 1.118002238530691,
+            "settling_pass": true,
+            "settling_standard_uncertainty_s": 0.006156095451750009,
+            "status": "EVALUATED",
+            "test_edge_50_s": 0.5828442603024377
+          }
+        ]
+      },
+      "timeconstant_readback_s": 0.07115309999965486,
+      "zero_noise": {
+        "manufacturer_enbw_hz": 0.7359927264272957,
+        "median_complex_output_rms_v": 6.849210773139334e-05,
+        "window_count": 7,
+        "windows": [
+          {
+            "complex_rms_v": 2.1119223476113683e-08,
+            "label": "zero_baseline",
+            "samples": 303
+          },
+          {
+            "complex_rms_v": 6.849210773139334e-05,
+            "label": "step_fall_1",
+            "samples": 122
+          },
+          {
+            "complex_rms_v": 6.127640421718818e-05,
+            "label": "step_fall_2",
+            "samples": 126
+          },
+          {
+            "complex_rms_v": 8.73054814046923e-05,
+            "label": "step_fall_3",
+            "samples": 122
+          },
+          {
+            "complex_rms_v": 0.0002020921489898146,
+            "label": "offset_1_end_zero",
+            "samples": 11
+          },
+          {
+            "complex_rms_v": 0.0012900543500430823,
+            "label": "offset_2_end_zero",
+            "samples": 11
+          },
+          {
+            "complex_rms_v": 4.529943930645515e-08,
+            "label": "offset_3_end_zero",
+            "samples": 964
+          }
+        ]
+      }
+    }
+  ],
+  "campaign_id": "system_recalibration_001",
+  "computational_selection_authorized": true,
+  "criterion_version": "HF01-MODEL-RESIDUAL-v3",
+  "intermediate_positive_negative_pair": {
+    "magnitude_acceptance_threshold": 0.05,
+    "magnitude_fractional_difference": 0.00014932940122575148,
+    "magnitude_pass": true,
+    "magnitude_standard_uncertainty": 0.0027657918447911533,
+    "negative_label": "offset_4",
+    "pass": true,
+    "phase_acceptance_threshold_rad": 0.08726646259971647,
+    "phase_sign_reversal_pass": true,
+    "phase_standard_uncertainty_rad": 0.002765802838452019,
+    "phase_sum_rad": -0.0004077271499334234,
+    "positive_label": "offset_2"
+  },
+  "method": "Exact-timestamp complex ratio of HF2LI demodulator 0 to same-clock wideband demodulator 1, with explicit reference-filter correction",
+  "overall_status": "PASS",
+  "phase_id": "HF-01",
+  "plan_version": "HF01-PLAN-v3",
+  "primary_anchor_pass_count": 3,
+  "primary_anchor_required_count": 3,
+  "validation_design_version": "HF01-VALIDATION-DESIGN-v3"
+}

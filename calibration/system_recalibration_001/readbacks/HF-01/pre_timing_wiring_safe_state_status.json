@@ -1,0 +1,28 @@
+{
+  "authorization_id": "HF01-AUTH-001",
+  "finished_utc": "2026-08-26T19:36:53.663826Z",
+  "phase_id": "HF-01",
+  "picoscope": {
+    "generator": {
+      "claim_limit": "API acceptance only until the connected output is measured on PicoScope channel A",
+      "electrical_state": "PROGRAMMED_ZERO_OUTPUT",
+      "frequency_hz": 1.0,
+      "offset_v": 0.0,
+      "pk_to_pk_v": 0.0,
+      "shots": 0,
+      "sweeps": 0,
+      "trigger_source": "NONE",
+      "waveform": "SINE"
+    },
+    "serial": "10261",
+    "status": "PASS"
+  },
+  "purpose": "program Pico generator zero and apply T660 safe idle before timing-copy cable moves",
+  "started_utc": "2026-08-26T19:36:46.419616Z",
+  "status": "PASS",
+  "t660": {
+    "matches_recipe": true,
+    "mismatches": [],
+    "status": "PASS"
+  }
+}

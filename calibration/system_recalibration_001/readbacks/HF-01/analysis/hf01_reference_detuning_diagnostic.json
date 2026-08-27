@@ -1,0 +1,79 @@
+{
+  "analysis_id": "HF01-ANALYSIS-REFERENCE-DETUNING-001",
+  "corrected_reference_frequency_hz": 2000013.7894589533,
+  "disposition": {
+    "HF01-ANCHOR-FAST-R1-001": "REJECT_REFERENCE_DETUNING",
+    "HF01-ANCHOR-INTERMEDIATE-001": "REJECT_REFERENCE_DETUNING",
+    "HF01-ANCHOR-SLOW-001": "REJECT_REFERENCE_DETUNING"
+  },
+  "mean_carrier_detuning_hz": 13.7894589533403,
+  "method": "linear fit to unwrapped HF2 complex phase over the final half of each energized segment",
+  "repeat_scope": "repeat the same three frozen anchors with corrected reference; no additional model point",
+  "segment_estimates": [
+    {
+      "carrier_detuning_hz": 13.788687452075342,
+      "commanded_offset_hz": 0.0,
+      "label": "step_rise_1",
+      "measured_rotation_hz": 13.788687452075342,
+      "phase_fit_rms_rad": 0.0002716601480910358,
+      "retained_samples": 177
+    },
+    {
+      "carrier_detuning_hz": 13.791606359224646,
+      "commanded_offset_hz": 0.0,
+      "label": "step_rise_2",
+      "measured_rotation_hz": 13.791606359224646,
+      "phase_fit_rms_rad": 0.00020972507684626233,
+      "retained_samples": 177
+    },
+    {
+      "carrier_detuning_hz": 13.788083048720912,
+      "commanded_offset_hz": 0.0,
+      "label": "step_rise_3",
+      "measured_rotation_hz": 13.788083048720912,
+      "phase_fit_rms_rad": 0.0002733921827602017,
+      "retained_samples": 177
+    },
+    {
+      "carrier_detuning_hz": 13.829989302136765,
+      "commanded_offset_hz": 6.92,
+      "label": "offset_1",
+      "measured_rotation_hz": 20.749989302136765,
+      "phase_fit_rms_rad": 0.014284671793044431,
+      "retained_samples": 472
+    },
+    {
+      "carrier_detuning_hz": 13.786802926982347,
+      "commanded_offset_hz": 69.2,
+      "label": "offset_2",
+      "measured_rotation_hz": 82.98680292698235,
+      "phase_fit_rms_rad": 0.0002358910866669076,
+      "retained_samples": 118
+    },
+    {
+      "carrier_detuning_hz": 13.872150570591202,
+      "commanded_offset_hz": 346.0,
+      "label": "offset_3",
+      "measured_rotation_hz": 359.8721505705912,
+      "phase_fit_rms_rad": 0.03584429916870498,
+      "retained_samples": 59
+    },
+    {
+      "carrier_detuning_hz": 13.779833015990754,
+      "commanded_offset_hz": -69.2,
+      "label": "offset_4",
+      "measured_rotation_hz": -55.42016698400925,
+      "phase_fit_rms_rad": 0.00017846174795505337,
+      "retained_samples": 118
+    }
+  ],
+  "source_acquisition_id": "HF01-ANCHOR-INTERMEDIATE-001",
+  "source_raw_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_intermediate_001_hf2_raw.csv",
+  "source_status_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_intermediate_001_status.json",
+  "standard_uncertainty_hz": 0.0010877867250837026,
+  "step_carrier_detuning_hz": [
+    13.788687452075342,
+    13.791606359224646,
+    13.788083048720912
+  ]
+}

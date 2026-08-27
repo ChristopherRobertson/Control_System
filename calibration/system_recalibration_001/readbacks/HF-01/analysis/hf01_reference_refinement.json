@@ -1,0 +1,17 @@
+{
+  "analysis_id": "HF01-ANALYSIS-REFERENCE-REFINEMENT-001",
+  "clockbase_hz": 210000000.0,
+  "mean_residual_rotation_hz": 0.13762770368032493,
+  "prior_reference_frequency_hz": 2000013.7894589533,
+  "refined_reference_frequency_hz": 2000013.927086657,
+  "scope": "reference synchronization only; no new filter setting or validation point",
+  "source_acquisition_id": "HF01-ANCHOR-INTERMEDIATE-R1-001",
+  "source_raw_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_intermediate_r1_001_hf2_raw.csv",
+  "source_status_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_intermediate_r1_001_status.json",
+  "standard_uncertainty_hz": 0.0011382588143022158,
+  "step_rotation_estimates_hz": [
+    0.13535121287108812,
+    0.13877551891280718,
+    0.13875637925707945
+  ]
+}

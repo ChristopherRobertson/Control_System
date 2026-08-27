@@ -1,0 +1,1095 @@
+{
+  "all_primary_magnitude_and_repeatability_metrics_pass": false,
+  "analysis_id": "HF01-ANALYSIS-MODEL-VALIDATION-001",
+  "criterion_version": "HF01-MODEL-RESIDUAL-v1",
+  "diagnostic_only_acquisition": "HF01-TARGET-HIGHORDER-001",
+  "downstream_disposition": "STOP_FOR_PROSPECTIVE_HF01_AMENDMENT; do not compute or select experiment configurations from the unvalidated model",
+  "fast_anchor_integrity_disposition": "REJECT_ACQUISITION: step_rise_1 carrier scale is inconsistent with step_rise_2 and step_rise_3, so the fast magnitude/cutoff residuals cannot be interpreted as a manufacturer-model rejection.",
+  "intermediate_sign_pair": {
+    "fractional_magnitude_difference": 0.0020830731599045514,
+    "magnitude_symmetry_pass": true,
+    "phase_sign_reversal_pass": null
+  },
+  "magnitude_passing_primary_regions": [
+    "intermediate",
+    "slow"
+  ],
+  "manufacturer_model": "H_n(f) = [1 + i 2 pi f tau]^-n",
+  "overall_model_verdict": "NOT_VALIDATED",
+  "primary_anchor_acquisitions": [
+    "HF01-ANCHOR-FAST-R2-001",
+    "HF01-ANCHOR-INTERMEDIATE-R1-001",
+    "HF01-ANCHOR-SLOW-R3-001"
+  ],
+  "results": [
+    {
+      "acquisition_id": "HF01-ANCHOR-FAST-R2-001",
+      "carrier_repeatability_pass": false,
+      "carrier_scale_fractional_span": 0.35066284712867796,
+      "carrier_segments": [
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.0004377692047349668,
+          "input_vpp": 0.05063380415689772,
+          "kind": "carrier",
+          "label": "step_rise_1",
+          "observed_frequency_hz": -359.0619370250171,
+          "output_magnitude_mean_v": 0.012128069961306553,
+          "output_magnitude_std_v": 0.008205586583424362,
+          "phase_at_segment_start_rad": 1.1142211324244427,
+          "phase_fit_rms_rad": 22.314579812529278,
+          "predicted_normalized_magnitude": 0.9999592838849004,
+          "retained_samples": 15092,
+          "scale_estimate_v_per_v_peak": 0.4790698226711669
+        },
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.0004392412124303441,
+          "input_vpp": 0.050699341108535405,
+          "kind": "carrier",
+          "label": "step_rise_2",
+          "observed_frequency_hz": -0.03754821775630609,
+          "output_magnitude_mean_v": 0.017699198282659985,
+          "output_magnitude_std_v": 1.0003396388722138e-05,
+          "phase_at_segment_start_rad": 3.1279588981218835,
+          "phase_fit_rms_rad": 0.014864294783077221,
+          "predicted_normalized_magnitude": 0.9999999999995547,
+          "retained_samples": 15092,
+          "scale_estimate_v_per_v_peak": 0.6982022998988501
+        },
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.00045138344487866117,
+          "input_vpp": 0.05070353375510483,
+          "kind": "carrier",
+          "label": "step_rise_3",
+          "observed_frequency_hz": -0.03942617863154776,
+          "output_magnitude_mean_v": 0.017703166833776575,
+          "output_magnitude_std_v": 1.2077630047126868e-05,
+          "phase_at_segment_start_rad": -1.0356327525493971,
+          "phase_fit_rms_rad": 0.014668942897746168,
+          "predicted_normalized_magnitude": 0.9999999999995091,
+          "retained_samples": 30184,
+          "scale_estimate_v_per_v_peak": 0.6983011053742546
+        }
+      ],
+      "cutoff_pass": false,
+      "cutoff_relative_residual": 0.19282837450027737,
+      "fitted_cutoff_hz": 47460.89283229484,
+      "fitted_timeconstant_s": 3.3533912573932472e-06,
+      "integrity": {
+        "acquisition_status": "CAPTURED",
+        "adcclip": 0,
+        "demodsampleloss": 0,
+        "final_safe_idle": true,
+        "master_clock_locked": true,
+        "pll_locked": 1
+      },
+      "magnitude_pass": true,
+      "name": "fast",
+      "normalized_rms_magnitude_residual": 0.08250080807064947,
+      "normalized_rms_magnitude_residual_pass": false,
+      "offset_results": [
+        {
+          "acceptance_threshold": 0.39005675331548173,
+          "combined_standard_uncertainty": 0.13001891777182725,
+          "commanded_offset_hz": 3980.0,
+          "input_fit_residual_rms_v": 0.0004325022678643283,
+          "input_vpp": 0.05066590066295517,
+          "kind": "offset_carrier",
+          "label": "offset_1",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 1.1125889237535884,
+          "normalized_magnitude_residual": 0.11755453658441395,
+          "observed_frequency_hz": 3979.985345420706,
+          "output_magnitude_mean_v": 0.01762111047259914,
+          "output_magnitude_std_v": 9.740327874581269e-06,
+          "phase_at_segment_start_rad": -2.7818884965204624,
+          "phase_fit_rms_rad": 0.01469348783368072,
+          "predicted_normalized_magnitude": 0.9950343871691745,
+          "retained_samples": 15092
+        },
+        {
+          "acceptance_threshold": 0.2763443424957778,
+          "combined_standard_uncertainty": 0.09211478083192592,
+          "commanded_offset_hz": 39800.0,
+          "input_fit_residual_rms_v": 0.00044742051713888333,
+          "input_vpp": 0.05069007751064857,
+          "kind": "offset_carrier",
+          "label": "offset_2",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.7882381081482749,
+          "normalized_magnitude_residual": 0.08123532806906586,
+          "observed_frequency_hz": 39800.239455405615,
+          "output_magnitude_mean_v": 0.012490020676353462,
+          "output_magnitude_std_v": 1.2944313989616437e-05,
+          "phase_at_segment_start_rad": -2.709786224483729,
+          "phase_fit_rms_rad": 0.014693759789530586,
+          "predicted_normalized_magnitude": 0.707002780079209,
+          "retained_samples": 15092
+        },
+        {
+          "acceptance_threshold": 0.06943780795205802,
+          "combined_standard_uncertainty": 0.02314593598401934,
+          "commanded_offset_hz": 199000.0,
+          "input_fit_residual_rms_v": 0.00043376571745849834,
+          "input_vpp": 0.05063611762890299,
+          "kind": "offset_carrier",
+          "label": "offset_3",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.19804154409299982,
+          "normalized_magnitude_residual": 0.0009499467697398345,
+          "observed_frequency_hz": 197918.56157205795,
+          "output_magnitude_mean_v": 0.0031347252233751054,
+          "output_magnitude_std_v": 0.0006594515324485944,
+          "phase_at_segment_start_rad": 0.5893569655101167,
+          "phase_fit_rms_rad": 197.81951613744232,
+          "predicted_normalized_magnitude": 0.19709159732325998,
+          "retained_samples": 15092
+        }
+      ],
+      "order_readback": 1,
+      "phase_and_complex_response": {
+        "group_delay_pass": null,
+        "normalized_rms_complex_residual_pass": null,
+        "phase_residual_pass": null,
+        "reason": "The PicoScope input phase and HF2LI complex output were not timestamp-synchronized to a shared edge during the anchor records; the HF2LI status/time command brackets are quantized at about 65.5 ms, so per-frequency source phase and delay cannot be removed.",
+        "status": "NOT_EVALUABLE_FROM_RECORDED_CLOCK_DOMAINS"
+      },
+      "predicted_cutoff_hz_from_readback": 39788.534416929906,
+      "rate_readback_sps": 460526.3157894737,
+      "raw_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_fast_r2_001_hf2_raw.csv",
+      "role": "primary_anchor",
+      "scale_standard_uncertainty": 0.07306063222272012,
+      "scale_v_per_v_peak": 0.6251910759814239,
+      "status_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_fast_r2_001_status.json",
+      "step_response": {
+        "evaluated_transition_count": 6,
+        "predicted_1_percent_s": 4.020154685913341e-08,
+        "predicted_1_to_99_s": 1.838057241780253e-05,
+        "predicted_99_percent_s": 1.8420773964661664e-05,
+        "rising_falling_final_gain_pass": true,
+        "rising_final_gain_fractional_span": 0.0008948108011211351,
+        "settling_and_overshoot_pass": true,
+        "transitions": [
+          {
+            "absolute_overshoot": 0.0016637306558957565,
+            "label": "step_rise_1",
+            "observed_1_to_99_s": 2.171428571428463e-05,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0023129507572139385,
+            "label": "step_fall_1",
+            "observed_1_to_99_s": 1.9542857142857556e-05,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0020194280736927084,
+            "label": "step_rise_2",
+            "observed_1_to_99_s": 2.171428571428463e-05,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0026593473587230854,
+            "label": "step_fall_2",
+            "observed_1_to_99_s": 2.171428571428463e-05,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0020861736226758243,
+            "label": "step_rise_3",
+            "observed_1_to_99_s": 1.9542857142854086e-05,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.001985585014311564,
+            "label": "step_fall_3",
+            "observed_1_to_99_s": 2.171428571428463e-05,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 1.838057241780253e-05,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          }
+        ]
+      },
+      "timeconstant_readback_s": 4.000020242619828e-06,
+      "zero_noise": {
+        "equivalent_input_complex_rms_v": 2.0194212680605274e-05,
+        "equivalent_input_noise_density_v_per_sqrt_hz": 8.077705511404752e-08,
+        "manufacturer_enbw_hz": 62499.68371066581,
+        "median_complex_output_rms_v": 1.2625241554385325e-05,
+        "window_count": 6,
+        "windows": [
+          {
+            "complex_rms_v": 1.2656505367880771e-05,
+            "label": "zero_baseline",
+            "samples": 105643,
+            "x_rms_v": 8.996591032548056e-06,
+            "y_rms_v": 8.902161418457357e-06
+          },
+          {
+            "complex_rms_v": 1.2593977740889879e-05,
+            "label": "step_fall_1",
+            "samples": 45275,
+            "x_rms_v": 8.866021647440159e-06,
+            "y_rms_v": 8.944380106253997e-06
+          },
+          {
+            "complex_rms_v": 1.2574866736972226e-05,
+            "label": "step_fall_2",
+            "samples": 45275,
+            "x_rms_v": 8.934497580392667e-06,
+            "y_rms_v": 8.848843226013674e-06
+          },
+          {
+            "complex_rms_v": 1.2587037614706465e-05,
+            "label": "step_fall_3",
+            "samples": 45275,
+            "x_rms_v": 8.877093133517477e-06,
+            "y_rms_v": 8.923605404369483e-06
+          },
+          {
+            "complex_rms_v": 0.008593035988806876,
+            "label": "offset_2_end_zero",
+            "samples": 15092,
+            "x_rms_v": 0.006076991263133408,
+            "y_rms_v": 0.0060753966695788995
+          },
+          {
+            "complex_rms_v": 1.2663000542806535e-05,
+            "label": "offset_3_end_zero",
+            "samples": 231181,
+            "x_rms_v": 8.947168643594499e-06,
+            "y_rms_v": 8.961013112935276e-06
+          }
+        ]
+      }
+    },
+    {
+      "acquisition_id": "HF01-ANCHOR-INTERMEDIATE-R1-001",
+      "carrier_repeatability_pass": true,
+      "carrier_scale_fractional_span": 0.0012736493091584282,
+      "carrier_segments": [
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.00044265172990585165,
+          "input_vpp": 0.050639618649310804,
+          "kind": "carrier",
+          "label": "step_rise_1",
+          "observed_frequency_hz": 0.13535121287108764,
+          "output_magnitude_mean_v": 0.017705571895752625,
+          "output_magnitude_std_v": 7.499998044579962e-06,
+          "phase_at_segment_start_rad": 1.9153908945956215,
+          "phase_fit_rms_rad": 0.002108453106603611,
+          "predicted_normalized_magnitude": 0.9999985480471063,
+          "retained_samples": 118,
+          "scale_estimate_v_per_v_peak": 0.6992784730888676
+        },
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.00044047792137555603,
+          "input_vpp": 0.050703035612171,
+          "kind": "carrier",
+          "label": "step_rise_2",
+          "observed_frequency_hz": 0.13877551891280787,
+          "output_magnitude_mean_v": 0.017705182506102857,
+          "output_magnitude_std_v": 7.355006202333705e-06,
+          "phase_at_segment_start_rad": 0.9970583106107854,
+          "phase_fit_rms_rad": 0.002126834296663874,
+          "predicted_normalized_magnitude": 0.9999984736507466,
+          "retained_samples": 118,
+          "scale_estimate_v_per_v_peak": 0.6983885409096161
+        },
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.0004396543621944132,
+          "input_vpp": 0.05069671910881497,
+          "kind": "carrier",
+          "label": "step_rise_3",
+          "observed_frequency_hz": 0.1387563792570795,
+          "output_magnitude_mean_v": 0.01770609804548631,
+          "output_magnitude_std_v": 7.442706638606016e-06,
+          "phase_at_segment_start_rad": -0.040045060127480776,
+          "phase_fit_rms_rad": 0.002123945186318671,
+          "predicted_normalized_magnitude": 0.9999984740717396,
+          "retained_samples": 118,
+          "scale_estimate_v_per_v_peak": 0.6985116739313509
+        }
+      ],
+      "cutoff_pass": true,
+      "cutoff_relative_residual": -0.0005491553033349347,
+      "fitted_cutoff_hz": 69.06067536006601,
+      "fitted_timeconstant_s": 0.0010024392026872647,
+      "integrity": {
+        "acquisition_status": "CAPTURED",
+        "adcclip": 0,
+        "demodsampleloss": 0,
+        "final_safe_idle": true,
+        "master_clock_locked": true,
+        "pll_locked": 1
+      },
+      "magnitude_pass": true,
+      "name": "intermediate",
+      "normalized_rms_magnitude_residual": 0.0004444770974071897,
+      "normalized_rms_magnitude_residual_pass": true,
+      "offset_results": [
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 0.00048215939890927683,
+          "commanded_offset_hz": 6.92,
+          "input_fit_residual_rms_v": 0.00044167739711146965,
+          "input_vpp": 0.050728379418061256,
+          "kind": "offset_carrier",
+          "label": "offset_1",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.9953144778176223,
+          "normalized_magnitude_residual": -0.0007527424288920059,
+          "observed_frequency_hz": 7.05467670877551,
+          "output_magnitude_mean_v": 0.017639584884036334,
+          "output_magnitude_std_v": 4.028210312630024e-06,
+          "phase_at_segment_start_rad": -2.497817539537111,
+          "phase_fit_rms_rad": 0.002150543289000423,
+          "predicted_normalized_magnitude": 0.9960672202465143,
+          "retained_samples": 472
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 0.0003914239637115553,
+          "commanded_offset_hz": 69.2,
+          "input_fit_residual_rms_v": 0.0004383782262372235,
+          "input_vpp": 0.05066592569465402,
+          "kind": "offset_carrier",
+          "label": "offset_2",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.7056461485522718,
+          "normalized_magnitude_residual": 4.2554287106977284e-05,
+          "observed_frequency_hz": 69.32941593378499,
+          "output_magnitude_mean_v": 0.012490505303248387,
+          "output_magnitude_std_v": 2.6112664625491185e-05,
+          "phase_at_segment_start_rad": -2.9281368000406416,
+          "phase_fit_rms_rad": 0.0028692893394214568,
+          "predicted_normalized_magnitude": 0.7056035942651648,
+          "retained_samples": 59
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 0.000258985317240194,
+          "commanded_offset_hz": 346.0,
+          "input_fit_residual_rms_v": 0.0004364308658911002,
+          "input_vpp": 0.050716186391228026,
+          "kind": "offset_carrier",
+          "label": "offset_3",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.03036797201391673,
+          "normalized_magnitude_residual": 5.8075938000976685e-05,
+          "observed_frequency_hz": 345.9943135648081,
+          "output_magnitude_mean_v": 0.0005380708076257233,
+          "output_magnitude_std_v": 3.5190756316635364e-05,
+          "phase_at_segment_start_rad": -1.8320005398486972,
+          "phase_fit_rms_rad": 0.06569616184860333,
+          "predicted_normalized_magnitude": 0.030309896075915752,
+          "retained_samples": 59
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 0.0012621925892327263,
+          "commanded_offset_hz": -69.2,
+          "input_fit_residual_rms_v": 0.0004433017348879325,
+          "input_vpp": 0.05066289856138352,
+          "kind": "offset_carrier",
+          "label": "offset_4",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.7071175936686251,
+          "normalized_magnitude_residual": -0.0004673699972163048,
+          "observed_frequency_hz": -69.02519543408552,
+          "output_magnitude_mean_v": 0.012515803241775316,
+          "output_magnitude_std_v": 0.0002335462873764788,
+          "phase_at_segment_start_rad": 0.7254245428963227,
+          "phase_fit_rms_rad": 0.05321750747639112,
+          "predicted_normalized_magnitude": 0.7075849636658414,
+          "retained_samples": 118
+        }
+      ],
+      "order_readback": 4,
+      "phase_and_complex_response": {
+        "group_delay_pass": null,
+        "normalized_rms_complex_residual_pass": null,
+        "phase_residual_pass": null,
+        "reason": "The PicoScope input phase and HF2LI complex output were not timestamp-synchronized to a shared edge during the anchor records; the HF2LI status/time command brackets are quantized at about 65.5 ms, so per-frequency source phase and delay cannot be removed.",
+        "status": "NOT_EVALUABLE_FROM_RECORDED_CLOCK_DOMAINS"
+      },
+      "predicted_cutoff_hz_from_readback": 69.09862123437,
+      "rate_readback_sps": 1798.9309210526317,
+      "raw_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_intermediate_r1_001_hf2_raw.csv",
+      "role": "primary_anchor",
+      "scale_standard_uncertainty": 0.0002784003883974276,
+      "scale_v_per_v_peak": 0.6987262293099449,
+      "status_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_intermediate_r1_001_status.json",
+      "step_response": {
+        "evaluated_transition_count": 6,
+        "predicted_1_percent_s": 0.000824803562628821,
+        "predicted_1_to_99_s": 0.009239286244837087,
+        "predicted_99_percent_s": 0.010064089807465908,
+        "rising_falling_final_gain_pass": true,
+        "rising_final_gain_fractional_span": 0.0001392341648398776,
+        "settling_and_overshoot_pass": true,
+        "transitions": [
+          {
+            "absolute_overshoot": 0.0002277149743850071,
+            "label": "step_rise_1",
+            "observed_1_to_99_s": 0.010005942857142854,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.00025227814146711047,
+            "label": "step_fall_1",
+            "observed_1_to_99_s": 0.00945005714285714,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.00023020795992767518,
+            "label": "step_rise_2",
+            "observed_1_to_99_s": 0.010005942857142857,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0,
+            "label": "step_fall_2",
+            "observed_1_to_99_s": 0.00500297142857143,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.00018140878464989463,
+            "label": "step_rise_3",
+            "observed_1_to_99_s": 0.010005942857142857,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0,
+            "label": "step_fall_3",
+            "observed_1_to_99_s": 0.00945005714285714,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.009239286244837087,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          }
+        ]
+      },
+      "timeconstant_readback_s": 0.0010018887078828383,
+      "zero_noise": {
+        "equivalent_input_complex_rms_v": 7.416705690877016e-07,
+        "equivalent_input_noise_density_v_per_sqrt_hz": 8.398964998938895e-08,
+        "manufacturer_enbw_hz": 77.97772286014825,
+        "median_complex_output_rms_v": 5.182246801288107e-07,
+        "window_count": 5,
+        "windows": [
+          {
+            "complex_rms_v": 5.182246801288107e-07,
+            "label": "zero_baseline",
+            "samples": 590,
+            "x_rms_v": 3.879614043941345e-07,
+            "y_rms_v": 3.435735260393893e-07
+          },
+          {
+            "complex_rms_v": 5.437554768941786e-07,
+            "label": "step_fall_1",
+            "samples": 295,
+            "x_rms_v": 4.185643957543276e-07,
+            "y_rms_v": 3.4709345320710135e-07
+          },
+          {
+            "complex_rms_v": 4.811680145780395e-07,
+            "label": "step_fall_2",
+            "samples": 236,
+            "x_rms_v": 3.001236851818603e-07,
+            "y_rms_v": 3.76096306610198e-07
+          },
+          {
+            "complex_rms_v": 5.594356913646846e-07,
+            "label": "step_fall_3",
+            "samples": 236,
+            "x_rms_v": 4.0580590330698234e-07,
+            "y_rms_v": 3.8508422664903686e-07
+          },
+          {
+            "complex_rms_v": 4.856139069402375e-07,
+            "label": "offset_4_end_zero",
+            "samples": 1574,
+            "x_rms_v": 3.3830208340039405e-07,
+            "y_rms_v": 3.483856584027455e-07
+          }
+        ]
+      }
+    },
+    {
+      "acquisition_id": "HF01-ANCHOR-SLOW-R3-001",
+      "carrier_repeatability_pass": true,
+      "carrier_scale_fractional_span": 0.0021548902175750504,
+      "carrier_segments": [
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.0004416696405664857,
+          "input_vpp": 0.05065429538596515,
+          "kind": "carrier",
+          "label": "step_rise_1",
+          "observed_frequency_hz": 0.0247585048809007,
+          "output_magnitude_mean_v": 0.017695112959932893,
+          "output_magnitude_std_v": 2.663585876890402e-06,
+          "phase_at_segment_start_rad": -0.7204720159162871,
+          "phase_fit_rms_rad": 0.0010872150997476271,
+          "predicted_normalized_magnitude": 0.9995100822196614,
+          "retained_samples": 48,
+          "scale_estimate_v_per_v_peak": 0.6990043479927671
+        },
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.000437730731023915,
+          "input_vpp": 0.05058270827723964,
+          "kind": "carrier",
+          "label": "step_rise_2",
+          "observed_frequency_hz": 0.010359621246234938,
+          "output_magnitude_mean_v": 0.017701695324780515,
+          "output_magnitude_std_v": 5.199027077637315e-06,
+          "phase_at_segment_start_rad": -2.357387050786352,
+          "phase_fit_rms_rad": 0.0016965084621613504,
+          "predicted_normalized_magnitude": 0.9999142030505453,
+          "retained_samples": 47,
+          "scale_estimate_v_per_v_peak": 0.6999709904627932
+        },
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.00045374335075724703,
+          "input_vpp": 0.05057862031519468,
+          "kind": "carrier",
+          "label": "step_rise_3",
+          "observed_frequency_hz": -0.13224342261308417,
+          "output_magnitude_mean_v": 0.017469934894330214,
+          "output_magnitude_std_v": 1.6043810435218957e-05,
+          "phase_at_segment_start_rad": 0.9857520689567962,
+          "phase_fit_rms_rad": 0.0015754328379258763,
+          "predicted_normalized_magnitude": 0.9861397714023484,
+          "retained_samples": 48,
+          "scale_estimate_v_per_v_peak": 0.7005124031915652
+        }
+      ],
+      "cutoff_pass": true,
+      "cutoff_relative_residual": -0.0005491553033345563,
+      "fitted_cutoff_hz": 0.6725593079517873,
+      "fitted_timeconstant_s": 0.07119219557140892,
+      "integrity": {
+        "acquisition_status": "CAPTURED",
+        "adcclip": 0,
+        "demodsampleloss": 0,
+        "final_safe_idle": true,
+        "master_clock_locked": true,
+        "pll_locked": 1
+      },
+      "magnitude_pass": true,
+      "name": "slow",
+      "normalized_rms_magnitude_residual": 0.00033420947784949015,
+      "normalized_rms_magnitude_residual_pass": true,
+      "offset_results": [
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 0.0006879419992610765,
+          "commanded_offset_hz": 0.0479,
+          "input_fit_residual_rms_v": 0.0004418876273410625,
+          "input_vpp": 0.05060949407617773,
+          "kind": "offset_carrier",
+          "label": "offset_1",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.9987576217860357,
+          "normalized_magnitude_residual": -0.0005427397273106704,
+          "observed_frequency_hz": 0.029588853500723364,
+          "output_magnitude_mean_v": 0.017687000792286033,
+          "output_magnitude_std_v": 2.0892300793822463e-05,
+          "phase_at_segment_start_rad": 0.2031421843406094,
+          "phase_fit_rms_rad": 0.2162165512975135,
+          "predicted_normalized_magnitude": 0.9993003615133463,
+          "retained_samples": 1412
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 0.0006201143403293278,
+          "commanded_offset_hz": 0.479,
+          "input_fit_residual_rms_v": 0.0004318246339211183,
+          "input_vpp": 0.05059392517609275,
+          "kind": "offset_carrier",
+          "label": "offset_2",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.8442718295950014,
+          "normalized_magnitude_residual": -0.00019775641252051113,
+          "observed_frequency_hz": 0.46473366563024293,
+          "output_magnitude_mean_v": 0.014946612166393283,
+          "output_magnitude_std_v": 4.7092020971004124e-05,
+          "phase_at_segment_start_rad": -0.7233822594439991,
+          "phase_fit_rms_rad": 0.004433056338254372,
+          "predicted_normalized_magnitude": 0.8444695860075219,
+          "retained_samples": 143
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 4.8745892478411685e-05,
+          "commanded_offset_hz": 2.395,
+          "input_fit_residual_rms_v": 0.00043081464493326924,
+          "input_vpp": 0.050626063279395596,
+          "kind": "offset_carrier",
+          "label": "offset_3",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.050989221180325305,
+          "normalized_magnitude_residual": -3.760206056910992e-05,
+          "observed_frequency_hz": 2.3502564630149263,
+          "output_magnitude_mean_v": 0.000903263849101564,
+          "output_magnitude_std_v": 4.585338582502915e-06,
+          "phase_at_segment_start_rad": -0.256331353572231,
+          "phase_fit_rms_rad": 0.0035810295723138815,
+          "predicted_normalized_magnitude": 0.051026823240894414,
+          "retained_samples": 58
+        }
+      ],
+      "order_readback": 8,
+      "phase_and_complex_response": {
+        "group_delay_pass": null,
+        "normalized_rms_complex_residual_pass": null,
+        "phase_residual_pass": null,
+        "reason": "The PicoScope input phase and HF2LI complex output were not timestamp-synchronized to a shared edge during the anchor records; the HF2LI status/time command brackets are quantized at about 65.5 ms, so per-frequency source phase and delay cannot be removed.",
+        "status": "NOT_EVALUABLE_FROM_RECORDED_CLOCK_DOMAINS"
+      },
+      "predicted_cutoff_hz_from_readback": 0.6729288503987506,
+      "rate_readback_sps": 112.43318256578948,
+      "raw_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_slow_r3_001_hf2_raw.csv",
+      "role": "primary_anchor",
+      "scale_standard_uncertainty": 0.00044106914867022797,
+      "scale_v_per_v_peak": 0.6998292472157085,
+      "status_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_anchor_slow_r3_001_status.json",
+      "step_response": {
+        "evaluated_transition_count": 6,
+        "predicted_1_percent_s": 0.20677846755337687,
+        "predicted_1_to_99_s": 0.9316685321089091,
+        "predicted_99_percent_s": 1.138446999662286,
+        "rising_falling_final_gain_pass": true,
+        "rising_final_gain_fractional_span": 0.012414130059105018,
+        "settling_and_overshoot_pass": true,
+        "transitions": [
+          {
+            "absolute_overshoot": 0.00022678652630703233,
+            "label": "step_rise_1",
+            "observed_1_to_99_s": 0.9427821714285713,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.00040091835098632345,
+            "label": "step_fall_1",
+            "observed_1_to_99_s": 0.933888,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0004663947515473055,
+            "label": "step_rise_2",
+            "observed_1_to_99_s": 1.0050413714285713,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0005932450382373222,
+            "label": "step_fall_2",
+            "observed_1_to_99_s": 0.9338879999999999,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0015868695144356515,
+            "label": "step_rise_3",
+            "observed_1_to_99_s": 0.8805229714285714,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0,
+            "label": "step_fall_3",
+            "observed_1_to_99_s": 0.9516763428571429,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.9316685321089091,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          }
+        ]
+      },
+      "timeconstant_readback_s": 0.07115309999965486,
+      "zero_noise": {
+        "equivalent_input_complex_rms_v": 0.00011372706395136023,
+        "equivalent_input_noise_density_v_per_sqrt_hz": 0.0001325644474925623,
+        "manufacturer_enbw_hz": 0.7359927264272957,
+        "median_complex_output_rms_v": 7.958952555313317e-05,
+        "window_count": 7,
+        "windows": [
+          {
+            "complex_rms_v": 3.877658271655003e-08,
+            "label": "zero_baseline",
+            "samples": 302,
+            "x_rms_v": 1.5489833509603554e-08,
+            "y_rms_v": 3.554839553366944e-08
+          },
+          {
+            "complex_rms_v": 8.185527641012882e-05,
+            "label": "step_fall_1",
+            "samples": 122,
+            "x_rms_v": 7.671259585842967e-05,
+            "y_rms_v": 2.8556328770341432e-05
+          },
+          {
+            "complex_rms_v": 7.958952555313317e-05,
+            "label": "step_fall_2",
+            "samples": 126,
+            "x_rms_v": 4.672200293749065e-05,
+            "y_rms_v": 6.443249971312577e-05
+          },
+          {
+            "complex_rms_v": 6.846049370703698e-05,
+            "label": "step_fall_3",
+            "samples": 122,
+            "x_rms_v": 2.3963623190365063e-05,
+            "y_rms_v": 6.41294313260413e-05
+          },
+          {
+            "complex_rms_v": 0.0003401551900874898,
+            "label": "offset_1_end_zero",
+            "samples": 11,
+            "x_rms_v": 0.00029240247570377724,
+            "y_rms_v": 0.00017379972826721634
+          },
+          {
+            "complex_rms_v": 0.0013396513752202842,
+            "label": "offset_2_end_zero",
+            "samples": 12,
+            "x_rms_v": 0.0005355153279053767,
+            "y_rms_v": 0.0012279613759023512
+          },
+          {
+            "complex_rms_v": 4.7656049306948646e-08,
+            "label": "offset_3_end_zero",
+            "samples": 792,
+            "x_rms_v": 2.8902742062943724e-08,
+            "y_rms_v": 3.789103504510353e-08
+          }
+        ]
+      }
+    },
+    {
+      "acquisition_id": "HF01-TARGET-HIGHORDER-001",
+      "carrier_repeatability_pass": true,
+      "carrier_scale_fractional_span": 0.01592934529786164,
+      "carrier_segments": [
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.00044120093699050167,
+          "input_vpp": 0.050684330149006224,
+          "kind": "carrier",
+          "label": "step_rise_1",
+          "observed_frequency_hz": 0.05604982086044191,
+          "output_magnitude_mean_v": 0.017505850639023504,
+          "output_magnitude_std_v": 0.0003398750253882148,
+          "phase_at_segment_start_rad": -0.13581385880369962,
+          "phase_fit_rms_rad": 0.00021483935038857748,
+          "predicted_normalized_magnitude": 0.9999487462123888,
+          "retained_samples": 15,
+          "scale_estimate_v_per_v_peak": 0.6908150063222935
+        },
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.00043565241195332743,
+          "input_vpp": 0.05057073753171035,
+          "kind": "carrier",
+          "label": "step_rise_2",
+          "observed_frequency_hz": 0.06071084137651074,
+          "output_magnitude_mean_v": 0.01727608128248783,
+          "output_magnitude_std_v": 0.0008007239448556209,
+          "phase_at_segment_start_rad": 2.3959724519742354,
+          "phase_fit_rms_rad": 0.0006611848269181302,
+          "predicted_normalized_magnitude": 0.9999398677297721,
+          "retained_samples": 19,
+          "scale_estimate_v_per_v_peak": 0.6832852767517795
+        },
+        {
+          "commanded_offset_hz": 0.0,
+          "input_fit_residual_rms_v": 0.0004322497764272704,
+          "input_vpp": 0.05062912994777951,
+          "kind": "carrier",
+          "label": "step_rise_3",
+          "observed_frequency_hz": 0.06162586517374234,
+          "output_magnitude_mean_v": 0.017573999930869423,
+          "output_magnitude_std_v": 0.0002704858621128066,
+          "phase_at_segment_start_rad": -1.4427300869825257,
+          "phase_fit_rms_rad": 0.00030256212796672986,
+          "predicted_normalized_magnitude": 0.9999380415334979,
+          "retained_samples": 19,
+          "scale_estimate_v_per_v_peak": 0.6942678602042386
+        }
+      ],
+      "cutoff_pass": true,
+      "cutoff_relative_residual": 0.025026818353112178,
+      "fitted_cutoff_hz": 4.82850134668689,
+      "fitted_timeconstant_s": 0.009916321928320253,
+      "integrity": {
+        "acquisition_status": "CAPTURED",
+        "adcclip": 0,
+        "demodsampleloss": 0,
+        "final_safe_idle": true,
+        "master_clock_locked": true,
+        "pll_locked": 1
+      },
+      "magnitude_pass": true,
+      "name": "targeted",
+      "normalized_rms_magnitude_residual": 0.010782029569904998,
+      "normalized_rms_magnitude_residual_pass": true,
+      "offset_results": [
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 0.004765235463589306,
+          "commanded_offset_hz": 0.479,
+          "input_fit_residual_rms_v": 0.0004277468767280676,
+          "input_vpp": 0.050614138612102434,
+          "kind": "offset_carrier",
+          "label": "offset_1",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 1.0116287258906491,
+          "normalized_magnitude_residual": 0.014721237306166368,
+          "observed_frequency_hz": 0.4357929712475113,
+          "output_magnitude_mean_v": 0.017651011295696965,
+          "output_magnitude_std_v": 6.641720475419553e-06,
+          "phase_at_segment_start_rad": 2.1915952084033656,
+          "phase_fit_rms_rad": 0.06837358005856402,
+          "predicted_normalized_magnitude": 0.9969074885844827,
+          "retained_samples": 358
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 0.00339343639940982,
+          "commanded_offset_hz": 4.79,
+          "input_fit_residual_rms_v": 0.00043175188863292584,
+          "input_vpp": 0.05054006682541515,
+          "kind": "offset_carrier",
+          "label": "offset_2",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.7202666870329029,
+          "normalized_magnitude_residual": 0.011486073174481692,
+          "observed_frequency_hz": 4.693810499012966,
+          "output_magnitude_mean_v": 0.012548902077164073,
+          "output_magnitude_std_v": 6.883465665644068e-06,
+          "phase_at_segment_start_rad": -2.062507106469526,
+          "phase_fit_rms_rad": 0.00112454899827632,
+          "predicted_normalized_magnitude": 0.7087806138584212,
+          "retained_samples": 41
+        },
+        {
+          "acceptance_threshold": 0.05,
+          "combined_standard_uncertainty": 0.000632109146581094,
+          "commanded_offset_hz": 23.95,
+          "input_fit_residual_rms_v": 0.0004468360867981689,
+          "input_vpp": 0.05060013363483461,
+          "kind": "offset_carrier",
+          "label": "offset_3",
+          "magnitude_pass": true,
+          "measured_normalized_magnitude": 0.009388831839068756,
+          "normalized_magnitude_residual": -0.000334335377884222,
+          "observed_frequency_hz": 23.14276645883277,
+          "output_magnitude_mean_v": 0.00016377206091054038,
+          "output_magnitude_std_v": 4.794366773345327e-05,
+          "phase_at_segment_start_rad": -2.1715231258440992,
+          "phase_fit_rms_rad": 0.4764936246063174,
+          "predicted_normalized_magnitude": 0.009723167216952978,
+          "retained_samples": 19
+        }
+      ],
+      "order_readback": 8,
+      "phase_and_complex_response": {
+        "group_delay_pass": null,
+        "normalized_rms_complex_residual_pass": null,
+        "phase_residual_pass": null,
+        "reason": "The PicoScope input phase and HF2LI complex output were not timestamp-synchronized to a shared edge during the anchor records; the HF2LI status/time command brackets are quantized at about 65.5 ms, so per-frequency source phase and delay cannot be removed.",
+        "status": "NOT_EVALUABLE_FROM_RECORDED_CLOCK_DOMAINS"
+      },
+      "predicted_cutoff_hz_from_readback": 4.710609771600645,
+      "rate_readback_sps": 112.43318256578948,
+      "raw_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_target_highorder_001_hf2_raw.csv",
+      "role": "diagnostic_only_superseded_trigger",
+      "scale_standard_uncertainty": 0.00324239423390737,
+      "scale_v_per_v_peak": 0.6894560477594371,
+      "status_path": "C:\\Users\\Chris\\Documents\\GitHub\\Control_System\\calibration\\system_recalibration_001\\readbacks\\HF-01\\raw\\hf01_target_highorder_001_status.json",
+      "step_response": {
+        "evaluated_transition_count": 6,
+        "predicted_1_percent_s": 0.02953910495766405,
+        "predicted_1_to_99_s": 0.13309245823003196,
+        "predicted_99_percent_s": 0.162631563187696,
+        "rising_falling_final_gain_pass": true,
+        "rising_final_gain_fractional_span": 0.0006963690617596748,
+        "settling_and_overshoot_pass": true,
+        "transitions": [
+          {
+            "absolute_overshoot": 0.0003980911013052868,
+            "label": "step_rise_1",
+            "observed_1_to_99_s": 0.13341257142857144,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.13309245823003196,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0,
+            "label": "step_fall_1",
+            "observed_1_to_99_s": 0.13341257142857144,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.13309245823003196,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.00021837479828712425,
+            "label": "step_rise_2",
+            "observed_1_to_99_s": 0.14230674285714287,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.13309245823003196,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0006771252533483985,
+            "label": "step_fall_2",
+            "observed_1_to_99_s": 0.13341257142857144,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.13309245823003196,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.0001980012465880865,
+            "label": "step_rise_3",
+            "observed_1_to_99_s": 0.13341257142857144,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.13309245823003196,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          },
+          {
+            "absolute_overshoot": 0.00038464208226907104,
+            "label": "step_fall_3",
+            "observed_1_to_99_s": 0.14230674285714284,
+            "overshoot_pass": true,
+            "predicted_1_to_99_s": 0.13309245823003196,
+            "settling_pass": true,
+            "status": "EVALUATED"
+          }
+        ]
+      },
+      "timeconstant_readback_s": 0.010164495915951307,
+      "zero_noise": {
+        "equivalent_input_complex_rms_v": 2.413011610256726e-05,
+        "equivalent_input_noise_density_v_per_sqrt_hz": 1.0630866394574276e-05,
+        "manufacturer_enbw_hz": 5.152067008096073,
+        "median_complex_output_rms_v": 1.6636654480052376e-05,
+        "window_count": 6,
+        "windows": [
+          {
+            "complex_rms_v": 1.1555753836576245e-07,
+            "label": "zero_baseline",
+            "samples": 48,
+            "x_rms_v": 6.100153667526073e-08,
+            "y_rms_v": 9.814457293407251e-08
+          },
+          {
+            "complex_rms_v": 6.149034265522428e-06,
+            "label": "step_fall_1",
+            "samples": 22,
+            "x_rms_v": 6.146161677588608e-06,
+            "y_rms_v": 1.8793358270977283e-07
+          },
+          {
+            "complex_rms_v": 2.884614095358348e-05,
+            "label": "step_fall_2",
+            "samples": 26,
+            "x_rms_v": 2.4327294823898475e-05,
+            "y_rms_v": 1.5501050753582102e-05
+          },
+          {
+            "complex_rms_v": 2.7124274694582327e-05,
+            "label": "step_fall_3",
+            "samples": 22,
+            "x_rms_v": 7.863560786018961e-06,
+            "y_rms_v": 2.5959404644015703e-05
+          },
+          {
+            "complex_rms_v": 0.0004867711978339227,
+            "label": "offset_1_end_zero",
+            "samples": 4,
+            "x_rms_v": 0.0003206052461202082,
+            "y_rms_v": 0.0003662765010219365
+          },
+          {
+            "complex_rms_v": 7.83829189190726e-08,
+            "label": "offset_3_end_zero",
+            "samples": 60,
+            "x_rms_v": 6.648750329810725e-08,
+            "y_rms_v": 4.1512575003944106e-08
+          }
+        ]
+      }
+    }
+  ],
+  "slow_anchor_configuration_disposition": {
+    "analysis_basis": "installed node readback",
+    "installed_readback_timeconstant_s": 0.07115309999965486,
+    "nearest_supported_write_diagnostic": "HF01-HF2-TC-MAP-DIAG-001",
+    "requested_timeconstant_s": 0.1
+  },
+  "stopping_rule": "The frozen criterion requires every phase and complex-response metric to pass. Those metrics are not identifiable from the recorded unsynchronized PicoScope/HF2LI phase domains, and the single targeted point does not fix that acquisition-design limitation.",
+  "targeted_point_disposition": "DIAGNOSTIC_ONLY; the apparent slow-anchor magnitude failure that invoked this point was caused by comparing data to the requested 100 ms value instead of the installed 71.153 ms readback.",
+  "unevaluable_frozen_metrics": [
+    "per-frequency phase residual",
+    "normalized RMS complex residual",
+    "group delay",
+    "intermediate positive/negative phase-sign reversal"
+  ]
+}
