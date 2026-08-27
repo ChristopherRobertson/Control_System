@@ -27,7 +27,7 @@ restructure.
 | `traceability_source` | manufacturer manuals |
 | `dependencies` | P0 |
 | `closure_test` | all sources inhibited |
-| `thesis_or_handoff_destination` | readbacks/S0 |
+| `thesis_or_handoff_destination` | campaigns/instrument_readiness_001/phases/S0 |
 | `current_status` | PASS |
 | `bypass_allowed` | no |
 | `effect_of_bypass` | none |

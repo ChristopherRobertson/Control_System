@@ -9,7 +9,7 @@ import time
 import threading
 
 from control_app.config_loader import REPO_ROOT
-from control_app.paths import EVIDENCE_ROOT, resolve_compat_path
+from control_app.paths import CAMPAIGNS_ROOT, resolve_compat_path
 from control_app.devices.hf2li_service import HF2LIService
 from control_app.devices.mircat_service import (
     MircatService,
@@ -59,11 +59,7 @@ def _validate_campaign_gate(request: dict, run_dir: str | Path) -> None:
         approved_dir = resolve_compat_path(approved_dir)
     approved_dir = approved_dir.resolve()
     expected_dir = (
-        EVIDENCE_ROOT
-        / "calibration"
-        / campaign_id
-        / "phases"
-        / phase_id
+        CAMPAIGNS_ROOT / "instrument_readiness_001" / "phases" / phase_id
     ).resolve()
     if approved_dir != expected_dir:
         raise MircatSweepScanError(

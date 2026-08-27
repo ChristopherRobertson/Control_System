@@ -8,5 +8,5 @@ depends_on:
 - TR-01
 optional_dependencies: []
 evidence_key: DET-01
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/instrument_readiness_001/phases/DET-01
 plan: plan.md

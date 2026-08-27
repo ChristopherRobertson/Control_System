@@ -24,13 +24,7 @@ evidence/experiments/logs/
 # Campaign metadata and analyzed results are versionable. Canonical outputs
 # remain local until explicit promotion, and large raw acquisitions remain
 # local for campaign archival rather than Git history.
-evidence/calibration/**/timing_calibration.csv
-evidence/calibration/**/timing_offsets.yaml
-evidence/calibration/**/shared/staging/raw_pico_traces/**
-evidence/calibration/**/shared/staging/raw_hf2li/**
-evidence/calibration/**/shared/staging/raw_mircat/**
-evidence/calibration/**/phases/**/raw/**
-!evidence/calibration/**/shared/staging/raw_pico_traces/.gitkeep
-!evidence/calibration/**/shared/staging/raw_hf2li/.gitkeep
-!evidence/calibration/**/shared/staging/raw_mircat/.gitkeep
-!evidence/calibration/**/phases/**/raw/.gitkeep
+campaigns/**/phases/**/timing_calibration.csv
+campaigns/**/phases/**/timing_offsets.yaml
+campaigns/**/phases/**/raw/**
+!campaigns/**/phases/**/raw/.gitkeep

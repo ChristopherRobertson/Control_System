@@ -1,5 +1,9 @@
 # Phase-primary campaign-layout completion
 
+> **Superseded layout note:** this document records the intermediate phase-plan
+> materialization. The final phase packages now include their retained run data and
+> artifacts directly; see `self_contained_phase_packages_20260827.md`.
+
 Date: `2026-08-27`  
 Branch: `codex/physical-unified-layout`  
 Pre-restructure checkpoint: `codex/pre-unified-layout-20260827` at `654f896`

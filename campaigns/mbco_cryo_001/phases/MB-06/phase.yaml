@@ -7,5 +7,5 @@ depends_on:
 - MB-05
 optional_dependencies: []
 evidence_key: MB-06
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/mbco_cryo_001/phases/MB-06
 plan: plan.md

@@ -6,8 +6,9 @@ experiment are phase domains in one dependency graph; they are not independent
 linear schedules.
 
 The machine-readable authority is `phase_registry.yaml`. The human-readable
-execution view is `master_sequence.md`. Every registered phase has one detailed
-plan under the owning campaign's `phases/<phase-id>/` directory.
+execution view is `master_sequence.md`. Every registered phase has one
+self-contained package under the owning campaign's `phases/<phase-id>/` directory,
+including its detailed plan and all generated run evidence.
 `registries/evidence_locations.yaml` maps stable phase IDs to their canonical
 evidence packages.
 
@@ -22,8 +23,9 @@ Directory responsibilities:
 - `mbco_cryo_001/phases/`: all 11 optional cryogenic-branch phase homes; and
 - `methods/` and `templates/`: shared controlled campaign resources.
 
-Adding a phase requires one registry entry, one plan path, stable dependencies, and
-a declared evidence location. A plan file alone does not authorize execution.
+Adding a phase requires one registry entry, one self-contained phase path, stable
+dependencies, and that same path as its declared evidence location. A plan file
+alone does not authorize execution.
 
 Every phase plan must budget time and evidence for a thesis-quality
 `procedural_writeup.md` conforming to

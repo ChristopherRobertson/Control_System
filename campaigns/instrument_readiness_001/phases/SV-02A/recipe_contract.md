@@ -16,7 +16,8 @@ characterization bundles exist and CH-00 has frozen the test grid.
 - independent Mylar reference and its accepted claim scope;
 - accepted QCL range, direction, power, detector range, and environmental
   conditions;
-- approved output directory under `evidence/characterization/system_characterization_001/phases/SV-02/`.
+- approved output directory in this phase package,
+  `campaigns/instrument_readiness_001/phases/SV-02A/`.
 
 ## Required experiment order
 

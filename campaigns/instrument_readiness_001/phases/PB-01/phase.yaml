@@ -7,5 +7,5 @@ depends_on:
 - PROM-CH
 optional_dependencies: []
 evidence_key: PB-01
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/instrument_readiness_001/phases/PB-01
 plan: plan.md

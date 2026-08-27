@@ -5,13 +5,12 @@ or supersede campaign evidence.
 
 ## Preserved authorities and evidence
 
-- `evidence/calibration/system_recalibration_001/` remains the calibration authority.
-- `evidence/characterization/system_characterization_001/` is the characterization
-  authority.
+- `campaigns/instrument_readiness_001/phases/` contains the self-contained
+  calibration and characterization phase authorities.
 - The separately maintained theoretical Mathematica notebook remains the
   theoretical authority.
-- Completed S0, MS-01, MS-02, T2-01, and T1-01 evidence was left in place.
-- The in-progress PT-01 record was left in place.
+- Completed S0, MS-01, MS-02, T2-01, and T1-01 evidence was preserved intact.
+- The in-progress PT-01 record was preserved intact.
 
 ## Active-tree changes
 
@@ -20,7 +19,7 @@ or supersede campaign evidence.
   opened. Mylar is an independent validation standard and cannot refit the
   correction.
 - The definitive P0 decision register is
-  `evidence/calibration/system_recalibration_001/phases/P0/p0_requirement_decisions.md`.
+  `campaigns/instrument_readiness_001/phases/P0/p0_requirement_decisions.md`.
 - Calibration now includes optical-transfer, detector/electronics response,
   detector latency, and installed non-50/50 splitter-balance phases.
 - Characterization has phase gates, mandatory closeout products, aggregation

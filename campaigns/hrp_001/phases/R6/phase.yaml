@@ -7,5 +7,5 @@ depends_on:
 - R5
 optional_dependencies: []
 evidence_key: R6
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/hrp_001/phases/R6
 plan: plan.md

@@ -3,11 +3,12 @@
 The unified phase authority is `campaigns/phase_registry.yaml`. This file
 preserves cross-phase characterization rules and background only. Detailed
 procedures live in the corresponding `../phases/<phase-id>/plan.md`; completed
-evidence stays under its registered `evidence/characterization/` root. There is
+evidence stays in that same self-contained phase directory. There is
 no independent characterization directory hierarchy or execution order.
 
-Each characterization campaign has a definition under `campaigns/` and a complete
-archival evidence unit under `evidence/characterization/<campaign-id>/`.
+Each characterization campaign has a definition under `campaigns/`, and every
+`campaigns/<campaign>/phases/<phase-id>/` directory is its complete archival
+phase-and-evidence unit.
 Characterization measures instrument and system performance using qualified
 calibration inputs; it does not replace or repeat calibration.
 

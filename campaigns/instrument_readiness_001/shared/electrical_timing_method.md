@@ -490,7 +490,7 @@ This equation connects recipe time to `t_chem = 0`. It does not redefine `t_mast
 Each hardware execution must use the approved stable phase directory
 
 ```text
-evidence/calibration/system_recalibration_001/phases/<phase-id>/
+campaigns/instrument_readiness_001/phases/<phase-id>/
 ```
 
 The phase directory is continuation-safe across days. New acquisition IDs and

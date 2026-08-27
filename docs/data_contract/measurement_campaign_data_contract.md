@@ -1,6 +1,6 @@
 # Measurement campaign data contract
 
-Version: `1.2.0`
+Version: `1.3.0`
 
 This contract makes calibration, characterization, and later experimental
 campaigns collectable and aggregatable without reacquisition. It governs new
@@ -28,7 +28,11 @@ All tables use these keys rather than relying on filenames or row order.
 ## Required phase-directory products
 
 ```text
-evidence/<domain>/<campaign-id>/phases/<phase-id>/
+campaigns/<campaign-directory>/phases/<phase-id>/
+  README.md
+  phase.yaml
+  plan.md
+  run_record.md                 # when a contemporaneous overview was produced
   phase_manifest.json
   acquisition_index.csv
   conditions.csv
@@ -105,7 +109,8 @@ quantities and cannot share one measurement row or authority.
 artifact_id,campaign_id,phase_id,acquisition_id,relative_path,artifact_role,media_type,byte_size,created_utc,modified_utc,producer,source_artifact_ids,immutable,notes
 ```
 
-Paths are relative to the campaign root. `artifact_role` distinguishes native
+Paths are relative to the campaign root or the phase directory, as declared by the
+manifest/index version. `artifact_role` distinguishes native
 raw, readback, operator observation, log, analysis source, derived table,
 figure, report, procedural writeup, photograph, and certificate link. The
 canonical procedural narrative uses the exact role `procedural_writeup` so it can

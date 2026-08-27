@@ -11,5 +11,5 @@ depends_on:
 - DET-04
 optional_dependencies: []
 evidence_key: SV-02A
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/instrument_readiness_001/phases/SV-02A
 plan: plan.md

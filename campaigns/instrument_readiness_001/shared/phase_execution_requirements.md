@@ -14,7 +14,12 @@ campaigns/instrument_readiness_001/phases/<phase-id>/
 ├── README.md
 ├── phase.yaml
 ├── plan.md
-└── <phase-specific supporting records>
+├── run_record.md                 # when retained from an executed phase
+├── phase_manifest.json           # when produced
+├── acquisition/artifact/result indexes and logs
+├── raw/, analysis/, figures/, and tables/
+├── final_report.md and restoration records
+└── <other phase-specific planning and execution records>
 ```
 
 `phase.yaml` identifies the phase, domain, dependencies, registry state, evidence
@@ -31,10 +36,10 @@ comparison tables that apply to more than one phase.
 
 ## 2. Preserve completed work
 
-The restructure is organizational, not scientific reacquisition. Existing phase
-evidence remains authoritative at the location registered in
-`../../registries/evidence_locations.yaml`. A canonical phase home links to that
-evidence and does not copy it, rename it, alter accepted artifacts, manufacture a
+The restructure is organizational, not scientific reacquisition. The canonical
+phase home is the evidence package registered in
+`../../registries/evidence_locations.yaml`; it does not link to a second external
+phase tree. Relocation does not copy or alter accepted artifacts, manufacture a
 new run, or change a historical scientific disposition.
 
 When a completed phase lacks a document now required by the current data contract,
@@ -65,7 +70,7 @@ During an approved operator-guided session:
 4. Present one physical action at a time and wait for the operator's actual
    observation or readback. Never infer that an action occurred.
 5. Record configuration, acquisition, observation, decision, deviation, and
-   restoration evidence contemporaneously under the registered evidence root.
+   restoration evidence contemporaneously in the phase directory.
 6. Stop immediately on an interlock, unexpected emission or motion, unsafe state,
    ownership conflict, missing required input, or plan-defined stop condition.
 7. Stop at the authorized phase boundary. A successful phase does not implicitly
@@ -102,7 +107,7 @@ gap and obtain authorization for a bounded new measurement.
 
 New evidence uses the measurement-campaign data contract in
 `../../../docs/data_contract/measurement_campaign_data_contract.md`. The
-registered phase evidence unit must retain or index, as applicable:
+phase directory must retain or index, as applicable:
 
 - phase and run manifests, artifact index, configuration snapshots, readbacks,
   operator/command log, source and producer records, and environment records;

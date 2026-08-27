@@ -11,5 +11,5 @@ depends_on:
 - RP-01
 optional_dependencies: []
 evidence_key: E2E-CH
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/instrument_readiness_001/phases/E2E-CH
 plan: plan.md

@@ -8,5 +8,5 @@ depends_on:
 - TR-01
 optional_dependencies: []
 evidence_key: CH-00
-evidence_path: evidence/characterization/system_characterization_001/phases/CH-00
+evidence_path: campaigns/instrument_readiness_001/phases/CH-00
 plan: plan.md

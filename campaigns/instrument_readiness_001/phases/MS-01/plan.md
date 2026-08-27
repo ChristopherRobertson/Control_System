@@ -17,7 +17,7 @@ The detailed phase text below was materialized from the former combined procedur
 
 ### 2. MS-01 — PicoScope differential channel/path skew — PASS
 
-Mandatory closeout evidence already retained in `evidence/calibration/system_recalibration_001/phases/MS-01/`: normal and
+Mandatory closeout evidence already retained directly in this phase directory: normal and
 swapped raw captures, settings, analysis, result, uncertainty, restoration,
 final safe idle, and the applicable PicoScope manufacturer-specification
 uncertainty basis. Do not reacquire.

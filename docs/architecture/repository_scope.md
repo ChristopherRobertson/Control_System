@@ -28,9 +28,11 @@ outside the checkout is required for normal development or reproduction.
 - `software/`: executable code and verification only;
 - `instrument/`: current installed configuration, runtime recipes and schemas, and
   promoted runtime products;
-- `campaigns/`: prospective procedure and dependency authority;
-- `evidence/`: observations, acquisition records, analysis outputs, exclusions,
-  phase procedural writeups, closeout, and restoration evidence;
+- `campaigns/`: prospective procedure/dependency authority and self-contained
+  registered phase packages, including observations, acquisition records,
+  analyses, exclusions, procedural writeups, closeout, and restoration evidence;
+- `evidence/`: generic operational experiment runs and cross-campaign catalogs
+  that are not themselves registered phase packages;
 - `references/`: manuals, SDKs/drivers, and certificates; and
 - `theory/`: model artifacts, not observations.
 

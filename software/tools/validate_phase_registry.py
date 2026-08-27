@@ -129,20 +129,24 @@ def validate() -> list[str]:
     locations = evidence.get("locations") or {}
     for phase_id, phase in by_id.items():
         campaign_dir = CAMPAIGN_DIRS[str(phase["campaign_id"])]
+        expected_evidence_path = (
+            Path("campaigns") / campaign_dir / "phases" / phase_id
+        ).as_posix()
         metadata = load_yaml(
             ROOT / "campaigns" / campaign_dir / "phases" / phase_id / "phase.yaml"
         )
+        if metadata.get("evidence_path") != expected_evidence_path:
+            raise RegistryError(
+                f"{phase_id} phase.yaml evidence_path is not its self-contained "
+                f"phase home: {metadata.get('evidence_path')!r}"
+            )
         key = str(phase.get("evidence_key") or phase_id)
         item = locations.get(key)
         if isinstance(item, dict) and item.get("path"):
-            if metadata.get("evidence_path") != item["path"]:
+            if item["path"] != expected_evidence_path:
                 raise RegistryError(
                     f"{phase_id} phase.yaml evidence_path does not match its registry"
                 )
-        elif metadata.get("evidence_path") != "NOT_CREATED_UNTIL_PHASE_AUTHORIZATION":
-            raise RegistryError(
-                f"{phase_id} must not claim an unregistered future evidence package"
-            )
         if phase.get("status") not in {"historical_complete", "in_progress"}:
             continue
         if not isinstance(item, dict) or not item.get("path"):
@@ -173,6 +177,11 @@ def validate() -> list[str]:
         retired_path = readiness_root / retired_name
         if retired_path.exists():
             raise RegistryError(f"retired split-layout directory still exists: {retired_path}")
+    for retired_path in (ROOT / "evidence/calibration", ROOT / "evidence/characterization"):
+        if retired_path.exists():
+            raise RegistryError(
+                f"retired external campaign-evidence directory still exists: {retired_path}"
+            )
 
     return order
 

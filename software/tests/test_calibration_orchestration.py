@@ -29,12 +29,11 @@ def test_codex_is_the_campaign_operator_interface() -> None:
 def test_ms01_continues_from_stable_phase_record() -> None:
     record = (
         REPO_ROOT
-        / "evidence"
-        / "calibration"
-        / "system_recalibration_001"
+        / "campaigns"
+        / "instrument_readiness_001"
         / "phases"
         / "MS-01"
-        / "README.md"
+        / "run_record.md"
     ).read_text(encoding="utf-8")
 
     assert "PREFLIGHT COMPLETE" in record

@@ -17,7 +17,7 @@ The detailed phase text below was materialized from the former combined procedur
 
 ### 5. T1-01 — T660-1 trigger/output routes and electrical closure — PASS
 
-Mandatory closeout evidence already retained in `evidence/calibration/system_recalibration_001/phases/T1-01/`: six-point
+Mandatory closeout evidence already retained directly in this phase directory: six-point
 route results, adapter normal/swapped evidence, trigger-count diagnostics,
 direct-versus-derived closure, all accepted and rejected traces, and final
 restoration. Do not reacquire.

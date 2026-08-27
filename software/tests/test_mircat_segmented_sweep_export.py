@@ -88,7 +88,7 @@ def test_sweep_candidate_cannot_run_without_phase_approval(tmp_path) -> None:
 
 
 def test_sweep_gate_accepts_only_stable_named_phase_directory() -> None:
-    approved = REPO_ROOT / "evidence" / "calibration" / "system_recalibration_001" / "phases" / "MD-01"
+    approved = REPO_ROOT / "campaigns" / "instrument_readiness_001" / "phases" / "MD-01"
     request = {
         "campaign_gate": {
             "campaign_id": "system_recalibration_001",
@@ -105,7 +105,7 @@ def test_sweep_gate_accepts_only_stable_named_phase_directory() -> None:
 
 
 def test_sweep_gate_cannot_expand_its_own_phase_scope() -> None:
-    approved = REPO_ROOT / "evidence" / "calibration" / "system_recalibration_001" / "phases" / "E2E-01"
+    approved = REPO_ROOT / "campaigns" / "instrument_readiness_001" / "phases" / "E2E-01"
     request = {
         "campaign_gate": {
             "campaign_id": "system_recalibration_001",

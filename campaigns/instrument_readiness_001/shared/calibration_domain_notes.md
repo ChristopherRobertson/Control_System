@@ -3,12 +3,12 @@
 The unified phase authority is `campaigns/phase_registry.yaml`. This file
 preserves cross-phase calibration rules and background only. Detailed procedures
 live in the corresponding `../phases/<phase-id>/plan.md`; completed evidence stays
-under its registered `evidence/calibration/` root. There is no independent
+in that same self-contained phase directory. There is no independent
 calibration directory hierarchy or execution order.
 
-Each calibration campaign has one canonical campaign definition under `campaigns/`
-and one evidence root under `evidence/calibration/<campaign-id>/`. Each phase root
-is the complete evidence unit for provenance, readbacks, raw acquisitions,
+Each calibration campaign has one canonical campaign definition under `campaigns/`,
+and each `campaigns/<campaign>/phases/<phase-id>/` directory is the complete
+evidence unit for provenance, readbacks, raw acquisitions,
 analysis, figures, tables, troubleshooting, bypass records, photographs,
 restoration, final report, and procedural writeup.
 
@@ -39,8 +39,8 @@ caveats, limitations, and bounded claims. It is separate from `final_report.md`
 and must be indexed, manifest-linked, and reviewer-accepted before closeout.
 
 Instrument-performance work downstream of calibration belongs in the
-characterization domain of the unified campaign and in a separate
-`evidence/characterization/<campaign-id>/` evidence unit. The active
+characterization domain of the unified campaign and in a self-contained
+characterization phase directory. The active
 `system_characterization_001` campaign imports promoted calibration bundles;
 quantitative dual-detector work depends on ATT-01, DET-02, and DET-04 rather
 than assuming a 50/50 sample/reference split.
@@ -54,8 +54,8 @@ monolithic command.
 For each approved phase, Codex reads the applicable procedure, presents one
 physical action at a time, waits for the operator's actual observation, and
 uses small utilities only for direct ownership, readback, acquisition, or
-analysis. Evidence is accumulated under the canonical registered phase root in
-`evidence/calibration/<campaign-id>/phases/<phase>/`. Unavailable information is
+analysis. Evidence is accumulated directly in the canonical registered phase root,
+`campaigns/<campaign>/phases/<phase>/`. Unavailable information is
 recorded as `USER_INPUT_REQUIRED`, and Codex stops at the approved phase
 boundary after guiding restoration.
 

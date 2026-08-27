@@ -3,12 +3,14 @@
 This campaign is phase-primary. All 47 calibration, characterization, validation,
 and promotion phases have one canonical home under `phases/<phase-id>/`, including
 the phases that were previously only sections in combined sequence documents.
-Each home contains `phase.yaml`, `plan.md`, and `README.md`; phase-specific planning
-material is kept there as well.
+Each home is the complete phase package. It contains `phase.yaml`, `plan.md`, and
+`README.md` plus every readback, raw acquisition, analysis input/output, command
+log, artifact index, report, restoration record, photograph, and other retained
+file produced by that phase.
 
 ```text
 instrument_readiness_001/
-├── phases/     # 47 complete phase-definition homes
+├── phases/     # 47 complete plan + execution + evidence packages
 └── shared/     # cross-phase requirements, methods, matrices, and history only
 ```
 
@@ -25,10 +27,12 @@ and cannot block the instrument-readiness core path.
 | Independent validation | 3 | `SV-01`, `SV-02A`, `SV-02B` |
 | Promotion | 2 | `PROM-01`, `PROM-CH` |
 
-Completed evidence stays in its existing `evidence/calibration/` or
-`evidence/characterization/` package and is linked through the phase's
-`evidence_key`; restructuring never represents it as a new acquisition or requires
-it to be repeated. Historical manifests retain their original provenance paths.
+Completed and in-progress evidence is stored directly in its phase directory and
+registered there through the phase's `evidence_key`. There is no second calibration
+or characterization evidence tree. Restructuring never represents a moved file as
+a new acquisition or requires a measurement to be repeated. Historical manifests
+retain contemporaneous path strings when those strings are provenance rather than
+active lookup instructions.
 
 All phases inherit `shared/phase_execution_requirements.md` and the thesis-quality
 writeup standard at `../../docs/data_contract/procedural_writeup_standard.md`.

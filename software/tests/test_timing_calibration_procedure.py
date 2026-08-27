@@ -29,12 +29,16 @@ from control_app.workflows.timing_calibration_procedure import (
 )
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
 
+PHASE_TEST_ROOT = (
+    REPO_ROOT / "campaigns" / "instrument_readiness_001" / "phases"
+)
+
 
 class TimingCalibrationProcedureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.inventory = load_config_inventory(write_files=False)
-        (REPO_ROOT / "evidence" / "calibration").mkdir(parents=True, exist_ok=True)
+        assert PHASE_TEST_ROOT.is_dir()
 
     def test_complete_plan_has_exact_sequence_time_origins_and_cables(self) -> None:
         workflow = TimingCalibrationProcedure(operator="Test", inventory=self.inventory)
@@ -73,7 +77,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
         self.assertNotIn("1", {item["step"] for item in scoped})
 
     def test_freshness_check_allows_current_attempt_command_log(self) -> None:
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "evidence" / "calibration") as temp:
+        with tempfile.TemporaryDirectory(dir=PHASE_TEST_ROOT) as temp:
             run_dir = Path(temp)
             for name in (
                 "timing_calibration_plan.json",
@@ -201,7 +205,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
 
     @unittest.skip("obsolete administrative plan-difference gate removed")
     def test_hardware_parameters_cannot_differ_from_frozen_plan(self) -> None:
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "evidence" / "calibration") as temp:
+        with tempfile.TemporaryDirectory(dir=PHASE_TEST_ROOT) as temp:
             run_dir = Path(temp) / "run"
             run_dir.mkdir()
             workflow = TimingCalibrationProcedure(operator="Test", inventory=self.inventory)
@@ -241,7 +245,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
 
     @unittest.skip("obsolete prior-plan execution gate removed")
     def test_execution_requires_prior_json_and_markdown_plan(self) -> None:
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "evidence" / "calibration") as temp:
+        with tempfile.TemporaryDirectory(dir=PHASE_TEST_ROOT) as temp:
             workflow = TimingCalibrationProcedure(operator="Test", inventory=self.inventory)
             with self.assertRaisesRegex(Exception, "prior plan-only invocation"):
                 workflow.run(
@@ -257,7 +261,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
     @unittest.skip("obsolete plan-review confirmation gate removed")
     def test_nonsemantic_recipe_comment_change_does_not_block_review(self) -> None:
         with tempfile.TemporaryDirectory() as recipe_temp, tempfile.TemporaryDirectory(
-            dir=REPO_ROOT / "evidence" / "calibration"
+            dir=PHASE_TEST_ROOT
         ) as run_temp:
             pico_recipe = Path(recipe_temp) / "pico.yaml"
             pico_recipe.write_bytes(
@@ -783,7 +787,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             events.append(f"prompt:{answer}")
             return answer
 
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "evidence" / "calibration") as temp:
+        with tempfile.TemporaryDirectory(dir=PHASE_TEST_ROOT) as temp:
             run_dir = Path(temp) / "unique_run"
             run_dir.mkdir()
             workflow = TimingCalibrationProcedure(

@@ -3,7 +3,7 @@
 The generic segmented-sweep implementation is retained for future MD-01 and
 MSW-01 qualification. Its current recipe is a non-executable candidate. It may
 run only after the campaign gate names an approved phase, phase-run ID, and the
-stable phase directory under `evidence/calibration/system_recalibration_001/phases/`.
+stable phase directory under `campaigns/instrument_readiness_001/phases/`.
 
 The manufacturer correspondence defining the DB9 signals and required
 GUI-first process-trigger qualification is preserved in

@@ -7,5 +7,5 @@ depends_on:
 - SV-02A
 optional_dependencies: []
 evidence_key: SV-02B
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/instrument_readiness_001/phases/SV-02B
 plan: plan.md

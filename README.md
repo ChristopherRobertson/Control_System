@@ -12,8 +12,8 @@ without copying data between repositories.
 | --- | --- |
 | `software/` | GUI application, device services, tests, tools, dependencies, and packaging |
 | `instrument/` | Installed hardware/wiring authority, runtime recipes, schemas, and explicitly promoted bundles |
-| `campaigns/` | Unified phase registry, dependency sequence, plans, procedures, reports, and promotion work |
-| `evidence/` | Completed/in-progress calibration and characterization phase packages plus generic experimental runs |
+| `campaigns/` | Unified phase registry plus self-contained phase packages containing plans, readbacks, raw data, analysis, reports, and promotion work |
+| `evidence/` | Generic GUI/operational experiment runs and cross-campaign catalogs that do not belong to a registered campaign phase |
 | `references/` | Manufacturer manuals, SDKs/drivers, certificates, and their registry |
 | `theory/` | Versioned model/notebook derivatives and validation fixtures |
 | `docs/` | Architecture, operating procedures, and data contracts shared across boundaries |
@@ -23,12 +23,13 @@ authority. Calibration and characterization remain useful scientific domains, bu
 they are phases in one instrument-readiness graph rather than competing schedules.
 `campaigns/master_sequence.md` is the human-readable view.
 
-Completed evidence was moved intact into canonical phase packages under
-`evidence/calibration/system_recalibration_001/phases/` and
-`evidence/characterization/system_characterization_001/phases/`. The relocation did
-not create new acquisitions, change measurement values, or change phase status.
+Completed evidence is stored directly in the matching canonical phase package under
+`campaigns/<campaign>/phases/<phase-id>/`, beside the plan and phase metadata. The
+relocation did not create new acquisitions, change measurement values, or change
+phase status.
 `campaigns/registries/evidence_locations.yaml` is the stable lookup authority, and
-`campaigns/migration/physical_restructure_20260827.md` records the old-to-new map.
+`campaigns/migration/self_contained_phase_packages_20260827.md` records the final
+old-to-new map and preservation audit.
 
 ## Control application
 

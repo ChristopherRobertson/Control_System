@@ -8,29 +8,24 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CALIBRATION = ROOT / "evidence/calibration/system_recalibration_001"
-CHARACTERIZATION = ROOT / "evidence/characterization/system_characterization_001"
+CAMPAIGN = ROOT / "campaigns/instrument_readiness_001"
 
 # Counts exclude interpreter caches.  They are minimum preservation counts from the
 # pre-move inventory, not closeout or data-loading gates.
 PRE_MOVE = {
-    "S0": (CALIBRATION, 8, 154_227, None),
-    "MS-01": (CALIBRATION, 231, 289_313_702, None),
-    "MS-02": (CALIBRATION, 226, 286_810_552, None),
-    "T2-01": (CALIBRATION, 1_898, 940_518_053, None),
-    "T1-01": (CALIBRATION, 3_054, 1_975_934_526, None),
-    "PT-01": (CALIBRATION, 656, 1_372_651_012, "PASS"),
-    "MC-01": (CALIBRATION, 97, 4_072_108, "COMPLETE"),
-    "TR-01": (CALIBRATION, 17, 37_381, "PASS"),
-    "OM-01": (
-        CALIBRATION,
-        46,
-        174_874,
-        "PASS_COMPLETE_QUALIFIED_BOUNDED",
-    ),
-    "HF-01": (CALIBRATION, 533, 2_682_508_197, "PASS"),
-    "WM-01": (CALIBRATION, 35, 65_967, "IN_PROGRESS"),
-    "CH-00": (CHARACTERIZATION, 22, 36_468, "PASS"),
+    "P0": (8, 53_961, None),
+    "S0": (8, 154_227, None),
+    "MS-01": (231, 289_313_702, None),
+    "MS-02": (226, 286_810_552, None),
+    "T2-01": (1_898, 940_518_053, None),
+    "T1-01": (3_054, 1_975_934_526, None),
+    "PT-01": (656, 1_372_651_012, "PASS"),
+    "MC-01": (97, 4_072_108, "COMPLETE"),
+    "TR-01": (17, 37_381, "PASS"),
+    "OM-01": (46, 174_874, "PASS_COMPLETE_QUALIFIED_BOUNDED"),
+    "HF-01": (533, 2_682_508_197, "PASS"),
+    "WM-01": (35, 65_967, "IN_PROGRESS"),
+    "CH-00": (22, 36_468, "PASS"),
 }
 
 REQUIRED_CLOSED_FILES = {
@@ -77,8 +72,8 @@ def main() -> int:
     errors: list[str] = []
     phases: list[dict[str, object]] = []
 
-    for phase_id, (campaign, minimum_count, pre_bytes, expected_status) in PRE_MOVE.items():
-        phase = campaign / "phases" / phase_id
+    for phase_id, (minimum_count, pre_bytes, expected_status) in PRE_MOVE.items():
+        phase = CAMPAIGN / "phases" / phase_id
         if not phase.is_dir():
             errors.append(f"missing phase directory: {phase.relative_to(ROOT)}")
             continue
@@ -144,9 +139,11 @@ def main() -> int:
         if not (ROOT / required).exists():
             errors.append(f"missing canonical path: {required}")
 
-    artifact_errors = artifact_path_errors(CALIBRATION) + artifact_path_errors(
-        CHARACTERIZATION
-    )
+    for retired in (ROOT / "evidence/calibration", ROOT / "evidence/characterization"):
+        if retired.exists():
+            errors.append(f"retired external phase-evidence root still exists: {retired}")
+
+    artifact_errors = artifact_path_errors(CAMPAIGN)
     errors.extend(f"unresolved artifact path: {item}" for item in artifact_errors)
 
     print(

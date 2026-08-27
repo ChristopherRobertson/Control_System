@@ -3932,12 +3932,15 @@ def _validate_step7_corrections(
 def _require_fresh_acquisition_directory(path: Path) -> None:
     if not path.exists() or not path.is_dir():
         raise TimingCalibrationError(f"Run directory does not exist: {path}")
-    allowed_root = (REPO_ROOT / "evidence" / "calibration").resolve()
+    allowed_root = (
+        REPO_ROOT / "campaigns" / "instrument_readiness_001" / "phases"
+    ).resolve()
     try:
         path.resolve().relative_to(allowed_root)
     except ValueError as exc:
         raise TimingCalibrationError(
-            "Calibration acquisition directories must be inside repository calibration/"
+            "Calibration acquisition directories must be inside the registered "
+            "instrument-readiness phase tree"
         ) from exc
     forbidden = ["raw_pico_traces", "timing_readbacks", "results", "workflow_summary.json"]
     present = [name for name in forbidden if (path / name).exists()]

@@ -1340,11 +1340,11 @@ With the current evidence, the experiment is **not ready for execution**.
   campaign phase evidence plus `HF-01`, `MD-01`, `MSW-01`, `HF-02`, detector,
   `SP-01`, and `SP-02` requirements.
 - **[R5]** P0
-  [`p0_execution_baseline.md`](../../../../evidence/calibration/system_recalibration_001/phases/P0/p0_execution_baseline.md),
-  [`p0_blocker_table.md`](../../../../evidence/calibration/system_recalibration_001/phases/P0/p0_blocker_table.md), and
-  [`p0_requirement_decisions.md`](../../../../evidence/calibration/system_recalibration_001/phases/P0/p0_requirement_decisions.md):
+  [`p0_execution_baseline.md`](../P0/p0_execution_baseline.md),
+  [`p0_blocker_table.md`](../P0/p0_blocker_table.md), and
+  [`p0_requirement_decisions.md`](../P0/p0_requirement_decisions.md):
   accepted/discarded provenance, blocker, and claim decisions.
-- **[R6]** [`evidence/calibration/system_recalibration_001/phases/P0/p0_physical_inventory.md`](../../../../evidence/calibration/system_recalibration_001/phases/P0/p0_physical_inventory.md),
+- **[R6]** [`P0/p0_physical_inventory.md`](../P0/p0_physical_inventory.md),
   Mylar, detector/amplifier, cable, and unresolved identity evidence.
 - **[R7]** [Characterization campaign history](../../shared/characterization_campaign_history.md) and
   [unified sequence](../../../master_sequence.md): `CH-00`,
@@ -1369,11 +1369,11 @@ With the current evidence, the experiment is **not ready for execution**.
   installed-system DB9 mapping and process-trigger clarification.
 - **[R15]** [`software/control_app/devices/t660_service.py`](../../../../software/control_app/devices/t660_service.py),
   current T660 stop/configure/start implementation and shot-counter semantics.
-- **[R16]** [`evidence/calibration/system_recalibration_001/phases/MS-01/normal/picoscope_configuration.json`](../../../../evidence/calibration/system_recalibration_001/phases/MS-01/normal/picoscope_configuration.json)
+- **[R16]** [`MS-01/normal/picoscope_configuration.json`](../MS-01/normal/picoscope_configuration.json)
   and the `MS-01` final report/acquisition source, completed PicoScope timing
   evidence.
 - **[R17]** Complete current calibration readback evidence under
-  `evidence/calibration/system_recalibration_001/phases/`, including `S0`, `MS-01`,
+  the self-contained phase packages under `campaigns/instrument_readiness_001/phases/`, including `S0`, `MS-01`,
   `MS-02`, `T1-01`, `T2-01`, and completed `PT-01`: identities,
   PicoScope configurations, accepted/rejected captures, timing-path results,
   safe-idle records, limitations, and restoration evidence.

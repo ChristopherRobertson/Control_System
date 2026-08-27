@@ -1,5 +1,9 @@
 # Physical unified-layout migration — 2026-08-27
 
+> **Superseded layout note:** this document records an intermediate migration in
+> which phase evidence was stored separately. The final self-contained layout is
+> documented in `self_contained_phase_packages_20260827.md`.
+
 This migration physically separates software, installed-instrument authority,
 campaign planning, evidence, references, theory, and shared documentation while
 keeping them in one Git repository. It does not represent a fresh scientific start.

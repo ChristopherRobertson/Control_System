@@ -10,5 +10,5 @@ depends_on:
 - DET-02
 optional_dependencies: []
 evidence_key: QB-01
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/instrument_readiness_001/phases/QB-01
 plan: plan.md

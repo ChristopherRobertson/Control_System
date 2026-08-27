@@ -1,23 +1,20 @@
-# Measurement evidence
+# Non-phase operational evidence
 
-This is the canonical root for retained and new acquisition records. Existing
-completed and in-progress phase packages are mapped by
-`campaigns/registries/evidence_locations.yaml`.
+This root is only for generic GUI/operational experiment runs and cross-campaign
+catalogs that do not yet belong to a registered campaign phase. A registered phase
+is self-contained under `campaigns/<campaign>/phases/<phase-id>/`, where its plan,
+readbacks, raw data, analysis, reports, and artifacts remain together.
 
-New records use:
-
-`evidence/<domain>/<campaign-id>/phases/<phase-id>/`
-
-Each run follows `docs/data_contract/measurement_campaign_data_contract.md`. Native, rejected,
-preview, diagnostic, partial, excluded, and superseded evidence remains indexed.
-Planning documents do not belong here. Indexing makes a native object immutable;
-correction creates a derived child rather than replacing its source.
+Every acquisition follows `docs/data_contract/measurement_campaign_data_contract.md`.
+Native, rejected, preview, diagnostic, partial, excluded, and superseded evidence
+remains indexed. Indexing makes a native object immutable; correction creates a
+derived child rather than replacing its source.
 
 Generic GUI output is retained under `evidence/experiments/runs/` and logs under
 `evidence/experiments/logs/`; those records become campaign evidence only through an
 approved, indexed import.
 
-Every canonical phase evidence root requires a thesis-quality
+Every canonical campaign phase package requires a thesis-quality
 `procedural_writeup.md` governed by
 `docs/data_contract/procedural_writeup_standard.md`. It is a distinct indexed
 artifact, not a replacement for `final_report.md` or machine-readable tables. A

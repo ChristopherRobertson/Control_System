@@ -980,7 +980,7 @@ Direct PDF links are supplied where a stable public PDF was located; otherwise t
 - **[R03]** [Instrument-readiness campaign](../instrument_readiness_001/README.md), its phase homes, manifests/status, shared gap analysis, phase evidence, and promotion rules.
 - **[R04]** [Measurement campaign data contract](../../docs/data_contract/measurement_campaign_data_contract.md).
 - **[R05]** [Experiments requirements-design boundary](README.md).
-- **[R06]** [P0 physical inventory](../../evidence/calibration/system_recalibration_001/phases/P0/p0_physical_inventory.md), [requirement decisions](../../evidence/calibration/system_recalibration_001/phases/P0/p0_requirement_decisions.md), wiring/topology, and blocker table.
+- **[R06]** [P0 physical inventory](../instrument_readiness_001/phases/P0/p0_physical_inventory.md), [requirement decisions](../instrument_readiness_001/phases/P0/p0_requirement_decisions.md), wiring/topology, and blocker table.
 - **[R07]** Current campaign-local MS-02, T2-01, and T1-01 results, treated as unpromoted evidence only.
 - **[R08]** [Unified phase sequence](../master_sequence.md), characterization phase plans, shared matrices/contracts, biological handoff requirements, and current status.
 - **[R09]** Current experiment-builder/device-registry and safe-restoration implementation, inspected read-only; current MIRcat 900–1800 cm⁻¹ registry conflict recorded as U04.

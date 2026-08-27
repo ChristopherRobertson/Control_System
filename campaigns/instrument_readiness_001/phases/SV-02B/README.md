@@ -8,8 +8,8 @@ procedure-catalog organization.
 - Canonical phase plan: `plan.md`
 - Phase-local supporting material: `planning_context.md`
 - Phase-local supporting material: `requirement_brief.md`
-- Canonical evidence: `NOT_CREATED_UNTIL_PHASE_AUTHORIZATION`
+- Canonical phase package and evidence root: this directory
 
-Do not create a second plan or phase directory. Any authorized execution or
-documentation work is governed from this phase home; evidence stays in its
-registered package.
+All planning, authorized execution, documentation, readbacks, raw acquisitions,
+analysis, reports, and retained artifacts for this phase belong here. Do not
+create a second phase or evidence directory.

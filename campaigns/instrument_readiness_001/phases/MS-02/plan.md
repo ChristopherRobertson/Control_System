@@ -17,7 +17,7 @@ The detailed phase text below was materialized from the former combined procedur
 
 ### 3. MS-02 — splitter branch skew and measurement-system sensitivities — PASS
 
-Mandatory closeout evidence already retained in `evidence/calibration/system_recalibration_001/phases/MS-02/`: imported
+Mandatory closeout evidence already retained directly in this phase directory: imported
 MS-01 data, second connection realization, threshold/interpolation/timebase
 sensitivities, pulse fidelity, results, uncertainty, and restoration. Do not
 reacquire.

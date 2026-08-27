@@ -7,5 +7,5 @@ depends_on:
 - TR-01
 optional_dependencies: []
 evidence_key: OM-01
-evidence_path: evidence/calibration/system_recalibration_001/phases/OM-01
+evidence_path: campaigns/instrument_readiness_001/phases/OM-01
 plan: plan.md

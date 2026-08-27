@@ -1,4 +1,6 @@
+import ast
 import copy
+import csv
 import json
 from pathlib import Path
 
@@ -97,6 +99,67 @@ def test_retired_split_campaign_trees_are_absent():
     for retired_name in ("planning", "procedures", "reports", "promotion"):
         assert not (campaign_root / retired_name).exists()
     assert (campaign_root / "shared" / "phase_execution_requirements.md").is_file()
+    assert not (EVIDENCE_ROOT / "calibration").exists()
+    assert not (EVIDENCE_ROOT / "characterization").exists()
+
+
+def test_completed_phase_home_contains_plan_and_retained_run_outputs():
+    phase = CAMPAIGNS_ROOT / "instrument_readiness_001" / "phases" / "HF-01"
+    for required in (
+        "phase.yaml",
+        "plan.md",
+        "run_record.md",
+        "phase_manifest.json",
+        "acquisition_index.csv",
+        "artifacts.csv",
+        "measurements.csv",
+        "final_report.md",
+        "restoration_confirmation.json",
+    ):
+        assert (phase / required).is_file()
+    assert (phase / "raw").is_dir()
+    assert (phase / "analysis").is_dir()
+
+
+def test_relocated_phase_utilities_parse_and_resolve_from_the_new_depth():
+    phase_root = CAMPAIGNS_ROOT / "instrument_readiness_001" / "phases"
+    scripts = sorted(phase_root.rglob("*.py"))
+    assert scripts
+
+    for script in scripts:
+        source = script.read_text(encoding="utf-8")
+        ast.parse(source, filename=str(script))
+        assert "parents[5]" not in source, script
+        assert "PHASE_DIR.parents[4]" not in source, script
+
+    hf01_preflight = (phase_root / "HF-01" / "run_preflight.py").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        'PHASE_ROOT = REPO_ROOT / "campaigns" / "instrument_readiness_001" / "phases"'
+        in hf01_preflight
+    )
+    assert 'PHASE_ROOT / "S0/s0_record.json"' in hf01_preflight
+
+
+def test_live_tr01_provenance_paths_resolve_in_the_unified_layout():
+    tr01 = CAMPAIGNS_ROOT / "instrument_readiness_001" / "phases" / "TR-01"
+
+    with (tr01 / "source_provenance_index.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as handle:
+        for row in csv.DictReader(handle):
+            path = REPO_ROOT / row["repository_relative_path"]
+            assert path.exists(), (row["source_id"], path)
+
+    with (tr01 / "measurement_resource_register.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as handle:
+        for row in csv.DictReader(handle):
+            for source in row["evidence_source"].split("; "):
+                source = source.split(" P0-D", maxsplit=1)[0]
+                path = REPO_ROOT / source
+                assert path.exists(), (row["resource_id"], path)
 
 
 def test_registry_has_no_promoted_bundle_until_promotion_is_authorized():

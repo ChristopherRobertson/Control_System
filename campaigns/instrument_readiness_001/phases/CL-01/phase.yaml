@@ -10,5 +10,5 @@ depends_on:
 - HF-02
 optional_dependencies: []
 evidence_key: CL-01
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/instrument_readiness_001/phases/CL-01
 plan: plan.md

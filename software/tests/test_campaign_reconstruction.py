@@ -29,12 +29,14 @@ def test_three_time_resolved_modes_are_explicit():
     assert "single rapid scan is never an instantaneous spectrum" in text
 
 
-def test_completed_phase_packages_are_preserved_in_canonical_evidence_roots():
+def test_completed_phase_packages_are_preserved_in_self_contained_phase_homes():
     assert (
         ROOT
-        / "evidence/calibration/system_recalibration_001/phases/HF-01/phase_manifest.json"
+        / "campaigns/instrument_readiness_001/phases/HF-01/phase_manifest.json"
     ).exists()
     assert (
         ROOT
-        / "evidence/characterization/system_characterization_001/phases/CH-00/phase_manifest.json"
+        / "campaigns/instrument_readiness_001/phases/CH-00/phase_manifest.json"
     ).exists()
+    assert not (ROOT / "evidence/calibration").exists()
+    assert not (ROOT / "evidence/characterization").exists()

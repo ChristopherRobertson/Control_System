@@ -4,11 +4,12 @@ These instructions apply throughout this campaign.
 
 ## Phase-primary organization
 
-`phases/<phase-id>/` is the sole active home for a phase definition. Every
+`phases/<phase-id>/` is the sole active home for the complete phase package. Every
 registered phase must contain `phase.yaml`, `plan.md`, and `README.md`. Put
-phase-specific planning notes beside those files. Do not recreate separate
-calibration or characterization plan trees, combined sequence catalogs, or a
-second copy of a phase plan.
+phase-specific planning notes, run records, readbacks, raw acquisitions, analysis,
+reports, restoration records, and retained artifacts in that same directory. Do
+not recreate separate calibration or characterization plan/evidence trees,
+combined sequence catalogs, or a second copy of a phase.
 
 `shared/` is only for material that genuinely governs or compares multiple
 phases. Calibration, characterization, validation, and promotion are registry
@@ -16,10 +17,11 @@ metadata domains, not directory hierarchies.
 
 ## Evidence and completed work
 
-Keep acquired records in the evidence root registered by `evidence_key` in
-`campaigns/registries/evidence_locations.yaml`. Never move, rewrite, or repeat a
-completed measurement merely to make its historical evidence resemble a new
-template. Link the canonical phase directory to retained evidence instead.
+The phase directory itself is the evidence root registered by `evidence_key` in
+`campaigns/registries/evidence_locations.yaml`. Never copy, rewrite, or repeat a
+completed measurement merely to satisfy a new template. Preserve accepted native
+files and move an intact package only as an explicitly documented repository
+reorganization.
 
 Historical evidence may cite repository paths that existed when it was created.
 Treat those citations as provenance records. Do not silently rewrite an accepted

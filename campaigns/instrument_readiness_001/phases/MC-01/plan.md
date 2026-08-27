@@ -47,7 +47,7 @@ inhibition, default-wiring restoration, and final T660 safe idle all passed.
 The shutter remained closed and T660-2 sent no external laser-trigger pulse,
 so no optical pulses occurred. Authorization `MC01-AUTH-002` permitted the
 bounded continuation but did not authorize any later phase. See
-`evidence/calibration/system_recalibration_001/phases/MC-01/final_report.md` and `continuation_authorization.md`.
+`final_report.md` and `continuation_authorization.md` in this phase directory.
 
 ## Closeout
 

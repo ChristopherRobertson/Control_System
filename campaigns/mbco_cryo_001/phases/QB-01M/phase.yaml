@@ -7,5 +7,5 @@ depends_on:
 - R9
 optional_dependencies: []
 evidence_key: QB-01M
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/mbco_cryo_001/phases/QB-01M
 plan: plan.md

@@ -18,7 +18,7 @@ The detailed phase text below was materialized from the former combined procedur
 ### 9. OM-01 — optical metrology readiness and transfer standards
 
 Execution status: **PASS - COMPLETE, QUALIFIED BOUNDED** in the stable
-`evidence/calibration/system_recalibration_001/phases/OM-01/` record. Newport 1918-R serial `15879` with 919P-010-16
+this phase directory. Newport 1918-R serial `15879` with 919P-010-16
 sensor serial `161791` has passed query-only USB identity/configuration
 communication and the completed installed checks are retained in
 `optical_metrology_bundle.json`. This status does not authorize WM-01, ATT-01,

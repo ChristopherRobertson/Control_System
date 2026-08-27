@@ -24,7 +24,7 @@ reference inventory, and the original unresolved-resource list.
 Mandatory closeout evidence already retained: P0 manifests, blocker table,
 physical inventory, pre/post-merge provenance, and gap analysis. Deferred
 requirements were resolved on 2026-08-15 in
-`manifests/p0_requirement_decisions.md`. Only requirements recorded there as
+`p0_requirement_decisions.md`. Only requirements recorded there as
 `KEEP` or `NARROW` move to TR-01 or another named phase; discarded requirements
 do not silently reappear. P0 is not repeated.
 

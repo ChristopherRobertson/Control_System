@@ -18,7 +18,7 @@ The detailed phase text below was materialized from the former combined procedur
 ### 8. TR-01 — retained identity and measurement-resource closure — COMPLETE / PASS
 
 Close only requirements retained or narrowed in
-`manifests/p0_requirement_decisions.md` plus metrology resources actually
+`../P0/p0_requirement_decisions.md` plus metrology resources actually
 selected for later phases. Do not repeat completed measurements and do not
 retrieve certificate or accessory metadata that the decision register
 discarded. Devices whose installed performance is measured directly require
@@ -49,7 +49,7 @@ traceability that the campaign does not establish. The replacement
 reference-detector SIP model/serial and detector model/serial must be recorded
 after arrival and before reference-detector-dependent DET phases begin.
 
-TR-01 closed by records audit in `evidence/calibration/system_recalibration_001/phases/TR-01/`. It imported completed
+TR-01 closed by records audit retained directly in this phase directory. It imported completed
 campaign evidence by stable identifier, retained the applicable PicoScope
 manufacturer-specification basis, classified spectral authority as deferred to
 SP-01 and optical resource qualification as deferred to OM-01, and made no

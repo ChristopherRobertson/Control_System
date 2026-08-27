@@ -13,7 +13,7 @@ exclusive T660/MIRcat ownership, all eight T660 outputs verified disabled
 before identity readback, the approved safe-idle recipe fully matched, MIRcat
 emission/armed/scan states verified inactive, and the installed interlock
 verified set. No cable was moved, neither laser was fired, and no measurement
-was acquired. The evidence is in `readbacks/S0/`.
+was acquired. The evidence is in `../phases/S0/`.
 
 Historical calibration files are comparison-only. Canonical calibration files
 must not be changed without the exact approval phrase
@@ -32,8 +32,8 @@ consumes WM-01, ATT-01, independent 540 nm identity, or the retained OPO-540
 path remains deferred. `RPT-01` may receive provisional indexes but may not
 close, and `PROM-01` may not begin, until the deferred chain is completed.
 
-The active campaign is confined to
-`C:\Users\Chris\Documents\GitHub\Control_System\calibration\system_recalibration_001`.
+The active campaign is confined to the self-contained phase packages under
+`campaigns/instrument_readiness_001/phases/`.
 The former `Control_System_timing` worktree has been merged into `main` and removed.
 References to that worktree in dated provenance snapshots describe the historical
 capture environment only and are not active paths.
@@ -44,7 +44,7 @@ The canonical phase plans and `campaigns/instrument_readiness_001/shared/electri
 measured and how. Codex orchestrates execution interactively; no complete
 workflow runner is used.
 
-For the active phase, Codex works only in `readbacks/<phase>/`, inspects
+For the active phase, Codex works only in `../phases/<phase>/`, inspects
 existing evidence, gives one physical action in plain language, and waits for
 Christopher Robertson's response. Operator-confirmed facts remain distinct
 from software readbacks. Focused utilities may perform ownership, safe idle,
@@ -57,7 +57,7 @@ The retired monolithic timing runner is not a campaign entry point.
 
 ## Expanded scope and downstream characterization
 
-`plans/campaign_sequence.md` preserves every completed phase as an immutable
+The phase-local plans and `../../master_sequence.md` preserve every completed phase as an immutable
 dependency and contains the retained identity/reference basis, optical-
 metrology, wavelength-metrology, attenuation/transfer, detector-latency,
 reporting, and retention work needed
@@ -90,14 +90,14 @@ verified requirement briefs.
 The non-duplication mapping is in `analysis/expansion_gap_map.md`.
 
 The definitive P0 decision record is
-`manifests/p0_requirement_decisions.md`. All 21 decisions were resolved on
+`../phases/P0/p0_requirement_decisions.md`. All 21 decisions were resolved on
 2026-08-15. Discarded certificate and accessory research cannot reappear as a
 phase gate without a new user-approved claim requirement.
 The dated P0 blocker table remains historical evidence rather than a second
 active requirements list.
 
-Pump/probe beam performance is measured separately in
-`evidence/characterization/system_characterization_001/`. That campaign imports
+Pump/probe beam performance is measured in the characterization-domain phase
+packages under `../phases/`. Those phases import
 promoted calibration quantities through stable bundle/artifact identifiers and
 must not reacquire completed calibration work merely to change format or make
 plots.

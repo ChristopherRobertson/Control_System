@@ -50,7 +50,7 @@ hf2li:
       scan_direction_bit: 20
       sweep_active_bit: 21
       wavelength_trigger_bit: 22
-      confirmation_source: "evidence/calibration/system_recalibration_001/phases/P0/mircat_dio_mapping_side_experiment.md"
+      confirmation_source: "campaigns/instrument_readiness_001/phases/P0/mircat_dio_mapping_side_experiment.md"
       campaign_measurement_status: "MD-01 MEASUREMENTS NOT STARTED"
     wavelength_trigger_interval_cm1: 5.0
     wavelength_trigger_pulse_width_us: 500

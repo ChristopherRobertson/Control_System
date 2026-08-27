@@ -29,7 +29,7 @@ those records for a technically literate thesis reader.
 The canonical phase-level file is:
 
 ```text
-evidence/<domain>/<campaign-id>/phases/<phase-id>/procedural_writeup.md
+campaigns/<campaign-directory>/phases/<phase-id>/procedural_writeup.md
 ```
 
 For phase records stored below `runs/<phase-run-id>/`, the campaign may retain

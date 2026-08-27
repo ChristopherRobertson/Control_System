@@ -1,0 +1,12 @@
+source_id,source_type,stable_identifier,repository_relative_path,version_or_date,equipment_association,access_or_validity,notes
+TR01-SRC-0001,campaign_plan,CAMPSEQ-system_recalibration_001,campaigns/master_sequence.md,reviewed_2026-08-18,all,authoritative_current,"TR-01 boundary and deliverables"
+TR01-SRC-0002,decision_register,P0-DECISIONS-v2026-08-15,campaigns/instrument_readiness_001/phases/P0/p0_requirement_decisions.md,2026-08-15,all,authoritative_current,"No discarded request reintroduced"
+TR01-SRC-0003,inventory,P0-PHYSICAL-INVENTORY,campaigns/instrument_readiness_001/phases/P0/p0_physical_inventory.md,through_2026-08-17,all,completed_immutable,"Installed identities"
+TR01-SRC-0004,data_contract,MEASUREMENT-CONTRACT-1.0.0,docs/data_contract/measurement_campaign_data_contract.md,1.0.0,all,authoritative_current,"Stable indexes and provenance convention"
+TR01-SRC-0005,manufacturer_datasheet,PICO-5000D-DATASHEET,references/manuals/PicoScope/PicoScope 5000D Series Data Sheet.pdf,local_record_reviewed_2026-08-18,PICOSCOPE-5244D-10261,manufacturer_specification,"Pages 15-17 supply 8-bit gain and 5244D timebase bounds"
+TR01-SRC-0006,manufacturer_manual,T660-MANUAL,references/manuals/T660/Highland Technologies T660 Manual.pdf,local_record,T660-1-00369;T660-2-00431,manufacturer_information,"Direct campaign results remain installed-performance authority"
+TR01-SRC-0007,manufacturer_manual,HF2LI-MANUAL,references/manuals/HF2LI/Zurich Insturments HF2LI User Manual.pdf,local_record,HF2LI-dev18500,manufacturer_information,"HF-01/HF-02 qualification remains later"
+TR01-SRC-0008,manufacturer_manual,MIRCAT-MANUAL,references/manuals/MIRcat/Daylight Solutions MIRcat Manual.pdf,local_record,MIRCAT-10524,manufacturer_information,"MC-01 behavior is directly qualified"
+TR01-SRC-0009,wiring_authority,WIRING-MAP-0.1,instrument/wiring_map.yaml,0.1,installed_system,authoritative_current,"Used with hardware_configuration.yaml and default_wiring_state.md"
+TR01-SRC-0010,configuration_authority,HW-CONFIG-0.1,instrument/hardware_configuration.yaml,0.1,installed_system,authoritative_current,"Stable equipment/configuration identities"
+TR01-SRC-0011,completed_phase,MC01-CLOSEOUT-001,campaigns/instrument_readiness_001/phases/MC-01/final_report.md,2026-08-17,MIRCAT-10524;T660-1-00369;HF2LI-dev18500,completed_immutable,"Imported without reacquisition"

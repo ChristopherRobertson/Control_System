@@ -8,5 +8,5 @@ depends_on:
 - RPT-CH
 optional_dependencies: []
 evidence_key: PROM-CH
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/instrument_readiness_001/phases/PROM-CH
 plan: plan.md

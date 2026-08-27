@@ -9,10 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CAMPAIGNS = (
-    ROOT / "evidence/calibration/system_recalibration_001",
-    ROOT / "evidence/characterization/system_characterization_001",
-)
+CAMPAIGNS = (ROOT / "campaigns/instrument_readiness_001",)
 INDEX_KEYS = {
     "acquisition_index.csv": "acquisition_id",
     "artifacts.csv": "artifact_id",

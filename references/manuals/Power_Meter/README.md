@@ -23,7 +23,7 @@ chain as a bounded campaign-local working reference under bundle
 
 The certificate date is retained as provenance and is not extended. The OM-01
 acceptance, uncertainty, validity, raw records, and limitations are authoritative
-in `evidence/calibration/system_recalibration_001/phases/OM-01/`.
+in `campaigns/instrument_readiness_001/phases/OM-01/`.
 
 ## Measurement authority
 

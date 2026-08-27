@@ -17,7 +17,7 @@ The detailed phase text below was materialized from the former combined procedur
 
 ### 1. S0 — safe-idle and interlock verification — PASS
 
-Mandatory closeout evidence already retained in `evidence/calibration/system_recalibration_001/phases/S0/`: operator
+Mandatory closeout evidence already retained directly in this phase directory: operator
 physical confirmations, exclusive ownership, device identities, T660 disabled
 readbacks, MIRcat safe state, interlock state, command log, and final cleanup.
 S0 is not repeated as a measurement phase.

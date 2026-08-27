@@ -10,5 +10,5 @@ depends_on:
 - OG-01
 optional_dependencies: []
 evidence_key: PF-00
-evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+evidence_path: campaigns/instrument_readiness_001/phases/PF-00
 plan: plan.md

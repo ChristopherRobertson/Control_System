@@ -7,5 +7,5 @@ depends_on:
 - MS-01
 optional_dependencies: []
 evidence_key: MS-02
-evidence_path: evidence/calibration/system_recalibration_001/phases/MS-02
+evidence_path: campaigns/instrument_readiness_001/phases/MS-02
 plan: plan.md
