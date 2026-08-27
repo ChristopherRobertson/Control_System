@@ -1,8 +1,8 @@
 # Calibration expansion gap map
 
-The authoritative prospective disposition is
-`docs/campaign_reconstruction_20260826.md`; it adds HF-01.1, joint AR-01, PF-00,
-SV-02A/SV-02B, all three acquisition modes, and optional QB-01M.
+The prospective dependency authority is `campaigns/registry/phase_registry.yaml`.
+The preserved reconstruction design adds HF-01.1, joint AR-01, PF-00, SV-02A/B,
+all three acquisition modes, and optional QB-01M.
 
 This map records how the expanded campaign handles the thesis and experimental gaps
 without repeating completed work.

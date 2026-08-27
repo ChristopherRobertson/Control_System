@@ -55,7 +55,8 @@ def main() -> int:
             if path.name == "artifacts.csv":
                 for row in csv_rows(path):
                     relative = (row.get("relative_path") or row.get("path") or "").strip()
-                    if relative and not (campaign / relative).exists():
+                    candidates = (campaign / relative, path.parent / relative)
+                    if relative and not any(candidate.exists() for candidate in candidates):
                         errors.append(
                             f"pre-existing unresolved artifact path: "
                             f"{row.get('artifact_id', '<no-id>')} -> {relative}"

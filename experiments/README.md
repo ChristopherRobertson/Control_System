@@ -1,8 +1,9 @@
 # Experimental campaigns
 
-The prospective hierarchy is in `docs/campaign_reconstruction_20260826.md`. Both
-proteins use `time_resolved_acquisition_modes.md`; MbCO is optional after HRP
-closeout, restoration, handoff, and cryogenic qualification.
+The prospective hierarchy is authoritative in
+`campaigns/registry/phase_registry.yaml`. Both proteins use
+`time_resolved_acquisition_modes.md`; MbCO remains optional after HRP closeout,
+restoration, handoff, and cryogenic qualification.
 
 This directory is reserved for thesis experiments. Define the scientific
 questions, claims, controls, sample conditions, wavelengths, power ranges,

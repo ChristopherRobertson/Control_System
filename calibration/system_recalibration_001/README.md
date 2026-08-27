@@ -1,7 +1,8 @@
 # Complete system recalibration run
 
-Prospective amendments are in `../../docs/campaign_reconstruction_20260826.md`.
-They preserve all completed identities/statuses and add planned HF-01.1.
+Prospective order is defined only by `../../campaigns/registry/phase_registry.yaml`.
+This directory retains detailed procedures and completed evidence. Planned HF-01.1
+is canonical under `../../campaigns/instrument_readiness_001/phases/HF-01.1/`.
 
 Campaign: `system_recalibration_001`
 

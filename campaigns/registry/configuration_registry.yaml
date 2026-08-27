@@ -1,0 +1,8 @@
+schema_version: "1.0"
+registry_id: CONFIGURATION-REGISTRY-001
+relationships:
+  - source_phase: HF-01
+    source_configuration: HF01-SWEEP-HRP-HISTORICAL
+    historical_status: valid_provisional_electrical_selection
+    future_disposition: retained_until_HF-01.1_and_AR-01_issue_explicit_supersession
+    note: Equal numerical settings never imply equivalent experiment requirements.

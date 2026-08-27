@@ -1,9 +1,9 @@
 # Experiment-requirement campaign crosswalk
 
-> **2026-08-26 amendment:** `campaign_reconstruction_20260826.md` is authoritative
-> for HF-01.1, expanded AR-01, PF-00, SV-02A/SV-02B, three acquisition modes, and
-> optional QB-01M/MbCO. Earlier completed evidence and this historical audit remain
-> valid; old configuration-count wording does not limit new mode identities.
+> **Unified-order amendment:** `campaigns/registry/phase_registry.yaml` is the phase
+> and dependency authority. `campaign_reconstruction_20260826.md` remains the design
+> basis for HF-01.1, expanded AR-01, PF-00, SV-02A/B, three acquisition modes, and
+> optional QB-01M/MbCO. This historical audit remains valid.
 
 Status: **BRIEFS VERIFIED; MINIMUM CAMPAIGN MAPPING DEFINED; NO PHASE EXECUTION AUTHORIZED**
 

@@ -5,6 +5,7 @@
 > windows, tolerances, and versions before issuing a Mylar unlock. SV-02B applies
 > those frozen choices blindly. Mylar never tunes them; failure opens a cause-coded
 > investigation or narrows the claim, never automatic refitting. See
+> `campaigns/registry/phase_registry.yaml` and the preserved scientific design in
 > `docs/campaign_reconstruction_20260826.md`.
 
 Status: **REQUIREMENTS-LEVEL DESIGN ONLY — NOT AN EXECUTABLE RECIPE**  

@@ -22,3 +22,17 @@ Prefer stable human-readable IDs, relative paths, byte sizes, UTC timestamps,
 explicit software/schema/analysis versions, branch or commit references,
 dirty-file lists, device identities, configuration registries, and
 source/producer records for campaign provenance and aggregation.
+
+## Unified repository hierarchy
+
+`campaigns/registry/phase_registry.yaml` is the sole prospective phase and hard-
+dependency authority. Calibration and characterization sequence documents are
+detailed procedure catalogs and historical context, not independent schedules.
+Completed and in-progress evidence stays at the path registered in
+`campaigns/registry/evidence_locations.yaml`; never relocate it merely to match the
+new hierarchy.
+
+The control application consumes explicitly promoted machine-readable bundles from
+`instrument/promoted_bundles/`, not raw campaign evidence or prose reports. Creating
+a plan, registry row, bundle directory, or manifest never authorizes hardware,
+changes phase status, or promotes a bundle.

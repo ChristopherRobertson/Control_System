@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "control-system/promoted-bundle.schema.json",
+  "title": "Promoted instrument bundle manifest",
+  "type": "object",
+  "required": ["schema_version", "bundle_id", "status", "sources", "validity"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "bundle_id": {"type": "string", "minLength": 1},
+    "status": {"const": "PROMOTED"},
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["phase_id", "result_id"],
+        "properties": {
+          "phase_id": {"type": "string"},
+          "result_id": {"type": "string"},
+          "relative_path": {"type": "string"},
+          "role": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "validity": {"type": "object"},
+    "configuration_files": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "software_versions": {"type": "object"}
+  },
+  "additionalProperties": true
+}

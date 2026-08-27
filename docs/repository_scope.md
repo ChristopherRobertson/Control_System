@@ -5,12 +5,17 @@ experimental control for the pump-probe platform.
 
 ## Canonical scientific authorities
 
-1. `calibration/system_recalibration_001/` defines calibration measurements,
-   corrections, uncertainty, promotion, and preserved evidence.
-2. `characterization/system_characterization_001/` defines pump, probe,
-   geometry, spectral, temporal, sensitivity, and reproducibility performance.
-3. The separately maintained theoretical Mathematica notebook defines the
-   scientific forward models and required experimental inputs.
+1. `campaigns/registry/phase_registry.yaml` defines prospective phase identities,
+   dependencies, branches, plan locations, and evidence keys.
+2. `campaigns/instrument_readiness_001/master_sequence.md` is the human-readable
+   dependency view generated and audited against that registry.
+3. Legacy calibration and characterization plans remain detailed procedure catalogs;
+   their completed records remain authoritative historical evidence at the locations
+   in `campaigns/registry/evidence_locations.yaml`.
+4. `instrument/promoted_bundles/` is the only runtime handoff from accepted science
+   to the control application.
+5. The separately maintained theoretical Mathematica notebook defines scientific
+   forward models and required experimental inputs, not observations.
 
 Publication drafts, journal submission packages, and paper-specific validation
 plans are outside this repository and are not authorities for hardware work.

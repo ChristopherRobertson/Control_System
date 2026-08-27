@@ -1,8 +1,10 @@
 # Pump-probe instrument characterization sequence
 
-> **2026-08-26 prospective reconstruction:** The dependency order, PF-00 gate, split
-> SV-02A/SV-02B firewall, expanded AR-01, and optional QB-01M branch are governed by
-> `docs/campaign_reconstruction_20260826.md`. Completed CH-00 remains PASS.
+> **Unified-order amendment:** `campaigns/registry/phase_registry.yaml` is the sole
+> prospective dependency authority and
+> `campaigns/instrument_readiness_001/master_sequence.md` is its human-readable view.
+> This file remains the detailed characterization procedure catalog. Completed CH-00
+> remains PASS; superseded future scope does not rewrite its history.
 
 Campaign: `system_characterization_001`
 
@@ -106,12 +108,11 @@ Legacy downstream references to `WaveMaster` mean the future WM-01-qualified
 wavelength instrument. They do not grant authority to the failed installed
 device or require the replacement to use the same interface or native format.
 
-The intended integration order is `PB-02 -> QB-01 -> SC-01 -> OG-01 -> OV-01 ->
-AR-01 -> SV-01 -> SV-02 -> IR-01 -> PF-01 -> RP-01 -> E2E-CH -> RPT-CH ->
-PROM-CH`, subject to each phase's calibration dependencies and separate
-authorization and the dependency-independent SV-01 exception above. PB-01 is a supplemental thesis characterization performed after
-PROM-CH under its own authorization. It is outside the required completion,
-promotion, and biological-entry dependency chain.
+The former local integration order is superseded for future work by the unified
+registry. In particular, it omitted HF-01.1 and PF-00, did not express the SV-02A/B
+firewall, and could not place post-HRP QB-01M correctly. PB-01 remains supplemental
+after PROM-CH and outside the required completion, promotion, and biological-entry
+chain.
 
 ### CH-00 — claim, scope, and calibration-import freeze
 

@@ -4,8 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_authoritative_reconstruction_preserves_hierarchy_and_new_phases():
+def test_preserved_reconstruction_defines_hierarchy_and_new_phases():
     text = (ROOT / "docs/campaign_reconstruction_20260826.md").read_text(encoding="utf-8")
+    assert "UNIFIED REGISTRY SUPERSEDES ITS PHASE ORDER" in text
     assert (
         "`polystyrene calibration/alignment partition -> polystyrene holdout -> "
         "blind Mylar validation -> HRP -> optional cryogenic MbCO`"

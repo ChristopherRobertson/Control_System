@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import atexit
+import os
 import signal
 import sys
 import traceback
 from datetime import UTC, datetime
 
-from control_app.config_loader import REPO_ROOT, load_config_inventory
+from control_app.config_loader import load_config_inventory
+from control_app.paths import LOG_ROOT
 from control_app.ui.main_window import ControlSystemMainWindow
 from control_app.workflows.state_machine import WorkflowStateMachine
 
@@ -30,6 +32,7 @@ def main() -> int:
         operator="UI",
         inventory=inventory,
         hardware_access=True,
+        bundle_id=os.environ.get("CONTROL_SYSTEM_BUNDLE_ID"),
     )
     window = ControlSystemMainWindow(
         command_handler=handler,
@@ -72,7 +75,7 @@ def _log_emergency_stop_error(reason: str) -> None:
     """Record emergency-stop hook failures without raising during process exit."""
 
     try:
-        log_path = REPO_ROOT / "logs" / f"{datetime.now().strftime('%Y%m%d')}_ui_shutdown_errors.txt"
+        log_path = LOG_ROOT / f"{datetime.now().strftime('%Y%m%d')}_ui_shutdown_errors.txt"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(

@@ -1,19 +1,21 @@
-# Pump-probe control and measurement campaigns
+# Pump-probe control system and unified thesis campaigns
 
 This repository contains the control software and evidence architecture for a
 thesis-level pump-probe program.
 
-Scientific work is organized in three layers:
+The repository is a monorepo with explicit boundaries:
 
-1. `calibration/system_recalibration_001/` establishes instrument corrections,
-   uncertainties, reference planes, qualified configurations, and promotion.
-2. `characterization/system_characterization_001/` measures source, beam,
-   spectral, temporal, sensitivity, stability, and reproducibility performance
-   using promoted calibration inputs.
-3. `experiments/` holds requirements-level horseradish-peroxidase and
-   myoglobin-CO designs used to select the minimum instrument work. Numeric
-   settings and executable campaigns are finalized from promoted results and
-   the canonical theoretical notebook.
+1. `control_app/`, `recipes/`, and `software/` implement the control system.
+2. `campaigns/` is the sole prospective phase/dependency authority across
+   calibration, characterization, validation, HRP, and optional MbCO.
+3. `instrument/` contains the promoted runtime-bundle interface.
+4. `evidence/` is the default location for new immutable campaign records; the
+   unified evidence registry preserves all completed legacy locations.
+5. `references/` and `theory/` define external-reference and model boundaries.
+
+The control application continues to launch with `python -m control_app.ui.app`.
+`control_app.paths` preserves current configuration, recipe, run, and log locations
+while supporting the unified hierarchy.
 
 The authoritative repository boundary is documented in
 `docs/repository_scope.md`. Generic UI runs under `runs/` are operational

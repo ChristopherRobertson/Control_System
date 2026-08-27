@@ -10,10 +10,10 @@ from typing import Any
 
 import yaml
 
-from control_app.config_loader import REPO_ROOT
+from control_app.paths import RECIPE_ROOT
 
 
-CATALOG_PATH = REPO_ROOT / "recipes" / "ui_workflows.yaml"
+CATALOG_PATH = RECIPE_ROOT / "ui_workflows.yaml"
 
 
 class SelectableWorkflowError(ValueError):

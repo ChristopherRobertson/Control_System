@@ -6,7 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, TextIO
 
-from control_app.config_loader import ConfigInventory, REPO_ROOT, load_config_inventory
+from control_app.config_loader import ConfigInventory, load_config_inventory
+from control_app.paths import LOG_ROOT, RECIPE_ROOT, RUN_ROOT
 from control_app.devices.t660_service import T660Service
 from control_app.ui.contracts import WorkflowCommand, WorkflowResult
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
@@ -64,7 +65,7 @@ class T660WidgetCommandHandler:
         if name == "t660_2.safe_idle":
             readback = self._apply_recipe(
                 command_log,
-                REPO_ROOT / "recipes" / "safe_idle.yaml",
+                RECIPE_ROOT / "safe_idle.yaml",
                 "safe_idle_readback.json",
             )
             return self._complete("T660 safe idle applied", command_log, readback=readback)
@@ -206,12 +207,12 @@ class T660WidgetCommandHandler:
         return state
 
     def _run_dir(self) -> Path:
-        path = REPO_ROOT / "runs" / f"{datetime.now().strftime('%Y%m%d')}_t6602_ui"
+        path = RUN_ROOT / f"{datetime.now().strftime('%Y%m%d')}_t6602_ui"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     def _command_log_path(self) -> Path:
-        return REPO_ROOT / "logs" / f"{datetime.now().strftime('%Y%m%d')}_t660_ui_command_log.txt"
+        return LOG_ROOT / f"{datetime.now().strftime('%Y%m%d')}_t660_ui_command_log.txt"
 
 
 def _fixed_recipe(*, enable_cha: bool, enable_chb: bool) -> dict[str, Any]:

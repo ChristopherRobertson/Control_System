@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from control_app.config_loader import REPO_ROOT
+from control_app.paths import RECIPE_ROOT, RUN_ROOT
 from control_app.experiments.builder import ExperimentBuilder
 from control_app.experiments.engine import ExperimentEngine
 from control_app.experiments.models import ExperimentDefinition, FieldDefinition
@@ -151,7 +151,7 @@ class ExperimentBuilderWidget(QWidget):
         self.document.textChanged.connect(self._document_changed)
 
     def _populate_catalog(self) -> None:
-        root = REPO_ROOT / "recipes" / "experiments"
+        root = RECIPE_ROOT / "experiments"
         self.catalog.clear()
         if root.exists():
             for path in sorted((*root.glob("*.yaml"), *root.glob("*.yml"), *root.glob("*.json"))):
@@ -175,7 +175,7 @@ class ExperimentBuilderWidget(QWidget):
 
     def _load_dialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load Experiment Definition", str(REPO_ROOT / "recipes" / "experiments"),
+            self, "Load Experiment Definition", str(RECIPE_ROOT / "experiments"),
             "Experiment definitions (*.yaml *.yml *.json)",
         )
         if path:
@@ -199,7 +199,7 @@ class ExperimentBuilderWidget(QWidget):
     def _save_dialog(self) -> None:
         if not self._sync_definition():
             return
-        suggested = str(self.definition_path or (REPO_ROOT / "recipes" / "experiments" / "experiment.yaml"))
+        suggested = str(self.definition_path or (RECIPE_ROOT / "experiments" / "experiment.yaml"))
         path, _ = QFileDialog.getSaveFileName(
             self, "Save Experiment Definition", suggested,
             "YAML (*.yaml *.yml);;JSON (*.json)",
@@ -356,7 +356,7 @@ class ExperimentBuilderWidget(QWidget):
     def _configure(self) -> None:
         if not self._sync_definition():
             return
-        suggested = REPO_ROOT / "runs" / "configured_experiments" / f"{self.builder.definition.experiment_id}_plan.json"
+        suggested = RUN_ROOT / "configured_experiments" / f"{self.builder.definition.experiment_id}_plan.json"
         path, _ = QFileDialog.getSaveFileName(self, "Save Immutable Execution Plan", str(suggested), "JSON (*.json)")
         if not path:
             return
@@ -398,7 +398,7 @@ class ExperimentBuilderWidget(QWidget):
     def _process(self) -> None:
         if self.builder.definition is None:
             return
-        path, _ = QFileDialog.getOpenFileName(self, "Select Raw JSON", str(REPO_ROOT / "runs"), "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Select Raw JSON", str(RUN_ROOT), "JSON (*.json)")
         if not path:
             return
         try:
@@ -412,7 +412,7 @@ class ExperimentBuilderWidget(QWidget):
             self._show_error(str(exc))
 
     def _export(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Export Standard Result", str(REPO_ROOT / "runs" / "result.json"), "JSON (*.json);;CSV (*.csv)")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Standard Result", str(RUN_ROOT / "result.json"), "JSON (*.json);;CSV (*.csv)")
         if not path:
             return
         try:

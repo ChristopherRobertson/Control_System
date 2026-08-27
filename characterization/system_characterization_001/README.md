@@ -1,7 +1,8 @@
 # Pump-probe system characterization run
 
-The prospective reconstruction is `../../docs/campaign_reconstruction_20260826.md`.
-Completed CH-00 remains PASS; all added work is unexecuted.
+Prospective order is defined only by `../../campaigns/registry/phase_registry.yaml`.
+Completed CH-00 remains PASS; this directory is the detailed procedure and legacy
+evidence location rather than a separate schedule.
 
 Campaign: `system_characterization_001`
 

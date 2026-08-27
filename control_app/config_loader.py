@@ -9,8 +9,9 @@ import json
 
 import yaml
 
+from control_app.paths import HARDWARE_CONFIGURATION_CANDIDATES, REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+
 PREFERRED_CONFIG = REPO_ROOT / "config" / "hardware_configuration.yaml"
 ROOT_CONFIG = REPO_ROOT / "hardware_configuration.yaml"
 
@@ -51,10 +52,9 @@ def find_hardware_config(path: str | Path | None = None) -> Path:
             return candidate.resolve()
         raise HardwareConfigError(f"hardware configuration not found: {candidate}")
 
-    if PREFERRED_CONFIG.exists():
-        return PREFERRED_CONFIG.resolve()
-    if ROOT_CONFIG.exists():
-        return ROOT_CONFIG.resolve()
+    for candidate in HARDWARE_CONFIGURATION_CANDIDATES:
+        if candidate.exists():
+            return candidate.resolve()
     raise HardwareConfigError(
         "hardware_configuration.yaml not found in config/ or repository root"
     )

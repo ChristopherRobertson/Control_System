@@ -1,7 +1,8 @@
 # Instrument characterization campaigns
 
-The authoritative prospective order, AR-01 expansion, PF-00, SV-02A/SV-02B split,
-and optional QB-01M branch are in `docs/campaign_reconstruction_20260826.md`.
+The unified phase authority is `campaigns/registry/phase_registry.yaml`. This
+directory retains detailed characterization procedures and completed evidence; it no
+longer maintains an independent execution order.
 
 Each characterization campaign is a complete archival unit under
 `characterization/<campaign-id>/`. Characterization measures instrument and

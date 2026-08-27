@@ -1,0 +1,4 @@
+schema_version: "1.0"
+registry_id: PROMOTED-BUNDLE-REGISTRY-001
+bundles: []
+note: No bundle is promoted merely by creating this registry. Promotion requires the existing explicit authorization gates.

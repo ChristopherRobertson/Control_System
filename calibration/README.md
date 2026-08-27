@@ -1,8 +1,8 @@
 # Calibration experiments
 
-The authoritative prospective reconstruction is
-`docs/campaign_reconstruction_20260826.md`; HF-01.1 adds experiment-specific
-candidate optimization without reopening completed HF-01.
+The unified phase authority is `campaigns/registry/phase_registry.yaml`. This
+directory retains detailed calibration procedures and completed evidence; it no
+longer maintains an independent execution order.
 
 Each calibration campaign lives in one uniquely named `calibration/<campaign-id>/` directory. The directory is the complete archival unit for its plan, provenance, readbacks, raw acquisitions, analysis, figures, tables, troubleshooting, bypass records, photographs, and final report.
 

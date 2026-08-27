@@ -8,7 +8,8 @@ from typing import Any, TextIO
 
 import yaml
 
-from control_app.config_loader import ConfigInventory, REPO_ROOT, load_config_inventory
+from control_app.config_loader import ConfigInventory, load_config_inventory
+from control_app.paths import LOG_ROOT, RUN_ROOT, resolve_compat_path
 from control_app.devices.t660_service import T660Service
 from control_app.ui.contracts import WorkflowCommand, WorkflowResult
 from control_app.workflows.ndyag_alignment import (
@@ -158,7 +159,7 @@ class NdYagWidgetCommandHandler:
             key in command.parameters
             for key in ("q_switch_delay_us", "shot_count", "continuous_mode")
         )
-        recipe_path = REPO_ROOT / NDYAG_ALIGNMENT_TIMING_RECIPE
+        recipe_path = resolve_compat_path(NDYAG_ALIGNMENT_TIMING_RECIPE)
         if not has_ui_parameters:
             return recipe_path
         with recipe_path.open("r", encoding="utf-8") as handle:
@@ -259,12 +260,12 @@ class NdYagWidgetCommandHandler:
         return state
 
     def _run_dir(self) -> Path:
-        path = REPO_ROOT / "runs" / f"{datetime.now().strftime('%Y%m%d')}_ndyag_ui"
+        path = RUN_ROOT / f"{datetime.now().strftime('%Y%m%d')}_ndyag_ui"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     def _command_log_path(self) -> Path:
-        return REPO_ROOT / "logs" / f"{datetime.now().strftime('%Y%m%d')}_ndyag_ui_command_log.txt"
+        return LOG_ROOT / f"{datetime.now().strftime('%Y%m%d')}_ndyag_ui_command_log.txt"
 
 
 def _response(value: Any) -> Any:

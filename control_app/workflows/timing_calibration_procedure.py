@@ -27,6 +27,7 @@ from control_app.config_loader import (
     REPO_ROOT,
     load_config_inventory,
 )
+from control_app.paths import RECIPE_ROOT, RUN_ROOT, wiring_map_path
 from control_app.devices.picoscope_service import PicoScopeService
 from control_app.devices.t660_service import T660Service
 from control_app.workflows.timing_trace_analysis import (
@@ -50,7 +51,7 @@ DEFAULT_OPTICAL_MINIMUM_LATENCY_NS = 5.0
 PLAN_SCHEMA_VERSION = "1.0"
 RESULT_SCHEMA_VERSION = "1.0"
 DEFAULT_OPTICAL_RECIPE = "recipes/ndyag_alignment_10hz.yaml"
-SAFE_IDLE_RECIPE = REPO_ROOT / "recipes" / "safe_idle.yaml"
+SAFE_IDLE_RECIPE = RECIPE_ROOT / "safe_idle.yaml"
 
 
 class SafeIdleVerificationError(TimingCalibrationError):
@@ -756,7 +757,7 @@ class TimingCalibrationProcedure:
                     "path": str(Path(self.inventory.config_path).resolve()),
                 },
                 "wiring_map": {
-                    "path": str((REPO_ROOT / "wiring_map.yaml").resolve()),
+                    "path": str(wiring_map_path()),
                 },
             },
             "implementation": {
@@ -792,7 +793,7 @@ class TimingCalibrationProcedure:
             },
             "recipes": {
                 "procedure_base": {
-                    "path": str((REPO_ROOT / "recipes" / "timing_calibration.yaml").resolve()),
+                    "path": str((RECIPE_ROOT / "timing_calibration.yaml").resolve()),
                 },
                 "safe_idle": {
                     "path": str(resolved_safe_idle_recipe),
@@ -1855,7 +1856,7 @@ def _steps_for_execution_scope(
 
 def create_unique_run_directory(
     *,
-    run_parent: str | Path = REPO_ROOT / "runs",
+    run_parent: str | Path = RUN_ROOT,
     requested_path: str | Path | None = None,
 ) -> Path:
     """Create an exclusive run directory; existing paths are never reused."""

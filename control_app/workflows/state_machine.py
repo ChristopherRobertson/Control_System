@@ -11,6 +11,8 @@ import json
 import yaml
 
 from control_app.config_loader import ConfigInventory, REPO_ROOT, load_config_inventory
+from control_app.paths import RECIPE_ROOT, RUN_ROOT, resolve_compat_path
+from control_app.promoted_bundles import PromotedBundle, load_promoted_bundle
 from control_app.devices.hf2li_service import HF2LIPreset, HF2LIService
 from control_app.devices.mircat_service import RET_NOT_INITIALIZED, MircatService
 from control_app.devices.picoscope_service import PicoScopeService
@@ -102,6 +104,8 @@ class WorkflowStateMachine:
         hardware_access: bool = True,
         hardware_blocker: str | None = None,
         run_dir: str | Path | None = None,
+        bundle_id: str | None = None,
+        bundle_root: str | Path | None = None,
     ) -> None:
         self.operator = operator
         self.inventory = inventory or load_config_inventory(config_path, write_files=False)
@@ -110,6 +114,9 @@ class WorkflowStateMachine:
         self.hardware_access = hardware_access
         self.hardware_blocker = hardware_blocker or (
             "Real hardware execution is not enabled for this workflow state-machine run."
+        )
+        self.promoted_bundle: PromotedBundle | None = (
+            load_promoted_bundle(bundle_id, bundle_root) if bundle_id else None
         )
         self.state = INITIAL_STATE
         self.recipe: dict[str, Any] | None = None
@@ -346,7 +353,7 @@ class WorkflowStateMachine:
 
     def _resolve_run_dir(self, run_dir: str | Path | None) -> Path:
         if run_dir is None:
-            target = REPO_ROOT / "runs" / f"{datetime.now().strftime('%Y%m%d')}_workflow_state_machine"
+            target = RUN_ROOT / f"{datetime.now().strftime('%Y%m%d')}_workflow_state_machine"
         else:
             target = Path(run_dir)
             if not target.is_absolute():
@@ -554,7 +561,7 @@ class WorkflowStateMachine:
         if not timing_recipe:
             raise WorkflowStateMachineError("active campaign recipe does not define timing_recipe")
         manager = TimingRecipeManager(self.inventory)
-        validation = manager.validate_recipe(REPO_ROOT / str(timing_recipe))
+        validation = manager.validate_recipe(resolve_compat_path(str(timing_recipe)))
         self.recipe_validation["timing_recipe"] = validation
         data = {
             "state": "TIMING_RECIPE_VALIDATED",
@@ -571,7 +578,7 @@ class WorkflowStateMachine:
 
         manager = TimingRecipeManager(self.inventory, command_log=self.command_log)
         readback_path = self._artifact_path(f"workflow_{Path(str(timing_recipe)).stem}_readback.json")
-        readback = manager.apply_recipe(REPO_ROOT / str(timing_recipe), output_path=readback_path)
+        readback = manager.apply_recipe(resolve_compat_path(str(timing_recipe)), output_path=readback_path)
         self._remember_readback(readback_path)
         data.update(
             {
@@ -1039,7 +1046,7 @@ class WorkflowStateMachine:
         try:
             manager = TimingRecipeManager(self.inventory, command_log=self.command_log)
             output_path = self._artifact_path(f"workflow_{label}_safe_idle_readback.json")
-            actions["t660"] = manager.apply_recipe(REPO_ROOT / "recipes" / "safe_idle.yaml", output_path=output_path)
+            actions["t660"] = manager.apply_recipe(RECIPE_ROOT / "safe_idle.yaml", output_path=output_path)
             self._remember_readback(output_path)
         except Exception as exc:  # noqa: BLE001
             errors.append(f"T660 safe_idle failed: {exc}")
@@ -1060,7 +1067,7 @@ class WorkflowStateMachine:
             )
         recipe_path = Path(str(recipe_path_value))
         if not recipe_path.is_absolute():
-            recipe_path = REPO_ROOT / recipe_path
+            recipe_path = resolve_compat_path(recipe_path)
         if not recipe_path.exists():
             raise WorkflowStateMachineError(f"workflow recipe not found: {recipe_path}")
         with recipe_path.open("r", encoding="utf-8") as handle:
@@ -1120,7 +1127,7 @@ class WorkflowStateMachine:
     def _validate_hf2li_preset(self, preset_name: Any) -> str:
         if not preset_name:
             raise WorkflowStateMachineError("workflow recipe does not define hf2li_preset")
-        presets_path = REPO_ROOT / "recipes" / "hf2li_presets.yaml"
+        presets_path = RECIPE_ROOT / "hf2li_presets.yaml"
         with presets_path.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
         presets = data.get("presets") if isinstance(data, dict) else None
@@ -1133,7 +1140,7 @@ class WorkflowStateMachine:
     def _validate_picoscope_recipe(self, recipe_path: Any) -> dict[str, Any]:
         if not recipe_path:
             raise WorkflowStateMachineError("workflow recipe does not define picoscope_recipe")
-        recipe, resolved_path = load_picoscope_recipe(REPO_ROOT / str(recipe_path))
+        recipe, resolved_path = load_picoscope_recipe(resolve_compat_path(str(recipe_path)))
         settings = capture_settings_from_recipe(recipe)
         device_config = self.inventory.devices.get("picoscope")
         if not isinstance(device_config, dict):

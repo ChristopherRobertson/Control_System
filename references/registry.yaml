@@ -1,0 +1,8 @@
+schema_version: "1.0"
+registry_id: REFERENCE-REGISTRY-001
+locations:
+  manuals: docs
+  sdk_documentation: docs/MIRcat/SDK
+  runtime_vendor_libraries: vendor
+  calibration_certificates: docs
+disposition: legacy_paths_preserved_until_separately_verified_migration

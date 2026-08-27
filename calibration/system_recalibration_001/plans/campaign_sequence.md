@@ -1,8 +1,10 @@
 # Complete calibration sequence (expanded)
 
-> **2026-08-26 prospective reconstruction:** Future dependencies are governed by
-> `docs/campaign_reconstruction_20260826.md`. Completed statuses/readbacks remain
-> unchanged. Planned HF-01.1 follows completed HF-01 and does not reopen it.
+> **Unified-order amendment:** `campaigns/registry/phase_registry.yaml` is the sole
+> prospective dependency authority and
+> `campaigns/instrument_readiness_001/master_sequence.md` is its human-readable view.
+> This file remains the detailed calibration procedure catalog. Completed statuses
+> and readbacks remain unchanged.
 
 Campaign: `system_recalibration_001`
 
@@ -120,8 +122,9 @@ records remain distinguishable and aggregatable.
 
 ### 2026-08-25 dependency-aware execution amendment
 
-The numbered order remains the intended integration order, but it is not an
-operational gate for phases that do not consume the deferred dependency. The
+The numbered order below is a historical procedure-catalog index, not the current
+integration order or an operational gate. The unified phase registry determines
+prospective dependencies. The
 installed WaveMaster failed WM-01 optical qualification and cannot supply the
 required independent 540 nm evidence. WM-01 remains one open phase record and
 will resume when a replacement spectrometer is available.
@@ -537,6 +540,11 @@ Mandatory closeout deliverables:
 
 ### 12. HF-01 — HF2LI configuration and external-reference qualification
 
+HF-01 is completed historical evidence. The procedure text below records its
+execution-era design and does not define current experiment-mode requirements.
+HF-01.1 may supersede future configuration use without changing HF-01's PASS status,
+decision, or configuration identities.
+
 Execute the bounded PicoScope-AWG electrical parameter-characterization design
 in `plans/hf01_awg_parameter_characterization.md`. Keep all lasers inhibited
 and shuttered. Use the monitored AWG carrier step and offset-carrier response to
@@ -588,6 +596,15 @@ range/rate/selected-setting channel-equivalence results, uncertainty/acceptance
 table, and three restorable experiment-specific
 approved configuration IDs (or separate biological IDs supported by an
 explicit equivalence alias).
+
+### 12a. HF-01.1 — experiment-specific HF2LI candidate optimization and targeted electrical confirmation
+
+Status: **PLANNED; NOT EXECUTED**. The canonical plan is
+`campaigns/instrument_readiness_001/phases/HF-01.1/plan.md`. It imports completed
+HF-01 evidence, freezes distinct acquisition-mode requirements, computes separate
+Pareto frontiers over the complete supported space, and limits any later physical
+confirmation to the winning configuration and nearest meaningful challenger. It
+does not reopen HF-01 or alter its historical selection and decision.
 
 ### 13. MD-01 — MIRcat/HF2LI DIO mapping qualification
 

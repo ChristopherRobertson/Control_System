@@ -15,7 +15,8 @@ import sys
 
 import yaml
 
-from control_app.config_loader import REPO_ROOT, load_hardware_config
+from control_app.config_loader import load_hardware_config
+from control_app.paths import RECIPE_ROOT, resolve_compat_path
 
 
 DEFAULT_LABONE_PACKAGE_PATHS = (
@@ -160,13 +161,13 @@ class HF2LIService:
         self,
         name: str,
         *,
-        presets_path: str | Path = REPO_ROOT / "recipes" / "hf2li_presets.yaml",
+        presets_path: str | Path = RECIPE_ROOT / "hf2li_presets.yaml",
     ) -> HF2LIPreset:
         """Load one named HF2LI preset from YAML."""
 
         path = Path(presets_path)
         if not path.is_absolute():
-            path = REPO_ROOT / path
+            path = resolve_compat_path(path)
         with path.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
         presets = data.get("presets")

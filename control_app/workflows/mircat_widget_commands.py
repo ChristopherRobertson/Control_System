@@ -6,7 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
-from control_app.config_loader import REPO_ROOT, load_config_inventory
+from control_app.config_loader import load_config_inventory
+from control_app.paths import LOG_ROOT, RECIPE_ROOT, RUN_ROOT
 from control_app.devices.mircat_service import RET_NOT_INITIALIZED, MircatError, MircatService
 from control_app.manifest import new_manifest, write_manifest
 from control_app.ui.contracts import WorkflowCommand, WorkflowResult
@@ -228,13 +229,13 @@ class MircatWidgetCommandHandler:
         """Run the all-device TRIG-OUT-started sweep workflow."""
         if not command.safety_approval:
             return WorkflowResult(status="blocked", message="Safety approval must be checked before starting a MIRcat scan.")
-        recipe_path = REPO_ROOT / "recipes" / "mircat_sweep_scan.yaml"
+        recipe_path = RECIPE_ROOT / "mircat_sweep_scan.yaml"
         recipe = yaml.safe_load(recipe_path.read_text(encoding="utf-8"))
         mircat = recipe["mircat"]
         for key, target in (("scan_start_cm1", "start_cm1"), ("scan_stop_cm1", "stop_cm1"), ("scan_rate_cm1_s", "scan_rate_cm1_s"), ("scan_repetitions", "repetitions"), ("pulse_rate_hz", "pulse_rate_hz"), ("pulse_width_ns", "pulse_width_ns")):
             if key in command.parameters:
                 mircat[target] = command.parameters[key]
-        run_dir = REPO_ROOT / "runs" / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_mircat_sweep_scan"
+        run_dir = RUN_ROOT / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_mircat_sweep_scan"
         try:
             result = run_sweep_scan(request=recipe, run_dir=run_dir, command_log=command_log)
         except Exception as exc:  # noqa: BLE001
@@ -521,7 +522,7 @@ class MircatWidgetCommandHandler:
         return write_manifest(run_dir / "run_manifest.json", manifest)
 
     def _command_log_path(self) -> Path:
-        return REPO_ROOT / "logs" / f"{datetime.now().strftime('%Y%m%d')}_mircat_ui_command_log.txt"
+        return LOG_ROOT / f"{datetime.now().strftime('%Y%m%d')}_mircat_ui_command_log.txt"
 
     def close_blockers(self) -> list[str]:
         """Return user actions required before normal application close."""

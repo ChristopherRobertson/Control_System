@@ -1,8 +1,12 @@
 # Prospective instrument-readiness and experiment campaign reconstruction
 
-Status: **AUTHORITATIVE PROSPECTIVE DEPENDENCY CROSSWALK; NO HARDWARE EXECUTION AUTHORIZED**  
+Status: **PRESERVED DESIGN BASIS; UNIFIED REGISTRY SUPERSEDES ITS PHASE ORDER; NO HARDWARE EXECUTION AUTHORIZED**
 Effective: 2026-08-26  
 Scope: future calibration, characterization, HRP, and optional cryogenic MbCO work
+
+The scientific requirements in this amendment remain applicable. Prospective phase
+identity and order moved to `campaigns/registry/phase_registry.yaml`; the audited
+human-readable view is `campaigns/instrument_readiness_001/master_sequence.md`.
 
 This amendment changes future dependencies and methods, not history. Completed phase
 records, decisions, identifiers, raw evidence, rejected attempts, exclusions, and
