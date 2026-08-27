@@ -6,6 +6,28 @@ Authority: `campaigns/phase_registry.yaml`. This view replaces independent
 calibration and characterization order statements. Domain-specific legacy sequences
 remain detailed procedure catalogs, not competing execution schedules.
 
+## Universal phase advancement gate
+
+Dependency readiness alone is insufficient for phase advancement. Every phase
+must satisfy its scientific acceptance criteria and the shared closeout contract,
+including an indexed, manifest-linked, reviewer-accepted
+`procedural_writeup.md` under
+`docs/data_contract/procedural_writeup_standard.md`. The writeup must provide the
+thesis-level WHY, actual step-by-step HOW, evidence-grounded WHAT, and bounded
+implications/caveats/claims.
+
+The separate `final_report.md` remains the formal disposition and authorization
+record. Machine-readable evidence remains the numerical authority. A plan,
+generated summary, final report, commit, or matching hash cannot substitute for
+the procedural writeup.
+
+Historical scientific dispositions below remain preserved. Their missing
+writeups are reconstructed from retained evidence without repeating completed
+measurements; documentation conformance is tracked in
+`campaigns/instrument_readiness_001/reports/procedural_writeup_backfill_register.md`.
+New promotion or thesis reuse requires accepted writeups for every material
+source phase.
+
 ## Preserved completed inputs
 
 `P0 -> S0 -> MS-01 -> MS-02 -> T2-01 -> T1-01 -> PT-01 -> MC-01`

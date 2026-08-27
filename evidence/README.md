@@ -16,3 +16,14 @@ correction creates a derived child rather than replacing its source.
 Generic GUI output is retained under `evidence/experiments/runs/` and logs under
 `evidence/experiments/logs/`; those records become campaign evidence only through an
 approved, indexed import.
+
+Every canonical phase evidence root requires a thesis-quality
+`procedural_writeup.md` governed by
+`docs/data_contract/procedural_writeup_standard.md`. It is a distinct indexed
+artifact, not a replacement for `final_report.md` or machine-readable tables. A
+new phase is not documentation-complete until the writeup is manifest-linked and
+reviewer-accepted.
+
+For historical phases, writeups are reconstructed from retained evidence without
+reacquisition or invented details. The original scientific status remains intact;
+documentation conformance is tracked independently until the backfill is accepted.

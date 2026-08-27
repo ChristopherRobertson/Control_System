@@ -6,4 +6,7 @@ it. Bundles contain machine-readable runtime values, validity envelopes, version
 and source IDs; raw campaign evidence and prose decisions stay outside this tree.
 
 Do not add hash-matching operational gates. Promotion still requires the existing
-explicit user authorization phrases and scientific closeout gates.
+explicit user authorization phrases and scientific closeout gates. Those gates
+include an accepted `procedural_writeup.md` under
+`docs/data_contract/procedural_writeup_standard.md` for every source phase
+material to the proposed runtime value, uncertainty, or validity envelope.

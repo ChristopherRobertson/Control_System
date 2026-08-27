@@ -56,3 +56,10 @@ changes scientific status.
 The detailed boundary rules are in `docs/architecture/repository_scope.md`, and the
 shared acquisition/evidence rules are in
 `docs/data_contract/measurement_campaign_data_contract.md`.
+
+Every phase also requires a separate thesis-quality `procedural_writeup.md` before
+documentation closeout. The governing standard and reusable template are
+`docs/data_contract/procedural_writeup_standard.md` and
+`campaigns/templates/phase_record/procedural_writeup.template.md`. The writeup
+explains WHY, HOW, WHAT, and the defensible implications/caveats/claims; it does not
+replace machine-readable evidence or the formal `final_report.md` decision record.

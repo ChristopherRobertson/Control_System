@@ -12,8 +12,9 @@ authorities.
 3. Native and derived records are retained in the phase package registered by
    `campaigns/registries/evidence_locations.yaml`.
 4. Reviewed campaign results may be assembled into a machine-readable bundle under
-   `instrument/promoted_bundles/` only through the existing scientific closeout and
-   explicit promotion gates.
+   `instrument/promoted_bundles/` only after every material source phase has an
+   accepted thesis-quality procedural writeup and the existing scientific closeout
+   and explicit promotion gates pass.
 5. `software/control_app/` consumes installed configuration, recipes, SDKs, and
    explicitly promoted bundles. It does not infer runtime values from raw evidence
    or prose reports.
@@ -29,13 +30,19 @@ outside the checkout is required for normal development or reproduction.
   promoted runtime products;
 - `campaigns/`: prospective procedure and dependency authority;
 - `evidence/`: observations, acquisition records, analysis outputs, exclusions,
-  closeout, and restoration evidence;
+  phase procedural writeups, closeout, and restoration evidence;
 - `references/`: manuals, SDKs/drivers, and certificates; and
 - `theory/`: model artifacts, not observations.
 
 Generic GUI output under `evidence/experiments/runs/` is operational data, not
 campaign evidence unless an approved phase imports and indexes it. Planning text
 cannot create an observation, close a phase, or promote a bundle.
+
+The procedural writeup is a required human-readable closeout artifact governed by
+`docs/data_contract/procedural_writeup_standard.md`. It explains WHY, HOW, WHAT,
+and the implications/caveats/claims using stable evidence IDs. It does not replace
+the formal final report or machine-readable evidence. Historical narratives are
+backfilled from preserved records without reacquisition or invented detail.
 
 ## Scientific boundaries
 

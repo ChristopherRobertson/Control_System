@@ -75,8 +75,9 @@ WaveMaster does not measure spectral-power fractions or the 355 nm drive.
    requires separate approval, operator readiness, and restoration planning.
 5. Preserve native raw data, all attempted acquisitions, controls, previews,
    rejected/excluded records, readbacks, and analysis provenance.
-6. A phase closes only after all mandatory deliverables exist and pass the
-   retention audit in `docs/data_contract/measurement_campaign_data_contract.md`.
+6. A phase closes only after all mandatory deliverables exist, the thesis-quality
+   `procedural_writeup.md` is reviewer-accepted, and the retention audit in
+   `docs/data_contract/measurement_campaign_data_contract.md` passes.
 7. Do not advance on a scientific FAIL. `USER_INPUT_REQUIRED` may permit only
    independent work and must propagate into claim limitations.
 8. No canonical summary is promoted without
@@ -87,9 +88,19 @@ WaveMaster does not measure spectral-power fractions or the 355 nm drive.
 Every phase produces the common manifest and tables, immutable indexed raw
 data, settings/readbacks, conditions and environment, calibration links,
 analysis source, machine-readable results with units/uncertainties, acceptance
-decisions, final report, restoration confirmation, and unresolved-input list.
-Only repository-approved provenance fields may be used. Phase-specific
-deliverables below are additional requirements.
+decisions, `procedural_writeup.md`, final report, restoration confirmation, and
+unresolved-input list. The procedural writeup follows
+`docs/data_contract/procedural_writeup_standard.md` and gives the thesis-level WHY,
+actual step-by-step HOW, evidence-grounded WHAT, and bounded implications,
+caveats, limitations, supported claims, and unsupported claims. It is indexed,
+manifest-linked, reconciled to the numerical tables, and accepted by a named
+reviewer. Only repository-approved provenance fields may be used. Phase-specific
+deliverables below are additional requirements and never replace the writeup.
+
+For historical phases, reconstruct the narrative from retained evidence without
+reacquisition or invented detail. Preserve the original scientific disposition,
+identify documentation gaps, and state how each gap limits reproducibility or
+claim strength.
 
 ## Phase sequence
 

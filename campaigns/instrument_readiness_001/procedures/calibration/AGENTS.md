@@ -1,14 +1,15 @@
 # Codex instructions for calibration campaigns
 
-These instructions apply only inside `calibration/`.
+These instructions apply to calibration procedures and calibration-domain phase
+work in the unified campaign/evidence hierarchy.
 
 ## Operator-led phase execution
 
 Treat each campaign sequence and technical calibration procedure as
 authoritative for measurement content. Orchestrate execution conversationally:
 
-1. Identify the single approved phase and its stable
-   `readbacks/<phase>/` directory.
+1. Identify the single approved phase and its canonical evidence directory from
+   `campaigns/registries/evidence_locations.yaml` or the future-location rule.
 2. Read existing phase evidence before acting.
 3. Give the operator one physical action at a time in plain language.
 4. Wait for the operator's observation before recording a physical state.
@@ -21,12 +22,21 @@ authoritative for measurement content. Orchestrate execution conversationally:
    unrelated valid calibration work.
 8. Update the same phase record when work resumes on another day.
 9. Guide restoration and record the final equipment state.
-10. Require the campaign plan's complete mandatory closeout package before a
-    phase closes or advances, then stop at the approved phase boundary.
+10. Draft the phase's `procedural_writeup.md` from the contemporaneous record as
+    work proceeds; do not wait until context has been lost.
+11. Require the campaign plan's complete mandatory closeout package, including an
+    indexed, manifest-linked, reviewer-accepted procedural writeup under
+    `docs/data_contract/procedural_writeup_standard.md`, before a phase closes or
+    advances, then stop at the approved phase boundary.
 
 Do not repeat a completed calibration measurement merely to change its format,
 plot it, aggregate it, or satisfy a newer schema. Link existing evidence by
 stable campaign, phase, acquisition, artifact, and calibration-bundle IDs.
+
+For retrospective documentation, reconstruct WHY, HOW, WHAT, and bounded claims
+only from preserved evidence. Label unknown facts and their implications; never
+turn an undocumented recollection into an observation or rerun a completed phase
+solely to fill a writeup gap.
 
 Do not recreate or invoke a monolithic complete-calibration runner. Use only
 the approved phase plan and focused phase utilities.

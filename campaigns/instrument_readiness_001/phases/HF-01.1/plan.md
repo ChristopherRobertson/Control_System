@@ -28,4 +28,9 @@ Reuse exact HF-01 support where the validity envelope covers the requirement and
 physical trigger exists. Issue stable `HF011-CFG-*` IDs with explicit
 `supersedes_for_future_use`, `electrically_equivalent`, or
 `distinct_requirement_same_settings` relationships. Closeout includes a complete
-HF-01 evidence-reuse matrix and never changes HF-01 history.
+HF-01 evidence-reuse matrix and never changes HF-01 history. It also requires an
+indexed, manifest-linked, reviewer-accepted `procedural_writeup.md` under
+`docs/data_contract/procedural_writeup_standard.md`, covering the optimization
+rationale, actual candidate-generation and targeted-confirmation steps, complete
+candidate/result accounting, selection uncertainty, reuse boundaries, caveats,
+supported/unsupported claims, and downstream configuration supersession.

@@ -584,6 +584,16 @@ quantum yield, overlap, dose-response, damage, or kinetic parameters. Failure
 of an HRP scientific hypothesis is reportable and does not by itself prevent
 the later MbCO campaign once HRP closeout and all independent MbCO gates pass.
 
+Every R-phase must produce its own thesis-quality `procedural_writeup.md` under
+`docs/data_contract/procedural_writeup_standard.md`. The writeup is maintained
+from contemporaneous evidence and must explain the phase rationale and thesis
+role (WHY), the actual preparation/configuration/actions/controls/analysis and
+restoration in chronological detail (HOW), the results and acceptance evaluation
+with uncertainty and stable source IDs (WHAT), and the supported/unsupported
+claims, caveats, limitations, downstream implications, and open work. It is a
+separate indexed and manifest-linked artifact from the final report and requires
+named technical and thesis-readiness review before phase advancement.
+
 | Phase | Work and deliverable | Gate to continue |
 |---|---|---|
 | R0 — requirements freeze | Approve this brief; assign question, claims, controls, parameter registry, and owners | No unresolved blocker classified “must resolve before characterization” |
@@ -595,7 +605,7 @@ the later MbCO campaign once HRP closeout and all independent MbCO gates pass.
 | R6 — exposure/recovery pilot | Verify the unchanged promoted iris configuration and post-iris power; run the lowest-setting 540 nm power ladder and rare-pump recovery without optimizing the iris on biology | Reversible regime and measured cadence established; iris/configuration validity passes |
 | R7 — MVP acquisition | ≥3 independent preparations, randomized/interleaved blocks | Per-block QC and completion of planned controls |
 | R8 — optional fast branch | Only after all §11.2 gates | IR01-supported resolution and independent exposure control |
-| R9 — analysis/closeout | Versioned analysis, uncertainty, exclusions, predicted-vs-measured, report | Reproducible from indexed native data; restoration and retention audits pass |
+| R9 — analysis/closeout | Versioned analysis, uncertainty, exclusions, predicted-vs-measured, accepted procedural writeups, and final report | Reproducible from indexed native data; writeup, restoration, and retention audits pass |
 
 ### Abort conditions
 
@@ -632,6 +642,7 @@ Each phase directory contains, at minimum:
 - exclusions;
 - calibration links;
 - command log;
+- thesis-quality `procedural_writeup.md`, indexed and manifest-linked;
 - final report;
 - restoration confirmation;
 - `raw/`, `analysis/`, `figures/`, and `tables/` subdirectories.
@@ -725,7 +736,8 @@ Optional work remains outside the MVP, must not contaminate its frozen design or
 - [ ] Randomization schedule and replicate/block definitions generated before acquisition.
 - [ ] Analysis package evaluates cleanly from a fresh environment and is independent of saved notebook outputs.
 - [ ] Data-contract directories, IDs, schemas, command logging, exclusions, and restoration records pass a non-biological dry run.
-- [ ] Retention audit and final report template are ready.
+- [ ] The procedural-writeup template, evidence/source-map review, and named review workflow are ready for every R-phase.
+- [ ] Retention audit, procedural writeup, and final report templates are ready.
 
 No unchecked item may be waived by verbal assurance or by a matching hash.
 

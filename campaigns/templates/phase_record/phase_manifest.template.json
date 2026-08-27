@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "campaign_id": "system_characterization_001",
   "phase_id": "PHASE-ID",
   "phase_run_id": "system_characterization_001_PHASE-ID_001",
@@ -23,6 +23,16 @@
   "measurements_table": "measurements.csv",
   "exclusions_table": "exclusions.csv",
   "calibration_links_table": "calibration_links.csv",
+  "procedural_writeup": {
+    "relative_path": "procedural_writeup.md",
+    "artifact_id": "USER_INPUT_REQUIRED",
+    "document_version": "0.1.0",
+    "preparation_mode": "PROSPECTIVE_CONTEMPORANEOUS",
+    "author_ids": ["USER_INPUT_REQUIRED"],
+    "reviewer_ids": [],
+    "review_status": "DRAFT",
+    "review_utc": null
+  },
   "criterion_versions": {},
   "deviations": [],
   "user_input_required": [],

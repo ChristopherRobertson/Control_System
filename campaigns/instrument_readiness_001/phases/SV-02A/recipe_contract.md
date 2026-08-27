@@ -28,9 +28,19 @@ characterization bundles exist and CH-00 has frozen the test grid.
    metrics without refitting.
 5. Acquire Mylar in both directions and calculate independent validation
    metrics without refitting.
-6. Restore safe state and produce the full SV-02 closeout package.
+6. Restore safe state and produce the full SV-02 closeout package, including the
+   distinct thesis-quality `procedural_writeup.md` required by
+   `docs/data_contract/procedural_writeup_standard.md`.
 
 ## Recipe requirements
+
+The recipe and phase record must accumulate enough contemporaneous evidence to
+write the required WHY/HOW/WHAT/implications narrative without reconstructing
+settings or decisions from memory. The procedural writeup must explain the
+polystyrene-only correction rationale, actual freeze workflow, holdout result,
+Mylar embargo/unlock evidence, uncertainty, deviations, claim boundaries, and
+why the frozen correction may or may not proceed to blind validation. A recipe,
+generated log, or final pass/fail report alone is insufficient.
 
 Every executable recipe must identify `campaign_id`, `phase_id`,
 `phase_run_id`, required bundle/configuration IDs, alignment/holdout role,

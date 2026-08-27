@@ -22,3 +22,15 @@ Directory responsibilities:
 
 Adding a phase requires one registry entry, one plan path, stable dependencies, and
 a declared evidence location. A plan file alone does not authorize execution.
+
+Every phase plan must budget time and evidence for a thesis-quality
+`procedural_writeup.md` conforming to
+`../docs/data_contract/procedural_writeup_standard.md`. The writeup is a required
+closeout product in addition to the manifest, tables, raw/derived evidence,
+restoration record, and final report. Its accepted review state is required before
+a new completion, downstream advance, or promotion review.
+
+Previously completed phases are not rerun. Their documentation status is assessed
+and backfilled from retained evidence, with missing facts stated explicitly. The
+instrument-readiness backfill register is
+`instrument_readiness_001/reports/procedural_writeup_backfill_register.md`.

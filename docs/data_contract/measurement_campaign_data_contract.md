@@ -1,11 +1,13 @@
 # Measurement campaign data contract
 
-Version: `1.1.0`
+Version: `1.2.0`
 
 This contract makes calibration, characterization, and later experimental
 campaigns collectable and aggregatable without reacquisition. It governs new
 phase records. Existing native evidence remains valid and is linked through an
-index; it is not rewritten solely to satisfy this contract.
+index; it is not rewritten solely to satisfy this contract. Historical phases
+retain their scientific disposition while missing thesis narratives are
+backfilled from evidence under the separate documentation-conformance policy.
 
 ## Required identifiers
 
@@ -26,7 +28,7 @@ All tables use these keys rather than relying on filenames or row order.
 ## Required phase-directory products
 
 ```text
-readbacks/<phase-id>/
+evidence/<domain>/<campaign-id>/phases/<phase-id>/
   phase_manifest.json
   acquisition_index.csv
   conditions.csv
@@ -36,6 +38,7 @@ readbacks/<phase-id>/
   calibration_links.csv
   command_log.txt
   final_report.md
+  procedural_writeup.md
   restoration_confirmation.json
   raw/
   analysis/
@@ -104,7 +107,9 @@ artifact_id,campaign_id,phase_id,acquisition_id,relative_path,artifact_role,medi
 
 Paths are relative to the campaign root. `artifact_role` distinguishes native
 raw, readback, operator observation, log, analysis source, derived table,
-figure, report, photograph, and certificate link.
+figure, report, procedural writeup, photograph, and certificate link. The
+canonical procedural narrative uses the exact role `procedural_writeup` so it can
+be audited independently from a formal final report.
 
 ### `exclusions.csv`
 
@@ -123,6 +128,41 @@ campaign_id,phase_id,phase_run_id,calibration_bundle_id,calibration_quantity_id,
 This table is the foreign-key bridge that prevents characterization from
 copying or repeating calibration work.
 
+## Thesis-quality procedural writeup
+
+Every phase requires `procedural_writeup.md` under
+`docs/data_contract/procedural_writeup_standard.md`. It is a separate closeout
+artifact from `final_report.md` and must answer:
+
+1. **WHY:** the phase purpose, scientific/engineering need, thesis relevance,
+   objective, acceptance criteria, dependencies, intended downstream use, scope,
+   and explicit exclusions;
+2. **HOW:** the actual entry state, configuration, chronological steps,
+   acquisitions and controls, analysis and uncertainty method, deviations,
+   troubleshooting, stop, and restoration;
+3. **WHAT:** the evidence population, results with units and uncertainty or
+   limitation, figures/tables, criterion-by-criterion evaluation, and final
+   scientific disposition; and
+4. **IMPLICATIONS/CAVEATS/CLAIMS:** supported and unsupported claims, validity
+   envelope, assumptions, limitations, downstream effects, and open work.
+
+The writeup cites stable evidence and configuration IDs and includes a
+claim/result-to-evidence source map. It is indexed in `artifacts.csv` with role
+`procedural_writeup`, linked from the manifest, and reviewed by a named technical
+reviewer. A terminal phase using manifest schema `1.1.0` requires
+`review_status: ACCEPTED`.
+
+Plans, command logs, generated summaries, notebooks, and concise final reports do
+not satisfy this requirement on their own. Machine-readable tables remain the
+numerical authority; the procedural writeup supplies thesis-level explanation and
+interpretation.
+
+Historical writeups use
+`preparation_mode: RETROSPECTIVE_EVIDENCE_RECONSTRUCTION`. They do not authorize
+reacquisition, mutation of native evidence, invented recollection, or silent
+revision of the original disposition. Missing facts remain explicit and narrow
+the claims.
+
 ## Manifest and provenance requirements
 
 `phase_manifest.json` validates against `instrument/schemas/phase_manifest.schema.json`.
@@ -131,6 +171,12 @@ clean tree when one was not present. Device settings/readbacks,
 software/driver versions, recipes, analysis source and environment are linked
 as artifacts. UTC timestamps use ISO 8601 with a
 `Z` suffix; local time may be stored additionally for operator convenience.
+
+New phase manifests use schema version `1.1.0` and include the
+`procedural_writeup` path, artifact ID, document version, preparation mode,
+authors, reviewers, review status, and review timestamp. Schema version `1.0.0`
+is retained only so historical manifests remain readable; it is not a template
+for new or resumed closeout.
 
 Units are explicit and stable (`s`, `ns`, `Hz`, `cm^-1`, `W`, `J`, `V`, `m`,
 `deg`, `K`, `%RH`, or another documented unit). Numeric columns contain only
@@ -144,6 +190,9 @@ numbers. Missing values are empty and accompanied by a reason or
 - A correction creates a new derived artifact with a new artifact ID.
 - Analysis code and criterion versions are recorded for every result.
 - Superseded artifacts remain indexed and point to their replacements.
+- An accepted procedural writeup is immutable. A correction creates a separately
+  named versioned revision with a new artifact ID, review record, and supersession
+  relationship; neither the prior narrative nor native evidence is overwritten.
 - Schema changes increment the contract version; collectors must not infer a
   schema from filenames.
 - External protected records are represented by stable identifier, location,
@@ -173,6 +222,12 @@ The phase cannot close until an audit confirms:
    links are present.
 5. Results identify analysis version, reference plane, correction state, and
    uncertainty or explicit limitation.
-6. Restoration and final safe state are recorded when hardware was involved.
-7. No canonical calibration or characterization output was promoted without
-   its campaign-specific approval gate.
+6. `procedural_writeup.md` exists, is indexed and manifest-linked, substantively
+   satisfies the required WHY/HOW/WHAT/implications structure, reconciles with
+   the indexes and final report, contains no unresolved template placeholders,
+   and has an accepted named review.
+7. Every major numerical statement and claim in the writeup maps to stable
+   evidence IDs and a versioned analysis or criterion record.
+8. Restoration and final safe state are recorded when hardware was involved.
+9. No canonical calibration or characterization output was promoted without
+   its campaign-specific approval gate and accepted source-phase writeups.

@@ -7,6 +7,15 @@ status_vocabulary:
   planned: no execution or observation is implied
   optional: outside the HRP core promotion path
 
+completion_policy:
+  procedural_writeup_standard: docs/data_contract/procedural_writeup_standard.md
+  required_artifact: procedural_writeup.md
+  required_before_new_completion_or_advance: true
+  required_before_promotion_or_thesis_reuse: true
+  historical_scientific_disposition_preserved: true
+  historical_documentation_tracking: campaigns/instrument_readiness_001/reports/procedural_writeup_backfill_register.md
+  backfill_requires_reacquisition: false
+
 campaigns:
   instrument-readiness-001:
     purpose: Unified calibration characterization validation and HRP-readiness path

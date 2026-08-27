@@ -18,6 +18,14 @@ exposure and recovery limits, spectral windows, delay schedule, replicate
 structure, acceptance criteria, uncertainty inputs, data retention, safe
 restoration, and promotion independently.
 
+Every biological phase must produce the thesis-quality `procedural_writeup.md`
+defined by `../docs/data_contract/procedural_writeup_standard.md`. In addition to
+the common WHY/HOW/WHAT/implications structure, document material identity and
+preparation history, controls, randomization, independent preparations and
+replicates, exposure, exclusions, pre/post integrity, sample disposition, and the
+exact population to which each claim applies. A final report or notebook output
+alone is insufficient for closeout.
+
 Do not assume an energy meter is available. Use measured average power and a
 verified repetition rate for any explicitly derived mean pulse energy, and do
 not claim direct pulse-energy distributions or calibrated peak power without

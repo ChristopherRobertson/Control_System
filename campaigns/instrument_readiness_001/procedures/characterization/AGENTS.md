@@ -1,6 +1,7 @@
 # Codex instructions for characterization campaigns
 
-These instructions apply only inside `characterization/`.
+These instructions apply to characterization procedures and
+characterization-domain phase work in the unified campaign/evidence hierarchy.
 
 ## Operator-led phased execution
 
@@ -14,8 +15,8 @@ required promoted results exist. The lab has a power meter but no energy
 meter; do not add direct pulse-energy or calibrated peak-power deliverables
 unless new metrology is explicitly approved.
 
-1. Work only on the single approved phase and its stable
-   `readbacks/<phase-id>/` record.
+1. Work only on the single approved phase and its canonical evidence record from
+   `campaigns/registries/evidence_locations.yaml` or the future-location rule.
 2. Read existing evidence and imported calibration links before acting.
 3. Never repeat a completed calibration or characterization measurement merely
    to change format, plotting, or aggregation.
@@ -24,7 +25,10 @@ unless new metrology is explicitly approved.
 5. Preserve every native raw, rejected, preview, control, excluded, and
    superseded acquisition under the shared measurement-campaign data contract
    and follow the repository-level provenance restrictions.
-6. Require every mandatory phase deliverable before phase closure or advance.
+6. Maintain `procedural_writeup.md` from the contemporaneous record and require
+   its indexed, manifest-linked, reviewer-accepted state under
+   `docs/data_contract/procedural_writeup_standard.md`, together with every other
+   mandatory deliverable, before phase closure or advance.
 7. Record unavailable information as `USER_INPUT_REQUIRED`; do not encode it as
    zero or silently narrow the uncertainty budget.
 8. Apply the phase-specific safe-idle, emission, shot-budget, restoration, and
@@ -36,3 +40,7 @@ unless new metrology is explicitly approved.
 
 No canonical characterization summary is promoted without the exact phrase
 `APPROVE CHARACTERIZATION PROMOTION`.
+
+Historical writeups are retrospective evidence reconstructions. Preserve the
+recorded scientific disposition, identify unknowns and later interpretation, and
+never repeat a completed measurement solely to improve the narrative.

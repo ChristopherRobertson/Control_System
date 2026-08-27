@@ -869,8 +869,10 @@ unresolved data-contract violation. Preserve the result as incomplete.
 **Entry:** Phase G complete and independently reviewed.  
 **Actions:** state exact validated scope, limitations, unresolved anomalies,
 and downstream permissions.  
-**Deliverables:** `final_report.md`, retention audit, restoration confirmation,
-and campaign approval record.  
+**Deliverables:** thesis-quality `procedural_writeup.md`, `final_report.md`,
+retention audit, restoration confirmation, and campaign approval record. The
+writeup must be indexed, manifest-linked, source-mapped, and reviewer-accepted
+under `docs/data_contract/procedural_writeup_standard.md`.
 **Accept:** promotion occurs only through the campaign's explicit approval
 process. A report is not self-promoting.  
 **Failure path:** open a cause-coded investigation; do not refit on Mylar.
@@ -1075,6 +1077,7 @@ exclusions.csv
 calibration_links.csv
 command_log.txt
 final_report.md
+procedural_writeup.md
 restoration_confirmation.json
 raw/
 analysis/
@@ -1116,7 +1119,12 @@ explicit supersession link.
 
 The retention audit shall reconcile schedule rows, acquisition attempts,
 native files, table rows, exclusion reasons, calibration links, figures,
-reported values, correction freeze/unlock order, and restoration evidence.
+reported values, correction freeze/unlock order, restoration evidence, and the
+procedural writeup's result/claim-to-evidence map. The writeup must explicitly
+explain WHY blind Mylar validation was required, HOW the frozen correction and
+embargo were implemented in actual execution, WHAT the independent results and
+uncertainties were, and which calibration claims are supported, narrowed,
+unsupported, or prohibited by the outcome.
 
 ## 17. Dependency map and unnecessary work
 
@@ -1251,6 +1259,8 @@ All boxes must be true before recipe generation:
   stop, exception, and restoration paths.
 - [ ] Data-contract directories/tables/identifiers are prepared without an
   operational hash gate.
+- [ ] The procedural-writeup template, contemporaneous source-map workflow, and
+  named technical/thesis review responsibilities are assigned.
 - [ ] Operator, laser-safety, configuration, and campaign approvals are
   documented.
 

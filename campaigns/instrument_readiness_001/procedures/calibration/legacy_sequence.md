@@ -74,9 +74,12 @@ replacement PT-01 directory or rerun its completed preflight.
 6. Unavailable metadata are recorded as `USER_INPUT_REQUIRED`. Independent
    valid work may continue, but affected claims remain limited.
 7. A phase closes only when every mandatory deliverable below exists, is
-   internally consistent, and the final equipment state is recorded. If a
-   deliverable cannot be completed, the phase remains open or closes as a
-   documented bypass with its downstream claim limitation.
+   internally consistent, the final equipment state is recorded, and the
+   thesis-quality `procedural_writeup.md` required by
+   `docs/data_contract/procedural_writeup_standard.md` is reviewer-accepted. If
+   a deliverable cannot be completed, the phase remains open or receives a
+   documented non-complete/bypass disposition with its downstream claim
+   limitation.
 8. Canonical calibration outputs remain unchanged until PROM-01 passes and the
    user supplies the exact phrase `APPROVE CALIBRATION PROMOTION`.
 9. Any phase using the OPO output after ATT-01 must acquire and retain the
@@ -111,8 +114,20 @@ phase can close it must contain, directly or by an explicit manifest link:
   phase.
 - Versioned analysis source, machine-readable results with units and sign or
   reference-plane conventions, an uncertainty budget, and acceptance checks.
+- `procedural_writeup.md`, indexed and manifest-linked, containing the phase
+  rationale (WHY), the actual chronological method and analysis (HOW), results
+  with uncertainty and source IDs (WHAT), and supported/unsupported claims,
+  implications, caveats, limitations, and open work.
 - `final_report.md`, `restoration_confirmation.json`, unresolved-input list,
-  and a statement that no canonical promotion occurred.
+  accepted procedural-writeup review record, and a statement that no canonical
+  promotion occurred.
+
+The procedural writeup is maintained from contemporaneous records throughout the
+phase and finalized only after results and exclusions are frozen. It is not a copy
+of the prospective procedure or a substitute for machine-readable evidence. Each
+quantitative statement and claim maps to stable evidence/configuration IDs and an
+analysis or criterion version. Historical phases use retrospective evidence
+reconstruction and are not reacquired solely for documentation.
 
 Derived data never replace raw data. Corrections are retained both as named
 terms and as corrected results. Original, excluded, rejected, and superseded

@@ -693,7 +693,7 @@ instrument revalidation rules.
 | **MB-06 timing/IRF and discovery kinetics** | MB-05 passes; OP/CL/IR/DET valid | Verify time zero on surrogate, acquire adaptive negative/prompt/slow/recovery schedule, assess SNR/identifiability, repeat-pulse spacing | Time-zero/IRF link; discovery traces; identifiability simulation; selected delay/rate/filter design | Abort mechanistic extension if 180 ns component unidentifiable; abort all kinetics for trigger mismatch, incomplete recovery, or sample damage. |
 | **MB-07 confirmatory MVP** | Analysis/settings frozen from independent pilot; sample size set | Run randomized/counterbalanced independent preparations/days, full controls, primary A₁ kinetics, post-integrity, restoration each day | Native/raw and derived datasets; fit diagnostics; uncertainty; predicted-vs-measured; reproducibility report | Accept minimum claim only if all primary criteria and retention audit pass; otherwise report feasibility/limitation. |
 | **MB-08 optional mechanistic extension** | MVP accepted; IRF/SNR/model simulation supports extension | Add dense geminate schedule, A₀/A₃ kinetics, concentration series or qualified 532 nm comparison | Extension-specific preregistration, data, model comparison, sensitivity analysis | Keep this phase outside the MVP; stop if validity, sample, or identifiability fails. |
-| **MB-09 closeout** | Acquisitions stopped safely | Complete restoration, exclusions, retention audit, result/limitation summary, thesis-ready provenance | Restoration report; retention audit; final tables/figures; readiness/closeout decision | No closeout while hardware state, raw indexing, exclusions, or calibration links are incomplete. |
+| **MB-09 closeout** | Acquisitions stopped safely | Complete restoration, exclusions, retention audit, phase procedural writeups, result/limitation summary, thesis-ready provenance | Restoration report; accepted procedural writeups; retention audit; final tables/figures; readiness/closeout decision | No closeout while hardware state, raw indexing, exclusions, calibration links, or writeup review are incomplete. |
 
 Every phase that touches hardware inherits the complete safe startup/fault/restoration lifecycle. Advancement requires the deliverables and acceptance record, not a commit/object hash match.
 
@@ -723,7 +723,19 @@ Each phase retains the contract's required structure and content:
 - `exclusions/` with reason code, scope, decision, evidence, timestamp, and author;
 - `calibration_links/` for promoted bundle IDs, validity envelopes, imported values/uncertainties, and revalidation checks;
 - `command_log/` for sent commands/readbacks/state transitions when execution is later authorized;
+- `procedural_writeup.md` for the indexed, manifest-linked, reviewer-accepted
+  thesis narrative defined by
+  `docs/data_contract/procedural_writeup_standard.md`;
 - `report/`, `restoration/`, `raw/`, `analysis/`, `figures/`, and `tables/` as specified by the contract.
+
+For every MB-phase, the writeup explains the biological or instrument question
+and thesis role (WHY); the actual material preparation, state verification,
+configuration, controls, randomization, independent preparations/replicates,
+exposure, chronological actions, analysis, deviations, and restoration (HOW);
+the complete result population, exclusions, uncertainty, and acceptance outcome
+(WHAT); and the supported/unsupported claims, caveats, limitations, sample and
+configuration validity envelope, downstream implications, and open work. A plan,
+notebook, or concise final report does not satisfy this requirement.
 
 Native/raw objects become immutable when indexed. A correction creates a new derived artifact with parent IDs, method/version, parameters, and reason. No spreadsheet/manual edit replaces native data.
 
@@ -733,7 +745,13 @@ At minimum retain: preparation time/history; verified concentration/state/pH; ca
 
 ### 14.4 Retention audit
 
-Closeout verifies all seven contract areas: required files exist; indexed paths resolve; native/raw data are retained; derived lineage is complete; identifiers/configurations/calibration links are consistent; exclusions and restoration are complete; and reports/tables reproduce from retained inputs. Any failure is a closeout blocker; a hash mismatch alone is not.
+Closeout verifies the contract areas: required files exist; indexed paths resolve;
+native/raw data are retained; derived lineage is complete;
+identifiers/configurations/calibration links are consistent; exclusions and
+restoration are complete; reports/tables reproduce from retained inputs; and the
+procedural writeup is substantive, source-mapped, reconciled, free of unresolved
+template placeholders, and accepted by named reviewers. Any failure is a closeout
+blocker; a hash mismatch alone is not.
 
 ## 15. Safety and environmental requirements
 
@@ -912,7 +930,7 @@ calendar dates.
 - [ ] LSO/EHS training, SOPs, SDSs, controlled area, eyewear, interlocks, enclosures/dumps, and emergency stop pass.
 - [ ] CO cylinder/regulator/ventilation/continuous monitor/leak test/alarm/evacuation and waste routes pass.
 - [ ] Dithionite, biological, cell/sharps, and contaminated-waste controls pass.
-- [ ] Phase manifest, acquisition index, conditions, measurements, native/raw, derived lineage, exclusions, calibration links, command log, report, and restoration are complete.
+- [ ] Phase manifest, acquisition index, conditions, measurements, native/raw, derived lineage, exclusions, calibration links, command log, accepted procedural writeup, report, and restoration are complete.
 - [ ] Native files are indexed/immutable; every correction has a derived parent/analysis version.
 - [ ] Retention audit and safe restoration pass; no hash match is used as a gate.
 

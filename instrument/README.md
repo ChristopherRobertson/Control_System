@@ -8,3 +8,8 @@ hardware/wiring configuration—not raw campaign evidence or prose reports.
 canonical in this directory. `control_app.paths` resolves them for the GUI and also
 accepts historic path strings in retained manifests without recreating legacy
 directories.
+
+Promotion also requires accepted source-phase procedural writeups under
+`docs/data_contract/procedural_writeup_standard.md`. The writeups document the
+scientific reasoning and claim boundaries; promoted machine-readable bundles and
+their indexed source evidence remain the runtime/numerical authority.

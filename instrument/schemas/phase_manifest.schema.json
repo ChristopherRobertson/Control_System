@@ -22,7 +22,7 @@
     "promotion_performed"
   ],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"enum": ["1.0.0", "1.1.0"]},
     "campaign_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
     "phase_id": {"type": "string", "pattern": "^[A-Z][A-Z0-9-]*$"},
     "phase_run_id": {"type": "string", "minLength": 1},
@@ -58,6 +58,49 @@
     "measurements_table": {"type": "string"},
     "exclusions_table": {"type": "string"},
     "calibration_links_table": {"type": "string"},
+    "procedural_writeup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relative_path",
+        "artifact_id",
+        "document_version",
+        "preparation_mode",
+        "author_ids",
+        "reviewer_ids",
+        "review_status",
+        "review_utc"
+      ],
+      "properties": {
+        "relative_path": {
+          "type": "string",
+          "pattern": "^procedural_writeup(?:_revision_[A-Za-z0-9._-]+)?\\.md$"
+        },
+        "artifact_id": {"type": "string", "minLength": 1},
+        "document_version": {"type": "string", "minLength": 1},
+        "preparation_mode": {
+          "enum": [
+            "PROSPECTIVE_CONTEMPORANEOUS",
+            "RETROSPECTIVE_EVIDENCE_RECONSTRUCTION"
+          ]
+        },
+        "author_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "reviewer_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "review_status": {
+          "enum": ["DRAFT", "READY_FOR_REVIEW", "ACCEPTED", "REJECTED"]
+        },
+        "review_utc": {"type": ["string", "null"], "format": "date-time"}
+      }
+    },
     "criterion_versions": {
       "type": "object",
       "additionalProperties": {"type": "string"}
@@ -68,5 +111,34 @@
     "promotion_performed": {"type": "boolean"},
     "promotion_approval_reference": {"type": ["string", "null"]},
     "notes": {"type": "string"}
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"schema_version": {"const": "1.1.0"}},
+        "required": ["schema_version"]
+      },
+      "then": {"required": ["procedural_writeup"]}
+    },
+    {
+      "if": {
+        "properties": {
+          "schema_version": {"const": "1.1.0"},
+          "status": {"enum": ["PASS", "FAIL", "BYPASSED"]}
+        },
+        "required": ["schema_version", "status"]
+      },
+      "then": {
+        "properties": {
+          "procedural_writeup": {
+            "properties": {
+              "review_status": {"const": "ACCEPTED"},
+              "reviewer_ids": {"minItems": 1},
+              "review_utc": {"type": "string", "format": "date-time"}
+            }
+          }
+        }
+      }
+    }
+  ]
 }
