@@ -1,0 +1,11 @@
+phase_id: RP-01
+title: between-run reproducibility and operational envelope
+campaign_id: instrument-readiness-001
+domain: characterization
+registry_status: planned
+depends_on:
+- PF-01
+optional_dependencies: []
+evidence_key: RP-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

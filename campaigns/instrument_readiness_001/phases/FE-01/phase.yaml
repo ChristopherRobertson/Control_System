@@ -1,0 +1,12 @@
+phase_id: FE-01
+title: finite emitted-pump-event control and reconciliation
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- OP-01
+- PT-01
+optional_dependencies: []
+evidence_key: FE-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

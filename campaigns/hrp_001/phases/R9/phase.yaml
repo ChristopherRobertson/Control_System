@@ -1,0 +1,12 @@
+phase_id: R9
+title: HRP analysis closeout restoration and MbCO handoff
+campaign_id: hrp-001
+domain: experiment
+registry_status: planned
+depends_on:
+- R7
+optional_dependencies:
+- R8
+evidence_key: R9
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

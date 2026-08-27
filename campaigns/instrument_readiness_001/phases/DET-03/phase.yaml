@@ -1,0 +1,12 @@
+phase_id: DET-03
+title: detector temporal response and latency correction
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- DET-02
+- HF-01
+optional_dependencies: []
+evidence_key: DET-03
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

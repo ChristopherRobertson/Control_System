@@ -1,0 +1,10 @@
+phase_id: P0
+title: provenance and inventory baseline
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: historical_complete
+depends_on: []
+optional_dependencies: []
+evidence_key: P0
+evidence_path: evidence/calibration/system_recalibration_001/phases/P0
+plan: plan.md

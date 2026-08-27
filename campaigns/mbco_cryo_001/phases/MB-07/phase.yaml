@@ -1,0 +1,11 @@
+phase_id: MB-07
+title: MbCO confirmatory minimum viable experiment
+campaign_id: mbco-cryo-001
+domain: experiment
+registry_status: optional
+depends_on:
+- MB-06
+optional_dependencies: []
+evidence_key: MB-07
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

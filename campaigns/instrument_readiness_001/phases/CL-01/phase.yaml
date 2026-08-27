@@ -1,0 +1,14 @@
+phase_id: CL-01
+title: complete timing-chain closure
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- OP-01
+- FE-01
+- DET-03
+- HF-02
+optional_dependencies: []
+evidence_key: CL-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

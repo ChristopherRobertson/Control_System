@@ -1,0 +1,15 @@
+phase_id: IR-01
+title: system temporal instrument response
+campaign_id: instrument-readiness-001
+domain: characterization
+registry_status: planned
+depends_on:
+- SV-02B
+- CL-01
+- DET-03
+- AR-01
+- OV-01
+optional_dependencies: []
+evidence_key: IR-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

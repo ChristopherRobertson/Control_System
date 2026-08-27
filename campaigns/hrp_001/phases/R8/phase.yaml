@@ -1,0 +1,13 @@
+phase_id: R8
+title: optional HRP fast branch
+campaign_id: hrp-001
+domain: experiment
+registry_status: optional
+depends_on:
+- R7
+- IR-01
+- PF-01
+optional_dependencies: []
+evidence_key: R8
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

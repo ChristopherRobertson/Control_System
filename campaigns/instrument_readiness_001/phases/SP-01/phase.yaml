@@ -1,0 +1,11 @@
+phase_id: SP-01
+title: spectral-reference provenance
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- TR-01
+optional_dependencies: []
+evidence_key: SP-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

@@ -1,0 +1,14 @@
+phase_id: QB-01
+title: MIRcat probe-source characterization
+campaign_id: instrument-readiness-001
+domain: characterization
+registry_status: planned
+depends_on:
+- MD-01
+- MSW-01
+- HF-02
+- DET-02
+optional_dependencies: []
+evidence_key: QB-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

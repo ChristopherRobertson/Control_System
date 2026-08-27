@@ -1,0 +1,13 @@
+phase_id: HF-02
+title: cross-stream alignment loss and endurance
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- HF-01
+- MD-01
+- MSW-01
+optional_dependencies: []
+evidence_key: HF-02
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

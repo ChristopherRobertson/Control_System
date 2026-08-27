@@ -1,0 +1,13 @@
+phase_id: DET-02
+title: illuminated detector and electronics transfer performance
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- DET-01
+- ATT-01
+- HF-01.1
+optional_dependencies: []
+evidence_key: DET-02
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

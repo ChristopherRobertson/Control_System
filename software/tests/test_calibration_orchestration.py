@@ -9,22 +9,20 @@ def test_codex_is_the_campaign_operator_interface() -> None:
         REPO_ROOT
         / "campaigns"
         / "instrument_readiness_001"
-        / "procedures"
-        / "calibration"
         / "AGENTS.md"
     ).read_text(encoding="utf-8")
     campaign = (
         REPO_ROOT
         / "campaigns"
         / "instrument_readiness_001"
-        / "procedures"
-        / "calibration"
-        / "legacy_campaign_readme.md"
+        / "shared"
+        / "calibration_campaign_history.md"
     ).read_text(encoding="utf-8")
 
     assert "one physical action at a time" in instructions
     assert "USER_INPUT_REQUIRED" in instructions
-    assert "monolithic complete-calibration runner" in instructions.lower()
+    assert "phase-primary organization" in instructions.lower()
+    assert "monolithic timing runner" in campaign.lower()
     assert "The retired monolithic timing runner is not a campaign entry point" in campaign
 
 

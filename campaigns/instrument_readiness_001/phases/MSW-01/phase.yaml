@@ -1,0 +1,12 @@
+phase_id: MSW-01
+title: MIRcat sweep timing
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- MC-01
+- MD-01
+optional_dependencies: []
+evidence_key: MSW-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

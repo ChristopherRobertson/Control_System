@@ -1,0 +1,12 @@
+phase_id: PROM-CH
+title: characterization promotion gate
+campaign_id: instrument-readiness-001
+domain: promotion
+registry_status: planned
+depends_on:
+- PROM-01
+- RPT-CH
+optional_dependencies: []
+evidence_key: PROM-CH
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

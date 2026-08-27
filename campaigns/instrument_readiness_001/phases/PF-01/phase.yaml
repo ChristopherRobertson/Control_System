@@ -1,0 +1,15 @@
+phase_id: PF-01
+title: platform sensitivity noise artifacts and stability
+campaign_id: instrument-readiness-001
+domain: characterization
+registry_status: planned
+depends_on:
+- SV-02B
+- IR-01
+- PF-00
+- PB-02
+- OV-01
+optional_dependencies: []
+evidence_key: PF-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

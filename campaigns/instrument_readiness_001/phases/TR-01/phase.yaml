@@ -1,0 +1,11 @@
+phase_id: TR-01
+title: retained identity and measurement-resource closure
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: historical_complete
+depends_on:
+- P0
+optional_dependencies: []
+evidence_key: TR-01
+evidence_path: evidence/calibration/system_recalibration_001/phases/TR-01
+plan: plan.md

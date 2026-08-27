@@ -1,0 +1,12 @@
+phase_id: MB-09
+title: MbCO closeout restoration and retention
+campaign_id: mbco-cryo-001
+domain: experiment
+registry_status: optional
+depends_on:
+- MB-07
+optional_dependencies:
+- MB-08
+evidence_key: MB-09
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

@@ -1,0 +1,11 @@
+phase_id: MB-04
+title: MbCO sample chemistry pilot
+campaign_id: mbco-cryo-001
+domain: experiment
+registry_status: optional
+depends_on:
+- MB-03
+optional_dependencies: []
+evidence_key: MB-04
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

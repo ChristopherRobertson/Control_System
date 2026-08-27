@@ -1332,11 +1332,11 @@ With the current evidence, the experiment is **not ready for execution**.
   identifiers, phase layout, artifacts, exclusions, restoration, and retention
   audit.
 - **[R4]** Calibration campaign
-  [`README.md`](../../procedures/calibration/legacy_campaign_readme.md),
-  [`campaign_sequence.md`](../../procedures/calibration/legacy_sequence.md),
-  [`calibration_matrix.csv`](../../planning/calibration/calibration_matrix.csv),
-  [`gap_analysis.md`](../../planning/calibration/gap_analysis.md), and
-  [`expansion_gap_map.md`](../../planning/calibration/expansion_gap_map.md):
+  [campaign history](../../shared/calibration_campaign_history.md),
+  [unified sequence](../../../master_sequence.md),
+  [calibration measurement matrix](../../shared/calibration_measurement_matrix.csv),
+  [calibration gap analysis](../../shared/calibration_gap_analysis.md), and
+  [expansion gap map](../../shared/expansion_gap_map.md):
   campaign phase evidence plus `HF-01`, `MD-01`, `MSW-01`, `HF-02`, detector,
   `SP-01`, and `SP-02` requirements.
 - **[R5]** P0
@@ -1346,13 +1346,13 @@ With the current evidence, the experiment is **not ready for execution**.
   accepted/discarded provenance, blocker, and claim decisions.
 - **[R6]** [`evidence/calibration/system_recalibration_001/phases/P0/p0_physical_inventory.md`](../../../../evidence/calibration/system_recalibration_001/phases/P0/p0_physical_inventory.md),
   Mylar, detector/amplifier, cable, and unresolved identity evidence.
-- **[R7]** Characterization campaign [`README.md`](../../procedures/characterization/legacy_campaign_readme.md) and
-  [`characterization_sequence.md`](../../procedures/characterization/legacy_sequence.md): `CH-00`,
+- **[R7]** [Characterization campaign history](../../shared/characterization_campaign_history.md) and
+  [unified sequence](../../../master_sequence.md): `CH-00`,
   `QB-01`, `OG-01`, `AR-01`, `SV-01`, `SV-02`, `IR-01`, `PF-01`, and `RP-01`
   requirements.
 - **[R8]** [`recipe_contract.md`](../SV-02A/recipe_contract.md), required
   inputs and correction-freeze order.
-- **[R9]** [`characterization_matrix.csv`](../../planning/characterization/characterization_matrix.csv),
+- **[R9]** [Characterization measurement matrix](../../shared/characterization_measurement_matrix.csv),
   minimum bidirectional Mylar replication.
 - **[R10]** [`instrument/recipes/safe_idle.yaml`](../../../../instrument/recipes/safe_idle.yaml),
   reviewed safe-idle target.

@@ -1,0 +1,11 @@
+phase_id: SV-02B
+title: blind Mylar independent validation
+campaign_id: instrument-readiness-001
+domain: validation
+registry_status: planned
+depends_on:
+- SV-02A
+optional_dependencies: []
+evidence_key: SV-02B
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

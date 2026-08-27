@@ -1,0 +1,13 @@
+phase_id: R4
+title: HRP reference preparation
+campaign_id: hrp-001
+domain: experiment
+registry_status: planned
+depends_on:
+- R1
+- R2
+- R3
+optional_dependencies: []
+evidence_key: R4
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

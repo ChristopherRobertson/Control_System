@@ -11,6 +11,11 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = ROOT / "campaigns/phase_registry.yaml"
 EVIDENCE = ROOT / "campaigns/registries/evidence_locations.yaml"
+CAMPAIGN_DIRS = {
+    "instrument-readiness-001": "instrument_readiness_001",
+    "hrp-001": "hrp_001",
+    "mbco-cryo-001": "mbco_cryo_001",
+}
 
 
 class RegistryError(RuntimeError):
@@ -44,9 +49,55 @@ def validate() -> list[str]:
         if not str(titles.get(phase_id, "")).strip():
             raise RegistryError(f"missing title for phase_id: {phase_id}")
         by_id[phase_id] = phase
-        plan = ROOT / str(phase.get("plan", ""))
+        campaign_id = str(phase.get("campaign_id", ""))
+        campaign_dir = CAMPAIGN_DIRS.get(campaign_id)
+        if campaign_dir is None:
+            raise RegistryError(f"{phase_id} has unknown campaign_id {campaign_id!r}")
+        expected_home = ROOT / "campaigns" / campaign_dir / "phases" / phase_id
+        expected_plan_ref = (
+            Path("campaigns") / campaign_dir / "phases" / phase_id / "plan.md"
+        ).as_posix()
+        actual_plan_ref = Path(str(phase.get("plan", ""))).as_posix()
+        if actual_plan_ref != expected_plan_ref:
+            raise RegistryError(
+                f"{phase_id} plan is not phase-local: "
+                f"{actual_plan_ref!r} != {expected_plan_ref!r}"
+            )
+        plan = ROOT / actual_plan_ref
         if not plan.is_file():
             raise RegistryError(f"missing plan for {phase_id}: {plan}")
+        plan_text = plan.read_text(encoding="utf-8")
+        if "procedural_writeup.md" not in plan_text:
+            raise RegistryError(f"{phase_id} plan omits the required procedural writeup")
+        if (
+            campaign_id == "instrument-readiness-001"
+            and "../../shared/phase_execution_requirements.md" not in plan_text
+        ):
+            raise RegistryError(
+                f"{phase_id} plan does not inherit the shared execution requirements"
+            )
+        for required_name in ("README.md", "phase.yaml"):
+            required_path = expected_home / required_name
+            if not required_path.is_file():
+                raise RegistryError(f"missing {required_name} for {phase_id}: {required_path}")
+        metadata = load_yaml(expected_home / "phase.yaml")
+        expected_metadata = {
+            "phase_id": phase_id,
+            "title": titles[phase_id],
+            "campaign_id": campaign_id,
+            "domain": phase.get("domain"),
+            "registry_status": phase.get("status"),
+            "depends_on": phase.get("depends_on") or [],
+            "optional_dependencies": phase.get("optional_dependencies") or [],
+            "evidence_key": phase.get("evidence_key"),
+            "plan": "plan.md",
+        }
+        for key, expected_value in expected_metadata.items():
+            if metadata.get(key) != expected_value:
+                raise RegistryError(
+                    f"{phase_id} phase.yaml {key} mismatch: "
+                    f"{metadata.get(key)!r} != {expected_value!r}"
+                )
 
     incoming = {phase_id: 0 for phase_id in by_id}
     outgoing: dict[str, list[str]] = defaultdict(list)
@@ -77,10 +128,23 @@ def validate() -> list[str]:
 
     locations = evidence.get("locations") or {}
     for phase_id, phase in by_id.items():
-        if phase.get("status") not in {"historical_complete", "in_progress"}:
-            continue
+        campaign_dir = CAMPAIGN_DIRS[str(phase["campaign_id"])]
+        metadata = load_yaml(
+            ROOT / "campaigns" / campaign_dir / "phases" / phase_id / "phase.yaml"
+        )
         key = str(phase.get("evidence_key") or phase_id)
         item = locations.get(key)
+        if isinstance(item, dict) and item.get("path"):
+            if metadata.get("evidence_path") != item["path"]:
+                raise RegistryError(
+                    f"{phase_id} phase.yaml evidence_path does not match its registry"
+                )
+        elif metadata.get("evidence_path") != "NOT_CREATED_UNTIL_PHASE_AUTHORIZATION":
+            raise RegistryError(
+                f"{phase_id} must not claim an unregistered future evidence package"
+            )
+        if phase.get("status") not in {"historical_complete", "in_progress"}:
+            continue
         if not isinstance(item, dict) or not item.get("path"):
             raise RegistryError(f"{phase_id} lacks an evidence-location mapping")
         path = ROOT / str(item["path"])
@@ -103,6 +167,12 @@ def validate() -> list[str]:
             raise RegistryError(f"{phase_id} is missing required dependencies {missing}")
     if by_id["QB-01M"].get("status") != "optional":
         raise RegistryError("QB-01M must remain optional")
+
+    readiness_root = ROOT / "campaigns/instrument_readiness_001"
+    for retired_name in ("planning", "procedures", "reports", "promotion"):
+        retired_path = readiness_root / retired_name
+        if retired_path.exists():
+            raise RegistryError(f"retired split-layout directory still exists: {retired_path}")
 
     return order
 

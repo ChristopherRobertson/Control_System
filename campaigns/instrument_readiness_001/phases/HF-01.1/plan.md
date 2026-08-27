@@ -2,6 +2,11 @@
 
 Status: **PLANNED; NOT EXECUTED**
 
+This is the canonical phase plan. It does not authorize hardware, acquisition,
+status changes, or promotion. Universal execution, retention, restoration, and
+procedural-writeup requirements are in
+`../../shared/phase_execution_requirements.md`.
+
 HF-01 remains PASS. Import its three accepted anchors, validated complex
 filter/transfer model, supported-space readback, timing/reference and dual-input
 equivalence, range/clipping/loss/reload/restoration evidence, uncertainties, and the
@@ -34,3 +39,16 @@ indexed, manifest-linked, reviewer-accepted `procedural_writeup.md` under
 rationale, actual candidate-generation and targeted-confirmation steps, complete
 candidate/result accounting, selection uncertainty, reuse boundaries, caveats,
 supported/unsupported claims, and downstream configuration supersession.
+
+## Preserved procedure-catalog detail
+
+The detailed phase text below was materialized from the former combined procedure catalog. Git commit `75b138a` preserves that pre-split source.
+
+### 12a. HF-01.1 — experiment-specific HF2LI candidate optimization and targeted electrical confirmation
+
+Status: **PLANNED; NOT EXECUTED**. The canonical plan is
+`campaigns/instrument_readiness_001/phases/HF-01.1/plan.md`. It imports completed
+HF-01 evidence, freezes distinct acquisition-mode requirements, computes separate
+Pareto frontiers over the complete supported space, and limits any later physical
+confirmation to the winning configuration and nearest meaningful challenger. It
+does not reopen HF-01 or alter its historical selection and decision.

@@ -1,0 +1,11 @@
+phase_id: QB-01M
+title: cryogenic MbCO MIRcat probe and acquisition optimization
+campaign_id: mbco-cryo-001
+domain: characterization
+registry_status: optional
+depends_on:
+- R9
+optional_dependencies: []
+evidence_key: QB-01M
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

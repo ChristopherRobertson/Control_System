@@ -1,0 +1,15 @@
+phase_id: SV-02A
+title: polystyrene spectral calibration and correction freeze
+campaign_id: instrument-readiness-001
+domain: validation
+registry_status: planned
+depends_on:
+- PF-00
+- SP-02
+- SV-01
+- AR-01
+- DET-04
+optional_dependencies: []
+evidence_key: SV-02A
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

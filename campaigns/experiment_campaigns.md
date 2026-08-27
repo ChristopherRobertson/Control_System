@@ -46,7 +46,7 @@ Polystyrene and Mylar remain in characterization SV-02 and are not biological
 experiment campaigns.
 
 The three verified briefs and their minimal calibration/characterization
-mapping are recorded in `campaigns/instrument_readiness_001/planning/experiment_requirement_campaign_crosswalk.md`.
+mapping are recorded in `campaigns/instrument_readiness_001/shared/experiment_requirement_campaign_crosswalk.md`.
 Actual prepared-protein FTIR and UV-visible state checks remain experiment
 work; they are not added to SV-01 or SV-02 and cannot revise instrument
 corrections.

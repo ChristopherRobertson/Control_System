@@ -1,0 +1,19 @@
+phase_id: AR-01
+title: joint scan-speed and HF2LI acquisition optimization
+campaign_id: instrument-readiness-001
+domain: characterization
+registry_status: planned
+depends_on:
+- HF-01.1
+- MSW-01
+- HF-02
+- DET-02
+- DET-03
+- DET-04
+- QB-01
+- OG-01
+- OV-01
+optional_dependencies: []
+evidence_key: AR-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

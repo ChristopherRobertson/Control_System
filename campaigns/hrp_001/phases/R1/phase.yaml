@@ -1,0 +1,11 @@
+phase_id: R1
+title: HRP calibration completion
+campaign_id: hrp-001
+domain: experiment
+registry_status: planned
+depends_on:
+- PROM-01
+optional_dependencies: []
+evidence_key: R1
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

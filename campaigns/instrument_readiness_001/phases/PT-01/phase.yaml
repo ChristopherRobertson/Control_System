@@ -1,0 +1,11 @@
+phase_id: PT-01
+title: MIRcat Process Trigger electrical timing
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: historical_complete
+depends_on:
+- T1-01
+optional_dependencies: []
+evidence_key: PT-01
+evidence_path: evidence/calibration/system_recalibration_001/phases/PT-01
+plan: plan.md

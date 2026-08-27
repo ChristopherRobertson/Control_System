@@ -24,7 +24,7 @@ the procedural writeup.
 Historical scientific dispositions below remain preserved. Their missing
 writeups are reconstructed from retained evidence without repeating completed
 measurements; documentation conformance is tracked in
-`campaigns/instrument_readiness_001/reports/procedural_writeup_backfill_register.md`.
+`campaigns/instrument_readiness_001/shared/procedural_writeup_backfill_register.md`.
 New promotion or thesis reuse requires accepted writeups for every material
 source phase.
 

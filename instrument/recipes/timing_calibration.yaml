@@ -3,7 +3,7 @@ description: "Safe base state for the complete operator-guided timing calibratio
 approved_laser_safety_condition: false
 procedure:
   implementation: "control_app.workflows.timing_calibration_procedure.TimingCalibrationProcedure"
-  review_document: "campaigns/instrument_readiness_001/procedures/timing_calibration.md"
+  review_document: "campaigns/instrument_readiness_001/shared/electrical_timing_method.md"
   time_origins:
     t_master: "First programmed T660-2 timing event (recipe/programming zero)."
     t_chem: "Optical OPO pulse arrival at the sample, established by TC-07."

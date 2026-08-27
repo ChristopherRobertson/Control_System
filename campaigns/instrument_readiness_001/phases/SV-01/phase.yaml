@@ -1,0 +1,11 @@
+phase_id: SV-01
+title: independent FTIR reference acquisition
+campaign_id: instrument-readiness-001
+domain: validation
+registry_status: planned
+depends_on:
+- SP-01
+optional_dependencies: []
+evidence_key: SV-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

@@ -1,0 +1,12 @@
+phase_id: DET-04
+title: installed sample-reference balance and normalization calibration
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- DET-02
+- ATT-01
+optional_dependencies: []
+evidence_key: DET-04
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

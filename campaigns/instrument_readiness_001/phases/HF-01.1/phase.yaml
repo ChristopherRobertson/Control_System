@@ -1,0 +1,12 @@
+phase_id: HF-01.1
+title: experiment-specific HF2LI candidate optimization and targeted electrical confirmation
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- HF-01
+- CH-00
+optional_dependencies: []
+evidence_key: HF-01.1
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

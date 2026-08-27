@@ -1,0 +1,15 @@
+phase_id: E2E-CH
+title: bounded nonbiological full-system demonstration
+campaign_id: instrument-readiness-001
+domain: characterization
+registry_status: planned
+depends_on:
+- E2E-01
+- SV-02B
+- IR-01
+- PF-01
+- RP-01
+optional_dependencies: []
+evidence_key: E2E-CH
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

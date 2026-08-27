@@ -1,0 +1,12 @@
+phase_id: ATT-01
+title: electronic iris optical attenuation and sample-plane transfer calibration
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- WM-01
+- OM-01
+optional_dependencies: []
+evidence_key: ATT-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

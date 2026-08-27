@@ -43,12 +43,60 @@ def test_compatibility_paths_keep_current_gui_assets_reachable():
 
 def test_unified_phase_registry_is_complete_and_acyclic():
     order = validate()
+    assert len(order) == 68
     for phase_id in ("HF-01", "HF-01.1", "AR-01", "PF-00", "SV-02A", "SV-02B", "R9", "QB-01M", "MB-01"):
         assert phase_id in order
     positions = {phase_id: order.index(phase_id) for phase_id in order}
     assert positions["HF-01"] < positions["HF-01.1"] < positions["AR-01"]
     assert positions["AR-01"] < positions["PF-00"] < positions["SV-02A"] < positions["SV-02B"]
     assert positions["R9"] < positions["QB-01M"] < positions["MB-01"]
+
+
+def test_every_registered_phase_has_one_canonical_phase_home():
+    registry = yaml.safe_load(
+        (CAMPAIGNS_ROOT / "phase_registry.yaml").read_text(encoding="utf-8")
+    )
+    campaign_dirs = {
+        "instrument-readiness-001": "instrument_readiness_001",
+        "hrp-001": "hrp_001",
+        "mbco-cryo-001": "mbco_cryo_001",
+    }
+    expected_counts = {
+        "instrument-readiness-001": 47,
+        "hrp-001": 10,
+        "mbco-cryo-001": 11,
+    }
+
+    actual_counts = {campaign_id: 0 for campaign_id in expected_counts}
+    for phase in registry["phases"]:
+        campaign_id = phase["campaign_id"]
+        actual_counts[campaign_id] += 1
+        home = (
+            CAMPAIGNS_ROOT
+            / campaign_dirs[campaign_id]
+            / "phases"
+            / phase["phase_id"]
+        )
+        expected_plan = (
+            Path("campaigns")
+            / campaign_dirs[campaign_id]
+            / "phases"
+            / phase["phase_id"]
+            / "plan.md"
+        ).as_posix()
+        assert phase["plan"] == expected_plan
+        assert (home / "README.md").is_file()
+        assert (home / "phase.yaml").is_file()
+        assert (home / "plan.md").is_file()
+
+    assert actual_counts == expected_counts
+
+
+def test_retired_split_campaign_trees_are_absent():
+    campaign_root = CAMPAIGNS_ROOT / "instrument_readiness_001"
+    for retired_name in ("planning", "procedures", "reports", "promotion"):
+        assert not (campaign_root / retired_name).exists()
+    assert (campaign_root / "shared" / "phase_execution_requirements.md").is_file()
 
 
 def test_registry_has_no_promoted_bundle_until_promotion_is_authorized():

@@ -1,0 +1,12 @@
+phase_id: PB-02
+title: 540 nm OPO output characterization
+campaign_id: instrument-readiness-001
+domain: characterization
+registry_status: planned
+depends_on:
+- WM-01
+- ATT-01
+optional_dependencies: []
+evidence_key: PB-02
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

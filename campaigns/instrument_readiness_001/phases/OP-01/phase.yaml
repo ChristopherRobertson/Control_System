@@ -1,0 +1,13 @@
+phase_id: OP-01
+title: operational pump-command-to-sample timing
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- ATT-01
+- PB-02
+- DET-03
+optional_dependencies: []
+evidence_key: OP-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

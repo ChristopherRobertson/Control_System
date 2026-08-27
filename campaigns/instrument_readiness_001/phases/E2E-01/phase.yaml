@@ -1,0 +1,14 @@
+phase_id: E2E-01
+title: normal-wiring calibration validation
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- CL-01
+- SP-02
+- DET-04
+- SV-02B
+optional_dependencies: []
+evidence_key: E2E-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

@@ -5,7 +5,7 @@ procedural_writeup_policy:
   standard: docs/data_contract/procedural_writeup_standard.md
   canonical_filename: procedural_writeup.md
   required_before_new_completion: true
-  historical_backfill_register: campaigns/instrument_readiness_001/reports/procedural_writeup_backfill_register.md
+  historical_backfill_register: campaigns/instrument_readiness_001/shared/procedural_writeup_backfill_register.md
   reacquisition_for_documentation_only: prohibited
 locations:
   P0: {path: evidence/calibration/system_recalibration_001/phases/P0, disposition: immutable_historical_source}

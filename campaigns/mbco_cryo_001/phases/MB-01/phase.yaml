@@ -1,0 +1,12 @@
+phase_id: MB-01
+title: MbCO safety and procurement readiness
+campaign_id: mbco-cryo-001
+domain: experiment
+registry_status: optional
+depends_on:
+- MB-00
+- R9
+optional_dependencies: []
+evidence_key: MB-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

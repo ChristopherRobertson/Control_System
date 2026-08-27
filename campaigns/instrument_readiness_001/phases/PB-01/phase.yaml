@@ -1,0 +1,11 @@
+phase_id: PB-01
+title: supplemental direct 355 nm OPO-drive characterization
+campaign_id: instrument-readiness-001
+domain: characterization
+registry_status: optional
+depends_on:
+- PROM-CH
+optional_dependencies: []
+evidence_key: PB-01
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

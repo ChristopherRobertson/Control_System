@@ -1,0 +1,11 @@
+phase_id: MC-01
+title: MIRcat GUI process-trigger qualification
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: historical_complete
+depends_on:
+- PT-01
+optional_dependencies: []
+evidence_key: MC-01
+evidence_path: evidence/calibration/system_recalibration_001/phases/MC-01
+plan: plan.md

@@ -1,0 +1,11 @@
+phase_id: MS-02
+title: splitter branch skew and measurement-system sensitivities
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: historical_complete
+depends_on:
+- MS-01
+optional_dependencies: []
+evidence_key: MS-02
+evidence_path: evidence/calibration/system_recalibration_001/phases/MS-02
+plan: plan.md

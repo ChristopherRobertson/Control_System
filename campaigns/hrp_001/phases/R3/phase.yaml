@@ -1,0 +1,11 @@
+phase_id: R3
+title: HRP chemistry dry run
+campaign_id: hrp-001
+domain: experiment
+registry_status: planned
+depends_on:
+- R0
+optional_dependencies: []
+evidence_key: R3
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

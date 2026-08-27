@@ -1,0 +1,13 @@
+phase_id: SP-02
+title: spectral-axis calibration
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- SP-01
+- AR-01
+- DET-04
+optional_dependencies: []
+evidence_key: SP-02
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

@@ -1,0 +1,11 @@
+phase_id: R0
+title: HRP requirements freeze
+campaign_id: hrp-001
+domain: experiment
+registry_status: planned
+depends_on:
+- CH-00
+optional_dependencies: []
+evidence_key: R0
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

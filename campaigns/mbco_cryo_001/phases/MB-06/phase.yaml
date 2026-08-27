@@ -1,0 +1,11 @@
+phase_id: MB-06
+title: MbCO timing IRF and discovery kinetics
+campaign_id: mbco-cryo-001
+domain: experiment
+registry_status: optional
+depends_on:
+- MB-05
+optional_dependencies: []
+evidence_key: MB-06
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md

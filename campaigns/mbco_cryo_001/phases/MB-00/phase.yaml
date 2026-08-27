@@ -1,0 +1,12 @@
+phase_id: MB-00
+title: MbCO claims and dependency freeze
+campaign_id: mbco-cryo-001
+domain: experiment
+registry_status: optional
+depends_on:
+- R9
+- QB-01M
+optional_dependencies: []
+evidence_key: MB-00
+evidence_path: NOT_CREATED_UNTIL_PHASE_AUTHORIZATION
+plan: plan.md
