@@ -2,7 +2,7 @@ phase_id: CH-00
 title: claim scope and calibration-import freeze
 campaign_id: instrument-readiness-001
 domain: characterization
-registry_status: historical_complete
+registry_status: complete
 depends_on:
 - P0
 - TR-01

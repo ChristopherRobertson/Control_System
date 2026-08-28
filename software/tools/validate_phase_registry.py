@@ -71,10 +71,10 @@ def validate() -> list[str]:
             raise RegistryError(f"{phase_id} plan omits the required procedural writeup")
         if (
             campaign_id == "instrument-readiness-001"
-            and "../../shared/phase_execution_requirements.md" not in plan_text
+            and "../../requirements.md" not in plan_text
         ):
             raise RegistryError(
-                f"{phase_id} plan does not inherit the shared execution requirements"
+                f"{phase_id} plan does not inherit the campaign requirements"
             )
         for required_name in ("README.md", "phase.yaml"):
             required_path = expected_home / required_name
@@ -147,7 +147,7 @@ def validate() -> list[str]:
                 raise RegistryError(
                     f"{phase_id} phase.yaml evidence_path does not match its registry"
                 )
-        if phase.get("status") not in {"historical_complete", "in_progress"}:
+        if phase.get("status") not in {"complete", "in_progress"}:
             continue
         if not isinstance(item, dict) or not item.get("path"):
             raise RegistryError(f"{phase_id} lacks an evidence-location mapping")
@@ -173,14 +173,14 @@ def validate() -> list[str]:
         raise RegistryError("QB-01M must remain optional")
 
     readiness_root = ROOT / "campaigns/instrument_readiness_001"
-    for retired_name in ("planning", "procedures", "reports", "promotion"):
-        retired_path = readiness_root / retired_name
-        if retired_path.exists():
-            raise RegistryError(f"retired split-layout directory still exists: {retired_path}")
-    for retired_path in (ROOT / "evidence/calibration", ROOT / "evidence/characterization"):
-        if retired_path.exists():
+    for inactive_name in ("planning", "procedures", "reports", "promotion"):
+        inactive_path = readiness_root / inactive_name
+        if inactive_path.exists():
+            raise RegistryError(f"inactive split-layout directory still exists: {inactive_path}")
+    for inactive_path in (ROOT / "evidence/calibration", ROOT / "evidence/characterization"):
+        if inactive_path.exists():
             raise RegistryError(
-                f"retired external campaign-evidence directory still exists: {retired_path}"
+                f"inactive external campaign-evidence directory still exists: {inactive_path}"
             )
 
     return order

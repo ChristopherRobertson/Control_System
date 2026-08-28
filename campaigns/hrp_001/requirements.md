@@ -585,7 +585,7 @@ of an HRP scientific hypothesis is reportable and does not by itself prevent
 the later MbCO campaign once HRP closeout and all independent MbCO gates pass.
 
 Every R-phase must produce its own thesis-quality `procedural_writeup.md` under
-`docs/data_contract/procedural_writeup_standard.md`. The writeup is maintained
+`docs/phase_record_contract.md`. The writeup is maintained
 from contemporaneous evidence and must explain the phase rationale and thesis
 role (WHY), the actual preparation/configuration/actions/controls/analysis and
 restoration in chronological detail (HOW), the results and acceptance evaluation
@@ -630,7 +630,7 @@ The operator must never rely on process exit or a successful engine return as re
 
 ## 16. Data-contract implementation
 
-Every phase follows `docs/data_contract/measurement_campaign_data_contract.md` version 1.0.0 or a later explicitly recorded version. Required core IDs include `campaign_id`, `phase_id`, `phase_run_id`, `acquisition_id`, `configuration_id`, `calibration_bundle_id`, `sample_id`, all installed device/component IDs, and operator ID.
+Every phase follows `docs/phase_record_contract.md` version 2.0.0 or a later explicitly recorded version. Required core IDs include `campaign_id`, `phase_id`, `phase_run_id`, `acquisition_id`, `configuration_id`, `calibration_bundle_id`, `sample_id`, all installed device/component IDs, and operator ID.
 
 Each phase directory contains, at minimum:
 
@@ -844,7 +844,7 @@ Direct PDF URLs are supplied when a stable public or publisher endpoint was foun
 18. Zurich Instruments. *HF2 User Manual*. [Current official manual](https://docs.zhinst.com/hf2_user_manual/index.html) · [Repository PDF](../../references/manuals/HF2LI/Zurich%20Insturments%20HF2LI%20User%20Manual.pdf). Used for dual-input demodulation, external reference, time constants, filter order, streaming, and DAQ behavior.
 19. Pico Technology. *PicoScope 5000D Series Data Sheet*. [Direct official PDF](https://www.picotech.com/download/datasheets/picoscope-5000d-series-data-sheet.pdf) · [manual index](https://www.picotech.com/oscilloscope/5000/picoscope-5000-manuals). Used for the installed 5244D capture capability and environmental/accuracy context.
 20. VIGO System. *MID-IR Detector Package* documentation. [Repository PDF](../../references/manuals/Detectors/MIDIR-Detector-Package.pdf). Used only as a starting hardware reference; DET01–04 measurements control experimental use.
-21. Repository authorities: [`repository_scope.md`](../../docs/architecture/repository_scope.md), [`measurement_campaign_data_contract.md`](../../docs/data_contract/measurement_campaign_data_contract.md), [`repository_cleanup_20260814.md`](../../docs/architecture/repository_cleanup_20260814.md), the active calibration/characterization campaign records, hardware configuration/wiring map, safe-idle recipe, and current control/workflow implementation. Used for authority boundaries, campaign state, IDs/retention, wiring, restoration, and builder limitations.
+21. Repository authorities: [`docs/README.md`](../../docs/README.md), [`phase_record_contract.md`](../../docs/phase_record_contract.md), the instrument-readiness master sequence and registry, hardware configuration/wiring map, safe-idle recipe, and current control/workflow implementation. Used for authority boundaries, campaign state, IDs/retention, wiring, restoration, and builder limitations.
 22. Daylight Solutions/manufacturer correspondence. [`daylight_db9_process_trigger_correspondence.md`](../../references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md). Used for installed DB9 pin roles and the active-low process-trigger interval; still subject to MD01 installed verification.
 23. Coherent. *WaveMaster User Manual*, part 1095245 Rev. AA, and catalog data sheet. [Repository manual](../../references/manuals/WaveMaster/WaveMaster_Manual.pdf) · [repository data sheet](../../references/manuals/WaveMaster/Coherent_WaveMaster_33-2650_Datasheet.pdf). Used for wavelength range, accuracy/resolution, pulsed mode, autocalibration, native response states, thermal stability, probe handling, RS-232 settings, and measurement limitations.
 24. Thorlabs. *ELL15K Motorized Iris Manual*, Rev. A, and Elliptec communication protocol, Issue 12. [Repository manual](../../references/manuals/Iris/ELL15K_Iris_Manual.pdf) · [repository protocol](../../references/manuals/Iris/Ellx_Iris_Communication_Protocol.pdf). Used for aperture range/units, repeatability/backlash, control behavior, USB identity, homing, and 950 nm home-sensor leakage control.

@@ -5,7 +5,7 @@ catalogs that do not yet belong to a registered campaign phase. A registered pha
 is self-contained under `campaigns/<campaign>/phases/<phase-id>/`, where its plan,
 readbacks, raw data, analysis, reports, and artifacts remain together.
 
-Every acquisition follows `docs/data_contract/measurement_campaign_data_contract.md`.
+Every acquisition follows `docs/phase_record_contract.md`.
 Native, rejected, preview, diagnostic, partial, excluded, and superseded evidence
 remains indexed. Indexing makes a native object immutable; correction creates a
 derived child rather than replacing its source.
@@ -16,11 +16,11 @@ approved, indexed import.
 
 Every canonical campaign phase package requires a thesis-quality
 `procedural_writeup.md` governed by
-`docs/data_contract/procedural_writeup_standard.md`. It is a distinct indexed
+`docs/phase_record_contract.md`. It is a distinct indexed
 artifact, not a replacement for `final_report.md` or machine-readable tables. A
 new phase is not documentation-complete until the writeup is manifest-linked and
 reviewer-accepted.
 
-For historical phases, writeups are reconstructed from retained evidence without
+For completed phases, writeups are reconstructed from retained evidence without
 reacquisition or invented details. The original scientific status remains intact;
 documentation conformance is tracked independently until the backfill is accepted.

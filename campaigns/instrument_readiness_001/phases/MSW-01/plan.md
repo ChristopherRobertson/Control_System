@@ -9,18 +9,17 @@ Optional dependencies: `none`
 This is the canonical phase plan. It does not authorize hardware,
 acquisition, status changes, or promotion. Universal execution,
 retention, restoration, and procedural-writeup requirements are in
-`../../shared/phase_execution_requirements.md`.
+`../../requirements.md`.
 
 ## Phase-specific procedure and deliverables
 
-The detailed phase text below was materialized from the former combined procedure catalog. Git commit `75b138a` preserves that pre-split source.
 
 ### 14. MSW-01 — MIRcat sweep timing
 
 Measure the single CH-00-selected continuous-sweep speed and marker interval/
 width in both directions over the longest retained Mylar/polystyrene window.
 Also measure the discrete point-tune/process transition sequence under each
-retained HRP-C-CO and MbCO acquisition configuration. The former 5 cm^-1,
+retained HRP-C-CO and MbCO acquisition configuration. The 5 cm^-1,
 500 us, and 40 cm^-1/s values are
 planning candidates only; test them only if CH-00 retains them. An alternative
 setting is added only after the selected setting fails a predeclared marker,

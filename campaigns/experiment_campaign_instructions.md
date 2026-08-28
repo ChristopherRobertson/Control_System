@@ -19,7 +19,7 @@ structure, acceptance criteria, uncertainty inputs, data retention, safe
 restoration, and promotion independently.
 
 Every biological phase must produce the thesis-quality `procedural_writeup.md`
-defined by `../docs/data_contract/procedural_writeup_standard.md`. In addition to
+defined by `../docs/phase_record_contract.md`. In addition to
 the common WHY/HOW/WHAT/implications structure, document material identity and
 preparation history, controls, randomization, independent preparations and
 replicates, exposure, exclusions, pre/post integrity, sample disposition, and the

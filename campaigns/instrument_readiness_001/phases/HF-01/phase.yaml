@@ -2,7 +2,7 @@ phase_id: HF-01
 title: HF2LI configuration and external-reference qualification
 campaign_id: instrument-readiness-001
 domain: calibration
-registry_status: historical_complete
+registry_status: complete
 depends_on:
 - T2-01
 - TR-01

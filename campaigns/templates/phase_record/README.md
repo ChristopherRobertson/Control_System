@@ -47,4 +47,4 @@ Mark later interpretation explicitly, preserve the original scientific
 disposition, and leave unsupported details unknown. Add the backfill as a new
 derived documentation artifact and update the applicable documentation register.
 The governing standard is
-`docs/data_contract/procedural_writeup_standard.md`.
+`docs/phase_record_contract.md`.

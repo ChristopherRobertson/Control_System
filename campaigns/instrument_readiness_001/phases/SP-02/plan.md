@@ -9,11 +9,10 @@ Optional dependencies: `none`
 This is the canonical phase plan. It does not authorize hardware,
 acquisition, status changes, or promotion. Universal execution,
 retention, restoration, and procedural-writeup requirements are in
-`../../shared/phase_execution_requirements.md`.
+`../../requirements.md`.
 
 ## Phase-specific procedure and deliverables
 
-The detailed phase text below was materialized from the former combined procedure catalog. Git commit `75b138a` preserves that pre-split source.
 
 ### 21. SP-02 — spectral-axis calibration
 
@@ -27,7 +26,7 @@ The grid contains only two disjoint validated regions: the CH-00 Mylar/
 polystyrene carbonyl window and the combined 1885-1980 cm^-1 HRP/MbCO window.
 Use one accepted continuous-sweep configuration and three scans per direction
 per retained region. Add a module-crossover condition only when a retained
-region crosses one. Do not run the former broad 1650-2050 cm^-1 candidate.
+region crosses one. Do not run a broad 1650-2050 cm^-1 candidate.
 
 Mandatory closeout deliverables: native spectra/readbacks/DIO streams, exactly
 three planned scans per direction and relevant channel, frozen calibration fit,

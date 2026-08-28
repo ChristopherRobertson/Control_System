@@ -9,11 +9,10 @@ Optional dependencies: `none`
 This is the canonical phase plan. It does not authorize hardware,
 acquisition, status changes, or promotion. Universal execution,
 retention, restoration, and procedural-writeup requirements are in
-`../../shared/phase_execution_requirements.md`.
+`../../requirements.md`.
 
 ## Phase-specific procedure and deliverables
 
-The detailed phase text below was materialized from the former combined procedure catalog. Git commit `75b138a` preserves that pre-split source.
 
 ### 16. DET-01 — dark detector/electronics performance
 

@@ -17,12 +17,12 @@ gate loading, analysis, acceptance, closeout, or promotion.
 
 Each registered phase package must contain `procedural_writeup.md` before
 documentation closeout. It must follow
-`../docs/data_contract/procedural_writeup_standard.md`, be
+`../docs/phase_record_contract.md`, be
 indexed in `artifacts.csv` with role `procedural_writeup`, and be linked from the
 manifest. Preserve source tables and logs as the numerical authority; the writeup
 must cite their stable IDs rather than replacing them.
 
-Historical backfill is a new derived documentation artifact, not a modification of
+Retrospective backfill is a new derived documentation artifact, not a modification of
 native evidence. Label it `RETROSPECTIVE_EVIDENCE_RECONSTRUCTION`, distinguish later
 interpretation from contemporaneous records, and leave irrecoverable facts unknown
 with an explicit claim limitation. Backfill never authorizes reacquisition.

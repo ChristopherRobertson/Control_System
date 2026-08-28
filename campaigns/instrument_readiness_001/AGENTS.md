@@ -4,45 +4,49 @@ These instructions apply throughout this campaign.
 
 ## Phase-primary organization
 
-`phases/<phase-id>/` is the sole active home for the complete phase package. Every
-registered phase must contain `phase.yaml`, `plan.md`, and `README.md`. Put
-phase-specific planning notes, run records, readbacks, raw acquisitions, analysis,
-reports, restoration records, and retained artifacts in that same directory. Do
-not recreate separate calibration or characterization plan/evidence trees,
-combined sequence catalogs, or a second copy of a phase.
+`phases/<phase-id>/` is the sole active home for a phase package. Every registered
+phase contains `phase.yaml`, `plan.md`, and `README.md`. Put phase-specific
+planning records, run records, readbacks, raw acquisitions, analysis, reports,
+restoration evidence, and retained artifacts in that directory. Do not create a
+second plan or evidence tree organized by calibration or characterization.
 
-`shared/` is only for material that genuinely governs or compares multiple
-phases. Calibration, characterization, validation, and promotion are registry
-metadata domains, not directory hierarchies.
+Use `requirements.md` only for rules or methods that govern multiple phases.
+The domain field in the registry classifies the work; it does not define a
+directory hierarchy or an independent sequence.
+
+## Authority and execution
+
+Follow, in order:
+
+1. `../master_sequence.md` for campaign-level instructions and dependency order;
+2. `../phase_registry.yaml` for machine-readable status and dependencies;
+3. `requirements.md` for cross-phase execution, evidence, and method rules; and
+4. the phase's `plan.md` for its exact procedure and acceptance logic.
+
+Planning or documentation work does not authorize hardware control, acquisition,
+phase-state changes, closeout, or promotion. During authorized execution, present
+one physical action at a time, wait for the operator's actual observation, and
+stop at the authorized boundary. Record operator-only information as
+`USER_INPUT_REQUIRED`; never substitute an assumption.
 
 ## Evidence and completed work
 
-The phase directory itself is the evidence root registered by `evidence_key` in
-`campaigns/registries/evidence_locations.yaml`. Never copy, rewrite, or repeat a
-completed measurement merely to satisfy a new template. Preserve accepted native
-files and move an intact package only as an explicitly documented repository
-reorganization.
+The phase directory is the evidence root registered by `evidence_key` in
+`../registries/evidence_locations.yaml`. Preserve accepted native files and their
+stable IDs. Do not copy, rewrite, or repeat a completed measurement merely to
+satisfy an organizational or documentation change.
 
-Historical evidence may cite repository paths that existed when it was created.
-Treat those citations as provenance records. Do not silently rewrite an accepted
-manifest or artifact to point at the post-migration layout.
-
-## Execution and closeout
-
-Follow `shared/phase_execution_requirements.md` and the phase's `plan.md`. Work on
-one explicitly authorized phase at a time, present one physical action at a time,
-record the operator's actual observation, and stop at the authorized boundary.
-Planning or documentation work does not authorize hardware control, acquisition,
-phase-state changes, closure, or promotion.
-
-Record information that only the operator can supply as `USER_INPUT_REQUIRED`;
-never replace a missing observation, confirmation, or setting with an assumption.
+Accepted evidence may contain path strings that record where a source existed at
+acquisition time. Preserve those strings as provenance. Use current canonical
+paths in new plans and records.
 
 Every phase requires a distinct thesis-quality `procedural_writeup.md` meeting
-`../../docs/data_contract/procedural_writeup_standard.md`. For historically
-completed phases, prepare the writeup from retained evidence and state unknowns
-and limitations; do not reacquire data solely to backfill documentation.
+`../../docs/phase_record_contract.md`. For a completed phase without that
+document, reconstruct it from retained evidence, identify unknowns and limitations,
+and preserve the scientific disposition. Do not reacquire data solely to fill a
+documentation gap.
 
-Repository-authored checks must not use hash matching as an operational gate.
-Use stable IDs, relative paths, versions, timestamps, configuration identities,
-and explicit source records for provenance and acceptance.
+Repository-authored behavior must not use hash matching as an operational gate.
+Use stable IDs, relative paths, versions, timestamps, device/configuration
+identities, source records, and branch or commit context for provenance and
+acceptance.

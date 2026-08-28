@@ -9,6 +9,6 @@ instrument calibration.
 
 Every R-phase requires its own indexed, manifest-linked, reviewer-accepted
 `procedural_writeup.md` under
-`../../docs/data_contract/procedural_writeup_standard.md`. It documents the
+`../../docs/phase_record_contract.md`. It documents the
 phase-specific WHY, actual HOW, evidence-grounded WHAT, and bounded biological and
 instrument implications/caveats/claims in addition to the final report.

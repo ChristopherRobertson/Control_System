@@ -699,7 +699,7 @@ Every phase that touches hardware inherits the complete safe startup/fault/resto
 
 ## 14. Data retention and campaign-contract implementation
 
-The biological campaign must conform to `docs/data_contract/measurement_campaign_data_contract.md`. Create no campaign as part of this brief; the following are requirements for the later authorized campaign. [R04]
+The biological campaign must conform to `docs/phase_record_contract.md`. Create no campaign as part of this brief; the following are requirements for the later authorized campaign. [R04]
 
 ### 14.1 Stable identifiers
 
@@ -725,7 +725,7 @@ Each phase retains the contract's required structure and content:
 - `command_log/` for sent commands/readbacks/state transitions when execution is later authorized;
 - `procedural_writeup.md` for the indexed, manifest-linked, reviewer-accepted
   thesis narrative defined by
-  `docs/data_contract/procedural_writeup_standard.md`;
+  `docs/phase_record_contract.md`;
 - `report/`, `restoration/`, `raw/`, `analysis/`, `figures/`, and `tables/` as specified by the contract.
 
 For every MB-phase, the writeup explains the biological or instrument question
@@ -975,10 +975,10 @@ Direct PDF links are supplied where a stable public PDF was located; otherwise t
 ### Notebook and repository authorities
 
 - **[N01]** `C:\Users\Chris\Documents\UC Davis\SETI\Thesis\articles\rsi-pump-probe\supplement\notebook\RSI_Supplemental_Theoretical_Calculations.nb`, canonical theoretical notebook, inspected read-only. Used for required variables/equations, model alternatives, lock-in response, normalization, noise/SNR, repeated-pulse relation, Monte Carlo input inventory, and predicted-versus-measured structure. Its Mb numerical entries are placeholders or literature start values unless independently cited.
-- **[R01]** [Repository scope](../../docs/architecture/repository_scope.md) and root/experiments `AGENTS.md`/README rules.
-- **[R02]** [Repository cleanup and active-authority boundary](../../docs/architecture/repository_cleanup_20260814.md).
+- **[R01]** [Repository architecture and authority](../../docs/README.md) and root/experiments `AGENTS.md`/README rules.
+- **[R02]** [Repository documentation instructions](../../docs/AGENTS.md).
 - **[R03]** [Instrument-readiness campaign](../instrument_readiness_001/README.md), its phase homes, manifests/status, shared gap analysis, phase evidence, and promotion rules.
-- **[R04]** [Measurement campaign data contract](../../docs/data_contract/measurement_campaign_data_contract.md).
+- **[R04]** [Phase-record contract](../../docs/phase_record_contract.md).
 - **[R05]** [Experiments requirements-design boundary](README.md).
 - **[R06]** [P0 physical inventory](../instrument_readiness_001/phases/P0/p0_physical_inventory.md), [requirement decisions](../instrument_readiness_001/phases/P0/p0_requirement_decisions.md), wiring/topology, and blocker table.
 - **[R07]** Current campaign-local MS-02, T2-01, and T1-01 results, treated as unpromoted evidence only.

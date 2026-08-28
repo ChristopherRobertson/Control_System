@@ -1,34 +1,56 @@
-# Master campaign plan and dependency sequence
+# Master campaign sequence
 
-Status: **PROSPECTIVE MASTER PLAN; NO HARDWARE EXECUTION AUTHORIZED**
+Status: **AUTHORITATIVE CAMPAIGN INSTRUCTIONS; NO HARDWARE EXECUTION AUTHORIZED**
 
-This document is the human-readable master plan for the complete instrument,
-HRP, and optional cryogenic MbCO program. It replaces the former independent
-calibration and characterization sequence documents without discarding their
-phase descriptions. The machine-readable authority for phase identity, status,
-hard dependencies, and plan paths is [`phase_registry.yaml`](phase_registry.yaml).
+This document is the human-readable authority for completing the full
+instrument-readiness, HRP, and optional cryogenic MbCO program. It defines the
+campaign-wide execution rules, dependency order, purpose, required products, and
+phase-specific plan location for every phase. Calibration and characterization
+are integrated scientific domains in a single readiness sequence.
 
-Each catalog entry below states why the phase exists, what it must produce, its
-current registry status, and the prerequisites that determine when it may be
-completed. The linked phase `plan.md` remains the detailed procedural authority.
-Catalog order expresses the intended integration flow; prerequisites take
-precedence, and phases whose prerequisites are independently satisfied may run
-in parallel with separate authorization.
+Use [`phase_registry.yaml`](phase_registry.yaml) as the machine-readable companion
+for phase identity, current status, dependencies, plan paths, evidence keys, and
+documentation state. Use
+[`instrument_readiness_001/requirements.md`](instrument_readiness_001/requirements.md)
+for cross-phase methods and measurement coverage. The linked phase `plan.md` is
+the detailed procedure and acceptance authority for that phase.
 
-## Universal phase advancement gate
+## How to use this sequence
 
-Dependency readiness alone is insufficient for advancement. Each phase must
-satisfy its scientific acceptance criteria and the shared closeout contract,
-including indexed evidence, a final disposition, restoration where applicable,
-and a manifest-linked, reviewer-accepted `procedural_writeup.md` that provides
-the thesis-level WHY, actual step-by-step HOW, evidence-grounded WHAT, and
-bounded implications, caveats, and claims. See the
-[`procedural_writeup` standard](../docs/data_contract/procedural_writeup_standard.md).
+For each authorized phase:
 
-Historical scientific dispositions remain preserved. Missing historical
-writeups are reconstructed from retained evidence without repeating completed
-measurements. A generated summary, final report, commit, checksum, or matching
-hash cannot substitute for the procedural writeup or act as an operational gate.
+1. Confirm its current registry status and every required dependency. A satisfied
+   dependency permits scheduling; it does not authorize execution.
+2. Read this phase entry, the complete phase `plan.md`, the campaign requirements,
+   the applicable hardware/wiring records, and each imported result's validity
+   envelope.
+3. Create or resume the phase record in its canonical phase directory. Record the
+   initial state and evidence destination before changing hardware.
+4. Follow the plan in order. During operator-guided work, present one physical
+   action at a time, wait for the operator's observation, and record the result.
+5. Apply the declared stop rules, exclusions, uncertainty model, and acceptance
+   criteria. Never infer missing operator input or silently extend the test grid.
+6. Restore and document the required state, evaluate every closeout criterion,
+   and assign an explicit scientific disposition.
+7. Complete the indexed evidence package, `final_report.md`, and
+   `procedural_writeup.md` required by
+   [`phase_record_contract.md`](../docs/phase_record_contract.md). The writeup must
+   explain WHY the phase was needed, HOW it was actually performed step by step,
+   WHAT the results were, and which implications, caveats, and claims the evidence
+   supports.
+8. Update the registry only after review. Begin no successor and promote no result
+   without its own authorization.
+
+Completed evidence remains authoritative for its recorded scientific disposition.
+When a completed phase lacks a required writeup, reconstruct it from retained
+evidence, identify unknowns, and bound the claims; do not repeat the measurement
+solely to fill a documentation gap. A summary, final report, commit, checksum, or
+matching hash cannot substitute for the procedural writeup or act as an
+operational gate.
+
+Catalog order expresses the intended integration flow. Required dependencies take
+precedence, and phases whose dependencies are independently satisfied may run in
+parallel only under separate authorization.
 
 ## Dependency roadmap
 
@@ -37,9 +59,11 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 2. Retain the completed resource and claim foundations:
    `P0 -> TR-01 -> OM-01`, `P0 + TR-01 -> CH-00`, and
    `T2-01 + TR-01 -> HF-01`.
-3. Resume `WM-01`; in parallel, complete independently unblocked work such as
-   `HF-01.1`, `MD-01`, `DET-01`, `SP-01`, `SV-01`, `SC-01`, and HRP planning
-   only after each entry's own prerequisites and authorization are satisfied.
+3. Preserve the in-progress `WM-01` package and resume its remaining measurements
+   only after a qualified replacement spectrometer is available. In parallel,
+   schedule dependency-ready work such as `HF-01.1`, `MD-01`, `DET-01`, `SP-01`,
+   `SC-01`, and HRP R0 planning only after each entry's own resources and
+   authorization are satisfied. SV-01 waits for SP-01.
 4. Complete timing/data-stream qualification through `MD-01 -> MSW-01 -> HF-02`
    and optical/detector readiness through `WM-01 -> ATT-01`,
    `DET-01 -> DET-02 -> DET-03/DET-04`, plus `QB-01`, `PB-02`, and `SC-01`.
@@ -63,7 +87,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### P0 — provenance and inventory baseline
 
-- **Status:** historical complete. **Prerequisites:** none.
+- **Status:** complete. **Prerequisites:** none.
 - **Purpose:** Establish the campaign boundary, installed hardware and accessory
   identities, software provenance, available references, unresolved resources,
   and the decision basis for all later work.
@@ -73,7 +97,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### S0 — safe-idle and interlock verification
 
-- **Status:** historical complete. **Prerequisites:** P0.
+- **Status:** complete. **Prerequisites:** P0.
 - **Purpose:** Demonstrate exclusive ownership, known device identities,
   interlock state, inhibited sources, disabled T660 outputs, and a recoverable
   safe starting condition before measurement work.
@@ -83,7 +107,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### MS-01 — PicoScope differential channel and path skew
 
-- **Status:** historical complete. **Prerequisites:** S0.
+- **Status:** complete. **Prerequisites:** S0.
 - **Purpose:** Measure the relative delay of the PicoScope channels and their
   measurement paths so later two-channel timing observations can be corrected.
 - **Primary products:** Normal/swapped captures, settings, path-skew estimate,
@@ -92,7 +116,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### MS-02 — splitter branch skew and measurement-system sensitivities
 
-- **Status:** historical complete. **Prerequisites:** MS-01.
+- **Status:** complete. **Prerequisites:** MS-01.
 - **Purpose:** Separate splitter-branch delay from channel/path delay and quantify
   threshold, interpolation, timebase, pulse-fidelity, and reconnection effects.
 - **Primary products:** Swapped-branch acquisitions, corrected splitter result,
@@ -101,7 +125,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### T2-01 — direct T660-2 routes
 
-- **Status:** historical complete. **Prerequisites:** MS-02.
+- **Status:** complete. **Prerequisites:** MS-02.
 - **Purpose:** Calibrate the installed T660-2 timing routes to the DAQ, MIRcat,
   and T660-1 reference planes without repeating measurement-system calibration.
 - **Primary products:** Route sweeps, fitted delays and jitter, rejected/accepted
@@ -110,7 +134,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### T1-01 — T660-1 trigger and output routes
 
-- **Status:** historical complete. **Prerequisites:** T2-01.
+- **Status:** complete. **Prerequisites:** T2-01.
 - **Purpose:** Calibrate T660-1 trigger/output routes and close adapter, trigger
   count, polarity, and direct-versus-derived timing questions.
 - **Primary products:** Six-point route results, adapter swap characterization,
@@ -119,7 +143,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### PT-01 — MIRcat Process Trigger electrical timing
 
-- **Status:** historical complete. **Prerequisites:** T1-01.
+- **Status:** complete. **Prerequisites:** T1-01.
 - **Purpose:** Determine the electrical behavior and timing of the retained
   MIRcat Process Trigger route at its approved reference plane.
 - **Primary products:** Raw timing captures, polarity and width results, path
@@ -128,7 +152,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### MC-01 — MIRcat GUI process-trigger qualification
 
-- **Status:** historical complete. **Prerequisites:** PT-01.
+- **Status:** complete. **Prerequisites:** PT-01.
 - **Purpose:** Qualify the retained MIRcat GUI point/process sequence, bounded
   repeat behavior, state transitions, trigger correlation, ownership release,
   and subsequent SDK eligibility without optical emission.
@@ -138,7 +162,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### TR-01 — retained identity and measurement-resource closure
 
-- **Status:** historical complete. **Prerequisites:** P0.
+- **Status:** complete. **Prerequisites:** P0.
 - **Purpose:** Resolve retained P0 identity and metrology requirements, classify
   devices versus working references, and record applicable uncertainty bases
   without reacquiring completed measurements or reviving discarded work.
@@ -148,7 +172,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### OM-01 — optical metrology readiness and transfer standards
 
-- **Status:** historical complete. **Prerequisites:** TR-01.
+- **Status:** complete. **Prerequisites:** TR-01.
 - **Purpose:** Qualify the available optical metrology resources and transfer
   methods needed for power, wavelength correction, beam size, and observational
   conditions over the retained operating grid.
@@ -158,7 +182,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### CH-00 — claim scope and calibration-import freeze
 
-- **Status:** historical complete. **Prerequisites:** P0 and TR-01.
+- **Status:** complete. **Prerequisites:** P0 and TR-01.
 - **Purpose:** Freeze the supported thesis/characterization claims, minimum test
   grid, configuration identities, acceptance logic, exposure policy, calibration
   imports, and explicit exclusions before characterization expands.
@@ -168,7 +192,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
 
 ### HF-01 — HF2LI configuration and external-reference qualification
 
-- **Status:** historical complete. **Prerequisites:** T2-01 and TR-01.
+- **Status:** complete. **Prerequisites:** T2-01 and TR-01.
 - **Purpose:** Qualify the supported HF2LI configuration space, complex transfer
   behavior, external reference, timing, dual-input equivalence, range, clipping,
   loss handling, and reproducible reload behavior.
@@ -475,7 +499,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
   validity envelope, limitations, retention, and exact canonical changes before
   explicit promotion authorization.
 - **Primary products:** Proposed diff, reviewed bundle, promotion decision,
-  validity/revalidation rules, rollback/archive plan, and dependency record.
+  validity/revalidation rules, retention/rollback plan, and dependency record.
 - **Detailed plan:** [`PROM-01/plan.md`](instrument_readiness_001/phases/PROM-01/plan.md).
 
 ### E2E-CH — bounded nonbiological full-system demonstration
@@ -505,7 +529,7 @@ hash cannot substitute for the procedural writeup or act as an operational gate.
   supported claims, limitations, validity envelope, recharacterization triggers,
   and biological-entry criteria.
 - **Primary products:** Proposed diff, approved or rejected bundle decision,
-  validity envelope, triggers, archive/rollback plan, and downstream handoff.
+  validity envelope, triggers, retention/rollback plan, and downstream handoff.
 - **Detailed plan:** [`PROM-CH/plan.md`](instrument_readiness_001/phases/PROM-CH/plan.md).
 
 ### PB-01 — supplemental direct 355 nm OPO-drive characterization

@@ -1,8 +1,7 @@
 # RP-01 phase home
 
-This directory is the sole active campaign-definition home for this phase.
-It replaces the former calibration/characterization planning and combined
-procedure-catalog organization.
+This directory is the sole campaign-definition and evidence home for this phase.
+It is one self-contained package for the phase's plan, execution, and closeout.
 
 - Registry identity and dependencies: `phase.yaml`
 - Canonical phase plan: `plan.md`

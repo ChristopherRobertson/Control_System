@@ -165,5 +165,5 @@ promotion, thesis scope, revalidation, and explicitly owned follow-up work.]
 | Thesis readiness | `USER_INPUT_REQUIRED` | `USER_INPUT_REQUIRED` | `PENDING` | |
 
 The writeup may be marked `ACCEPTED` only after every checklist item in
-`docs/data_contract/procedural_writeup_standard.md` passes and all placeholders
+`docs/phase_record_contract.md` passes and all placeholders
 are resolved or converted into explicit, claim-limiting unknowns.

@@ -1,12 +1,12 @@
 # Unified thesis campaign workspace
 
-This directory is the authority for prospective campaign order and dependency
+This directory is the authority for campaign instructions, order, and dependency
 management. Calibration, characterization, validation, promotion, and biological
 experiment are phase domains in one dependency graph; they are not independent
 linear schedules.
 
-The machine-readable authority is `phase_registry.yaml`. The human-readable
-execution view is `master_sequence.md`. Every registered phase has one
+The human-readable authority is `master_sequence.md`; `phase_registry.yaml` is its
+machine-readable companion. Every registered phase has one
 self-contained package under the owning campaign's `phases/<phase-id>/` directory,
 including its detailed plan and all generated run evidence.
 `registries/evidence_locations.yaml` maps stable phase IDs to their canonical
@@ -14,11 +14,12 @@ evidence packages.
 
 Directory responsibilities:
 
+- `master_sequence.md`: authoritative execution instructions and phase catalog;
 - `phase_registry.yaml`: phase identity, status, ordering, and hard dependencies;
 - `registries/`: evidence and configuration relationships;
 - `instrument_readiness_001/phases/`: all 47 instrument-readiness phase homes;
-- `instrument_readiness_001/shared/`: cross-phase requirements, matrices,
-  methods, and history, with no separate calibration/characterization trees;
+- `instrument_readiness_001/requirements.md`: consolidated cross-phase
+  execution, measurement, method, and closeout requirements;
 - `hrp_001/phases/`: all 10 first-biological-campaign phase homes;
 - `mbco_cryo_001/phases/`: all 11 optional cryogenic-branch phase homes; and
 - `methods/` and `templates/`: shared controlled campaign resources.
@@ -29,12 +30,11 @@ alone does not authorize execution.
 
 Every phase plan must budget time and evidence for a thesis-quality
 `procedural_writeup.md` conforming to
-`../docs/data_contract/procedural_writeup_standard.md`. The writeup is a required
+`../docs/phase_record_contract.md`. The writeup is a required
 closeout product in addition to the manifest, tables, raw/derived evidence,
 restoration record, and final report. Its accepted review state is required before
 a new completion, downstream advance, or promotion review.
 
-Previously completed phases are not rerun. Their documentation status is assessed
-and backfilled from retained evidence, with missing facts stated explicitly. The
-instrument-readiness backfill register is
-`instrument_readiness_001/shared/procedural_writeup_backfill_register.md`.
+Completed phases are not rerun. Their documentation state is recorded in
+`phase_registry.yaml` and backfilled from retained evidence, with missing facts
+stated explicitly.

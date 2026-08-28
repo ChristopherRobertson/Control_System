@@ -872,7 +872,7 @@ and downstream permissions.
 **Deliverables:** thesis-quality `procedural_writeup.md`, `final_report.md`,
 retention audit, restoration confirmation, and campaign approval record. The
 writeup must be indexed, manifest-linked, source-mapped, and reviewer-accepted
-under `docs/data_contract/procedural_writeup_standard.md`.
+under `docs/phase_record_contract.md`.
 **Accept:** promotion occurs only through the campaign's explicit approval
 process. A report is not self-promoting.  
 **Failure path:** open a cause-coded investigation; do not refit on Mylar.
@@ -1324,21 +1324,16 @@ With the current evidence, the experiment is **not ready for execution**.
 
 - **[R1]** [`AGENTS.md`](../../../../AGENTS.md), repository rule prohibiting
   operational hash-matching gates.
-- **[R2]** [`README.md`](../../../../README.md),
-  [`docs/architecture/repository_scope.md`](../../../../docs/architecture/repository_scope.md), and
-  [`docs/architecture/repository_cleanup_20260814.md`](../../../../docs/architecture/repository_cleanup_20260814.md),
-  campaign/material scope and retired-recipe boundary.
-- **[R3]** [`docs/data_contract/measurement_campaign_data_contract.md`](../../../../docs/data_contract/measurement_campaign_data_contract.md),
-  identifiers, phase layout, artifacts, exclusions, restoration, and retention
-  audit.
-- **[R4]** Calibration campaign
-  [campaign history](../../shared/calibration_campaign_history.md),
-  [unified sequence](../../../master_sequence.md),
-  [calibration measurement matrix](../../shared/calibration_measurement_matrix.csv),
-  [calibration gap analysis](../../shared/calibration_gap_analysis.md), and
-  [expansion gap map](../../shared/expansion_gap_map.md):
-  campaign phase evidence plus `HF-01`, `MD-01`, `MSW-01`, `HF-02`, detector,
-  `SP-01`, and `SP-02` requirements.
+- **[R2]** [`README.md`](../../../../README.md) and
+  [`docs/README.md`](../../../../docs/README.md), repository and campaign scope.
+- **[R3]** [`docs/phase_record_contract.md`](../../../../docs/phase_record_contract.md),
+  identifiers, phase layout, artifacts, exclusions, restoration, writeups, and
+  retention audit.
+- **[R4]** Instrument-readiness
+  [master sequence](../../../master_sequence.md) and
+  [campaign requirements](../../requirements.md): campaign phase evidence plus
+  `HF-01`, `MD-01`, `MSW-01`, `HF-02`, detector, `SP-01`, and `SP-02`
+  requirements.
 - **[R5]** P0
   [`p0_execution_baseline.md`](../P0/p0_execution_baseline.md),
   [`p0_blocker_table.md`](../P0/p0_blocker_table.md), and
@@ -1346,14 +1341,14 @@ With the current evidence, the experiment is **not ready for execution**.
   accepted/discarded provenance, blocker, and claim decisions.
 - **[R6]** [`P0/p0_physical_inventory.md`](../P0/p0_physical_inventory.md),
   Mylar, detector/amplifier, cable, and unresolved identity evidence.
-- **[R7]** [Characterization campaign history](../../shared/characterization_campaign_history.md) and
-  [unified sequence](../../../master_sequence.md): `CH-00`,
+- **[R7]** [Master sequence](../../../master_sequence.md) and
+  [campaign requirements](../../requirements.md): `CH-00`,
   `QB-01`, `OG-01`, `AR-01`, `SV-01`, `SV-02`, `IR-01`, `PF-01`, and `RP-01`
   requirements.
 - **[R8]** [`recipe_contract.md`](../SV-02A/recipe_contract.md), required
   inputs and correction-freeze order.
-- **[R9]** [Characterization measurement matrix](../../shared/characterization_measurement_matrix.csv),
-  minimum bidirectional Mylar replication.
+- **[R9]** [Campaign requirements](../../requirements.md), minimum bidirectional
+  Mylar replication.
 - **[R10]** [`instrument/recipes/safe_idle.yaml`](../../../../instrument/recipes/safe_idle.yaml),
   reviewed safe-idle target.
 - **[R11]** [`instrument/recipes/mircat_sweep_scan.yaml`](../../../../instrument/recipes/mircat_sweep_scan.yaml)

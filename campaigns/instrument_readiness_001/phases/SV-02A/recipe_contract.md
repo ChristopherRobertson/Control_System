@@ -2,8 +2,8 @@
 
 Status: **DESIGN CONTRACT ONLY — NO EXECUTABLE RECIPE EXISTS**
 
-The former sample-specific polystyrene and Mylar YAML files are retired. New
-SV-02 recipes are generated only after the required calibration and earlier
+Sample-specific polystyrene and Mylar YAML files are not active. SV-02 recipes
+are generated only after the required calibration and earlier
 characterization bundles exist and CH-00 has frozen the test grid.
 
 ## Required inputs before recipe authoring
@@ -31,7 +31,7 @@ characterization bundles exist and CH-00 has frozen the test grid.
    metrics without refitting.
 6. Restore safe state and produce the full SV-02 closeout package, including the
    distinct thesis-quality `procedural_writeup.md` required by
-   `docs/data_contract/procedural_writeup_standard.md`.
+   `docs/phase_record_contract.md`.
 
 ## Recipe requirements
 

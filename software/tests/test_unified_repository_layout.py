@@ -61,6 +61,10 @@ def test_master_plan_describes_every_phase_in_dependency_safe_order():
     master = (CAMPAIGNS_ROOT / "master_sequence.md").read_text(encoding="utf-8")
     heading_positions = {}
 
+    assert "AUTHORITATIVE CAMPAIGN INSTRUCTIONS" in master
+    for inactive_term in ("legacy", "former", "historical", "retired", "superseded"):
+        assert inactive_term not in master.lower()
+
     for phase in registry["phases"]:
         phase_id = phase["phase_id"]
         marker = f"### {phase_id} —"
@@ -123,13 +127,54 @@ def test_every_registered_phase_has_one_canonical_phase_home():
     assert actual_counts == expected_counts
 
 
-def test_retired_split_campaign_trees_are_absent():
+def test_split_campaign_trees_are_absent_and_requirements_are_consolidated():
     campaign_root = CAMPAIGNS_ROOT / "instrument_readiness_001"
-    for retired_name in ("planning", "procedures", "reports", "promotion"):
-        assert not (campaign_root / retired_name).exists()
-    assert (campaign_root / "shared" / "phase_execution_requirements.md").is_file()
+    for inactive_name in ("planning", "procedures", "reports", "promotion", "shared"):
+        assert not (campaign_root / inactive_name).exists()
+    assert (campaign_root / "requirements.md").is_file()
     assert not (EVIDENCE_ROOT / "calibration").exists()
     assert not (EVIDENCE_ROOT / "characterization").exists()
+
+
+def test_inactive_document_sources_are_retained_in_the_path_mirrored_archive():
+    archived_sources = (
+        "docs/architecture/experiment_builder_architecture.md",
+        "docs/architecture/recipe_driven_workflow_ui.md",
+        "docs/architecture/repository_cleanup_20260814.md",
+        "docs/architecture/repository_scope.md",
+        "docs/data_contract/measurement_campaign_data_contract.md",
+        "docs/data_contract/procedural_writeup_standard.md",
+        "campaigns/instrument_readiness_001/shared/calibration_campaign_history.md",
+        "campaigns/instrument_readiness_001/shared/calibration_deferred_dependency_register_20260825.csv",
+        "campaigns/instrument_readiness_001/shared/calibration_domain_notes.md",
+        "campaigns/instrument_readiness_001/shared/calibration_gap_analysis.md",
+        "campaigns/instrument_readiness_001/shared/calibration_measurement_matrix.csv",
+        "campaigns/instrument_readiness_001/shared/characterization_campaign_history.md",
+        "campaigns/instrument_readiness_001/shared/characterization_deferred_dependency_register_20260825.csv",
+        "campaigns/instrument_readiness_001/shared/characterization_domain_notes.md",
+        "campaigns/instrument_readiness_001/shared/characterization_measurement_matrix.csv",
+        "campaigns/instrument_readiness_001/shared/electrical_timing_method.md",
+        "campaigns/instrument_readiness_001/shared/expansion_gap_map.md",
+        "campaigns/instrument_readiness_001/shared/experiment_requirement_campaign_crosswalk.md",
+        "campaigns/instrument_readiness_001/shared/phase_execution_requirements.md",
+        "campaigns/instrument_readiness_001/shared/procedural_writeup_backfill_register.md",
+    )
+    for relative in archived_sources:
+        assert not (REPO_ROOT / relative).exists(), relative
+        assert (REPO_ROOT / ".archive" / relative).is_file(), relative
+
+    assert (REPO_ROOT / ".archive" / "documentation_consolidation_20260827.md").is_file()
+
+
+def test_timing_recipe_review_document_resolves_to_the_consolidated_requirements():
+    recipe = yaml.safe_load(
+        (RECIPE_ROOT / "timing_calibration.yaml").read_text(encoding="utf-8")
+    )
+    review_document = REPO_ROOT / recipe["procedure"]["review_document"]
+    assert review_document == (
+        CAMPAIGNS_ROOT / "instrument_readiness_001" / "requirements.md"
+    )
+    assert review_document.is_file()
 
 
 def test_completed_phase_home_contains_plan_and_retained_run_outputs():
@@ -171,14 +216,17 @@ def test_relocated_phase_utilities_parse_and_resolve_from_the_new_depth():
     assert 'PHASE_ROOT / "S0/s0_record.json"' in hf01_preflight
 
 
-def test_live_tr01_provenance_paths_resolve_in_the_unified_layout():
+def test_tr01_provenance_paths_resolve_live_or_in_the_path_mirrored_archive():
     tr01 = CAMPAIGNS_ROOT / "instrument_readiness_001" / "phases" / "TR-01"
 
     with (tr01 / "source_provenance_index.csv").open(
         encoding="utf-8-sig", newline=""
     ) as handle:
         for row in csv.DictReader(handle):
-            path = REPO_ROOT / row["repository_relative_path"]
+            relative = Path(row["repository_relative_path"])
+            path = REPO_ROOT / relative
+            if not path.exists():
+                path = REPO_ROOT / ".archive" / relative
             assert path.exists(), (row["source_id"], path)
 
     with (tr01 / "measurement_resource_register.csv").open(
@@ -187,7 +235,10 @@ def test_live_tr01_provenance_paths_resolve_in_the_unified_layout():
         for row in csv.DictReader(handle):
             for source in row["evidence_source"].split("; "):
                 source = source.split(" P0-D", maxsplit=1)[0]
-                path = REPO_ROOT / source
+                relative = Path(source)
+                path = REPO_ROOT / relative
+                if not path.exists():
+                    path = REPO_ROOT / ".archive" / relative
                 assert path.exists(), (row["resource_id"], path)
 
 
@@ -244,7 +295,7 @@ def test_promoted_bundle_loader_requires_both_registry_and_manifest_promotion(tm
 
 
 def test_procedural_writeup_standard_and_template_cover_required_thesis_narrative():
-    standard_path = REPO_ROOT / "docs" / "data_contract" / "procedural_writeup_standard.md"
+    standard_path = REPO_ROOT / "docs" / "phase_record_contract.md"
     template_path = (
         REPO_ROOT
         / "campaigns"
@@ -266,8 +317,8 @@ def test_procedural_writeup_standard_and_template_cover_required_thesis_narrativ
         assert required_heading in template
 
     assert "RETROSPECTIVE_EVIDENCE_RECONSTRUCTION" in standard
-    assert "Backfilling documentation does not require rerunning a phase" in standard
-    assert "review_status: ACCEPTED" in standard
+    assert "Documentation reconstruction never requires reacquisition" in standard
+    assert "evidence-traceability" in standard
 
 
 def test_manifest_schema_requires_accepted_writeup_for_new_terminal_phase():
@@ -314,5 +365,23 @@ def test_phase_registry_declares_writeup_completion_and_backfill_policy():
     assert policy["required_artifact"] == "procedural_writeup.md"
     assert policy["required_before_new_completion_or_advance"] is True
     assert policy["required_before_promotion_or_thesis_reuse"] is True
-    assert policy["historical_scientific_disposition_preserved"] is True
+    assert policy["completed_scientific_disposition_preserved"] is True
     assert policy["backfill_requires_reacquisition"] is False
+    assert policy["phase_record_contract"] == "docs/phase_record_contract.md"
+
+    completed = [phase for phase in registry["phases"] if phase["status"] == "complete"]
+    assert {phase["phase_id"] for phase in completed} == {
+        "P0",
+        "S0",
+        "MS-01",
+        "MS-02",
+        "T2-01",
+        "T1-01",
+        "PT-01",
+        "MC-01",
+        "TR-01",
+        "OM-01",
+        "CH-00",
+        "HF-01",
+    }
+    assert all(phase["documentation_status"] == "backfill_required" for phase in completed)

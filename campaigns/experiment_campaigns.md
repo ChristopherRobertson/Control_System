@@ -38,7 +38,7 @@ evidence and the separate accepted residual-spectral-content result. A center
 wavelength does not apportion optical power among wavelengths, and the
 WaveMaster is not used for the 355 nm OPO drive.
 
-No legacy recipe is active here. Numeric settings and executable recipes are
+No experiment recipe is active here. Numeric settings and executable recipes are
 finalized only after the required calibration and characterization results are
 available. Each future campaign imports the promoted bundle IDs, uses the
 validated operating envelope, and obtains phase-specific approvals.
@@ -46,7 +46,7 @@ Polystyrene and Mylar remain in characterization SV-02 and are not biological
 experiment campaigns.
 
 The three verified briefs and their minimal calibration/characterization
-mapping are recorded in `campaigns/instrument_readiness_001/shared/experiment_requirement_campaign_crosswalk.md`.
+mapping are defined in `campaigns/instrument_readiness_001/requirements.md`.
 Actual prepared-protein FTIR and UV-visible state checks remain experiment
 work; they are not added to SV-01 or SV-02 and cannot revise instrument
 corrections.

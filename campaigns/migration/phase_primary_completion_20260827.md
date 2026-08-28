@@ -44,21 +44,17 @@ not lost.
 
 ## Cross-phase material
 
-Only genuinely cross-phase material remains in
-`campaigns/instrument_readiness_001/shared/`:
+Cross-phase execution, timing, measurement-coverage, gap, dependency, and
+writeup-backfill rules are consolidated in
+`campaigns/instrument_readiness_001/requirements.md`,
+`campaigns/phase_registry.yaml`, and `docs/phase_record_contract.md`. Their source
+documents are retained under
+`.archive/campaigns/instrument_readiness_001/shared/` for traceability.
 
-- common execution and closeout requirements;
-- electrical timing method;
-- calibration and characterization measurement matrices;
-- deferred-dependency registers and gap/crosswalk material;
-- historical campaign context; and
-- the procedural-writeup backfill register.
-
-The prior active `planning/`, `procedures/`, `reports/`, and `promotion/`
-containers were removed after their retained material was relocated. The combined
-catalogs were retired after their phase-specific sections were materialized. They
-remain recoverable in Git history, the checkpoint branch, and the user's external
-backup; they are not duplicated in the active tree.
+The `planning/`, `procedures/`, `reports/`, and `promotion/` containers became
+unnecessary after their retained material was placed in phase packages. The
+source catalogs remain recoverable in Git history, the checkpoint branch, and the
+user's external backup; they are not duplicated in the active tree.
 
 ## Evidence preservation
 

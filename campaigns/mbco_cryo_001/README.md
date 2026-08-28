@@ -11,6 +11,6 @@ tree is created.
 
 Every MB-phase requires its own indexed, manifest-linked, reviewer-accepted
 `procedural_writeup.md` under
-`../../docs/data_contract/procedural_writeup_standard.md`. It must include the
+`../../docs/phase_record_contract.md`. It must include the
 phase-specific materials, controls, execution, results, uncertainty, limitations,
 and exact claim population; a campaign-level summary cannot replace it.

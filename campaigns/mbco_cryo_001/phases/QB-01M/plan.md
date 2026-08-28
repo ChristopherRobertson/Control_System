@@ -13,7 +13,6 @@ the campaign `../../requirements.md`.
 
 ## Phase-specific procedure and deliverables
 
-The detailed phase text below was materialized from the former combined procedure catalog. Git commit `75b138a` preserves that pre-split source.
 
 ### QB-01M — cryogenic MbCO MIRcat probe and acquisition optimization
 

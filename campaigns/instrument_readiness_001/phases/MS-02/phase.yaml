@@ -2,7 +2,7 @@ phase_id: MS-02
 title: splitter branch skew and measurement-system sensitivities
 campaign_id: instrument-readiness-001
 domain: calibration
-registry_status: historical_complete
+registry_status: complete
 depends_on:
 - MS-01
 optional_dependencies: []

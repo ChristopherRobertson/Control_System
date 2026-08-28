@@ -2,7 +2,7 @@ phase_id: T1-01
 title: T660-1 trigger and output routes
 campaign_id: instrument-readiness-001
 domain: calibration
-registry_status: historical_complete
+registry_status: complete
 depends_on:
 - T2-01
 optional_dependencies: []

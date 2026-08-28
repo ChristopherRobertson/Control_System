@@ -5,7 +5,7 @@ Status: **PLANNED; NOT EXECUTED**
 This is the canonical phase plan. It does not authorize hardware, acquisition,
 status changes, or promotion. Universal execution, retention, restoration, and
 procedural-writeup requirements are in
-`../../shared/phase_execution_requirements.md`.
+`../../requirements.md`.
 
 HF-01 remains PASS. Import its three accepted anchors, validated complex
 filter/transfer model, supported-space readback, timing/reference and dual-input
@@ -35,14 +35,13 @@ physical trigger exists. Issue stable `HF011-CFG-*` IDs with explicit
 `distinct_requirement_same_settings` relationships. Closeout includes a complete
 HF-01 evidence-reuse matrix and never changes HF-01 history. It also requires an
 indexed, manifest-linked, reviewer-accepted `procedural_writeup.md` under
-`docs/data_contract/procedural_writeup_standard.md`, covering the optimization
+`docs/phase_record_contract.md`, covering the optimization
 rationale, actual candidate-generation and targeted-confirmation steps, complete
 candidate/result accounting, selection uncertainty, reuse boundaries, caveats,
 supported/unsupported claims, and downstream configuration supersession.
 
 ## Preserved procedure-catalog detail
 
-The detailed phase text below was materialized from the former combined procedure catalog. Git commit `75b138a` preserves that pre-split source.
 
 ### 12a. HF-01.1 — experiment-specific HF2LI candidate optimization and targeted electrical confirmation
 

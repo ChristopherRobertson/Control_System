@@ -25,9 +25,9 @@ source/producer records for campaign provenance and aggregation.
 
 ## Unified repository hierarchy
 
-`campaigns/phase_registry.yaml` is the sole prospective phase and hard-
-dependency authority. Calibration and characterization sequence documents are
-detailed procedure catalogs and historical context, not independent schedules.
+`campaigns/master_sequence.md` is the authoritative human instruction set and
+`campaigns/phase_registry.yaml` is its machine-readable phase/dependency
+companion. Calibration and characterization are domains in one readiness sequence.
 Completed and in-progress evidence stays in its canonical phase package registered
 in `campaigns/registries/evidence_locations.yaml`. Preserve every native, rejected,
 preview, diagnostic, excluded, superseded, closeout, and restoration record when
@@ -41,7 +41,7 @@ changes phase status, or promotes a bundle.
 ## Thesis-quality phase procedural writeups
 
 Every campaign phase requires a canonical `procedural_writeup.md` that complies
-with `docs/data_contract/procedural_writeup_standard.md`. The writeup must explain
+with `docs/phase_record_contract.md`. The writeup must explain
 WHY the phase was necessary, HOW it was actually performed step by step, WHAT the
 results were, and which implications, caveats, limitations, and bounded claims
 follow. It must be indexed, manifest-linked, evidence-traceable, and accepted by a
@@ -49,6 +49,6 @@ named reviewer before a new phase is considered documentation-complete.
 
 Do not substitute a plan, command log, generated result dump, or terse
 `final_report.md`. Do not invent details or reacquire completed measurements to fill
-a narrative gap. Historical phases retain their scientific disposition while a
+a narrative gap. Completed phases retain their scientific disposition while a
 retrospective evidence reconstruction is tracked separately; unknowns remain
 explicit and limit claims.

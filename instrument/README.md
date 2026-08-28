@@ -6,10 +6,10 @@ hardware/wiring configuration—not raw campaign evidence or prose reports.
 
 `hardware_configuration.yaml`, `wiring_map.yaml`, schemas, and runtime recipes are
 canonical in this directory. `control_app.paths` resolves them for the GUI and also
-accepts historic path strings in retained manifests without recreating legacy
-directories.
+accepts contemporaneous path strings in retained manifests without recreating
+inactive directories.
 
 Promotion also requires accepted source-phase procedural writeups under
-`docs/data_contract/procedural_writeup_standard.md`. The writeups document the
+`docs/phase_record_contract.md`. The writeups document the
 scientific reasoning and claim boundaries; promoted machine-readable bundles and
 their indexed source evidence remain the runtime/numerical authority.

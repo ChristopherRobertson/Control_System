@@ -16,7 +16,7 @@ def main() -> int:
     complete = {
         phase_id
         for phase_id, item in phases.items()
-        if item.get("status") == "historical_complete"
+        if item.get("status") == "complete"
     }
     in_progress = [
         phase_id for phase_id in order if phases[phase_id].get("status") == "in_progress"

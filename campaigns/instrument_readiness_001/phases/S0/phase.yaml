@@ -2,7 +2,7 @@ phase_id: S0
 title: safe-idle and interlock verification
 campaign_id: instrument-readiness-001
 domain: calibration
-registry_status: historical_complete
+registry_status: complete
 depends_on:
 - P0
 optional_dependencies: []

@@ -4,26 +4,26 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_codex_is_the_campaign_operator_interface() -> None:
+def test_campaign_operator_contract_is_explicit() -> None:
     instructions = (
         REPO_ROOT
         / "campaigns"
         / "instrument_readiness_001"
         / "AGENTS.md"
     ).read_text(encoding="utf-8")
-    campaign = (
+    requirements = (
         REPO_ROOT
         / "campaigns"
         / "instrument_readiness_001"
-        / "shared"
-        / "calibration_campaign_history.md"
+        / "requirements.md"
     ).read_text(encoding="utf-8")
 
     assert "one physical action at a time" in instructions
     assert "USER_INPUT_REQUIRED" in instructions
     assert "phase-primary organization" in instructions.lower()
-    assert "monolithic timing runner" in campaign.lower()
-    assert "The retired monolithic timing runner is not a campaign entry point" in campaign
+    assert "one physical action at a time" in requirements
+    assert "software development do not authorize a" in requirements
+    assert "hardware action or scientific acquisition" in requirements
 
 
 def test_ms01_continues_from_stable_phase_record() -> None:
