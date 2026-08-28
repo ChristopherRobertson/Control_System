@@ -78,9 +78,27 @@ def test_master_plan_describes_every_phase_in_dependency_safe_order():
         assert "**Prerequisites:**" in block, phase_id
         assert "**Purpose:**" in block, phase_id
         assert "**Primary products:**" in block, phase_id
+        assert "**Final Report:**" in block, phase_id
+        assert "**Procedural Writeup:**" in block, phase_id
         assert "**Detailed plan:**" in block, phase_id
         expected_plan_link = phase["plan"].removeprefix("campaigns/")
         assert f"({expected_plan_link})" in block, phase_id
+
+        phase_home = REPO_ROOT / phase["plan"].removesuffix("/plan.md")
+        for label, filename in (
+            ("Final Report", "final_report.md"),
+            ("Procedural Writeup", "procedural_writeup.md"),
+        ):
+            relative_artifact = (
+                Path(phase["plan"]).parent / filename
+            ).as_posix().removeprefix("campaigns/")
+            artifact_line = next(
+                line for line in block.splitlines() if line.startswith(f"- **{label}:**")
+            )
+            if (phase_home / filename).is_file():
+                assert f"({relative_artifact})" in artifact_line, phase_id
+            else:
+                assert artifact_line == f"- **{label}:** Incomplete.", phase_id
 
     for phase in registry["phases"]:
         for dependency in phase.get("depends_on", []):
