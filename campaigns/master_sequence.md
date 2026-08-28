@@ -96,7 +96,7 @@ parallel only under separate authorization.
 - **Primary products:** Physical inventory, provenance records, blocker and
   decision registers, requirement disposition, and the baseline configuration.
 - **Final Report:** Incomplete.
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`P0/procedural_writeup.md`](instrument_readiness_001/phases/P0/procedural_writeup.md).
 - **Detailed plan:** [`P0/plan.md`](instrument_readiness_001/phases/P0/plan.md).
 
 ### S0 — safe-idle and interlock verification
@@ -108,7 +108,7 @@ parallel only under separate authorization.
 - **Primary products:** Safe-state readbacks, operator confirmations, identity
   records, command log, and final cleanup/restoration evidence.
 - **Final Report:** Incomplete.
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`S0/procedural_writeup.md`](instrument_readiness_001/phases/S0/procedural_writeup.md).
 - **Detailed plan:** [`S0/plan.md`](instrument_readiness_001/phases/S0/plan.md).
 
 ### MS-01 — PicoScope differential channel and path skew
@@ -119,7 +119,7 @@ parallel only under separate authorization.
 - **Primary products:** Normal/swapped captures, settings, path-skew estimate,
   uncertainty and sensitivity analysis, and restoration record.
 - **Final Report:** [`MS-01/final_report.md`](instrument_readiness_001/phases/MS-01/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`MS-01/procedural_writeup.md`](instrument_readiness_001/phases/MS-01/procedural_writeup.md).
 - **Detailed plan:** [`MS-01/plan.md`](instrument_readiness_001/phases/MS-01/plan.md).
 
 ### MS-02 — splitter branch skew and measurement-system sensitivities
@@ -130,7 +130,7 @@ parallel only under separate authorization.
 - **Primary products:** Swapped-branch acquisitions, corrected splitter result,
   sensitivity studies, uncertainty budget, and validity limitations.
 - **Final Report:** [`MS-02/final_report.md`](instrument_readiness_001/phases/MS-02/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`MS-02/procedural_writeup.md`](instrument_readiness_001/phases/MS-02/procedural_writeup.md).
 - **Detailed plan:** [`MS-02/plan.md`](instrument_readiness_001/phases/MS-02/plan.md).
 
 ### T2-01 — direct T660-2 routes
@@ -141,7 +141,7 @@ parallel only under separate authorization.
 - **Primary products:** Route sweeps, fitted delays and jitter, rejected/accepted
   trace indexes, pulse-fidelity evidence, and route validity envelopes.
 - **Final Report:** [`T2-01/final_report.md`](instrument_readiness_001/phases/T2-01/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`T2-01/procedural_writeup.md`](instrument_readiness_001/phases/T2-01/procedural_writeup.md).
 - **Detailed plan:** [`T2-01/plan.md`](instrument_readiness_001/phases/T2-01/plan.md).
 
 ### T1-01 — T660-1 trigger and output routes
@@ -152,7 +152,7 @@ parallel only under separate authorization.
 - **Primary products:** Six-point route results, adapter swap characterization,
   trigger diagnostics, electrical closure analysis, and restoration evidence.
 - **Final Report:** [`T1-01/final_report.md`](instrument_readiness_001/phases/T1-01/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`T1-01/procedural_writeup.md`](instrument_readiness_001/phases/T1-01/procedural_writeup.md).
 - **Detailed plan:** [`T1-01/plan.md`](instrument_readiness_001/phases/T1-01/plan.md).
 
 ### PT-01 — MIRcat Process Trigger electrical timing
@@ -163,7 +163,7 @@ parallel only under separate authorization.
 - **Primary products:** Raw timing captures, polarity and width results, path
   corrections, reference-plane definition, uncertainty, and safe restoration.
 - **Final Report:** [`PT-01/final_report.md`](instrument_readiness_001/phases/PT-01/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`PT-01/procedural_writeup.md`](instrument_readiness_001/phases/PT-01/procedural_writeup.md).
 - **Detailed plan:** [`PT-01/plan.md`](instrument_readiness_001/phases/PT-01/plan.md).
 
 ### MC-01 — MIRcat GUI process-trigger qualification
@@ -175,7 +175,7 @@ parallel only under separate authorization.
 - **Primary products:** GUI/firmware provenance, action ledger, DIO evidence,
   bounded-repeat results, automation prerequisites, and shutdown/restoration.
 - **Final Report:** [`MC-01/final_report.md`](instrument_readiness_001/phases/MC-01/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`MC-01/procedural_writeup.md`](instrument_readiness_001/phases/MC-01/procedural_writeup.md).
 - **Detailed plan:** [`MC-01/plan.md`](instrument_readiness_001/phases/MC-01/plan.md).
 
 ### TR-01 — retained identity and measurement-resource closure
@@ -187,7 +187,7 @@ parallel only under separate authorization.
 - **Primary products:** Measurement-resource register, source-provenance index,
   P0 decision export, validity limits, and explicit claim limitations.
 - **Final Report:** [`TR-01/final_report.md`](instrument_readiness_001/phases/TR-01/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`TR-01/procedural_writeup.md`](instrument_readiness_001/phases/TR-01/procedural_writeup.md).
 - **Detailed plan:** [`TR-01/plan.md`](instrument_readiness_001/phases/TR-01/plan.md).
 
 ### OM-01 — optical metrology readiness and transfer standards
@@ -199,7 +199,7 @@ parallel only under separate authorization.
 - **Primary products:** Optical-metrology bundle, configuration manifest,
   correction tables, saturation and spatial methods, uncertainty, and limits.
 - **Final Report:** [`OM-01/final_report.md`](instrument_readiness_001/phases/OM-01/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`OM-01/procedural_writeup.md`](instrument_readiness_001/phases/OM-01/procedural_writeup.md).
 - **Detailed plan:** [`OM-01/plan.md`](instrument_readiness_001/phases/OM-01/plan.md).
 
 ### CH-00 — claim scope and calibration-import freeze
@@ -211,7 +211,7 @@ parallel only under separate authorization.
 - **Primary products:** Claim-to-measurement map, frozen test grid, dependency
   graph, configuration conventions, uncertainty rules, and exclusion register.
 - **Final Report:** [`CH-00/final_report.md`](instrument_readiness_001/phases/CH-00/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`CH-00/procedural_writeup.md`](instrument_readiness_001/phases/CH-00/procedural_writeup.md).
 - **Detailed plan:** [`CH-00/plan.md`](instrument_readiness_001/phases/CH-00/plan.md).
 
 ### HF-01 — HF2LI configuration and external-reference qualification
@@ -223,7 +223,7 @@ parallel only under separate authorization.
 - **Primary products:** Accepted anchors, validated transfer model, supported
   configurations, residual/uncertainty analysis, and restoration evidence.
 - **Final Report:** [`HF-01/final_report.md`](instrument_readiness_001/phases/HF-01/final_report.md).
-- **Procedural Writeup:** Incomplete.
+- **Procedural Writeup:** [`HF-01/procedural_writeup.md`](instrument_readiness_001/phases/HF-01/procedural_writeup.md).
 - **Detailed plan:** [`HF-01/plan.md`](instrument_readiness_001/phases/HF-01/plan.md).
 
 ### HF-01.1 — experiment-specific HF2LI candidate optimization and confirmation

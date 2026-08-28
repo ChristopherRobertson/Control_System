@@ -377,7 +377,7 @@ def test_manifest_schema_requires_accepted_writeup_for_new_terminal_phase():
     validator.validate(historical)
 
 
-def test_phase_registry_declares_writeup_completion_and_backfill_policy():
+def test_phase_registry_declares_writeup_completion_and_reconstruction_policy():
     registry = yaml.safe_load((CAMPAIGNS_ROOT / "phase_registry.yaml").read_text(encoding="utf-8"))
     policy = registry["completion_policy"]
     assert policy["required_artifact"] == "procedural_writeup.md"
@@ -402,4 +402,15 @@ def test_phase_registry_declares_writeup_completion_and_backfill_policy():
         "CH-00",
         "HF-01",
     }
-    assert all(phase["documentation_status"] == "backfill_required" for phase in completed)
+    assert all(phase["documentation_status"] == "draft_reconstruction" for phase in completed)
+    assert "draft_reconstruction" in policy["documentation_status_vocabulary"]
+    for phase in completed:
+        writeup = (
+            REPO_ROOT
+            / "campaigns"
+            / "instrument_readiness_001"
+            / "phases"
+            / phase["phase_id"]
+            / "procedural_writeup.md"
+        )
+        assert writeup.is_file(), f"missing completed-phase writeup: {writeup}"

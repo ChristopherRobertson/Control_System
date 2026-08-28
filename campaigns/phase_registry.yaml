@@ -18,6 +18,7 @@ completion_policy:
   backfill_requires_reacquisition: false
   documentation_status_vocabulary:
     backfill_required: scientific disposition is retained; procedural writeup remains to be completed from evidence
+    draft_reconstruction: evidence-based retrospective writeup exists but required review, indexing, and manifest linkage remain pending
     required_before_closeout: procedural writeup is required before scientific closeout
     accepted: procedural writeup has passed evidence-traceability and thesis-readiness review
   planned_phase_default: required_before_closeout
@@ -111,18 +112,18 @@ titles:
   MB-09: MbCO closeout restoration and retention
 
 phases:
-  - {phase_id: P0, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [], plan: campaigns/instrument_readiness_001/phases/P0/plan.md, evidence_key: P0}
-  - {phase_id: S0, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [P0], plan: campaigns/instrument_readiness_001/phases/S0/plan.md, evidence_key: S0}
-  - {phase_id: MS-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [S0], plan: campaigns/instrument_readiness_001/phases/MS-01/plan.md, evidence_key: MS-01}
-  - {phase_id: MS-02, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [MS-01], plan: campaigns/instrument_readiness_001/phases/MS-02/plan.md, evidence_key: MS-02}
-  - {phase_id: T2-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [MS-02], plan: campaigns/instrument_readiness_001/phases/T2-01/plan.md, evidence_key: T2-01}
-  - {phase_id: T1-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [T2-01], plan: campaigns/instrument_readiness_001/phases/T1-01/plan.md, evidence_key: T1-01}
-  - {phase_id: PT-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [T1-01], plan: campaigns/instrument_readiness_001/phases/PT-01/plan.md, evidence_key: PT-01}
-  - {phase_id: MC-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [PT-01], plan: campaigns/instrument_readiness_001/phases/MC-01/plan.md, evidence_key: MC-01}
-  - {phase_id: TR-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [P0], plan: campaigns/instrument_readiness_001/phases/TR-01/plan.md, evidence_key: TR-01}
-  - {phase_id: OM-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [TR-01], plan: campaigns/instrument_readiness_001/phases/OM-01/plan.md, evidence_key: OM-01}
-  - {phase_id: CH-00, domain: characterization, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [P0, TR-01], plan: campaigns/instrument_readiness_001/phases/CH-00/plan.md, evidence_key: CH-00}
-  - {phase_id: HF-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: backfill_required, depends_on: [T2-01, TR-01], plan: campaigns/instrument_readiness_001/phases/HF-01/plan.md, evidence_key: HF-01}
+  - {phase_id: P0, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [], plan: campaigns/instrument_readiness_001/phases/P0/plan.md, evidence_key: P0}
+  - {phase_id: S0, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [P0], plan: campaigns/instrument_readiness_001/phases/S0/plan.md, evidence_key: S0}
+  - {phase_id: MS-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [S0], plan: campaigns/instrument_readiness_001/phases/MS-01/plan.md, evidence_key: MS-01}
+  - {phase_id: MS-02, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [MS-01], plan: campaigns/instrument_readiness_001/phases/MS-02/plan.md, evidence_key: MS-02}
+  - {phase_id: T2-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [MS-02], plan: campaigns/instrument_readiness_001/phases/T2-01/plan.md, evidence_key: T2-01}
+  - {phase_id: T1-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [T2-01], plan: campaigns/instrument_readiness_001/phases/T1-01/plan.md, evidence_key: T1-01}
+  - {phase_id: PT-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [T1-01], plan: campaigns/instrument_readiness_001/phases/PT-01/plan.md, evidence_key: PT-01}
+  - {phase_id: MC-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [PT-01], plan: campaigns/instrument_readiness_001/phases/MC-01/plan.md, evidence_key: MC-01}
+  - {phase_id: TR-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [P0], plan: campaigns/instrument_readiness_001/phases/TR-01/plan.md, evidence_key: TR-01}
+  - {phase_id: OM-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [TR-01], plan: campaigns/instrument_readiness_001/phases/OM-01/plan.md, evidence_key: OM-01}
+  - {phase_id: CH-00, domain: characterization, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [P0, TR-01], plan: campaigns/instrument_readiness_001/phases/CH-00/plan.md, evidence_key: CH-00}
+  - {phase_id: HF-01, domain: calibration, campaign_id: instrument-readiness-001, status: complete, documentation_status: draft_reconstruction, depends_on: [T2-01, TR-01], plan: campaigns/instrument_readiness_001/phases/HF-01/plan.md, evidence_key: HF-01}
   - {phase_id: HF-01.1, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [HF-01, CH-00], plan: campaigns/instrument_readiness_001/phases/HF-01.1/plan.md, evidence_key: HF-01.1}
   - {phase_id: WM-01, domain: calibration, campaign_id: instrument-readiness-001, status: in_progress, documentation_status: required_before_closeout, depends_on: [OM-01], plan: campaigns/instrument_readiness_001/phases/WM-01/plan.md, evidence_key: WM-01}
   - {phase_id: MD-01, domain: calibration, campaign_id: instrument-readiness-001, status: planned, depends_on: [HF-01], plan: campaigns/instrument_readiness_001/phases/MD-01/plan.md, evidence_key: MD-01}
