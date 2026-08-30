@@ -3,7 +3,7 @@
 Campaign: `instrument-readiness-001`  
 Domain: `characterization`  
 Registry status: `planned`  
-Required dependencies: `WM-01, ATT-01`  
+Required dependencies: `WM-01, ATT-01, CH-00.1`
 Optional dependencies: `none`  
 
 This is the canonical phase plan. It does not authorize hardware,
@@ -29,7 +29,7 @@ Begin with the ATT-01 preliminary delay and a prospectively frozen narrow
 FIRE-to-Q-SWITCH delay range. With the iris mount and aperture locked, acquire
 repeated ascending and descending searches plus a revisit. For every point
 retain the programmed and read-back delay, synchronized post-iris power,
-WaveMaster native value/status, residual-content result, iris readback,
+replacement wavelength-spectrometer native value/status, residual-content result, iris readback,
 centroid/profile, and stability diagnostics. Select the final delay by maximum
 accepted post-iris 540 nm average power, not unfiltered total power, subject to
 the wavelength, residual-content, stability, core-clipping, and meter-safety
@@ -54,11 +54,11 @@ Mandatory deliverables:
 
 - Native OPO meter, wavelength-reference, spatial-profile, and iris USB/
   API command/readback records with synchronized shot or acquisition IDs.
-- WaveMaster bundle/configuration ID, device/adapter/probe identity, reference
-  plane, air-nanometre units, pulsed mode, autocalibration state, native
-  `VAL$` time tag/value/status, thermal-stability class, and uncertainty for
-  every accepted wavelength record. `Multi-Line`, `Saturated`, and `No Signal`
-  remain non-numeric outcomes; an unresolved `Multi-Line` result blocks the
+- WM-01 replacement bundle/configuration ID, device/interface/sampling-optic identity,
+  reference plane, wavelength medium/units, acquisition/calibration state, native
+  time tag/value/status, thermal-stability class, and uncertainty for every accepted
+  wavelength record. Instrument-specific multi-line, saturation, and no-signal
+  outcomes remain non-numeric; an unresolved multi-line result blocks the
   single-wavelength claim unless the accepted spectral method resolves and
   bounds every contributing component.
 - Post-iris average power, residual spectral-content bound, pre/post-iris
@@ -69,6 +69,17 @@ Mandatory deliverables:
   manufacturer-only range, and unavailable range; recommended wavelength-
   specific settings, accepted iris configuration/tolerance, mismatch stop,
   revalidation triggers, and restoration record.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+PB-02 supplies the OPO-output portions of `EXP-CAL-14`, `EXP-CAL-15`,
+`EXP-CHAR-05`, and `EXP-OPT-03`. The retained source condition,
+FIRE-to-Q-SWITCH delay, iris, wavelength, spectral-content method, power reference
+plane, beam geometry, and sampling device are configuration identity. Native records,
+controls, rejected points, uncertainty, and return visits define acceptance and
+validity. Source/iris/optical-path/metrology changes or failed stability, wavelength,
+spectral-content, profile, or aperture-margin checks trigger revalidation. This phase
+does not establish sample dose, pump/probe overlap, chemical time zero, or kinetics.
 
 ## Closeout
 

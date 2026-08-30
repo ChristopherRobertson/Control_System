@@ -24,6 +24,16 @@ beam transfer, cell/blank/temperature readiness, and AR-01 selection. PF-00 must
 before SV-02A. PF-01 remains later for pump artifacts, experiment-length stability,
 and biological-anchor operating envelopes.
 
+Measure every materially distinct slow-scan and reconstruction configuration needed to
+show that its target precision is supportable, including room-temperature and 77 K
+blank/cryostat envelopes. Retain native Sample/Reference streams, settings, controls,
+loss/rejection records, covariance, Allan/noise and SNR analysis, uncertainty, and the
+configuration-specific acceptance rule. Changes in source/detector/topology/settings,
+cell/cryostat/temperature, normalization, duration, environment, or analysis trigger
+revalidation. This phase implements the readiness portions of `EXP-CAL-12`,
+`EXP-CHAR-06`, `EXP-CHAR-09`, `EXP-OPT-01`, and `EXP-OPT-06`; it does not establish
+sample absorbance, pump artifacts, biological variance, or kinetics.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

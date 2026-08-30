@@ -27,10 +27,17 @@ plan, and updated downstream dependency record. After promotion and retention
 review, the campaign directory can be archived as one independent unit.
 
 The promotion candidate must include the electronic-iris control/optical-
-transfer bundle and the qualified WaveMaster working-reference bundle. It must
+transfer bundle and the qualified WM-01 replacement working-reference bundle. It must
 not promote the original OM-01 mixed-spectrum indication as post-iris 540 nm
-sample-plane power or a WaveMaster center wavelength as a spectral-power
+sample-plane power or a wavelength-spectrometer center value as a spectral-power
 fraction.
+
+Promotion is prohibited while a required CH-00.1 row lacks accepted, reviewer-linked
+evidence or is marked unresolved/unsupported for the proposed validity envelope. The
+gate must explicitly review MS-02.1 dual-recorder corrections, normal-versus-timing
+topologies, configuration-specific timing/IRFs, and the four mandatory slow-scan
+prerequisites. Creating a registry row, report, bundle directory, or manifest is not
+promotion.
 
 ## Closeout
 

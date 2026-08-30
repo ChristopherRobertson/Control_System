@@ -3,7 +3,7 @@
 Campaign: `hrp-001`  
 Domain: `experiment`  
 Registry status: `planned`  
-Required dependencies: `CH-00`  
+Required dependencies: `CH-00.1`
 Optional dependencies: `none`  
 
 This is the canonical phase plan. It does not authorize hardware,
@@ -15,7 +15,14 @@ the campaign `../../requirements.md`.
 
 This phase inherits the campaign-wide scientific, safety, acquisition, analysis, and data-contract requirements in `../../requirements.md`.
 
-| R0 — requirements freeze | Approve this brief; assign question, claims, controls, parameter registry, and owners | No unresolved blocker classified “must resolve before characterization” |
+| R0 — requirements freeze | Approve this brief; assign question, claims, controls, parameter registry, architecture/configuration IDs, and owners | No unresolved blocker classified “must resolve before characterization” |
+
+Import the CH-00.1 traceability matrix and freeze separate room-temperature slow-scan,
+nanosecond wavelength-by-wavelength, and repeated rapid-scan phase-delay allocations.
+Record the required 77 K slow-scan, nanosecond, and single-pump scan-burst packages as
+unresolved downstream work until new phase packages are registered. Freeze no numeric
+setting from literature or an unpromoted bundle. The phase establishes allocation and
+claims only; it does not establish readiness, dose, recovery, IRF, or kinetics.
 
 ## Closeout
 

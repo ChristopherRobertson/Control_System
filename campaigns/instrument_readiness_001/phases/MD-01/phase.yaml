@@ -5,6 +5,8 @@ domain: calibration
 registry_status: planned
 depends_on:
 - HF-01
+- CH-00.1
+- MS-02.1
 optional_dependencies: []
 evidence_key: MD-01
 evidence_path: campaigns/instrument_readiness_001/phases/MD-01

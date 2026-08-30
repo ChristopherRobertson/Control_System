@@ -17,6 +17,14 @@ This phase inherits the campaign-wide scientific, safety, acquisition, analysis,
 
 | R5 — steady-state pilot | Dark spectrum, controls, both directions, beginning/end state | Both target regions supported; no drift/saturation/state loss |
 
+This is the mandatory room-temperature HRP–CO initial slow scan. Retain native
+forward/reverse Sample/Reference/DIO/source data, preparation/cell/path/temperature and
+configuration identity, corrected centers, widths, integrated areas, baselines,
+interference, sensitivity, uncertainty, and local windows. Literature centers are
+search anchors only. Repeat after a new preparation/lot/pH, cell reload/path,
+state/material time gap, temperature, optical/acquisition change, or failed checkpoint.
+R5 does not satisfy the separate 77 K slow-scan requirement or establish kinetics.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

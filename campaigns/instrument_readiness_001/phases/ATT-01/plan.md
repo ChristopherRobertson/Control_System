@@ -3,7 +3,7 @@
 Campaign: `instrument-readiness-001`  
 Domain: `calibration`  
 Registry status: `planned`  
-Required dependencies: `WM-01, OM-01`  
+Required dependencies: `WM-01, OM-01, CH-00.1`
 Optional dependencies: `none`  
 
 This is the canonical phase plan. It does not authorize hardware,
@@ -43,8 +43,8 @@ requires the independent laser shutter to remain closed.
 Before comparing iris planes, perform a preliminary FIRE-to-Q-SWITCH delay
 search using the unoccluded pre-iris 540 nm output. Freeze the permitted delay
 range, coarse step sequence, dwell, repetition count, approach directions, and
-meter safety limit before emission. The previously observed approximately
-245 microsecond maximum at 632 nm is only a safe search-center hypothesis; it
+meter safety limit before emission. A previously observed maximum at another
+wavelength is only a safe search-center hypothesis; it
 is not authority for the 355 nm drive or 540 nm output. Use the qualified power
 meter within its accepted range and the WM-01 wavelength/status record at every
 retained point. Reject saturated, unstable, unresolved `Multi-Line`, or
@@ -84,7 +84,8 @@ sample-specific pilot as a later confirmation gate. Report both the post-iris of
 conservative absorption-weighted dose-bias bound; visible suppression alone is
 not an acceptance measurement.
 
-The WaveMaster records independent center-wavelength/status evidence for every
+The WM-01-qualified replacement spectrometer records independent
+center-wavelength/status evidence for every
 retained optical condition within its accepted envelope. Its native
 `Multi-Line` result is a qualitative spectral-complexity flag, not a power
 fraction; the residual off-wavelength power fraction still requires the
@@ -104,7 +105,7 @@ and do not inherit the OPO-output iris correction.
 For the installed sample/reference splitter, measure both output-port powers
 from the same incident condition and quantify total insertion loss and the
 port-resolved split versus wavenumber, polarization, alignment, and operating
-power wherever those dependencies are material. Use only the CH-00-retained
+power wherever those dependencies are material. Use only the CH-00.1-retained
 355 nm OPO-drive, post-iris 540 nm, Mylar-carbonyl, and merged biological
 probe anchors. At each used configuration measure the lowest and highest
 planned power; add a midpoint only if the predeclared linearity test fails.
@@ -119,7 +120,7 @@ Mandatory closeout deliverables:
   candidate positions; locked Z/X/Y mount coordinates or fiducials; orientation,
   wavelength, polarization, beam-dump, and reference-plane photographs/diagrams.
 - Preliminary FIRE-to-Q-SWITCH delay-search definition, native programmed and
-  read-back delays, synchronized pre-iris power and WaveMaster status records,
+  read-back delays, synchronized pre-iris power and WM-01 spectrometer status records,
   rejected-point accounting, direction/revisit comparison, selected
   preliminary delay, uncertainty, and safe restoration.
 - Complete 540 nm diameter-scan records and the frozen selection rule, including
@@ -127,10 +128,10 @@ Mandatory closeout deliverables:
   centroid/radii, core encircled-energy or transmission loss, diffraction,
   drift margin, uncertainty, accepted aperture/readback tolerance, and the
   lasers-blocked iris-powered 950 nm leakage control.
-- WM-01 bundle link and native center-wavelength/status/time-tag records for
+- WM-01 replacement bundle link and native center-wavelength/status/time-tag records for
   each retained condition, with probe geometry, units, pulsed mode,
   autocalibration state, quality outcome, and the explicit limitation that the
-  WaveMaster does not determine spectral-power fractions.
+  the wavelength spectrometer does not determine spectral-power fractions.
 - Raw incident/transmitted readings, dark subtraction, transmission or optical
   density with repeatability and uncertainty, linearity/saturation checks, and
   wavelength interpolation limits for every other used transfer element.
@@ -146,6 +147,19 @@ Mandatory closeout deliverables:
   or centroid/profile drift outside the qualified envelope. No uncharacterized
   aperture or attenuator may enter an emitting phase silently, and no
   downstream calculation may assume a 0.5 split.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+ATT-01 implements the installed iris, attenuation, splitter, and sample-plane-transfer
+portions of `EXP-CAL-14`, `EXP-CAL-15`, `EXP-CHAR-05`, and `EXP-OPT-03`.
+Each optical element, port, reference plane, wavelength, polarization, power, geometry,
+and source condition is explicit. Native commands/readbacks, power and spectral records,
+controls, rejected candidates, uncertainty, acceptance limits, and restoration are
+retained. Optic/iris/mount/metrology/source changes or a failed wavelength, residual-
+content, clipping, transfer, repeatability, or contamination check trigger revalidation.
+PB-02, DET-02/04, OG-01, OV-01, OP-01, and the biological campaigns consume the
+result. This phase does not establish sample photochemistry, temporal IRF, chemical time
+zero, or kinetics.
 
 ## Closeout
 

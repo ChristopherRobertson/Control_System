@@ -3,7 +3,7 @@
 Campaign: `instrument-readiness-001`  
 Domain: `characterization`  
 Registry status: `planned`  
-Required dependencies: `TR-01`  
+Required dependencies: `TR-01, CH-00.1`
 Optional dependencies: `none`  
 
 This is the canonical phase plan. It does not authorize hardware,
@@ -31,12 +31,27 @@ Mandatory deliverables:
   background/fringe/scatter results, bubble and leak criteria, one disassembly/
   reassembly check, and compatibility with the retained pump/probe geometry.
 - Temperature-sensor basis, spatial placement, equilibration rule, stability/
-  drift and uncertainty at 293 K and 298 K when active control is available.
+  drift and uncertainty at every retained room-temperature condition and at 77 K.
+  Qualify cryostat/window/background, thermal cycling, condensation/frost control,
+  sample-plane temperature gradients, and pump/probe access as separate configuration
+  terms rather than extrapolating room-temperature evidence.
   If a setpoint cannot be controlled, record the observational limit and narrow
   the later kinetic claim rather than adding an unsupported calibration.
 - Safe handling/restoration record and a biological-handoff table identifying
   the qualified cell/path/temperature configurations. CO loading, protein
   state verification, and chemical stability remain experiment-phase work.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+SC-01 implements `EXP-CAL-16`, `EXP-CAL-17`, `EXP-CHAR-10`, `EXP-CHAR-11`, and
+`EXP-OPT-01` and
+is the hardware prerequisite for all four mandatory slow-scan conditions. Native
+temperature/time records, sensor calibration basis, empty/filled controls, thermal
+cycles, geometry, background, leak/bubble/frost checks, uncertainty, rejected records,
+and restoration are required. Acceptance is cell/path/temperature/configuration-
+specific. Cell/window/spacer/seal, cryostat/stage/sensor, alignment, thermal cycle,
+temperature range, or analysis changes trigger revalidation. This phase does not
+establish CO loading, protein state, photochemistry, sample stability, or spectra.
 
 ## Closeout
 

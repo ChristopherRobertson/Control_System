@@ -5,14 +5,43 @@
 > `time_resolved_acquisition_modes.md`. Settings remain prospective until required
 > promotion; a single rapid scan is never an instantaneous spectrum.
 
+## 0. `EXPERIMENTS.md` architecture-alignment amendment
+
+The canonical allocation is the instrument-readiness CH-00.1
+`experiment_requirements_traceability.md` matrix. Completed readiness phases remain
+immutable inputs; this brief does not reopen them. Before any time-resolved block, an
+accepted condition-specific slow scan must determine actual centers, widths, areas,
+baselines, interference, and local windows. Literature band values remain search
+anchors, never final acquisition setpoints.
+
+The current room-temperature HRP sequence allocates the mandatory slow scan to R5,
+recovery/dose/reset qualification to R6, repeated rapid-scan phase-delay work to R7,
+and nanosecond wavelength-by-wavelength work to R8 only after the corresponding
+readiness and identifiability gates pass. Low- and high-rate probe candidates are
+distinct configurations and are not derived from the pump's 10 Hz maximum.
+
+`EXPERIMENTS.md` also requires separate 77 K HRP slow-scan, nanosecond, and
+single-pump rapid/log scan-burst conditions. No condition-specific 77 K HRP phase
+package currently exists. That remains an explicit downstream planning gap: a new
+incomplete R-phase package must be inserted and dependency-frozen before cryogenic HRP
+execution. Room-temperature evidence cannot be extrapolated across cryostat, matrix,
+temperature, beam, heating, reset, timing/IRF, or reconstruction configuration.
+
+Normal HF2LI dual-detector acquisition and temporary PicoScope timing/IRF wiring have
+separate configuration identities. The HF2LI is the primary spectral recorder; the
+PicoScope is an independent diagnostic. Chemical time zero is the independently
+observed pump/probe relation at the sample plane, not an electrical command or
+equal-cable-length assumption. Each reconstruction method requires a matching
+configuration-specific IRF and nonbiological native-coverage validation.
+
 - **Document class:** requirements-level experimental procedure; not an executable recipe
 - **Selected system:** native, glycosylated horseradish peroxidase isoenzyme C in the ferrous carbonmonoxy state, HRP-C(FeII)–CO
 - **Target environment:** room-temperature aqueous 0.10 M sodium phosphate, pH 6.00
 - **Primary observables:** equilibrium ν(CO) bands near 1905 and 1934 cm⁻¹ and their pump-induced differential signals
-- **Required pump:** WM-01-verified 540 nm OPO output through the permanent ATT-01-qualified electronic iris at its locked far-field mount and accepted aperture diameter
+- **Required pump:** 540 nm OPO output verified by the WM-01-qualified replacement wavelength spectrometer through the permanent ATT-01-qualified electronic iris at its locked far-field mount and accepted aperture diameter
 - **Status:** blocked from biological execution until the readiness gates in this brief are satisfied and the necessary campaign results are explicitly promoted
 
-This brief defines what must be true, measured, recorded, and accepted before a biological run. It does not authorize sample preparation, gas handling, laser emission, hardware operation, or promotion. Values marked **literature anchor** reproduce a published or manufacturer value. Values marked **campaign-resolved** may be used only after an identified calibration or characterization result is promoted. Values marked **CH00 decision** are proposed project criteria that must be approved and frozen in characterization phase CH00 before becoming operational. No Git or file hash is an operational gate.
+This brief defines what must be true, measured, recorded, and accepted before a biological run. It does not authorize sample preparation, gas handling, laser emission, hardware operation, or promotion. Values marked **literature anchor** reproduce a published or manufacturer value. Values marked **campaign-resolved** may be used only after an identified calibration or characterization result is promoted. Values marked **CH00 decision** are proposed project criteria that must be approved and frozen through CH-00.1 and the applicable biological design phase before becoming operational. No Git or file hash is an operational gate.
 
 ## 1. Decision summary and scope
 

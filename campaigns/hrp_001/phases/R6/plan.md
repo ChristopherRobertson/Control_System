@@ -17,6 +17,13 @@ This phase inherits the campaign-wide scientific, safety, acquisition, analysis,
 
 | R6 — exposure/recovery pilot | Verify the unchanged promoted iris configuration and post-iris power; run the lowest-setting 540 nm power ladder and rare-pump recovery without optimizing the iris on biology | Reversible regime and measured cadence established; iris/configuration validity passes |
 
+Measure condition-specific pump dose, overlap, emitted-event accounting, equivalent-
+state/full-recovery/fresh-position behavior, probe-duty heating, accumulation, damage,
+and the lowest useful reversible operating envelope. Select pump cadence and total
+event budget independently of the MIR probe carrier rate. Retain all native controls,
+rejected events, temperature, state/integrity, uncertainty, and restoration. This
+room-temperature result cannot qualify 77 K recovery/reset behavior.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

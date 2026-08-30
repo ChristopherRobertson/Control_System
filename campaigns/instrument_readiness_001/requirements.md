@@ -1,6 +1,6 @@
 # Instrument-readiness campaign requirements
 
-Version: `2.0.0`
+Version: `2.1.0`
 Status: **AUTHORITATIVE CROSS-PHASE REQUIREMENTS**
 
 ## 1. Purpose and authority
@@ -17,6 +17,12 @@ characterization, independent-validation, reporting, and promotion phases of
    acceptance logic, and deliverables; and
 4. [`../../docs/phase_record_contract.md`](../../docs/phase_record_contract.md),
    the evidence and thesis-quality procedural-writeup contract.
+
+Root-level [`../../EXPERIMENTS.md`](../../EXPERIMENTS.md) is the source for the
+experimental architectures and claims that this readiness campaign must support.
+It does not silently override the authority order above, authorize hardware, or
+freeze a setting. `CH-00.1` maintains the reviewed requirement allocation in
+[`phases/CH-00.1/experiment_requirements_traceability.md`](phases/CH-00.1/experiment_requirements_traceability.md).
 
 If two active records disagree, stop before execution and reconcile them in that
 order of authority. A phase directory is the sole active home for its plan and
@@ -68,6 +74,14 @@ needed configuration and validity envelope. Import it by stable ID. When coverag
 is insufficient, document the gap and obtain separate authorization for a bounded
 new measurement.
 
+Every `status: complete` phase and its canonical package are immutable for this
+alignment. A requirement that would have added work to such a phase is owned by a
+registered supplemental phase immediately after it or by an already-planned phase
+whose scope coherently covers the missing work. Completed status, dependencies,
+plans, writeups, manifests, evidence, and scientific dispositions are not edited.
+`WM-01` is incomplete and may be updated while preserving every retained entry,
+preflight, failure, diagnostic, and deferral record.
+
 ## 4. Common evidence and completion requirements
 
 Every phase follows the phase-record contract. Retain or index, as applicable:
@@ -112,12 +126,13 @@ reproduction, acceptance, closeout, or promotion.
   command, readback, qualified aperture and tolerance, and fault state. Loss of
   ownership, communication, or accepted readback blocks OPO emission. The iris is
   not a personnel-safety shutter or finite-exposure counter.
-- Quantitative OPO-540 work imports the WM-01 working-reference bundle and records
-  meter, adapter, probe, unit, pulse/CW mode, autocalibration state, geometry,
-  native time/value/status, quality state, stability classification, and
-  uncertainty. `Multi-Line`, `Saturated`, and `No Signal` are outcomes, not
-  wavelengths. Center wavelength does not establish spectral-power fractions or
-  absence of other wavelengths.
+- Quantitative OPO-540 work imports the WM-01 replacement working-reference bundle
+  and records device/interface/sampling-optic identity, wavelength medium/units,
+  acquisition and calibration state, geometry, native time/value/status, quality
+  state, stability classification, and uncertainty. Instrument-specific multi-line,
+  saturation, low/no-signal, or invalid states are outcomes, not wavelengths. Center
+  wavelength does not establish spectral-power fractions or absence of other
+  wavelengths.
 - A power meter is available; an energy meter is not. Do not claim measured
   pulse-energy distributions, pulse-to-pulse energy jitter, or calibrated peak
   power. Mean pulse energy may be derived from qualified average-power and
@@ -125,6 +140,15 @@ reproduction, acceptance, closeout, or promotion.
 - Biological samples are not calibration standards. Sample preparation, CO
   handling, biological state, dose-response controls, and biological acquisition
   remain in their experiment campaigns.
+- The HF2LI is the primary sample/reference spectral recorder. The PicoScope is an
+  independently calibrated timing, pulse-shape, detector-response, branch-skew,
+  saturation, overflow, and trigger diagnostic; it does not replace the HF2LI.
+- Normal dual-detector acquisition and the sample-detector/pump-detector timing/IRF
+  topology are separate configuration families. A correction may cross between
+  them only through an accepted bridge with reference planes and uncertainty.
+- The MIRcat probe carrier rate is independent of the 10 Hz pump limit. Low-rate
+  and high-rate probe candidates require separate measured source, reference-lock,
+  detector, heating, synchronization, and stream-validity envelopes.
 
 ## 6. Measurement-system and timing requirements
 
@@ -132,11 +156,15 @@ reproduction, acceptance, closeout, or promotion.
 
 Each timing result names its source and destination event, electrical or optical
 reference plane, threshold/crossing definition, sign convention, sampling rate,
-and configuration ID. Use 100 Hz for direct T660-2 electrical routes. Use 10 Hz
-for T660-1 routes and optical work unless the phase plan explicitly qualifies a
-different rate. The standard programmed delay grid is
-`[0, 100, 1000, 10000, 100000, 1000000] ns`; a phase may use a smaller declared
-subset only when its plan explains why.
+and configuration ID. Completed timing evidence retains its actually used rates and
+programmed delays as immutable provenance. A future phase selects its rate and delay
+grid only from accepted device limits, the measured response/uncertainty, and the
+frozen precision/resolution requirement; completed values are not automatic defaults.
+
+Chemical time zero is the optically observed pump arrival at the sample plane.
+Command edges, programmed delays, and cable lengths are diagnostic/provenance
+quantities and are never relabeled as chemical time zero. Physical cable-length
+equality is not a timing calibration.
 
 Make wiring and range changes only from a safe, non-emitting state. Record the
 pre-change topology, the exact change, a post-change verification, and the
@@ -156,10 +184,10 @@ and configuration terms in the uncertainty budget.
 
 T2-01 and T1-01 qualify direct trigger/output routes. PT-01 and MC-01 qualify
 MIRcat Process Trigger electrical behavior and GUI state semantics. DET-03
-qualifies installed detector latency. OP-01 measures command-to-sample optical
-timing, FE-01 qualifies finite emitted-event admission and reconciliation, and
-CL-01 performs covariance-aware closure across the retained sweep, HRP, and MbCO
-configurations. Closure must retain every component identity and configuration
+qualifies installed detector latency. OP-01 measures independently observed pump and
+probe arrival at the sample-equivalent plane, FE-01 qualifies finite emitted-event
+admission and reconciliation, and CL-01 performs covariance-aware closure across every
+retained slow-scan and reconstruction configuration. Closure must retain every component identity and configuration
 foreign key and may not hide an incompatible time origin or failed loop.
 
 ## 7. Required measurement coverage by phase
@@ -172,34 +200,73 @@ acceptance thresholds.
 | --- | --- |
 | P0, S0 | Establish inventory/provenance and safe-idle/interlock behavior; retain identities, topology, observations, and restoration evidence. |
 | MS-01, MS-02 | Quantify oscilloscope channel/path and splitter-branch timing corrections, sensitivity, covariance, and validity. |
+| MS-02.1 | Without changing or reacquiring MS-01/MS-02, calibrate the installed detector-output tee/adapter/cable networks to the HF2LI and PicoScope, including loading, attenuation, reflection/ringing, bandwidth, skew, PicoScope timebase/amplitude/bandwidth/trigger behavior, overflow, uncertainty, and topology-specific validity. |
 | T2-01, T1-01, PT-01, MC-01 | Qualify the direct timer routes, MIRcat Process Trigger electrical route, and GUI/process-trigger state semantics with native traces and command/readback records. |
 | TR-01, OM-01 | Close identity/resource gaps and qualify only the metrology resources, adapters, references, limits, and transfer standards required by the campaign. |
 | CH-00 | Freeze the minimum claim grid and imported calibration dependencies for Mylar, HRP-C–CO, and MbCO work; exclude optional scope from core gates. |
-| HF-01, HF-01.1, HF-02 | Qualify HF2LI external-reference, acquisition, candidate experiment settings, cross-stream alignment, loss/recovery, filter memory, and endurance. Retain distinct sweep, HRP, and MbCO configuration IDs. |
-| WM-01 | Qualify installed visible/near-IR wavelength metrology, including identity, communications, state semantics, 540 nm repeatability, stability, uncertainty, and validity. Completion requires a qualified replacement spectrometer. |
-| MD-01, MSW-01 | Qualify MIRcat/HF2LI DIO mapping and sweep timing with direction, rate, trigger, state, and error records. |
-| DET-01 | Measure dark detector/electronics offsets, noise, drift, range, saturation, and stability over the retained configurations. |
+| CH-00.1 | Reconcile every `EXPERIMENTS.md` calibration, characterization, optimization, validation, initial-slow-scan, architecture, and claim prerequisite with the sequence; maintain the canonical traceability and unresolved-gap register without assigning new work to completed phases. |
+| HF-01, HF-01.1, HF-02 | Import immutable HF-01 evidence and qualify experiment-specific low/high-rate HF2LI reference topologies, demodulator/filter/order/time-constant/phase/range/output-rate tradeoffs, timestamps, settling/filter memory, cross-stream alignment, loss/relock, and endurance. Retain distinct IDs for every acquisition architecture even when numerical settings coincide. |
+| WM-01 | Resume the incomplete phase with a suitable replacement spectrometer and qualify its installed identity, communications, native status semantics, pulsed/CW applicability, 540 nm repeatability/stability, uncertainty, validity, and exclusions. Preserve the failed WaveMaster evidence; no center-wavelength instrument assigns residual spectral-power fractions. |
+| MD-01, MSW-01 | Qualify MIRcat/HF2LI DIO mapping, the installed process-trigger receiver interval, one-command/one-transition behavior, `Tuned` reliability, discrete optical settling and history, failure response, and actual scan trajectory versus speed, direction, window, start, acceleration/turnaround, and module transition. |
+| DET-01 | Measure dark detector/electronics offsets, noise, 1/f/drift/Allan behavior, cross-talk, range, saturation/recovery baselines, temperature sensitivity, and stability over the retained normal dual-recorder configurations. |
 | SP-01 | Freeze reference-material identities, feature authorities, uncertainties, and partition rules before spectral fitting. |
 | ATT-01 | Qualify the electronic iris control/readback and faults; lock the far-field mount; perform the preliminary bidirectional OPO-540 delay search; measure attenuation, splitter-port, and sample-plane transfer; preserve wavelength and clipping controls. |
-| DET-02 | Measure illuminated detector/electronics response at the retained anchors and endpoints, with raw meter/detector/HF2LI/interchange records and fit residuals. |
-| DET-03 | Measure installed detector temporal response and configuration-specific composition with HF-01 transfer functions. |
-| DET-04 | Separate optical split balance from detector/electronics balance and produce wavelength-dependent normalization with covariance. |
-| QB-01 | Qualify only the Mylar window and merged 1885–1980 cm⁻¹ probe anchors, including one retained sweep and one fixed-point envelope. |
+| DET-02 | Measure illuminated sample/reference detector/electronics gain, linearity, noise, saturation and recovery versus signal/wavelength, including the installed simultaneous HF2LI/PicoScope loading configuration, with raw meter/detector/HF2LI/PicoScope/interchange records and fit residuals. |
+| DET-03 | Measure separate sample- and reference-path impulse/step response, bandwidth, latency, wavelength/signal dependence, pump-scatter recovery, and configuration-specific composition with MS-02.1 and HF-01 transfer functions. |
+| DET-04 | Separate optical split balance from detector/electronics balance and produce wavelength-dependent normalization, covariance, common-mode rejection, residual baseline, and uncertainty. |
+| QB-01 | Characterize MIRcat output versus wavenumber, current, pulse width, repetition rate, and duty cycle across all retained regions and low/high-rate candidates; measure pulse/timing/linewidth/stability/thermal behavior, malformed/missing pulses, tune/process behavior, scan dynamics, and sample-heating bounds. |
 | PB-02 | Qualify the final post-iris OPO-540 output and final narrow FIRE-to-Q-SWITCH delay using bidirectional searches, a confirmation revisit, three return-to-540 visits, and low/high planned power conditions. |
-| SC-01 | Qualify the minimum gas-tight CaF2 cell set and 293 K/298 K states using blank, leak, transmission, reassembly, and temperature evidence without biological material or CO. |
-| OG-01, OV-01 | Measure sample-plane transfer, beam profiles, fluence inputs, placement, and overlap for Mylar and the fixed-iris OPO-540 path at HRP and MbCO geometries. Do not tune the iris to obtain a desired response. |
-| AR-01 | Jointly validate the selected sweep, HRP fixed-point, and MbCO fixed-point configurations optically; retain settling, filter-memory, peak-shift/broadening, covariance, and bounded-escalation results without repeating HF-01 mapping. |
+| SC-01 | Qualify room-temperature and nominal-77 K cell/stage/cryostat configurations: path, blank/matrix/window/fringe/placement, sensor calibration, sample gradient, equilibration, transmission, focus/beam shift, condensation/icing/purge, heating, thermal cycling, and mechanical stability without protein or CO. |
+| OG-01, OV-01 | Measure pump/probe sample-plane transfer, beam profiles, centroids, pointing, illuminated geometry, placement, and overlap at room-temperature and cryogenic sample-equivalent planes. Do not tune the iris to obtain a desired response. |
+| AR-01 | Jointly optimize and validate slow-scan, fixed-wavelength nanosecond/microsecond, repeated rapid-scan, single-scan phase-delay, and single-pump scan-burst acquisition candidates; retain settling, filter memory, scan distortion, native coverage, covariance, and bounded-escalation results. |
 | PF-00 | Before reference-standard acquisition, establish normalized noise, common-mode rejection, drift, saturation margin, and SNR on blank or stable nonbiological inputs. |
 | SP-02, SV-01 | Calibrate the spectral axis over the Mylar/polystyrene carbonyl window and 1885–1980 cm⁻¹ region; acquire specimen-matched FTIR reference sets for polystyrene and Mylar. |
 | SV-02A, SV-02B | Fit/freeze corrections with a predeclared polystyrene partition and holdout, then perform blind Mylar validation with three accepted scans per direction and no post-unblinding refit. |
-| OP-01, FE-01, CL-01 | Qualify post-iris OPO-540 command-to-sample timing, finite-event count and stop/fault behavior, and complete timing closure for sweep, HRP, and MbCO configurations. |
-| IR-01 | Measure temporal instrument response for fixed-iris OPO-540 at both HRP bands and MbCO A1 with synchronized native streams, controls, configuration-specific bias/width/residual, and uncertainty. |
-| PF-01 | Measure sensitivity, artifacts, drift, common-mode residual, SNR, NEA/MDA where supportable, and averaging validity for Mylar, both HRP bands, MbCO A1, and one shared off-band condition. |
-| RP-01 | Repeat compact Mylar, OPO-540-HRP, and OPO-540-MbCO checkpoints on three independent days, retaining configuration, wavelength, iris, mount, environment, restoration, variance, and recharacterization evidence. |
-| E2E-01, E2E-CH | Demonstrate bounded normal-wiring nonbiological workflows with all native streams, axes, controls, event ledgers, mismatch stops, iris/wavelength state, processing, uncertainty, and restoration. |
+| OP-01, FE-01, CL-01 | Qualify independently observed post-iris OPO-540 pump and MIRcat probe arrival at the sample-equivalent plane, finite-event count and stop/fault behavior, and complete timing closure for every retained architecture/configuration. |
+| IR-01 | Measure complete sample-plane IRFs for every retained architecture/configuration, combining pump/probe optical envelopes, jitter, sample/reference detector responses, branch latency, PicoScope aperture/trigger uncertainty, HF2LI acquisition kernels, and scan history with synchronized native streams and uncertainty. |
+| PF-01 | Measure sensitivity, detector/pump/cell artifacts, pump-scatter recovery, drift, common-mode residual, SNR, NEA/MDA where supportable, averaging validity, probe/pump heating, and saturation margin for all retained room-temperature and cryogenic surrogate configurations. |
+| RP-01 | Repeat compact checkpoints across startups, placements/reinstallations, and independent days for each materially distinct retained configuration, retaining configuration, wavelength, iris, cryostat/cell, environment, restoration, variance, and recharacterization evidence. |
+| E2E-01, E2E-CH | Demonstrate bounded normal-wiring nonbiological workflows and validate nanosecond and microsecond stroboscopy, repeated rapid-scan phase-delay, single-scan phase-delay, and single-pump rapid-scan/logarithmic scan-burst reconstruction. Publish native `(wavenumber,time)` coverage, interpolation support, bias, filter memory, direction, missing-data behavior, identifiable regions, uncertainty, mismatch stops, and restoration. |
 | RPT-01, RPT-CH | Aggregate indexed evidence, thesis tables/figures, uncertainty budgets, claim-to-evidence links, configuration/validity envelopes, and experiment handoff records without altering source evidence. |
 | PROM-01, PROM-CH | Review an exact candidate bundle, unresolved limitations, validity/revalidation rules, and retention plan; promotion requires the plan's explicit authorization phrase. |
 | PB-01 | After core promotion, optionally characterize direct 355 nm drive for supplemental thesis evidence. It does not satisfy or block any core gate and cannot inherit the 540 nm meter/iris qualification. |
+
+### 7.1 Experimental architecture and configuration families
+
+The campaign supplies separate configuration IDs and validity envelopes for:
+
+1. slow steady-state scanning at room temperature and 77 K;
+2. nanosecond wavelength-by-wavelength stroboscopy;
+3. microsecond wavelength-by-wavelength stroboscopy;
+4. repeated rapid-scan phase-delay reconstruction;
+5. single-scan phase-delay reconstruction;
+6. single-pump rapid-scan and logarithmic scan-burst reconstruction;
+7. normal dual-detector HF2LI-primary acquisition with PicoScope diagnostics; and
+8. sample-detector/pump-detector sample-plane timing and IRF acquisition.
+
+Room-temperature HRP–CO, room-temperature MbCO, 77 K HRP–CO, and 77 K MbCO each
+require an accepted condition-specific initial slow scan before time-resolved work.
+Readiness phases provide the axis, scan/tune, detector, normalization, path,
+temperature, and sensitivity prerequisites. The experimental scan determines the
+actual centers, widths, areas, baselines, interference, and local windows; literature
+positions never become final setpoints.
+
+### 7.2 Phase-plan completeness for `EXPERIMENTS.md` allocations
+
+Every affected incomplete phase plan must state or inherit without ambiguity:
+
+- why the phase is required and which traceability IDs it owns;
+- measured quantities, reference planes, and configuration identities;
+- native evidence, retained failures/exclusions, and analysis/uncertainty outputs;
+- prospective acceptance, rejection, stop, and fallback logic;
+- validity envelope and revalidation triggers;
+- downstream architecture/claim consumers; and
+- what the phase explicitly does not establish.
+
+Plans must not assign final pulse width, repetition rate, scan speed, spectral or
+phase increment, window, delay grid, filter, output rate, detector range, averaging,
+pump cadence/dose, recovery interval, or cryogenic equilibration time. A numeric
+illustration remains non-operational only when labeled `EXAMPLE ONLY`.
 
 ## 8. Acceptance, restoration, promotion, and handoff
 

@@ -1,0 +1,11 @@
+phase_id: CH-00.1
+title: experimental architecture and claim traceability freeze
+campaign_id: instrument-readiness-001
+domain: validation
+registry_status: planned
+depends_on:
+- CH-00
+optional_dependencies: []
+evidence_key: CH-00.1
+evidence_path: campaigns/instrument_readiness_001/phases/CH-00.1
+plan: plan.md

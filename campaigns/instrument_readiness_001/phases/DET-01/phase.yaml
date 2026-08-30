@@ -6,6 +6,8 @@ registry_status: planned
 depends_on:
 - HF-01
 - TR-01
+- MS-02.1
+- CH-00.1
 optional_dependencies: []
 evidence_key: DET-01
 evidence_path: campaigns/instrument_readiness_001/phases/DET-01

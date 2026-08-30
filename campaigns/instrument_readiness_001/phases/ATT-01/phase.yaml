@@ -6,6 +6,7 @@ registry_status: planned
 depends_on:
 - WM-01
 - OM-01
+- CH-00.1
 optional_dependencies: []
 evidence_key: ATT-01
 evidence_path: campaigns/instrument_readiness_001/phases/ATT-01

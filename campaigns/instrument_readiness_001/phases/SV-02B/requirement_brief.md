@@ -4,9 +4,10 @@
 > then freezes correction/covariance, scan/HF2LI settings, normalization, analysis,
 > windows, tolerances, and versions before issuing a Mylar unlock. SV-02B applies
 > those frozen choices blindly. Mylar never tunes them; failure opens a cause-coded
-> investigation or narrows the claim, never automatic refitting. See
-> `campaigns/phase_registry.yaml` and the preserved scientific design in
-> `campaigns/migration/campaign_reconstruction_20260826.md`.
+> investigation or narrows the claim, never automatic refitting. Current authority
+> is `campaigns/master_sequence.md`, `campaigns/phase_registry.yaml`,
+> `campaigns/instrument_readiness_001/requirements.md`, and the CH-00.1
+> experiment-requirements traceability record.
 
 Status: **REQUIREMENTS-LEVEL DESIGN ONLY — NOT AN EXECUTABLE RECIPE**  
 Campaign phase: `SV-02B` in `instrument_readiness_001`

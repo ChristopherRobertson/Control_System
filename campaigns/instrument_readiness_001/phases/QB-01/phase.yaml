@@ -8,6 +8,7 @@ depends_on:
 - MSW-01
 - HF-02
 - DET-02
+- CH-00.1
 optional_dependencies: []
 evidence_key: QB-01
 evidence_path: campaigns/instrument_readiness_001/phases/QB-01

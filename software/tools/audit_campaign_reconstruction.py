@@ -66,16 +66,25 @@ def main() -> int:
                 duplicate_errors.append(f"duplicate {key}: {value} ({count})")
 
     required = {
-        "campaigns/migration/campaign_reconstruction_20260826.md": (
+        "campaigns/master_sequence.md": (
             "HF-01.1",
             "SV-02A",
             "SV-02B",
             "PF-00",
             "QB-01M",
-            "Polystyrene",
+            "polystyrene",
             "Mylar",
             "HRP",
             "MbCO",
+        ),
+        "campaigns/instrument_readiness_001/requirements.md": (
+            "predeclared polystyrene partition and holdout",
+            "blind Mylar validation",
+        ),
+        "campaigns/mbco_cryo_001/requirements.md": (
+            "At 2 MHz",
+            "30% duty ceiling is 150 ns",
+            "1005 ns at 2 MHz is prohibited",
         ),
         "campaigns/methods/time_resolved_acquisition_modes.md": (
             "Fixed-wavelength kinetics",

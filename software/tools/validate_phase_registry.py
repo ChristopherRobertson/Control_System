@@ -156,7 +156,14 @@ def validate() -> list[str]:
             raise RegistryError(f"mapped evidence path is missing for {phase_id}: {path}")
 
     required_edges = {
-        "HF-01.1": {"HF-01"},
+        "MS-02.1": {"MS-02"},
+        "CH-00.1": {"CH-00"},
+        "HF-01.1": {"HF-01", "MS-02.1", "CH-00.1"},
+        "MD-01": {"MS-02.1", "CH-00.1"},
+        "DET-01": {"MS-02.1", "CH-00.1"},
+        "ATT-01": {"CH-00.1"},
+        "OP-01": {"MS-02.1"},
+        "R0": {"CH-00.1"},
         "AR-01": {"HF-01.1"},
         "PF-00": {"AR-01"},
         "SV-02A": {"PF-00"},

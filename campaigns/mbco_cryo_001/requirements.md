@@ -1,10 +1,35 @@
 # Myoglobin–CO spectroscopy and photolysis/rebinding experiment: requirements brief
 
-> **2026-08-26 optional cryogenic branch:** MbCO follows HRP closeout, verified
+> **2026-08-26 room-temperature and cryogenic branches:** MbCO follows HRP closeout, verified
 > restoration, explicit handoff, QB-01M, and MbCO-specific promotion and uses all
 > modes in `time_resolved_acquisition_modes.md`. No slowed timescale is asserted in
 > advance. HF-01's approximately 1 us uncooled limitation remains valid. At 2 MHz,
 > the 30% duty ceiling is 150 ns; 1005 ns at 2 MHz is prohibited.
+
+## 0. `EXPERIMENTS.md` architecture-alignment amendment
+
+The canonical allocation is the instrument-readiness CH-00.1
+`experiment_requirements_traceability.md` matrix. Completed readiness phases remain
+immutable. Before time-resolved work, separate accepted room-temperature and 77 K MbCO
+slow scans must determine actual A-state centers, widths, areas, baselines,
+interference, quantifiability, and local windows. Literature values are search anchors,
+not final setpoints.
+
+The room-temperature branch retains nanosecond and microsecond
+wavelength-by-wavelength configurations plus a reset-qualified single-scan phase-delay
+support architecture. The 77 K branch retains separate nanosecond/microsecond
+stroboscopic configurations and a single-pump rapid/log scan-burst architecture when
+equivalent-state repetition cannot be justified. The present MB phase catalog does not
+yet separate room-temperature and 77 K execution records; MB-00 must freeze
+condition-tagged allocations before execution, and missing condition packages must be
+inserted as new incomplete phases rather than hidden in an existing record.
+
+Probe carrier/rate optimization is independent of the pump's maximum event rate.
+Normal HF2LI dual-detector acquisition and temporary PicoScope timing/IRF wiring have
+separate configuration identities; the HF2LI is primary and the PicoScope diagnostic.
+Chemical time zero is the independently observed sample-plane pump/probe relation.
+Each architecture requires its own IRF, native-coverage/missing-data validation,
+temperature/cryostat/beam envelope, recovery/reset rule, and accepted initial slow scan.
 
 **Document status:** requirements-level design; **not an executable recipe and not authorization to energize hardware, handle CO, or prepare samples**
 **Prepared:** 2026-08-15
@@ -23,7 +48,7 @@ A quantitative geminate claim near the literature value of approximately 4% with
 
 The recommended biological starting point is 4.0 mM equine-heart myoglobin in 25 mM phosphate buffer at pH 7.0, reduced with four molar equivalents of sodium dithionite and equilibrated with CO at atmospheric pressure. This exactly reproduces the most directly relevant aqueous time-resolved FTIR preparation (4.0 mM Mb, 16 mM dithionite, 25 mM phosphate, pH 7.0) and is a **development starting point**, not a frozen batch instruction. Final concentration and optical path are selected together from measured A₁ absorbance, water transmission, detector linearity, and sensitivity. [L01, L03]
 
-The required pump is 540 nm because an aqueous MbCO time-resolved IR study used a 10 ns, 540 nm OPO pulse absorbed by the heme β band and because the preceding HRP-C–CO campaign uses the same shared biological pump configuration. The retained path includes the WM-01-qualified Coherent WaveMaster wavelength working reference and permanent ATT-01-qualified USB/API electronic iris at its locked far-field mount and accepted 540 nm diameter so wavelength-separated OPO halos do not enter the sample-plane power/dose calculation. The WaveMaster provides center-wavelength/status evidence but does not assign spectral-power fractions. Direct 532 nm is not a fallback within the MbCO MVP; any future comparison is a separate, prospectively approved pump-path qualification and experiment amendment. The post-iris configuration is frozen from promoted instrument characterization and must remain unchanged across the HRP-to-MbCO handoff. [L01, L10, N01, R08]
+The required pump is 540 nm because an aqueous MbCO time-resolved IR study used a 10 ns, 540 nm OPO pulse absorbed by the heme β band and because the preceding HRP-C–CO campaign uses the same shared biological pump configuration. The retained path includes the WM-01-qualified replacement wavelength spectrometer and permanent ATT-01-qualified USB/API electronic iris at its locked far-field mount and accepted 540 nm diameter so wavelength-separated OPO halos do not enter the sample-plane power/dose calculation. The wavelength spectrometer provides center-wavelength/status evidence but does not assign spectral-power fractions. Direct 532 nm is not a fallback within the MbCO MVP; any future comparison is a separate, prospectively approved pump-path qualification and experiment amendment. The post-iris configuration is frozen from promoted instrument characterization and must remain unchanged across the HRP-to-MbCO handoff. [L01, L10, N01, R08]
 
 The primary probe is the A₁ band near 1943–1945 cm⁻¹; secondary steady-state probes near 1932–1937 cm⁻¹ (A₃) and 1965–1966 cm⁻¹ (A₀) diagnose conformational composition and pH/sample changes. The reported photodissociated-pocket bands near 2119–2131 cm⁻¹ are outside the documented installed MIRcat range and are excluded from this experiment's claims. [L04–L07, N01, R06]
 
@@ -57,7 +82,7 @@ Archived Day-based, RSI-specific, generic-sample, and prior MbCO recipes are not
 
 | Area | Current evidence | Consequence for this brief |
 |---|---|---|
-| Calibration | S0, MS-01, MS-02, T2-01, T1-01, PT-01, MC-01, TR-01, and OM-01 are complete; WM-01 entry preflight is ready but the phase is not authorized; no canonical promotion exists. [R03, R07, R11] | Campaign-local results may inform risk analysis but cannot freeze biological delays or wavelength assignments. |
+| Calibration | The registry records completed immutable readiness phases; WM-01 remains incomplete after the installed WaveMaster optical-qualification failure and awaits a suitable replacement spectrometer; MS-02.1 and all downstream bundles remain planned; no canonical promotion exists. [R03, R07, R11] | Campaign-local results may inform risk analysis but cannot freeze biological delays or wavelength assignments. |
 | Characterization | Matrix and sequence exist; no experimental-requirement freeze and no promoted bundle. [R08, R12] | Power, probe envelope, geometry, overlap, settling, IRF, sensitivity, and reproducibility remain dependencies. |
 | Reference channel | Replacement reference chain identified as VIGO `SIP-DC-250M` serial `445161066` with `PVM-10.6-1x1` detector serial `21834`. [R06, R08] | Identity gate resolved; no final dual-detector normalization or latency correction until DET results are promoted. |
 | MIRcat software readiness | Installed notebook range is 1638.8–2077.3 cm⁻¹; current builder registry says 900–1800 cm⁻¹. [R09] | Correct and verify the registry before authoring or validating a 1933–1966 cm⁻¹ recipe. |

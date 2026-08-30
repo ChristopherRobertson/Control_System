@@ -2,6 +2,7 @@ import ast
 import copy
 import csv
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -45,13 +46,79 @@ def test_compatibility_paths_keep_current_gui_assets_reachable():
 
 def test_unified_phase_registry_is_complete_and_acyclic():
     order = validate()
-    assert len(order) == 68
-    for phase_id in ("HF-01", "HF-01.1", "AR-01", "PF-00", "SV-02A", "SV-02B", "R9", "QB-01M", "MB-01"):
+    assert len(order) == 70
+    for phase_id in ("MS-02.1", "CH-00.1", "HF-01", "HF-01.1", "AR-01", "PF-00", "SV-02A", "SV-02B", "R9", "QB-01M", "MB-01"):
         assert phase_id in order
     positions = {phase_id: order.index(phase_id) for phase_id in order}
+    assert positions["MS-02"] < positions["MS-02.1"] < positions["HF-01.1"]
+    assert positions["CH-00"] < positions["CH-00.1"] < positions["HF-01.1"]
     assert positions["HF-01"] < positions["HF-01.1"] < positions["AR-01"]
     assert positions["AR-01"] < positions["PF-00"] < positions["SV-02A"] < positions["SV-02B"]
     assert positions["R9"] < positions["QB-01M"] < positions["MB-01"]
+
+
+def test_experiment_traceability_is_complete_and_supplements_are_adjacent():
+    registry = yaml.safe_load(
+        (CAMPAIGNS_ROOT / "phase_registry.yaml").read_text(encoding="utf-8")
+    )
+    phase_ids = [phase["phase_id"] for phase in registry["phases"]]
+    by_id = {phase["phase_id"]: phase for phase in registry["phases"]}
+
+    assert phase_ids.index("MS-02.1") == phase_ids.index("MS-02") + 1
+    assert phase_ids.index("CH-00.1") == phase_ids.index("CH-00") + 1
+    assert by_id["MS-02.1"]["status"] == "planned"
+    assert by_id["CH-00.1"]["status"] == "planned"
+    assert by_id["WM-01"]["status"] == "in_progress"
+
+    traceability = (
+        CAMPAIGNS_ROOT
+        / "instrument_readiness_001"
+        / "phases"
+        / "CH-00.1"
+        / "experiment_requirements_traceability.md"
+    ).read_text(encoding="utf-8")
+    expected_requirements = {
+        *(f"EXP-CAL-{number:02d}" for number in range(1, 19)),
+        *(f"EXP-CHAR-{number:02d}" for number in range(1, 15)),
+        *(f"EXP-OPT-{number:02d}" for number in range(1, 12)),
+        *(f"EXP-VAL-{number:02d}" for number in range(1, 8)),
+    }
+    assert set(re.findall(r"EXP-(?:CAL|CHAR|OPT|VAL)-\d{2}", traceability)) == expected_requirements
+
+    expected_architectures = {
+        "ARC-RT-HRP-NS",
+        "ARC-RT-HRP-RRS",
+        "ARC-RT-MB-NS",
+        "ARC-RT-MB-US",
+        "ARC-RT-MB-SSP",
+        "ARC-77-HRP-NS",
+        "ARC-77-HRP-SPB",
+        "ARC-77-MB-NSUS",
+        "ARC-77-MB-SPB",
+    }
+    assert set(re.findall(r"ARC-(?:RT|77)-[A-Z0-9-]+", traceability)) == expected_architectures
+    for condition in (
+        "Room-temperature HRP–CO",
+        "Room-temperature MbCO",
+        "77 K HRP–CO",
+        "77 K MbCO",
+    ):
+        assert condition in traceability
+
+    phase_plan_text = "\n".join(
+        plan.read_text(encoding="utf-8")
+        for plan in (CAMPAIGNS_ROOT / "instrument_readiness_001" / "phases").glob("*/plan.md")
+    )
+    assert expected_requirements <= set(
+        re.findall(r"EXP-(?:CAL|CHAR|OPT|VAL)-\d{2}", phase_plan_text)
+    )
+
+    requirements = (
+        CAMPAIGNS_ROOT / "instrument_readiness_001" / "requirements.md"
+    ).read_text(encoding="utf-8")
+    assert "Plans must not assign final pulse width" in requirements
+    assert "completed values are not automatic defaults" in requirements
+    assert "[0, 100, 1000, 10000, 100000, 1000000]" not in requirements
 
 
 def test_master_plan_describes_every_phase_in_dependency_safe_order():
@@ -115,7 +182,7 @@ def test_every_registered_phase_has_one_canonical_phase_home():
         "mbco-cryo-001": "mbco_cryo_001",
     }
     expected_counts = {
-        "instrument-readiness-001": 47,
+        "instrument-readiness-001": 49,
         "hrp-001": 10,
         "mbco-cryo-001": 11,
     }

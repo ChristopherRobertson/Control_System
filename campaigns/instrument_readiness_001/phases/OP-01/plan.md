@@ -3,7 +3,7 @@
 Campaign: `instrument-readiness-001`  
 Domain: `calibration`  
 Registry status: `planned`  
-Required dependencies: `ATT-01, PB-02, DET-03`  
+Required dependencies: `ATT-01, PB-02, DET-03, MS-02.1`
 Optional dependencies: `none`  
 
 This is the canonical phase plan. It does not authorize hardware,
@@ -16,10 +16,12 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 22. OP-01 — operational pump-command-to-sample timing
 
-Execute one bounded biological-pump optical path at permanent-iris 540 nm, but
-capture and report it under the separate retained HRP-C-CO and MbCO HF2LI
-acquisition configuration IDs. The pump path may be shared; acquisition-filter
-delay, sampling, and estimator corrections may not be assumed shared.
+At a nonbiological sample-equivalent plane, independently observe both the
+permanent-iris 540 nm pump arrival and MIRcat probe arrival for every retained probe
+mode/region. Capture and report them under separate room-temperature/77 K HRP-C-CO
+and MbCO acquisition configuration IDs. The pump path may be shared; probe module,
+mode, region, optical path, acquisition-filter delay, sampling, and estimator
+corrections may not be assumed shared.
 Use the identified straight barrel adapter correction (0.125 ns with
 0.0722 ns rectangular standard uncertainty), MS-01/MS-02 results, and DET-03
 detector correction. The Q-switch cable, loaded Nd:YAG response, the applicable
@@ -32,12 +34,23 @@ readback and configuration ID before every emitted block. Do not use the iris
 as the timing origin, optical event gate, or safety shutter.
 
 Mandatory closeout deliverables for the retained pump path: frozen shot
-budget; blocked control; one attenuated preview; a prospective precision-based
-repeat count capped at 100 unless separately approved; raw traces;
+budget; blocked control; one attenuated preview; a prospective precision- and
+exposure-based repeat count frozen before results; raw traces;
 shot/rejection/counter ledger; SNR/saturation checks;
 adapter/splitter/detector/placement IDs; signed correction equation; placement
 and restoration repeatability; uncertainty budget; photographs; and final safe
 state. No automatic replacement shots are permitted.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+OP-01 implements the optical-arrival portions of `EXP-CAL-08`, `EXP-CAL-09`,
+`EXP-CAL-18`, `EXP-OPT-04`, and `EXP-VAL-07`. Electrical command or equal cable
+length is not chemical time zero. Native synchronized optical/electrical records,
+blocked controls, reference planes, configuration IDs, signed corrections, rejected
+events, jitter and uncertainty are required. Pump/probe route, module/mode/region,
+optic/cell plane, detector/branch/adapter/cable, timing receiver, acquisition settings,
+or analysis changes trigger revalidation. This phase does not establish a sample's
+chemical response, recovery, dose tolerance, or kinetics.
 
 ## Closeout
 

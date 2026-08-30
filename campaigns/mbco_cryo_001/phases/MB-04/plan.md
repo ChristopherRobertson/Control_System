@@ -17,6 +17,14 @@ This phase inherits the campaign-wide scientific, safety, acquisition, analysis,
 
 | **MB-04 sample chemistry pilot** | Approved sample procedure and UV–visible access | Prepare small independent batches, verify concentration/state/pH/stability, load cell, collect steady IR and post-check | Preparation records; pre/post UV–visible and IR; concentration/path uncertainty; stability window | Abort on mixed/oxidized state beyond validation limit, precipitation, concentration ambiguity, or irreproducible A₁. |
 
+Acquire separate accepted initial slow scans at room temperature and 77 K, each with
+complete temperature/matrix/cryostat/cell/configuration identity, forward/reverse native
+data, centers, widths, integrated areas, baselines, interference, A0/A1/A3
+quantifiability, sensitivity, uncertainty, and local windows. Room-temperature evidence
+cannot stand in for 77 K. Reacquire after a new preparation/lot/pH, cell reload/path,
+state/material time gap, thermal cycle/matrix, optical/acquisition change, or failed
+checkpoint. This phase does not establish time-resolved kinetics.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

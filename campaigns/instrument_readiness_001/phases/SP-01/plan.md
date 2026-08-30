@@ -29,6 +29,12 @@ table with uncertainty, observational conditions, and an explicit statement
 that absolute film absorbance and quantitative Mylar etalon prediction are
 outside scope. Missing film thickness does not block SP-01 or SV-02.
 
+This phase supplies the reference-identity and feature-authority portion of
+`EXP-CAL-05`. Acceptance is material/lot/feature-authority and
+uncertainty specific; a new reference, damaged specimen, revised authority, or changed
+feature assignment triggers review. It does not establish the installed QCL axis,
+scan trajectory, or any biological peak.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

@@ -17,6 +17,12 @@ This phase inherits the campaign-wide scientific, safety, acquisition, analysis,
 
 | **MB-08 optional mechanistic extension** | MVP accepted; IRF/SNR/model simulation supports extension | Add dense geminate schedule, A₀/A₃ kinetics, concentration series or qualified 532 nm comparison | Extension-specific preregistration, data, model comparison, sensitivity analysis | Keep this phase outside the MVP; stop if validity, sample, or identifiability fails. |
 
+Any extension is condition- and architecture-specific. The room-temperature and 77 K
+branches require separate slow-scan anchors, IRFs, native coverage, reset/dose rules,
+temperature/geometry envelopes, and identifiability simulations. A new wavelength or
+pump path requires its own qualification; a model is not expanded beyond what remains
+identifiable after measured acquisition-kernel convolution.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

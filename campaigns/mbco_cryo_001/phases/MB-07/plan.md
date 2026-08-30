@@ -17,6 +17,12 @@ This phase inherits the campaign-wide scientific, safety, acquisition, analysis,
 
 | **MB-07 confirmatory MVP** | Analysis/settings frozen from independent pilot; sample size set | Run randomized/counterbalanced independent preparations/days, full controls, primary A₁ kinetics, post-integrity, restoration each day | Native/raw and derived datasets; fit diagnostics; uncertainty; predicted-vs-measured; reproducibility report | Accept minimum claim only if all primary criteria and retention audit pass; otherwise report feasibility/limitation. |
 
+The confirmatory record must name the temperature and acquisition architecture and may
+pool neither temperature nor method without a predeclared bridge and supported
+equivalence. Preserve complete native coverage, independent preparation/day identity,
+configuration-specific IRF, missing/excluded records, and slow-scan linkage. Claims are
+bounded to the accepted condition; unsupported branches remain explicit limitations.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

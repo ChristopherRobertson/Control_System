@@ -37,7 +37,7 @@ sample/reference powers.
 
 Mandatory deliverables:
 
-- At least the CH-00-defined repeated scans in both directions with complete
+- At least the CH-00.1-defined repeated scans in both directions with complete
   Sample/Reference/DIO/readback records and acquisition settings.
 - Peak centers, Gaussian/sloping-baseline fits, FWHM/effective resolution,
   residuals, RMS wavenumber deviation, SNR, baseline/etalon amplitude,
@@ -50,6 +50,13 @@ Mandatory deliverables:
   inputs/outputs, figures/tables, and thesis-claim acceptance decision.
 
 The minimum acquisition is the predeclared polystyrene alignment and holdout sets.
+
+This phase supplies the frozen correction and independent holdout portions of
+`EXP-CAL-05` and `EXP-OPT-06`. Acceptance is limited to the measured
+mode, direction, region, normalization, analysis version, and validity range. Any
+source/module service, optical-path or detector-normalization change, out-of-control
+reference, acquisition-setting change, or analysis change triggers revalidation. It
+does not establish room-temperature or 77 K biological peak locations.
 
 ## Closeout
 

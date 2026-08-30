@@ -25,7 +25,8 @@ Mandatory closeout deliverables:
 - Versioned calibration-bundle manifest linking every promoted candidate value
   to raw evidence, analysis code, correction terms, units, reference planes,
   covariance, validity envelope, and unresolved limitations.
-- Three experiment-specific HF2LI configuration IDs, their acquisition-rate,
+- Separate HF2LI and diagnostic-recorder configuration IDs for every retained
+  architecture, their acquisition-rate,
   time-constant, filter-order, settling, bandwidth, and record-length validity
   envelopes, plus any measured biological equivalence/alias record. Reporting
   must not silently substitute one biological configuration for the other.
@@ -45,11 +46,19 @@ Mandatory closeout deliverables:
   transfer and contamination bounds, validity envelope, command/readback
   requirements, and revalidation triggers. Preserve the pre-iris OM-01 result
   as historical mixed-spectrum evidence rather than relabeling it.
-- WaveMaster working-reference package containing its WM-01 identity,
-  adapter/power/probe configuration, native response-state contract,
+- WM-01 replacement working-reference package containing its device identity,
+  interface/power/sampling configuration, native response-state contract,
   measurement settings, repeatability and uncertainty, validity envelope,
   bundle/quantity IDs, and the distinction between center-wavelength evidence
   and spectral-power-fraction evidence.
+
+The package must include the complete CH-00.1 requirement and architecture matrix,
+with every row linked to accepted evidence or labeled unresolved/unsupported; absence is
+never converted to a pass. It must distinguish normal dual-detector and temporary
+timing/IRF topologies, all four mandatory slow-scan prerequisites, all five
+reconstruction methods, and every room-temperature/77 K configuration. This phase does
+not authorize promotion, fill evidence gaps, alter completed evidence, or select
+biological recipes.
 
 ## Closeout
 

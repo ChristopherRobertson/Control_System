@@ -29,6 +29,13 @@ reference bundle, ATT-01 electronic-iris bundle, and accepted
 PB-02/OG/OV/RP configuration chain; a bypass cannot support quantitative
 540 nm dose or notebook-prediction claims. PB-01 is outside this gate.
 
+Promotion requires a row-by-row CH-00.1 audit and accepted nonbiological validation for
+each architecture and reconstruction method included in the proposed envelope. Missing
+native coverage, configuration-specific IRF, topology bridge, missing-data/noise test,
+cryogenic envelope, or reproducibility evidence remains an explicit exclusion and
+cannot be cured by prose aggregation. Promotion does not authorize hardware or a
+biological recipe.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

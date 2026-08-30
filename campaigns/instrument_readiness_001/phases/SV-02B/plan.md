@@ -24,6 +24,13 @@ analysis, windows, or acceptance rules. Failure opens a cause-coded investigatio
 narrows the claim and never automatically refits. The minimum is three accepted
 Mylar scans per direction.
 
+This blind validation closes the nonbiological spectral-axis evidence for `EXP-CAL-05`
+and `EXP-OPT-06` without refitting. Native records, rejection causes,
+uncertainty, direction dependence, and the frozen correction/version are retained.
+Failure narrows the validated envelope or opens a new investigation; it cannot be cured
+by tuning to Mylar. The result is a prerequisite for all four initial slow scans but
+does not supply their sample-specific centers, widths, areas, or baselines.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

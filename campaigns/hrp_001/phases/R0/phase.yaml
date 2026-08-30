@@ -4,7 +4,7 @@ campaign_id: hrp-001
 domain: experiment
 registry_status: planned
 depends_on:
-- CH-00
+- CH-00.1
 optional_dependencies: []
 evidence_key: R0
 evidence_path: campaigns/hrp_001/phases/R0

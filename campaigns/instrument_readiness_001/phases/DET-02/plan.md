@@ -3,7 +3,7 @@
 Campaign: `instrument-readiness-001`  
 Domain: `calibration`  
 Registry status: `planned`  
-Required dependencies: `DET-01, ATT-01, HF-01.1`  
+Required dependencies: `DET-01, ATT-01, HF-01.1, MS-02.1`
 Optional dependencies: `none`  
 
 This is the canonical phase plan. It does not authorize hardware,
@@ -25,7 +25,7 @@ approved branch/detector interchange where practical to separate detector-
 electronics response from optical-path transmission. Do not repeat DET-01 dark
 acquisitions; import their result bundle.
 
-The minimum grid is the merged CH-00 probe-anchor set: one Mylar-carbonyl
+The minimum grid is the merged CH-00.1 probe-anchor set: one Mylar-carbonyl
 anchor, the two HRP-C-CO band anchors, the MbCO A1/upper diagnostic anchor, and
 only the off-band point needed by the biological controls. Merge coincident
 anchors. At each retained wavelength use the lowest and highest expected
@@ -41,6 +41,18 @@ part of the channel mismatch belongs to detector/electronics response rather
 than optical splitting. Report installed-chain response to the qualified
 available power meter; accredited absolute detector responsivity is outside
 scope.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+DET-02 implements the illuminated detector portions of `EXP-CAL-11`,
+`EXP-CHAR-01`, `EXP-CHAR-06`, and `EXP-OPT-02`. Each accepted
+channel/configuration needs native optical-reference and electrical records, corrections
+for the installed branch transfer, fit residuals, saturation/clipping rejection,
+covariance, and a validity envelope. Changes in detector, amplifier, branch/cable,
+meter/reference plane, wavelength/power/polarization, HF2LI/Pico path or settings, or
+analysis trigger revalidation. Consumers include DET-03/04, AR-01, PF-00/01, IR-01,
+and the biological campaigns. This phase does not establish sample/reference optical
+balance, temporal IRF, spectral axis, or biological kinetics.
 
 ## Closeout
 

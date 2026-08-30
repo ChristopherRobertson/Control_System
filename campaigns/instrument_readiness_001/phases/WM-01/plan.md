@@ -19,73 +19,81 @@ retention, restoration, and procedural-writeup requirements are in
 Execution status: **STARTED 2026-08-21; INSTALLED WAVEMASTER OPTICAL
 QUALIFICATION FAILED; OPEN / DEFERRED PENDING REPLACEMENT SPECTROMETER**.
 
-WM-01 qualifies the installed Coherent WaveMaster, catalog number 33-2650, as
-a campaign-local wavelength working reference over only the source conditions
-used by the retained campaign. It does not qualify optical power, spectral-
-power fractions, absence of additional wavelengths, or the 355 nm OPO drive,
-which is outside the instrument's 380-1095 nm specified range.
+WM-01 resumes with a suitable replacement wavelength spectrometer and qualifies only
+the installed replacement as a campaign-local wavelength working reference over the
+source conditions it actually supports. The rejected Coherent WaveMaster, catalog
+number 33-2650, and all native failure evidence remain preserved and indexed; they are
+not overwritten, normalized into a pass, or treated as evidence for the replacement.
+The replacement's identity, interfaces, wavelength range, units, modes, status
+semantics, uncertainty, and reference plane must be established from its own records.
+WM-01 does not qualify optical power, spectral-power fractions, absence of additional
+wavelengths, or any wavelength outside the accepted replacement validity envelope.
 
-Before WM-01 may start, every `devices.wavemaster.phase_entry_required_fields`
-entry in `hardware_configuration.yaml` must contain an observed value. The
-2026-08-20 query-only connection intake resolved and recorded the electronic
-serial, complete `*IDN?` response, firmware revision, COM port, adapter
-VID/PID, adapter/interface serials, adapter model, installed driver, and native
-query responses. The operator confirms that the connected instrument works
-safely. All phase-entry fields are resolved.
+Before resumed acquisition, create a replacement-device entry with observed identity,
+firmware/software, connection, driver, interface, supported-range, and native-query
+records. Existing `devices.wavemaster.*` entries and `wm01_preflight.py` output describe
+only the rejected installation and cannot serve as the replacement entry gate. A
+replacement-specific preflight must verify its documented communication and safety
+requirements. Separate user approval is still required before phase work, optical
+placement, or laser emission.
 
-`python software/tools/wm01_preflight.py` enforces this entry gate and now reports
-`READY_FOR_PHASE_APPROVAL`. Separate user approval is still required before
-phase work, optical placement, or laser emission. A null-modem cable or missing
-RTS/CTS conductors blocks the phase.
+The resumed phase identifies and photographs the replacement label, front panel,
+sampling optic/fibre, mount, pickoff, dump, and retained reference plane. It verifies
+the replacement's documented connection, self-test, query/set/readback behavior,
+exclusive ownership where applicable, loss/reconnect behavior, malformed or stale
+response rejection, local-control restoration, and safe cleanup. Device-specific
+commands, serial settings, acceptance controls, and status values are recorded from
+observed native behavior and documentation rather than inherited from the WaveMaster.
 
-The phase first identifies and photographs the label, front panel, sampling
-probe/fibre and acceptance switch, mount, pickoff, and dump. Cable, USB adapter,
-and rear-panel photographs are optional when the installed RS-232 and power
-connections are otherwise identified in the cable/adapter, driver, device
-configuration, and live communication evidence. It then verifies
-straight-through RS-232 operation at
-9600 baud, 8-N-1 with hardware RTS/CTS, exclusive port ownership, `*IDN?`,
-`*TST?`, local/remote restoration, documented query/set/readback behavior,
-communication loss/reconnect, malformed/stale-response rejection, and safe
-cleanup. Electronic identity is compared with the reported `WO 339` label
-without normalizing an ambiguous character by assumption.
-
-Optical qualification freezes air-nanometre units, pulsed mode for OPO work,
-autocalibration enabled, sampling-probe geometry/acceptance setting, input-
-status interpretation, and the retained reference plane. Quantitative records
-use the manufacturer guidance for best thermal stability after approximately
-four hours. At 540 nm, and at 532 nm only where useful as a visible source-
-health/reference point, acquire blocked/no-signal controls, native `VAL$`
-records with time tags, repeated windows and a later revisit. Capture naturally
-observed `Multi-Line` or saturation states without coercion or deliberate
-overload. An applicable independent wavelength reference may support an
-agreement check; when none is available, the result remains a manufacturer-
-specification-based installed working reference and does not claim accredited
-traceability.
+Optical qualification freezes the replacement's wavelength medium/units, acquisition
+mode, calibration state, sampling geometry and acceptance controls, input-status
+interpretation, and retained reference plane. Quantitative records follow the
+replacement manufacturer's warm-up and stability guidance. At every retained visible
+or near-IR campaign wavelength within its supported envelope, acquire blocked/no-signal
+controls, native wavelength/status records with time tags, repeated windows, and a
+later revisit. Capture naturally observed multi-line, low-signal, or saturation states
+without coercion or deliberate overload. An applicable independent wavelength
+reference may support an agreement check; otherwise the result is a
+manufacturer-specification-based installed working reference and does not claim
+accredited traceability.
 
 Mandatory closeout deliverables:
 
-- Installed-device, cable, adapter/driver, probe, mount, reference-plane,
-  and software configuration manifests with native identities and applicable
+- Installed-device, cable, adapter/driver, sampling optic, mount, reference-plane,
+  and software configuration manifests with native replacement identities and applicable
   photographs; rear-panel, cable, and adapter photographs are not mandatory
   when the installed connections are otherwise identified.
-- Raw serial transcript; self-test/autocalibration results; settings/readbacks;
+- Raw native communication transcript; self-test/calibration results; settings/readbacks;
   disconnect/reconnect, exclusive-ownership, invalid-response, local-control,
   and restoration evidence; offline-test results; and accepted/rejected index.
 - Native wavelength/status/time-tag records, blocked control, thermal-stability
   classification, repeatability/revisit analysis, any reference comparison,
-  response-state handling, uncertainty budget, and explicit 355 nm and
-  spectral-power-fraction exclusions.
+  response-state handling, uncertainty budget, and explicit unsupported-wavelength and
+  spectral-power-fraction exclusions. The rejected WaveMaster evidence remains a
+  separately indexed rejected stratum.
 - `wavelength_metrology_bundle.json` with a stable bundle ID, validity envelope,
-  permitted units/modes/probe geometry, revalidation triggers, and machine-
+  permitted units/modes/sampling geometry, replacement identity, revalidation triggers, and machine-
   readable quantity IDs consumable by ATT-01, PB-02, OG-01, PF-01, RP-01,
   RPT-01, and the characterization campaign.
 
 WM-01 must pass and close before ATT-01 can be authorized. The 2026-08-25
-dependency amendment allows only independent non-WaveMaster phases to proceed;
-it is not a bypass. A bypass cannot
-support independent 540 nm wavelength identity, residual-color interpretation,
-or quantitative notebook-prediction claims.
+dependency amendment allows only independent wavelength-metrology phases to proceed;
+it is not a bypass. The rejected WaveMaster installation cannot support independent
+wavelength identity, residual-color interpretation, or quantitative
+notebook-prediction claims.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+This phase supplies independent OPO wavelength/status working-reference evidence for
+`EXP-CAL-15` and the applicable pump-identity portion of `EXP-CHAR-05`; it does not
+replace the separate MIRcat mapping phases. Native replacement
+records, calibration/status readbacks, controls, repeats, rejected records, uncertainty,
+and validity limits must be retained. Acceptance is wavelength- and configuration-
+specific. A device change, sampling-path change, calibration expiry, unsupported status,
+out-of-envelope wavelength, or failed revisit triggers rejection or revalidation.
+Consumers are ATT-01, PB-02, OG-01, PF-01, RP-01, RPT-01, and both biological
+campaigns. This phase does not establish optical power, beam overlap, spectral purity,
+chemical time zero, detector linearity, or kinetic claims.
 
 ## Closeout
 

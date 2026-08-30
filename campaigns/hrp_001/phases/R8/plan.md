@@ -17,6 +17,14 @@ This phase inherits the campaign-wide scientific, safety, acquisition, analysis,
 
 | R8 — optional fast branch | Only after all §11.2 gates | IR01-supported resolution and independent exposure control |
 
+The optional room-temperature nanosecond wavelength-by-wavelength branch requires its
+own optical time zero, IRF, integration aperture, detector/branch/HF2LI configuration,
+probe-rate envelope, emitted-event/dose/recovery schedule, native delay/wavelength
+coverage, controls, SNR and identifiability simulation, and nonbiological validation.
+It stops rather than overclaims when resolution or identifiability fails. It does not
+authorize or satisfy the separate 77 K nanosecond or single-pump scan-burst branches;
+those require newly registered incomplete phase packages.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

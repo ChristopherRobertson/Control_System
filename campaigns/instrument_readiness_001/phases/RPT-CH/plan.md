@@ -30,12 +30,19 @@ Mandatory deliverables:
   evidence to PB-02/OG/OV/RP results, the accepted 540 nm setting and tolerance,
   post-iris dose inputs, spectral-rejection/core-margin bounds, and all
   revalidation triggers.
-- Wavelength-metrology summary linking the WM-01 device/adapter/power/probe
+- Wavelength-metrology summary linking the WM-01 replacement device/interface/power/sampling
   configuration and uncertainty to PB-02/PF/RP/E2E records, with native status
   handling and an audit that center-wavelength evidence was not used as a
   spectral-power fraction.
 - Data dictionary, analysis environment, reproducibility instructions,
   retention audit, unresolved/bypass register, and biological-handoff bundle.
+
+The handoff must audit every CH-00.1 calibration, characterization, optimization,
+validation, slow-scan, and architecture row. For each of the five reconstruction
+methods, it reports native coverage, missing-data/noise tests, filter/scan history,
+interpolation bounds, uncertainty, algorithm version, accepted configuration IDs, and
+unsupported claims. It may aggregate but cannot manufacture measurements, erase gaps,
+or change completed-phase dispositions.
 
 ## Closeout
 

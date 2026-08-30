@@ -17,6 +17,14 @@ This phase inherits the campaign-wide scientific, safety, acquisition, analysis,
 
 | **MB-06 timing/IRF and discovery kinetics** | MB-05 passes; OP/CL/IR/DET valid | Verify time zero on surrogate, acquire adaptive negative/prompt/slow/recovery schedule, assess SNR/identifiability, repeat-pulse spacing | Time-zero/IRF link; discovery traces; identifiability simulation; selected delay/rate/filter design | Abort mechanistic extension if 180 ns component unidentifiable; abort all kinetics for trigger mismatch, incomplete recovery, or sample damage. |
 
+Keep room-temperature nanosecond, room-temperature microsecond, room-temperature
+single-scan phase-delay, 77 K nanosecond/microsecond, and 77 K single-pump scan-burst
+records separate. Each imports its own optical time zero, IRF, detector/HF2LI settings,
+native coverage, temperature/geometry, dose/reset rule, missing-data/noise validation,
+and accepted MB-04 slow scan. Probe rate is selected independently of pump cadence.
+Reject an architecture that cannot meet reset, coverage, SNR, IRF, or identifiability
+criteria without deleting its evidence.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

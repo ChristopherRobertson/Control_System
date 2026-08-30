@@ -7,6 +7,7 @@ depends_on:
 - DET-01
 - ATT-01
 - HF-01.1
+- MS-02.1
 optional_dependencies: []
 evidence_key: DET-02
 evidence_path: campaigns/instrument_readiness_001/phases/DET-02

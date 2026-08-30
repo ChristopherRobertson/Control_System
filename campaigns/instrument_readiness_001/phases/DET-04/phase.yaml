@@ -6,6 +6,7 @@ registry_status: planned
 depends_on:
 - DET-02
 - ATT-01
+- MS-02.1
 optional_dependencies: []
 evidence_key: DET-04
 evidence_path: campaigns/instrument_readiness_001/phases/DET-04

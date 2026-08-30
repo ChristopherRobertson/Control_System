@@ -4,9 +4,10 @@ campaign_id: instrument-readiness-001
 domain: calibration
 registry_status: planned
 depends_on:
-- HF-01
+- HF-01.1
 - MD-01
 - MSW-01
+- MS-02.1
 optional_dependencies: []
 evidence_key: HF-02
 evidence_path: campaigns/instrument_readiness_001/phases/HF-02

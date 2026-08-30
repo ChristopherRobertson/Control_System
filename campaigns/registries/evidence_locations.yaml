@@ -12,6 +12,7 @@ locations:
   S0: {path: campaigns/instrument_readiness_001/phases/S0, disposition: immutable_completed_source}
   MS-01: {path: campaigns/instrument_readiness_001/phases/MS-01, disposition: immutable_completed_source}
   MS-02: {path: campaigns/instrument_readiness_001/phases/MS-02, disposition: immutable_completed_source}
+  MS-02.1: {path: campaigns/instrument_readiness_001/phases/MS-02.1, disposition: planned_phase_package}
   T2-01: {path: campaigns/instrument_readiness_001/phases/T2-01, disposition: immutable_completed_source}
   T1-01: {path: campaigns/instrument_readiness_001/phases/T1-01, disposition: immutable_completed_source}
   PT-01: {path: campaigns/instrument_readiness_001/phases/PT-01, disposition: immutable_completed_source}
@@ -21,6 +22,7 @@ locations:
   HF-01: {path: campaigns/instrument_readiness_001/phases/HF-01, disposition: immutable_completed_source}
   WM-01: {path: campaigns/instrument_readiness_001/phases/WM-01, disposition: resume_existing_run}
   CH-00: {path: campaigns/instrument_readiness_001/phases/CH-00, disposition: immutable_completed_source}
+  CH-00.1: {path: campaigns/instrument_readiness_001/phases/CH-00.1, disposition: planned_phase_package}
 future_default:
   path_template: campaigns/{campaign_directory}/phases/{phase_id}
   disposition: append_only_after_indexing

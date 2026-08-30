@@ -21,8 +21,9 @@ using the desired biological response as the only indicator. Quantify overlap
 fraction, relative centroids, crossing angle, overlap area/volume as applicable,
 placement repeatability, and sensitivity to routine realignment.
 
-Retain only two pump/probe pairs: permanent-iris OPO 540 nm with the HRP probe
-geometry and that same pump with the MbCO A1 probe geometry. For each pair perform three
+Retain the permanent-iris OPO 540 nm with HRP and MbCO probe geometries at each
+retained room-temperature and 77 K condition. Cryogenic windows, matrix, refraction,
+thermal contraction, and focus create separate placement configurations. For each pair perform three
 independent placements and one controlled realignment. Mylar is pump-off and
 adds no overlap condition. Add a second probe wavenumber only if OG-01 shows a
 material geometry change across the corresponding biological window.
@@ -42,6 +43,16 @@ Mandatory deliverables:
   pump/probe condition.
 - Final fiducial/alignment procedure and sample-position record suitable for
   later biological campaigns.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+OV-01 implements the spatial-overlap and placement portions of `EXP-CHAR-05`,
+`EXP-CHAR-11` and `EXP-OPT-03`. Acceptance requires an independent
+overlap measurement with uncertainty and reproducible fiducials for every retained
+condition. Optic/cell/cryostat movement, thermal cycle, source profile, iris, probe
+region, alignment, or failed placement checkpoint triggers revalidation. Consumers are
+IR-01, PF-01, RP-01, E2E-CH, and biological dose/overlap pilots. It does not establish
+temporal overlap, chemical time zero, reversible biological dose, or kinetics.
 
 ## Closeout
 

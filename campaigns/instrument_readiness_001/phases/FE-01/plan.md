@@ -43,9 +43,21 @@ Mandatory closeout deliverables:
   path must close the pump first, stop both T660s/MIRcat as applicable, apply
   safe idle, preserve partial evidence, and verify restoration.
 - Latency/uncertainty, event-observation behavior, and maximum supported rare-
-  event interval/record length under each retained HRP and MbCO acquisition
+  event interval/record length under each retained room-temperature/77 K HRP and MbCO acquisition
   configuration. Dose, photolysis,
   and biological recovery are outside this calibration phase.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+FE-01 implements the emitted-event control portions of `EXP-CAL-08`,
+`EXP-CHAR-05`, `EXP-CHAR-12`, `EXP-OPT-03`, and `EXP-OPT-09`. Qualify zero, one,
+and finite-event behavior for every materially distinct repeated-event or single-pump
+architecture while treating probe carrier rate independently of the pump-event limit.
+Acceptance requires command-versus-independent-optical-event reconciliation, bounded
+latency/uncertainty, finite stop, fault-safe behavior, and preserved partial evidence.
+Gate/divider, cadence, route, observation detector, source/iris, orchestration, or
+configuration changes trigger revalidation. This phase does not establish biological
+recovery, equivalent state, photolysis fraction, damage threshold, or kinetics.
 
 ## Closeout
 

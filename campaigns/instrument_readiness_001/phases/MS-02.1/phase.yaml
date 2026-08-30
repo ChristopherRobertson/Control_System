@@ -1,0 +1,11 @@
+phase_id: MS-02.1
+title: installed PicoScope and dual-recorder branch transfer calibration
+campaign_id: instrument-readiness-001
+domain: calibration
+registry_status: planned
+depends_on:
+- MS-02
+optional_dependencies: []
+evidence_key: MS-02.1
+evidence_path: campaigns/instrument_readiness_001/phases/MS-02.1
+plan: plan.md

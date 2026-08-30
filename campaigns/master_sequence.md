@@ -3,7 +3,7 @@
 Status: **AUTHORITATIVE CAMPAIGN INSTRUCTIONS; NO HARDWARE EXECUTION AUTHORIZED**
 
 This document is the human-readable authority for completing the full
-instrument-readiness, HRP, and optional cryogenic MbCO program. It defines the
+instrument-readiness, HRP, and room-temperature/cryogenic MbCO program. It defines the
 campaign-wide execution rules, dependency order, purpose, required products, and
 phase-specific plan location for every phase. Calibration and characterization
 are integrated scientific domains in a single readiness sequence.
@@ -61,27 +61,32 @@ parallel only under separate authorization.
 2. Retain the completed resource and claim foundations:
    `P0 -> TR-01 -> OM-01`, `P0 + TR-01 -> CH-00`, and
    `T2-01 + TR-01 -> HF-01`.
-3. Preserve the in-progress `WM-01` package and resume its remaining measurements
-   only after a qualified replacement spectrometer is available. In parallel,
-   schedule dependency-ready work such as `HF-01.1`, `MD-01`, `DET-01`, `SP-01`,
-   `SC-01`, and HRP R0 planning only after each entry's own resources and
-   authorization are satisfied. SV-01 waits for SP-01.
-4. Complete timing/data-stream qualification through `MD-01 -> MSW-01 -> HF-02`
+3. Complete the supplemental post-baseline work without changing the completed
+   packages: `MS-02 -> MS-02.1` for the installed dual-recorder branch and
+   `CH-00 -> CH-00.1` for `EXPERIMENTS.md` architecture/claim traceability.
+4. Preserve the in-progress `WM-01` package and resume it only with a suitable
+   replacement spectrometer. In parallel, schedule dependency-ready work such as
+   `SP-01` and `SV-01` only after each entry's resources and authorization are
+   satisfied. HF-01.1, MD-01, DET-01, SC-01, and HRP R0 additionally depend on the
+   applicable supplemental phase.
+5. Complete timing/data-stream qualification through `MD-01 -> MSW-01 -> HF-02`
    and optical/detector readiness through `WM-01 -> ATT-01`,
    `DET-01 -> DET-02 -> DET-03/DET-04`, plus `QB-01`, `PB-02`, and `SC-01`.
-5. Establish installed geometry and operating choices through
+6. Establish installed geometry and operating choices through
    `QB-01 + PB-02 + SC-01 + OM-01 + ATT-01 -> OG-01 -> OV-01`, then converge
    at `AR-01` and `PF-00`.
-6. Freeze and independently validate the spectral chain through
+7. Freeze and independently validate the spectral chain through
    `SP-01 -> SP-02`, `SP-01 -> SV-01`, and
    `PF-00 + SP-02 + SV-01 + AR-01 + DET-04 -> SV-02A -> SV-02B`.
-7. Close operational timing through `OP-01 -> FE-01 -> CL-01`, then complete
+8. Close operational timing through `OP-01 -> FE-01 -> CL-01`, then complete
    `IR-01`, `PF-01`, and `RP-01`.
-8. Demonstrate, report, and promote the platform through `E2E-01 -> RPT-01 ->
+9. Demonstrate, report, and promote the platform through `E2E-01 -> RPT-01 ->
    PROM-01` and `E2E-01 + SV-02B + IR-01 + PF-01 + RP-01 -> E2E-CH -> RPT-CH
    -> PROM-CH`.
-9. Execute HRP through its gated R0-R9 sequence. Only after R9 restoration and
-   handoff may the optional `QB-01M` and MB-00-MB-09 cryogenic MbCO branch begin.
+10. Execute room-temperature HRP through its gated R0-R9 sequence. The separate
+    77 K HRP slow-scan and time-resolved packages remain an explicit unregistered
+    downstream gap. Only after R9 restoration and handoff may `QB-01M` and the
+    condition-tagged MB-00-MB-09 room-temperature/cryogenic MbCO work begin.
 
 ## Ordered phase catalog
 
@@ -132,6 +137,20 @@ parallel only under separate authorization.
 - **Final Report:** [`MS-02/final_report.md`](instrument_readiness_001/phases/MS-02/final_report.md).
 - **Procedural Writeup:** [`MS-02/procedural_writeup.md`](instrument_readiness_001/phases/MS-02/procedural_writeup.md).
 - **Detailed plan:** [`MS-02/plan.md`](instrument_readiness_001/phases/MS-02/plan.md).
+
+### MS-02.1 — installed PicoScope and dual-recorder branch transfer calibration
+
+- **Status:** planned. **Prerequisites:** MS-02.
+- **Purpose:** Import immutable MS-01/MS-02 corrections and qualify the installed
+  detector-output tee/adapter/cable/receiver network plus PicoScope timebase,
+  amplitude, bandwidth, trigger, overflow, loading, reflection, and branch-skew
+  behavior under normal simultaneous HF2LI/PicoScope recording.
+- **Primary products:** Installed topology/configuration manifests, native branch
+  captures, amplitude/timebase/trigger/bandwidth results, transfer and ringing model,
+  uncertainty, validity envelope, and normal-versus-timing topology bridge limits.
+- **Final Report:** Incomplete.
+- **Procedural Writeup:** Incomplete.
+- **Detailed plan:** [`MS-02.1/plan.md`](instrument_readiness_001/phases/MS-02.1/plan.md).
 
 ### T2-01 — direct T660-2 routes
 
@@ -214,6 +233,19 @@ parallel only under separate authorization.
 - **Procedural Writeup:** [`CH-00/procedural_writeup.md`](instrument_readiness_001/phases/CH-00/procedural_writeup.md).
 - **Detailed plan:** [`CH-00/plan.md`](instrument_readiness_001/phases/CH-00/plan.md).
 
+### CH-00.1 — experimental architecture and claim traceability freeze
+
+- **Status:** planned. **Prerequisites:** CH-00.
+- **Purpose:** Reconcile every calibration, characterization, optimization,
+  validation, slow-scan, and architecture requirement in `EXPERIMENTS.md` with the
+  unified phase sequence without changing CH-00 or any other completed phase.
+- **Primary products:** Requirement-to-phase matrix, nine-row architecture
+  prerequisite table, four-condition slow-scan table, configuration/role boundaries,
+  validity/revalidation rules, and consolidated unresolved-gap register.
+- **Final Report:** Incomplete.
+- **Procedural Writeup:** Incomplete.
+- **Detailed plan:** [`CH-00.1/plan.md`](instrument_readiness_001/phases/CH-00.1/plan.md).
+
 ### HF-01 — HF2LI configuration and external-reference qualification
 
 - **Status:** complete. **Prerequisites:** T2-01 and TR-01.
@@ -228,9 +260,10 @@ parallel only under separate authorization.
 
 ### HF-01.1 — experiment-specific HF2LI candidate optimization and confirmation
 
-- **Status:** planned. **Prerequisites:** HF-01 and CH-00.
-- **Purpose:** Use the completed HF-01 model to optimize separate sweep, HRP,
-  and MbCO acquisition candidates, then electrically confirm only the winning
+- **Status:** planned. **Prerequisites:** HF-01, CH-00.1, and MS-02.1.
+- **Purpose:** Use the completed HF-01 model and supplemental installed-branch and
+  architecture requirements to optimize every retained slow/kinetic configuration,
+  then electrically confirm only the winning
   and nearest meaningful challenger configurations.
 - **Primary products:** Frozen requirements, complete candidate tables, Pareto
   frontiers, shortlisted configurations, targeted confirmations, and selections.
@@ -253,7 +286,7 @@ parallel only under separate authorization.
 
 ### MD-01 — MIRcat and HF2LI DIO mapping qualification
 
-- **Status:** planned. **Prerequisites:** HF-01.
+- **Status:** planned. **Prerequisites:** HF-01, CH-00.1, and MS-02.1.
 - **Purpose:** Establish the semantic and electrical mapping between MIRcat
   states/events and HF2LI DIO observations used for synchronization and loss
   accounting.
@@ -277,7 +310,7 @@ parallel only under separate authorization.
 
 ### HF-02 — cross-stream alignment loss and endurance
 
-- **Status:** planned. **Prerequisites:** HF-01, MD-01, and MSW-01.
+- **Status:** planned. **Prerequisites:** HF-01.1, MD-01, MSW-01, and MS-02.1.
 - **Purpose:** Verify sustained alignment among MIRcat, DIO, HF2LI, and recorded
   streams; quantify missing, duplicated, misordered, or delayed records over
   experiment-relevant durations.
@@ -289,7 +322,7 @@ parallel only under separate authorization.
 
 ### DET-01 — dark detector and electronics performance
 
-- **Status:** planned. **Prerequisites:** HF-01 and TR-01.
+- **Status:** planned. **Prerequisites:** HF-01, TR-01, MS-02.1, and CH-00.1.
 - **Purpose:** Characterize detector/electronics behavior without illumination,
   separating dark offset, noise, drift, range, saturation, and HF2LI effects.
 - **Primary products:** Dark records, noise and drift spectra, range/saturation
@@ -312,7 +345,7 @@ parallel only under separate authorization.
 
 ### ATT-01 — electronic iris attenuation and sample-plane transfer calibration
 
-- **Status:** planned. **Prerequisites:** WM-01 and OM-01.
+- **Status:** planned. **Prerequisites:** WM-01, OM-01, and CH-00.1.
 - **Purpose:** Qualify the permanent electronic iris as an operating component,
   determine its 540 nm command/readback aperture and attenuation/transfer
   behavior, and freeze its installed placement and configuration limits.
@@ -324,7 +357,7 @@ parallel only under separate authorization.
 
 ### DET-02 — illuminated detector and electronics transfer performance
 
-- **Status:** planned. **Prerequisites:** DET-01, ATT-01, and HF-01.1.
+- **Status:** planned. **Prerequisites:** DET-01, ATT-01, HF-01.1, and MS-02.1.
 - **Purpose:** Characterize detector/electronics response under controlled
   illumination across the retained ranges and selected HF2LI configurations.
 - **Primary products:** Transfer/linearity data, range and saturation envelope,
@@ -335,7 +368,7 @@ parallel only under separate authorization.
 
 ### DET-03 — detector temporal response and latency correction
 
-- **Status:** planned. **Prerequisites:** DET-02 and HF-01.
+- **Status:** planned. **Prerequisites:** DET-02, HF-01, and MS-02.1.
 - **Purpose:** Measure detector/electronics temporal response, latency, bandwidth,
   and configuration-dependent correction needed for timing-chain and IRF work.
 - **Primary products:** Step/impulse response, delay and bandwidth model, correction
@@ -346,7 +379,7 @@ parallel only under separate authorization.
 
 ### DET-04 — installed sample-reference balance and normalization calibration
 
-- **Status:** planned. **Prerequisites:** DET-02 and ATT-01.
+- **Status:** planned. **Prerequisites:** DET-02, ATT-01, and MS-02.1.
 - **Purpose:** Quantify installed sample/reference imbalance and covariance so
   normalized signals use measured corrections rather than assumed equal powers.
 - **Primary products:** Channel-balance and background-ratio corrections,
@@ -357,7 +390,7 @@ parallel only under separate authorization.
 
 ### QB-01 — MIRcat probe-source characterization
 
-- **Status:** planned. **Prerequisites:** MD-01, MSW-01, HF-02, and DET-02.
+- **Status:** planned. **Prerequisites:** MD-01, MSW-01, HF-02, DET-02, and CH-00.1.
 - **Purpose:** Characterize the installed MIRcat probe across the required bands,
   pulse widths, currents, rates, scan behavior, stability, timing, and detector
   operating constraints.
@@ -369,7 +402,7 @@ parallel only under separate authorization.
 
 ### PB-02 — 540 nm OPO output characterization
 
-- **Status:** planned. **Prerequisites:** WM-01 and ATT-01.
+- **Status:** planned. **Prerequisites:** WM-01, ATT-01, and CH-00.1.
 - **Purpose:** Characterize the biologically relevant 540 nm OPO output after the
   permanent iris over the retained command, delay, rate, power, spatial, and
   wavelength conditions.
@@ -381,9 +414,10 @@ parallel only under separate authorization.
 
 ### SC-01 — sample-cell and temperature-stage qualification
 
-- **Status:** planned. **Prerequisites:** TR-01.
+- **Status:** planned. **Prerequisites:** TR-01 and CH-00.1.
 - **Purpose:** Qualify cell materials, path, windows, seals, filling, leak and
-  bubble behavior, transmission, temperature control, gradients, and recovery.
+  bubble behavior, transmission, room-temperature and 77 K control/gradients,
+  cryostat/window/background behavior, thermal cycling, and recovery.
 - **Primary products:** Cell/stage configuration, path and thermal results,
   blank/transmission evidence, compatibility limits, uncertainty, and procedures.
 - **Final Report:** Incomplete.
@@ -420,8 +454,9 @@ parallel only under separate authorization.
 - **Purpose:** Jointly select experiment-specific scan speed, direction, HF2LI
   filtering/rate/range, record length, settling, throughput, and loss margins
   using measured source, detector, geometry, and timing behavior.
-- **Primary products:** Validated sweep, HRP, and MbCO acquisition configurations,
-  response residuals, speed/dwell envelope, robustness, and uncertainty.
+- **Primary products:** Validated slow-scan and five-method architecture
+  configurations across applicable room-temperature/77 K envelopes, response
+  residuals, native coverage, speed/dwell envelope, robustness, and uncertainty.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`AR-01/plan.md`](instrument_readiness_001/phases/AR-01/plan.md).
@@ -486,9 +521,10 @@ parallel only under separate authorization.
 
 ### OP-01 — operational pump-command-to-sample timing
 
-- **Status:** planned. **Prerequisites:** ATT-01, PB-02, and DET-03.
-- **Purpose:** Measure the operational delay and jitter from pump command through
-  actual emitted OPO event arrival at the sample-equivalent plane.
+- **Status:** planned. **Prerequisites:** ATT-01, PB-02, DET-03, and MS-02.1.
+- **Purpose:** Measure independently observed pump and probe arrival at the
+  sample-equivalent plane for every retained mode; an electrical command or equal
+  cable length is not chemical time zero.
 - **Primary products:** Synchronized electrical/optical records, time-origin
   definition, delay and jitter model, correction, uncertainty, and envelope.
 - **Final Report:** Incomplete.
@@ -557,9 +593,10 @@ parallel only under separate authorization.
 ### E2E-01 — normal-wiring calibration validation
 
 - **Status:** planned. **Prerequisites:** CL-01, SP-02, DET-04, and SV-02B.
-- **Purpose:** Verify that the complete promoted-candidate calibration chain works
-  together under normal wiring, startup, acquisition, failure, and restoration
-  conditions without replacing component-phase evidence.
+- **Purpose:** Verify the complete promoted-candidate calibration chain separately
+  under normal dual-detector and temporary timing/IRF wiring, including startup,
+  acquisition, calibrated bridging, failure, and restoration without replacing
+  component-phase evidence.
 - **Primary products:** End-to-end calibration records, configuration/calibration
   links, expected-versus-observed checks, fault handling, and readiness decision.
 - **Final Report:** Incomplete.
@@ -593,11 +630,12 @@ parallel only under separate authorization.
 ### E2E-CH — bounded nonbiological full-system demonstration
 
 - **Status:** planned. **Prerequisites:** E2E-01, SV-02B, IR-01, PF-01, and RP-01.
-- **Purpose:** Demonstrate the complete platform with bounded nonbiological sweep,
-  HRP-style, and MbCO-style blocks using the frozen configurations and evidence
-  chain before biological method development.
-- **Primary products:** Native full-system data, configuration/calibration links,
-  startup/safe-stop/restoration records, agreement/uncertainty, and readiness.
+- **Purpose:** Demonstrate slow scan and all five reconstruction methods on bounded
+  nonbiological targets, including native coverage, missing-data/noise, direction,
+  filter-memory, interpolation, and topology tests before biological development.
+- **Primary products:** Native full-system data and coverage, reconstruction truth/
+  residuals, fault/noise robustness, configuration/calibration links,
+  startup/safe-stop/restoration records, uncertainty, and method-specific decisions.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`E2E-CH/plan.md`](instrument_readiness_001/phases/E2E-CH/plan.md).
@@ -642,7 +680,7 @@ parallel only under separate authorization.
 
 ### R0 — HRP requirements freeze
 
-- **Status:** planned. **Prerequisites:** CH-00.
+- **Status:** planned. **Prerequisites:** CH-00.1.
 - **Purpose:** Freeze the HRP question, claims, observables, controls, parameter
   registry, owners, exclusions, and analysis logic before biological work.
 - **Primary products:** Approved requirements/claim matrix, control plan,
@@ -676,7 +714,7 @@ parallel only under separate authorization.
 ### R2 — HRP characterization completion
 
 - **Status:** planned. **Prerequisites:** PROM-CH.
-- **Purpose:** Verify that the promoted characterization bundle, frozen CH-00
+- **Purpose:** Verify that the promoted characterization bundle, frozen CH-00.1
   settings, end-to-end demonstration, and repeatability envelope support HRP.
 - **Primary products:** Characterization-link and validity audit, operating-envelope
   import, biological-entry assessment, and readiness disposition.
@@ -751,7 +789,7 @@ parallel only under separate authorization.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`R9/plan.md`](hrp_001/phases/R9/plan.md).
 
-## Optional cryogenic MbCO campaign
+## Room-temperature and cryogenic MbCO campaign
 
 ### QB-01M — cryogenic MbCO MIRcat probe and acquisition optimization
 
@@ -768,8 +806,9 @@ parallel only under separate authorization.
 ### MB-00 — MbCO claims and dependency freeze
 
 - **Status:** optional. **Prerequisites:** R9 and QB-01M.
-- **Purpose:** Freeze the minimum and optional MbCO claims, species, observables,
-  models, numeric evidence map, promoted imports, exclusions, and analysis tests.
+- **Purpose:** Freeze condition-tagged room-temperature and 77 K claims,
+  architecture/slow-scan allocations, species, observables, models, promoted imports,
+  exclusions, and analysis tests; register missing condition packages before work.
 - **Primary products:** Approved claim matrix, dependency register, observable/
   calibration map, analysis preregistration, and stop/narrowing rules.
 - **Final Report:** Incomplete.
@@ -793,7 +832,7 @@ parallel only under separate authorization.
 - **Status:** optional. **Prerequisites:** MB-01, PROM-01, PROM-CH, and QB-01M.
 - **Purpose:** Import and verify every promoted wavelength, spectral, timing,
   detector, normalization, power, geometry, IRF, sensitivity, reproducibility,
-  and acquisition dependency for the selected cryogenic configuration.
+  and acquisition dependency for each selected room-temperature or 77 K configuration.
 - **Primary products:** Calibration/characterization links, validity assessment,
   MbCO configuration registry, range verification, and readiness report.
 - **Final Report:** Incomplete.
@@ -803,9 +842,9 @@ parallel only under separate authorization.
 ### MB-03 — MbCO blank and cell qualification
 
 - **Status:** optional. **Prerequisites:** MB-02.
-- **Purpose:** Qualify the cryogenic cell and blank without protein, including
-  assembly, path, leak/bubble behavior, temperature hold, transmission, fringes,
-  forward/reverse scans, and pump/probe-only artifacts.
+- **Purpose:** Qualify separate room-temperature and 77 K cell/blank configurations
+  without protein, including assembly, path, leak/bubble behavior, temperature hold,
+  cryostat/matrix effects, transmission, fringes, scans, and pump/probe-only artifacts.
 - **Primary products:** Cell/path and compatibility report, blank/background data,
   thermal/leak evidence, baseline/noise results, and acceptance limits.
 - **Final Report:** Incomplete.
@@ -815,8 +854,9 @@ parallel only under separate authorization.
 ### MB-04 — MbCO sample chemistry pilot
 
 - **Status:** optional. **Prerequisites:** MB-03.
-- **Purpose:** Prepare small independent MbCO batches and verify concentration,
-  oxidation/ligation state, pH, stability, cell loading, and the steady A1 signal.
+- **Purpose:** Prepare small independent MbCO batches, verify state/stability, and
+  acquire separate mandatory room-temperature and 77 K slow scans that determine
+  actual A-state bands, baselines, interference, sensitivity, and local windows.
 - **Primary products:** Preparation records, pre/post UV-visible and IR data,
   concentration/path uncertainty, stability window, and sample acceptance.
 - **Final Report:** Incomplete.
@@ -838,9 +878,9 @@ parallel only under separate authorization.
 ### MB-06 — MbCO timing, IRF, and discovery kinetics
 
 - **Status:** optional. **Prerequisites:** MB-05.
-- **Purpose:** Verify time zero/IRF on a surrogate, acquire discovery kinetics over
-  negative through recovery delays, and determine whether proposed kinetic
-  components are identifiable at the measured SNR and response.
+- **Purpose:** Verify condition- and architecture-specific optical time zero/IRF,
+  then assess room-temperature nanosecond/microsecond and single-scan methods plus
+  77 K nanosecond/microsecond and single-pump scan-burst discovery records.
 - **Primary products:** Time-zero/IRF links, discovery traces, identifiability
   simulation, selected delay/rate/filter design, recovery, and stop decision.
 - **Final Report:** Incomplete.

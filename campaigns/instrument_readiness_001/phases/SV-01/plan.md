@@ -35,6 +35,12 @@ Mandatory deliverables:
 - Separation of calibration, independent validation, and illustrative-only
   records.
 
+This phase supplies independent-reference provenance for `EXP-CAL-05`.
+Acceptance is reference-material, geometry, temperature, preprocessing,
+and resolution specific. Reference data remain independent of QCL fitting; a specimen,
+geometry, processing, provenance, or uncertainty change triggers review. It does not
+establish the installed QCL axis or biological peak positions.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

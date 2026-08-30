@@ -3,7 +3,7 @@
 Campaign: `instrument-readiness-001`  
 Domain: `calibration`  
 Registry status: `planned`  
-Required dependencies: `DET-02, ATT-01`  
+Required dependencies: `DET-02, ATT-01, MS-02.1`
 Optional dependencies: `none`  
 
 This is the canonical phase plan. It does not authorize hardware,
@@ -25,7 +25,7 @@ splitter is 50/50.
 
 Use the same merged probe anchors and low/high expected powers retained in
 DET-02, with shared points measured once. Use only the polarization and
-alignment states that survive CH-00, and include one controlled realignment/
+alignment states that survive CH-00.1, and include one controlled realignment/
 revisit. If detector or branch exchange is safe and practical, use it once as
 a separation/closure test; otherwise use the same qualified transfer detector
 sequentially at both detector planes and retain the placement/repeatability
@@ -60,6 +60,17 @@ Mandatory closeout deliverables:
 
 DET-04 is a prerequisite for quantitative dual-detector spectral calibration,
 normalization, platform sensitivity, and later biological absorbance claims.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+DET-04 implements the installed normalization and unequal-branch portions of
+`EXP-CAL-12` and `EXP-CHAR-09`. The normal simultaneous dual-channel topology is the reference plane;
+temporary timing topologies cannot silently supply its correction. Acceptance requires
+closure of the optical, detector/electronics, and observed baseline ratios with
+uncertainty for every non-equivalent configuration. Optic/splitter movement, detector
+or amplifier replacement, branch/cable/topology, gain/range, wavelength/polarization,
+alignment, or drift outside the validity envelope triggers revalidation. It does not
+establish transient kinetics, optical time zero, or spectrometer-axis accuracy.
 
 ## Closeout
 

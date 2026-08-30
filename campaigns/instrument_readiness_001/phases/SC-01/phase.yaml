@@ -5,6 +5,7 @@ domain: characterization
 registry_status: planned
 depends_on:
 - TR-01
+- CH-00.1
 optional_dependencies: []
 evidence_key: SC-01
 evidence_path: campaigns/instrument_readiness_001/phases/SC-01

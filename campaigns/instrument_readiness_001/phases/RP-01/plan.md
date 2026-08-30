@@ -21,10 +21,11 @@ separate days and after one documented normal restoration/reinstallation. This
 tests reproducibility; it is not a repeat of the complete characterization
 grid.
 
-On each of three independent days, run one compact checkpoint suite containing
-the Mylar sweep anchor under the sweep configuration, one OPO-540/HRP surrogate
-point under the HRP configuration, and one OPO-540/MbCO surrogate point under
-the MbCO configuration with the unchanged iris configuration. Shared startup,
+On each of three independent days, run a prospectively balanced compact checkpoint
+suite that collectively covers every non-equivalent architecture configuration,
+including room-temperature and 77 K optical/cryostat states, without repeating full
+phase grids. Include the Mylar sweep anchor and HRP/MbCO surrogates under the unchanged
+iris configuration. Shared startup,
 dark, geometry, and restoration evidence
 is recorded once per day. Do not repeat full PB/QB/OG/OV/AR/SV/IR/PF grids.
 
@@ -45,6 +46,16 @@ Mandatory deliverables:
   recharacterization triggers.
 - Final operating-envelope table identifying validated, conditionally
   validated, manufacturer-only, and unsupported regions.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+RP-01 implements `EXP-CHAR-09`, `EXP-CHAR-11`, `EXP-CHAR-14`, `EXP-OPT-10`, and
+`EXP-VAL-06`. The three-day design must distinguish startup, placement/reinstallation,
+day, temperature/thermal-cycle, and residual repeat components with configuration IDs,
+native checkpoints, uncertainty, control limits, and rejected records. A material
+hardware/path/configuration change or failed checkpoint triggers recharacterization;
+unsupported rows remain unsupported. This phase does not establish preparation
+variance, biological recovery, dose tolerance, peak positions, or kinetics.
 
 ## Closeout
 

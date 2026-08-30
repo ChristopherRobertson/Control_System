@@ -28,9 +28,13 @@ Completed evidence is stored directly in the matching canonical phase package un
 `campaigns/<campaign>/phases/<phase-id>/`, beside the plan and phase metadata. The
 relocation did not create new acquisitions, change measurement values, or change
 phase status.
-`campaigns/registries/evidence_locations.yaml` is the stable lookup authority, and
-`campaigns/migration/self_contained_phase_packages_20260827.md` records the
-phase-package relocation and preservation audit.
+`campaigns/registries/evidence_locations.yaml` is the stable lookup authority. The
+archived historical record at
+`.archive/campaigns/migration/self_contained_phase_packages_20260827.md` documents
+the phase-package relocation and preservation audit. Archived migration and
+experiment-overview documents are historical only; current campaign authority
+remains in the master sequence, phase registry, campaign requirements, methods,
+and phase packages.
 
 ## Control application
 

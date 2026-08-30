@@ -16,9 +16,11 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### OG-01 — sample-plane optical transfer and beam geometry
 
-Using the final optical path and SC-01 cell/mount, characterize exactly three
-optical conditions: probe-only Mylar validation, permanent-iris OPO-540/HRP
-probing, and the same OPO-540 pump with MbCO probing. For the QCL, profile one Mylar anchor and the lower/upper
+Using the final optical path and SC-01 cell/mount, characterize each retained
+room-temperature and 77 K HRP/MbCO optical configuration plus the probe-only Mylar
+validation condition. Treat cryostat windows, matrix, refraction/focus, beam
+displacement, and temperature-dependent alignment as configuration terms rather than
+transferring room-temperature geometry. For the QCL, profile one Mylar anchor and the lower/upper
 biological anchors; add an intermediate point only if the endpoint comparison
 fails the wavelength-dependence criterion. Measure pump and probe spot size
 using a stated diameter convention, spatial profile, incidence angle,
@@ -42,6 +44,17 @@ Mandatory deliverables:
   uncertainty propagation.
 - Alignment coordinates or reproducible fiducials, acceptance bounds, damage/
   saturation margins, and restoration/reinstallation record.
+
+## `EXPERIMENTS.md` allocation and decision contract
+
+OG-01 implements `EXP-CAL-14`, `EXP-CHAR-05`, `EXP-CHAR-10`, `EXP-CHAR-11`,
+and `EXP-OPT-03`. Native profiles/readings, scale/background controls,
+reference planes, condition identities, rejected placements, uncertainty, and thermal
+state are required. Acceptance is wavelength/path/cell/temperature-specific. Any moved
+optic, iris or cell/cryostat, source/metrology change, thermal cycle outside the
+validated envelope, or failed transfer/profile/focus/aperture-margin check triggers
+revalidation. This phase does not establish temporal overlap, chemical time zero,
+sample dose response, or kinetics.
 
 ## Closeout
 
