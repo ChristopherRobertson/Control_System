@@ -10,7 +10,7 @@ import traceback
 from datetime import UTC, datetime
 
 from control_app.config_loader import load_config_inventory
-from control_app.paths import LOG_ROOT
+from control_app.paths import output_log_root
 from control_app.ui.main_window import ControlSystemMainWindow
 from control_app.workflows.state_machine import WorkflowStateMachine
 
@@ -36,6 +36,7 @@ def main() -> int:
     )
     window = ControlSystemMainWindow(
         command_handler=handler,
+        persist_settings=True,
     )
     window.resize(1100, 780)
     window.show()
@@ -75,7 +76,7 @@ def _log_emergency_stop_error(reason: str) -> None:
     """Record emergency-stop hook failures without raising during process exit."""
 
     try:
-        log_path = LOG_ROOT / f"{datetime.now().strftime('%Y%m%d')}_ui_shutdown_errors.txt"
+        log_path = output_log_root() / f"{datetime.now().strftime('%Y%m%d')}_ui_shutdown_errors.txt"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(

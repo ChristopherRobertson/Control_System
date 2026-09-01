@@ -27,6 +27,23 @@ evidence required by `EXP-VAL-07`.
 
 ## Measurement and reference planes
 
+Use the [current default detector wiring](../../../../instrument/default_wiring_state.md)
+reported on 2026-08-31 as the normal configuration under test:
+
+| Signal | Split assembly, in signal order | Simultaneously connected receivers |
+| --- | --- | --- |
+| Sample | Female-to-female BNC adapter -> male-to-two-female BNC tee | HF2LI Signal 1 In (+) and PicoScope CHA |
+| Reference | Female-to-female BNC adapter -> male-to-two-female BNC tee | HF2LI Signal 2 In (+) and PicoScope CHB |
+
+Each detector has its own assembly and branch cables; the MUX is bypassed.
+The operator's topology report does not establish adapter/tee identities,
+cable lengths, receiver terminations, or branch-transfer values. Unreported
+fields remain `USER_INPUT_REQUIRED` until recorded for this phase. Keep both
+receivers connected for the normal-state measurements, including tests where
+only one instrument records. Explicitly identify the removed branch and changed
+load for single-destination controls and temporary timing/IRF configurations.
+Restoration returns both detector signals to both default receivers.
+
 For each retained normal dual-detector and sample-detector/pump-detector timing
 configuration, freeze a human-readable `configuration_id` containing detector,
 amplifier, tee, adapter, connector, cable, termination, HF2LI input, PicoScope

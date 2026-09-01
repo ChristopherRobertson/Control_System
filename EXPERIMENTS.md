@@ -231,10 +231,14 @@ detector response, branch skew, saturation, and timing closure.
 
 Two explicitly qualified wiring configurations are required:
 
-1. **Normal dual-detector acquisition:** each detector output is split by its
-   characterized tee/adapter/cable network so the sample signal reaches HF2LI
-   input 1 and PicoScope channel A, while the reference signal reaches HF2LI
-   input 2 and PicoScope channel B. The two destinations need not have identical
+1. **Normal dual-detector acquisition:** each detector signal passes through
+   its own **female-to-female BNC adapter -> male-to-two-female BNC tee**,
+   with separate cable branches to the two receivers. Sample feeds **HF2LI
+   Signal 1 In (+) and PicoScope CHA (channel A)**; reference feeds **HF2LI
+   Signal 2 In (+) and PicoScope CHB (channel B)**. Both receivers remain
+   connected even when the PicoScope is not recording; the Arduino MUX is
+   bypassed. See the [default wiring diagram](instrument/default_wiring_state.md).
+   The two destinations need not have identical
    electrical input impedances; loading, attenuation, reflections, branch skew,
    and bandwidth must be measured in the installed configuration.
 2. **Sample-plane timing/IRF configuration:** the sample IR detector is observed
@@ -243,6 +247,12 @@ Two explicitly qualified wiring configurations are required:
    arrival and the sample-path response. Because the sample and reference optical
    paths differ, reference-path latency and response must be measured separately
    when they enter the normalization or timing model.
+
+The adapter/tee topology is the operator-reported default as of 2026-08-31;
+its documentation is not evidence of qualified electrical transfer. MS-02.1
+qualifies the installed branches without rewriting completed MS-01/MS-02 or
+HF-01 records. Temporary timing/IRF work records any disconnected detector
+branch and changed loading, then restores both default split paths.
 
 The PicoScope external-trigger source, polarity, threshold, impedance, and
 latency must be selected and qualified. An electrical trigger may aid stable

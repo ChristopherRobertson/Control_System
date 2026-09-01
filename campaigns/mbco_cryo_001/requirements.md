@@ -27,6 +27,14 @@ inserted as new incomplete phases rather than hidden in an existing record.
 Probe carrier/rate optimization is independent of the pump's maximum event rate.
 Normal HF2LI dual-detector acquisition and temporary PicoScope timing/IRF wiring have
 separate configuration identities; the HF2LI is primary and the PicoScope diagnostic.
+Normal wiring follows the [default detector split setup](../../instrument/default_wiring_state.md):
+each signal passes through its own female-to-female BNC adapter and
+male-to-two-female BNC tee, with sample feeding HF2LI Signal 1 In (+)/PicoScope
+CHA and reference feeding HF2LI Signal 2 In (+)/PicoScope CHB. Both receivers
+remain connected, with the MUX bypassed. MS-02.1 qualifies this installed branch
+network. Temporary timing/IRF wiring uses the sample IR detector on CHA and the
+pump detector on CHB, records any disconnected branch and changed loading, and
+restores both default detector split paths afterward.
 Chemical time zero is the independently observed sample-plane pump/probe relation.
 Each architecture requires its own IRF, native-coverage/missing-data validation,
 temperature/cryostat/beam envelope, recovery/reset rule, and accepted initial slow scan.

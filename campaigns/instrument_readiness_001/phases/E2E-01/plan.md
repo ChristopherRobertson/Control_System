@@ -16,6 +16,14 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 25. E2E-01 — normal-wiring validation
 
+The normal state is the [default detector split setup](../../../../instrument/default_wiring_state.md):
+each signal passes through a female-to-female BNC adapter -> male-to-two-female
+BNC tee, with sample feeding HF2LI Signal 1 In (+)/PicoScope CHA and reference
+feeding HF2LI Signal 2 In (+)/PicoScope CHB. Verify both receivers are connected
+for normal-state records and restored after temporary timing/IRF work. Record
+any temporary disconnected branch and changed load; do not interpret older
+phase restoration confirmations as confirmation of this updated topology.
+
 Perform bounded nonbiological runs that separately validate the normal simultaneous
 dual-detector topology and the temporary sample-detector/pump-detector timing/IRF
 topology. Collectively cover slow scan and every materially distinct retained

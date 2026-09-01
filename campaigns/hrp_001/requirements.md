@@ -28,8 +28,12 @@ execution. Room-temperature evidence cannot be extrapolated across cryostat, mat
 temperature, beam, heating, reset, timing/IRF, or reconstruction configuration.
 
 Normal HF2LI dual-detector acquisition and temporary PicoScope timing/IRF wiring have
-separate configuration identities. The HF2LI is the primary spectral recorder; the
-PicoScope is an independent diagnostic. Chemical time zero is the independently
+separate configuration identities. Normal wiring follows the
+[default detector split setup](../../instrument/default_wiring_state.md): each
+signal passes through its own female-to-female BNC adapter and male-to-two-female
+BNC tee, with sample feeding HF2LI Signal 1 In (+)/PicoScope CHA and reference
+feeding HF2LI Signal 2 In (+)/PicoScope CHB. The HF2LI is the primary spectral
+recorder; the PicoScope is an independent diagnostic. Chemical time zero is the independently
 observed pump/probe relation at the sample plane, not an electrical command or
 equal-cable-length assumption. Each reconstruction method requires a matching
 configuration-specific IRF and nonbiological native-coverage validation.
@@ -212,7 +216,9 @@ A “no effect” control is interpretable only when its uncertainty is reported
 
 ## 7. Platform authority, fixed wiring, and unresolved capability
 
-The repository’s current wiring authority is `hardware_configuration.yaml` and its associated wiring map. The required signal topology is:
+The repository’s current wiring authority is `instrument/hardware_configuration.yaml`,
+`instrument/wiring_map.yaml`, and the
+[default wiring convention](../../instrument/default_wiring_state.md). The required signal topology is:
 
 - T660-2 channel A → HF2LI external reference;
 - T660-2 channel B → MIRcat trigger input;
@@ -221,11 +227,17 @@ The repository’s current wiring authority is `hardware_configuration.yaml` and
 - T660-1 channel A → Surelite FIRE, external connector pin 7;
 - T660-1 channel B → Surelite Q-SWITCH, external connector pin 6;
 - T660-1 channel C → MIRcat process input, DB9 pin 4, active low;
-- VIGO sample detector → HF2LI signal input 1;
-- VIGO reference detector → HF2LI signal input 2;
+- VIGO sample signal → female-to-female BNC adapter → male-to-two-female BNC tee → HF2LI Signal 1 In (+) and PicoScope CHA;
+- VIGO reference signal → female-to-female BNC adapter → male-to-two-female BNC tee → HF2LI Signal 2 In (+) and PicoScope CHB;
 - MIRcat direction/sweep/wavelength outputs → HF2LI DIO20/DIO21/DIO22 when those mappings are promoted.
 
 This list describes intended identity, not proof of timing or polarity. Physical cable length is provenance, not a delay calibration.
+
+Both detector receivers remain connected in normal operation, with the MUX
+bypassed. MS-02.1 supplies the installed branch-transfer/loading qualification.
+Temporary timing/IRF wiring substitutes the pump detector on PicoScope CHB under
+its own configuration record, records any changed receiver loading, and restores
+both default detector paths afterward.
 
 The present experiment-builder capability registry limits MIRcat wavenumber to 1800 cm⁻¹, below both target HRP-C–CO bands. It also marks external process triggering and relevant DIO capabilities unavailable. Therefore no biological plan may be compiled until QB01 demonstrates the installed module’s accessible range around 1905/1934 cm⁻¹, the capability registry is updated and tested, MD01/MSW01 establish the trigger/status behavior actually used, and a dry-run plan passes. A configuration-file edit alone is not evidence of optical capability.
 

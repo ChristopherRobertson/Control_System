@@ -11,7 +11,7 @@ import json
 import yaml
 
 from control_app.config_loader import ConfigInventory, REPO_ROOT, load_config_inventory
-from control_app.paths import RECIPE_ROOT, RUN_ROOT, resolve_compat_path
+from control_app.paths import RECIPE_ROOT, output_run_root, resolve_compat_path
 from control_app.promoted_bundles import PromotedBundle, load_promoted_bundle
 from control_app.devices.hf2li_service import HF2LIPreset, HF2LIService
 from control_app.devices.mircat_service import RET_NOT_INITIALIZED, MircatService
@@ -144,12 +144,20 @@ class WorkflowStateMachine:
         self._hf2li_preset: HF2LIPreset | None = None
         self._configured_ui_workflow: ConfiguredWorkflow | None = None
         self._active_ui_workflow: ConfiguredWorkflow | None = None
+        self.phase_scan_active = False
+        from control_app.workflows.phase_scan_runner import PhaseScanRunner
+        from control_app.workflows.phase_scan_acquisition import LivePhaseScanAcquirer
+        self.phase_scan_runner = PhaseScanRunner(
+            (lambda: LivePhaseScanAcquirer(config_path=self.config_path)) if hardware_access else None
+        )
         if command_log is not None and getattr(command_log, "name", None):
             self._remember_command_log(str(command_log.name))
 
     def __call__(self, command: WorkflowCommand) -> WorkflowResult:
         """Handle one UI command through the workflow state machine."""
 
+        if self.phase_scan_active:
+            return WorkflowResult(status="blocked", message="Phase Scan owns the instruments. Use Abort Scan first.")
         name = _normalize_command(command.command)
         if command.device_key == "workflow" and name == "configure_selected":
             return self._configure_selected_workflow(command)
@@ -169,6 +177,13 @@ class WorkflowStateMachine:
         self._record(name, self.state, "blocked", result.message, result.data)
         return result
 
+    def output_location_changed(self, selected: Path) -> None:
+        """Start future UI artifacts in the selected folder; preserve previous runs."""
+        self.run_dir = self._resolve_run_dir(selected / f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_workflow_state_machine")
+        # Existing configured workflows point into their previous output folder.
+        # Require Configure again rather than redirecting an existing run.
+        self._configured_ui_workflow = None
+
     def _configure_selected_workflow(self, command: WorkflowCommand) -> WorkflowResult:
         """Validate and persist a complete UI workflow plan before Run is enabled."""
 
@@ -185,8 +200,7 @@ class WorkflowStateMachine:
                 message="Select a workflow and provide its settings before configuring it.",
             )
         plan_dir = (
-            REPO_ROOT
-            / "runs"
+            output_run_root()
             / "configured_workflows"
             / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         )
@@ -304,6 +318,7 @@ class WorkflowStateMachine:
     def emergency_stop(self, *, reason: str = "emergency_stop") -> WorkflowResult:
         """Best-effort shutdown for forced process exit paths."""
 
+        self.phase_scan_runner.abort()
         return self._ui_shutdown(reason=reason, emergency=True)
 
     def _ui_shutdown(self, *, reason: str, emergency: bool) -> WorkflowResult:
@@ -353,7 +368,7 @@ class WorkflowStateMachine:
 
     def _resolve_run_dir(self, run_dir: str | Path | None) -> Path:
         if run_dir is None:
-            target = RUN_ROOT / f"{datetime.now().strftime('%Y%m%d')}_workflow_state_machine"
+            target = output_run_root() / f"{datetime.now().strftime('%Y%m%d')}_workflow_state_machine"
         else:
             target = Path(run_dir)
             if not target.is_absolute():

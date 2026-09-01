@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from control_app.config_loader import load_config_inventory
-from control_app.paths import LOG_ROOT, RECIPE_ROOT, RUN_ROOT
+from control_app.paths import RECIPE_ROOT, output_run_root, output_log_root
 from control_app.devices.mircat_service import RET_NOT_INITIALIZED, MircatError, MircatService
 from control_app.manifest import new_manifest, write_manifest
 from control_app.ui.contracts import WorkflowCommand, WorkflowResult
@@ -235,7 +235,7 @@ class MircatWidgetCommandHandler:
         for key, target in (("scan_start_cm1", "start_cm1"), ("scan_stop_cm1", "stop_cm1"), ("scan_rate_cm1_s", "scan_rate_cm1_s"), ("scan_repetitions", "repetitions"), ("pulse_rate_hz", "pulse_rate_hz"), ("pulse_width_ns", "pulse_width_ns")):
             if key in command.parameters:
                 mircat[target] = command.parameters[key]
-        run_dir = RUN_ROOT / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_mircat_sweep_scan"
+        run_dir = output_run_root() / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_mircat_sweep_scan"
         try:
             result = run_sweep_scan(request=recipe, run_dir=run_dir, command_log=command_log)
         except Exception as exc:  # noqa: BLE001
@@ -268,8 +268,7 @@ class MircatWidgetCommandHandler:
         existing_service = self.service if self.initialized else None
 
         run_dir = (
-            REPO_ROOT
-            / "runs"
+            output_run_root()
             / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_mircat_detector_alignment_ui"
         )
         workflow = MircatDetectorAlignmentWorkflow(
@@ -522,7 +521,7 @@ class MircatWidgetCommandHandler:
         return write_manifest(run_dir / "run_manifest.json", manifest)
 
     def _command_log_path(self) -> Path:
-        return LOG_ROOT / f"{datetime.now().strftime('%Y%m%d')}_mircat_ui_command_log.txt"
+        return output_log_root() / f"{datetime.now().strftime('%Y%m%d')}_mircat_ui_command_log.txt"
 
     def close_blockers(self) -> list[str]:
         """Return user actions required before normal application close."""

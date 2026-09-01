@@ -116,9 +116,18 @@ reproduction, acceptance, closeout, or promotion.
 
 - The default wiring state is defined by
   [`../../instrument/default_wiring_state.md`](../../instrument/default_wiring_state.md).
-  “Default wiring restored” means T660-1 CHD and MIRcat DB9 pin 5 are
+  “Default wiring restored” includes both detector split paths: each signal
+  passes through its own female-to-female BNC adapter -> male-to-two-female
+  BNC tee, with sample feeding HF2LI Signal 1 In (+) and PicoScope CHA, and
+  reference feeding HF2LI Signal 2 In (+) and PicoScope CHB. Both receivers
+  remain connected even when the PicoScope is not recording; the Arduino MUX
+  remains bypassed. T660-1 CHD and MIRcat DB9 pin 5 are
   disconnected; MIRcat DB9 pins 6 and 8 are unused and unwired unless the
   operator records a changed installed state.
+- The detector wiring update was reported on 2026-08-31. Earlier inventories,
+  acquisitions, and restoration confirmations remain evidence of their recorded
+  topology. MS-02.1 qualifies the new adapter/tee/cable/receiver network; this
+  documentation update does not establish measured transfer or promote results.
 - Hardwired room and door interlocks remain external safety infrastructure. The
   repository does not substitute software for those interlocks.
 - The retained OPO-540 path uses the ATT-01-qualified electronic iris. Applicable
@@ -146,6 +155,9 @@ reproduction, acceptance, closeout, or promotion.
 - Normal dual-detector acquisition and the sample-detector/pump-detector timing/IRF
   topology are separate configuration families. A correction may cross between
   them only through an accepted bridge with reference planes and uncertainty.
+  Temporary timing/IRF work uses PicoScope CHA for the sample IR detector and
+  CHB for the pump detector, records any disconnected detector branch and changed
+  loading, and restores both default detector split paths afterward.
 - The MIRcat probe carrier rate is independent of the 10 Hz pump limit. Low-rate
   and high-rate probe candidates require separate measured source, reference-lock,
   detector, heating, synchronization, and stream-validity envelopes.

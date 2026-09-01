@@ -16,6 +16,12 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 19. DET-04 — installed sample/reference optical-balance and normalization calibration
 
+Keep the [default detector adapter/tee wiring](../../../../instrument/default_wiring_state.md)
+and its MS-02.1-qualified receiver load: sample feeds HF2LI Signal 1 In (+) and
+PicoScope CHA; reference feeds HF2LI Signal 2 In (+) and PicoScope CHB. Both
+receivers remain connected even when the PicoScope is not recording. These
+electrical tee branches are distinct from the optical splitter measured by ATT-01.
+
 Combine ATT-01's component/port measurements with DET-02's separate channel
 response functions in the final installed sample/reference optical paths.
 Measure power at the sample and reference detector planes separately under the

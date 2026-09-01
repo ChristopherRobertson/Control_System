@@ -16,6 +16,11 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 16. DET-01 — dark detector/electronics performance
 
+Use the [default detector adapter/tee wiring](../../../../instrument/default_wiring_state.md)
+with both HF2LI and PicoScope receivers connected: sample to Signal 1 In (+)/CHA,
+reference to Signal 2 In (+)/CHB. Keep this MS-02.1-qualified load present even
+when only HF2LI data are recorded; record any temporary load change separately.
+
 With non-emitting sources, determine dark noise, drift, Allan-style stability,
 electrical cross-talk, range dependence, and short/long-duration repeatability.
 Use only the gains/ranges retained for the CH-00.1 architecture configurations. For each

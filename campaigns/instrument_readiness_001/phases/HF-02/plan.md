@@ -16,6 +16,12 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 15. HF-02 — cross-stream alignment, loss, and endurance
 
+For normal acquisition, use the
+[default detector adapter/tee wiring](../../../../instrument/default_wiring_state.md):
+sample feeds HF2LI Signal 1 In (+)/PicoScope CHA and reference feeds HF2LI
+Signal 2 In (+)/PicoScope CHB. Both receivers stay connected even when only
+HF2LI streams are recorded. Record temporary timing/IRF topology separately.
+
 Verify simultaneous Sample, Reference, complete-DIO, and—where diagnostic only—
 PicoScope timestamps, API/server buffering, dropped samples, and boundary behavior for
 the maximum-duration envelope of every materially distinct CH-00.1-retained acquisition

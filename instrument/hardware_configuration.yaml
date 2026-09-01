@@ -3,6 +3,9 @@ schema_version: "0.2"
 system:
   name: "IR Spectroscope"
   default_wiring_convention: "instrument/default_wiring_state.md"
+  default_detector_connections:
+    - "Detector 1 (sample) signal -> female-to-female BNC adapter -> male-to-two-female BNC tee -> HF2LI Signal 1 In (+) and PicoScope CHA"
+    - "Detector 2 (reference) signal -> female-to-female BNC adapter -> male-to-two-female BNC tee -> HF2LI Signal 2 In (+) and PicoScope CHB"
   default_wiring_standing_exclusions:
     - "T660-1 channel D disconnected and unused"
     - "MIRcat DB9 pin 5 disconnected"

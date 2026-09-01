@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from control_app.paths import RECIPE_ROOT, RUN_ROOT
+from control_app.paths import RECIPE_ROOT, output_run_root
 from control_app.experiments.builder import ExperimentBuilder
 from control_app.experiments.engine import ExperimentEngine
 from control_app.experiments.models import ExperimentDefinition, FieldDefinition
@@ -356,7 +356,7 @@ class ExperimentBuilderWidget(QWidget):
     def _configure(self) -> None:
         if not self._sync_definition():
             return
-        suggested = RUN_ROOT / "configured_experiments" / f"{self.builder.definition.experiment_id}_plan.json"
+        suggested = output_run_root() / "configured_experiments" / f"{self.builder.definition.experiment_id}_plan.json"
         path, _ = QFileDialog.getSaveFileName(self, "Save Immutable Execution Plan", str(suggested), "JSON (*.json)")
         if not path:
             return
@@ -398,7 +398,7 @@ class ExperimentBuilderWidget(QWidget):
     def _process(self) -> None:
         if self.builder.definition is None:
             return
-        path, _ = QFileDialog.getOpenFileName(self, "Select Raw JSON", str(RUN_ROOT), "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Select Raw JSON", str(output_run_root()), "JSON (*.json)")
         if not path:
             return
         try:
@@ -412,7 +412,7 @@ class ExperimentBuilderWidget(QWidget):
             self._show_error(str(exc))
 
     def _export(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Export Standard Result", str(RUN_ROOT / "result.json"), "JSON (*.json);;CSV (*.csv)")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Standard Result", str(output_run_root() / "result.json"), "JSON (*.json);;CSV (*.csv)")
         if not path:
             return
         try:

@@ -59,6 +59,11 @@ bundle explicitly marked `PROMOTED` in both the promoted-bundle registry and its
 manifest. A plan, recipe, directory, or registry row never authorizes hardware or
 changes scientific status.
 
+The [default wiring diagram](instrument/default_wiring_state.md) shows the
+detector split connections: each signal passes through a female-to-female BNC
+adapter and a male-to-two-female BNC tee. Sample feeds HF2LI Signal 1 In (+)
+and PicoScope CHA; reference feeds HF2LI Signal 2 In (+) and PicoScope CHB.
+
 The repository boundary and authority rules are in `docs/README.md`, and the
 shared acquisition/evidence rules are in `docs/phase_record_contract.md`.
 

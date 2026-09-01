@@ -6,6 +6,7 @@ import csv
 from pathlib import Path
 
 from control_app.workflows.sweep_export import export_kaleidagraph_scan
+from control_app.paths import output_run_root
 
 try:
     from PySide6.QtCore import Qt
@@ -74,7 +75,7 @@ if PYSIDE6_AVAILABLE:
             browse.clicked.connect(self._choose_destination)
             export = QPushButton("Export")
             export.clicked.connect(self._export)
-            self.destination = QLineEdit(str(Path.cwd() / "runs"))
+            self.destination = QLineEdit(str(output_run_root()))
             self.filename = QLineEdit("scan_kaleidagraph.csv")
             layout = QVBoxLayout(self)
             controls = QHBoxLayout()

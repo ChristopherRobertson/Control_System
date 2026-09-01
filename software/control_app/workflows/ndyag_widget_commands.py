@@ -9,7 +9,7 @@ from typing import Any, TextIO
 import yaml
 
 from control_app.config_loader import ConfigInventory, load_config_inventory
-from control_app.paths import LOG_ROOT, RUN_ROOT, resolve_compat_path
+from control_app.paths import output_log_root, output_run_root, resolve_compat_path
 from control_app.devices.t660_service import T660Service
 from control_app.ui.contracts import WorkflowCommand, WorkflowResult
 from control_app.workflows.ndyag_alignment import (
@@ -260,12 +260,12 @@ class NdYagWidgetCommandHandler:
         return state
 
     def _run_dir(self) -> Path:
-        path = RUN_ROOT / f"{datetime.now().strftime('%Y%m%d')}_ndyag_ui"
+        path = output_run_root() / f"{datetime.now().strftime('%Y%m%d')}_ndyag_ui"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     def _command_log_path(self) -> Path:
-        return LOG_ROOT / f"{datetime.now().strftime('%Y%m%d')}_ndyag_ui_command_log.txt"
+        return output_log_root() / f"{datetime.now().strftime('%Y%m%d')}_ndyag_ui_command_log.txt"
 
 
 def _response(value: Any) -> Any:

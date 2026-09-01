@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from control_app.config_loader import ConfigInventory, load_config_inventory
-from control_app.paths import LOG_ROOT, RECIPE_ROOT, RUN_ROOT
+from control_app.paths import RECIPE_ROOT, output_run_root, output_log_root
 from control_app.devices.t660_service import T660Service
 from control_app.ui.contracts import WorkflowCommand, WorkflowResult
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
@@ -207,12 +207,12 @@ class T660WidgetCommandHandler:
         return state
 
     def _run_dir(self) -> Path:
-        path = RUN_ROOT / f"{datetime.now().strftime('%Y%m%d')}_t6602_ui"
+        path = output_run_root() / f"{datetime.now().strftime('%Y%m%d')}_t6602_ui"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     def _command_log_path(self) -> Path:
-        return LOG_ROOT / f"{datetime.now().strftime('%Y%m%d')}_t660_ui_command_log.txt"
+        return output_log_root() / f"{datetime.now().strftime('%Y%m%d')}_t660_ui_command_log.txt"
 
 
 def _fixed_recipe(*, enable_cha: bool, enable_chb: bool) -> dict[str, Any]:

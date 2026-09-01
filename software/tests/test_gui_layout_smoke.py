@@ -6,7 +6,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
-def test_six_tab_gui_shell_instantiates_without_hardware():
+def test_seven_tab_gui_shell_instantiates_without_hardware():
     pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication
 
@@ -14,12 +14,14 @@ def test_six_tab_gui_shell_instantiates_without_hardware():
     from control_app.ui.main_window import ControlSystemMainWindow
 
     app = QApplication.instance() or QApplication([])
-    window = ControlSystemMainWindow(blocked_handler("automated smoke test; no hardware"))
+    window = ControlSystemMainWindow(blocked_handler("automated smoke test; no hardware"), persist_settings=False)
     assert window.windowTitle() == "IR Spectroscope Control System"
-    assert window.centralWidget().count() == 6
-    assert [window.centralWidget().tabText(index) for index in range(6)] == [
+    assert window.tabs.count() == 7
+    assert window.save_location.objectName() == "save_location"
+    assert [window.tabs.tabText(index) for index in range(7)] == [
         "Experiment Builder",
         "Configured Workflows",
+        "Phase Scan",
         "MIRcat",
         "T660-2",
         "Nd:YAG",

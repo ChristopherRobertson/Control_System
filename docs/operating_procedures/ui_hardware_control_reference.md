@@ -33,6 +33,24 @@ These T660 TTL timing lines are direct point-to-point routes. They are not route
 
 The Arduino MUX is disabled and bypassed until the MUX inputs are rewired and requalified. The old MUX route table is intentionally empty because HF2LI `DIO16-DIO22` inputs do not mirror to HF2LI `DIO9-DIO15` outputs. The PicoScope owns only Pico identity, driver/API paths, supported capture capabilities, editable capture recipes, and `picoscope_connectors` metadata. PicoScope settings/capture checks must use direct wiring and must not require MUX route selection.
 
+## Current default detector wiring
+
+The detector wiring was updated by operator report on 2026-08-31, after the
+June control-session checks above. Each detector signal now passes through its
+own **female-to-female BNC adapter -> male-to-two-female BNC tee**:
+
+| Detector | HF2LI tee branch | PicoScope tee branch |
+| --- | --- | --- |
+| Detector 1 (sample) | Signal 1 In (+) | CHA (channel A) |
+| Detector 2 (reference) | Signal 2 In (+) | CHB (channel B) |
+
+Both receivers stay connected in normal operation, independently of whether
+PicoScope capture is enabled. These branches bypass the MUX. The
+[default wiring convention](../../instrument/default_wiring_state.md) defines
+restoration and distinguishes temporary timing/IRF wiring. No external-trigger
+source or receiver termination is selected by this documentation update, and
+the June checks do not qualify the new adapter/tee network.
+
 
 ## Runtime Environment
 

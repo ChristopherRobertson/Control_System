@@ -14,6 +14,12 @@ independent waveform, trigger, detector-response, saturation, branch-transfer, a
 diagnostic; its records do not silently replace the primary spectral streams. Normal
 simultaneous dual-detector wiring and temporary sample-detector/pump-detector timing
 wiring have separate configuration IDs and are bridged only by calibrated quantities.
+The [default detector wiring](../../instrument/default_wiring_state.md) is one
+female-to-female BNC adapter -> male-to-two-female BNC tee per detector signal:
+sample feeds HF2LI Signal 1 In (+) and PicoScope CHA; reference feeds HF2LI
+Signal 2 In (+) and PicoScope CHB. Both receivers remain connected in normal
+operation. Temporary timing/IRF work records changed branch connections/loading
+and restores both default split paths after measurement.
 Probe carrier/rate optimization is independent of the maximum pump-event rate.
 
 ## Mandatory initial slow scans

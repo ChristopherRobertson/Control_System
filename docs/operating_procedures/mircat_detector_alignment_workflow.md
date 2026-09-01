@@ -12,6 +12,18 @@ continuous internal alignment pulse train, and configure the HF2LI for detector
 monitoring in LabOne Plotter. The default alignment mode does not require
 T660-2. The run continues until the operator presses `Emission Off` in the UI.
 
+## Detector wiring
+
+Use the [default detector split connections](../../instrument/default_wiring_state.md).
+Each signal passes through its own female-to-female BNC adapter ->
+male-to-two-female BNC tee: detector 1 (sample) feeds HF2LI Signal 1 In (+) and
+PicoScope CHA; detector 2 (reference) feeds HF2LI Signal 2 In (+) and PicoScope
+CHB. Both PicoScope channels therefore show detector waveforms, not T660
+trigger waveforms, with this wiring. Leave both
+receivers connected while monitoring in LabOne, even if the PicoScope is not
+recording. The Arduino MUX remains bypassed; changing a branch or receiver
+termination changes the installed load and must be recorded and reviewed.
+
 ## UI Defaults
 
 - Wavenumber: `1850.0 cm^-1`

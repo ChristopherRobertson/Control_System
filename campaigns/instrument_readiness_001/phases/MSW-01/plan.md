@@ -16,6 +16,12 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 14. MSW-01 — MIRcat sweep timing
 
+Normal detector acquisition uses the
+[default adapter/tee split paths](../../../../instrument/default_wiring_state.md):
+sample to HF2LI Signal 1 In (+)/PicoScope CHA and reference to HF2LI Signal 2
+In (+)/PicoScope CHB. Leave both receivers connected for the normal-state
+records and distinguish any temporary diagnostic rewiring in its configuration.
+
 Measure actual wavenumber-versus-time and event timing for every CH-00.1-retained
 slow-scan, repeated rapid-scan, single-scan phase-delay, fixed-wavelength transition,
 and single-pump rapid/log scan-burst mode. Cover both directions and the longest

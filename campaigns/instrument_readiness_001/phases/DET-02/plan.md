@@ -16,6 +16,12 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 17. DET-02 — illuminated detector/electronics transfer performance
 
+Retain the [default detector adapter/tee wiring](../../../../instrument/default_wiring_state.md):
+sample to HF2LI Signal 1 In (+)/PicoScope CHA and reference to HF2LI Signal 2
+In (+)/PicoScope CHB, with both receivers connected. Import the MS-02.1 branch
+transfer for this installed load. Any single-receiver control or interchange
+records its changed loading and restores both default split paths afterward.
+
 Using OM-01/ATT-01-qualified metrology and separately authorized illumination,
 measure each detector/amplifier/HF2LI channel's response against independently
 measured incident power: gain or responsivity, linearity, saturation, SNR,

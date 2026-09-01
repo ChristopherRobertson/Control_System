@@ -242,6 +242,18 @@ class MircatService:
 
         return self._bool_call("MIRcatSDK_IsConnectedToLaser")
 
+    def get_qcl_tuning_range(self, qcl: int) -> dict[str, float]:
+        """Read installed channel coverage; normalize SDK microns or cm-1 to cm-1."""
+        low, high, units = c_float(), c_float(), c_uint8()
+        self._check(self._call("MIRcatSDK_GetQclTuningRange", c_uint8(qcl),
+                              byref(low), byref(high), byref(units)), "MIRcatSDK_GetQclTuningRange")
+        values = [float(low.value), float(high.value)]
+        if int(units.value) != UNITS_CM1:
+            if int(units.value) != UNITS_MICRONS or min(values) <= 0:
+                raise ValueError("Unsupported MIRcat tuning-range units or values")
+            values = [10000 / value for value in values]
+        return {"qcl": qcl, "min_cm1": min(values), "max_cm1": max(values)}
+
     def is_interlock_set(self) -> bool:
         """Return whether the interlock circuit is closed."""
 
@@ -511,7 +523,7 @@ class MircatService:
         }
 
     def get_qcl_pulse_limits(self, qcl: int) -> dict[str, float]:
-        """Return pulse-rate, pulse-width, and duty-cycle limits for a QCL."""
+        """Return pulse-rate, pulse-width, and duty-cycle (percent) limits for a QCL."""
 
         max_rate_hz = c_float()
         max_width_ns = c_float()
@@ -532,6 +544,14 @@ class MircatService:
             "max_pulse_width_ns": float(max_width_ns.value),
             "max_duty_cycle": float(max_duty_cycle.value),
         }
+
+    def get_qcl_current_limits(self, qcl: int) -> tuple[float, float]:
+        values = []
+        for name in ("MIRcatSDK_GetQCLMinPulsedCurrent", "MIRcatSDK_GetQCLMaxPulsedCurrent"):
+            current = c_uint16()
+            self._check(self._call(name, c_uint8(qcl), byref(current)), name)
+            values.append(float(current.value))
+        return tuple(values)
 
     def get_wavelength_trigger_params(self) -> dict[str, Any]:
         """Return MIRcat wavelength-trigger/pulse-trigger settings."""
@@ -859,6 +879,11 @@ class MircatService:
         sdk.MIRcatSDK_GetAPIVersion.restype = c_uint32
         sdk.MIRcatSDK_GetNumInstalledQcls.argtypes = [POINTER(c_uint8)]
         sdk.MIRcatSDK_GetNumInstalledQcls.restype = c_uint32
+        sdk.MIRcatSDK_GetQclTuningRange.argtypes = [c_uint8, POINTER(c_float), POINTER(c_float), POINTER(c_uint8)]
+        sdk.MIRcatSDK_GetQclTuningRange.restype = c_uint32
+        for name in ("MIRcatSDK_GetQCLMinPulsedCurrent", "MIRcatSDK_GetQCLMaxPulsedCurrent"):
+            getattr(sdk, name).argtypes = [c_uint8, POINTER(c_uint16)]
+            getattr(sdk, name).restype = c_uint32
         for name in [
             "MIRcatSDK_IsConnectedToLaser",
             "MIRcatSDK_IsInterlockedStatusSet",

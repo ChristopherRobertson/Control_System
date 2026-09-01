@@ -1,6 +1,6 @@
 schema_version: '0.1'
 source:
-  file: Wiring Table.xlsx
+  file: instrument/wiring_table.xlsx
   sheet: Sheet1
   range: A1:F165
   generated_from_spreadsheet: true
@@ -8,6 +8,12 @@ source:
   - This file separates fixed wiring from hardware identity configuration.
   - Preferred routing uses the confirmed timing architecture where spreadsheet rows
     conflict.
+  - Operator-reported detector wiring update, 2026-08-31; each detector signal passes
+    through its own female-to-female BNC adapter, then a male-to-two-female BNC tee.
+    Detector 1 (sample) branches to HF2LI Signal 1 In (+) and PicoScope CHA;
+    detector 2 (reference) branches to HF2LI Signal 2 In (+) and PicoScope CHB.
+    Both receivers remain connected. PicoScope CHA and CHB carry detector signals,
+    not T660 trigger signals, in this default wiring.
   - Legacy spreadsheet labels "RS232 7" and "RS232 6" mean the Surelite Nd:YAG
     DB9 EXT TTL fire-command pin 7 and Q-switch-command pin 6. They are not
     RS-232 electrical-level signals and must never be driven as an RS-232 port.
@@ -15,12 +21,36 @@ source:
     inputs do not mirror to HF2LI DIO9-DIO15 outputs.
   - MIRcat DB9 pin 5 is reserved for Laser Output On/Off and is disconnected.
     DB9 pins 6 and 8 are unused and unwired in the installed topology.
-  - The phrase "default wiring restored" includes T660-1 CHD disconnected,
+  - The phrase "default wiring restored" includes both detector split paths,
+    T660-1 CHD disconnected,
     MIRcat DB9 pin 5 disconnected, and MIRcat DB9 pins 6 and 8 unused/unwired.
     These remain standing conditions unless the operator explicitly reports a
     change; see instrument/default_wiring_state.md.
   - Manufacturer correspondence is preserved at
     references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md.
+detector_signal_paths:
+  sample:
+    source: Sample Detector output
+    connection_sequence:
+    - female-to-female BNC adapter
+    - male-to-two-female BNC tee
+    destinations:
+    - device: hf2li
+      signal: Signal 1 In (+)
+    - device: picoscope_5244d
+      signal: Channel A
+    split_count: 2
+  reference:
+    source: Reference Detector output
+    connection_sequence:
+    - female-to-female BNC adapter
+    - male-to-two-female BNC tee
+    destinations:
+    - device: hf2li
+      signal: Signal 2 In (+)
+    - device: picoscope_5244d
+      signal: Channel B
+    split_count: 2
 global_buses:
   ground_bus:
     connected_devices:
@@ -230,18 +260,18 @@ device_io:
     connected_device: T660-2
     bulkhead: null
     split_count: 3
-  - signal: Signal 1 +
+  - signal: Signal 1 In (+)
     direction: Input
-    connected_to: Detector 1
+    connected_to: Sample detector via female-to-female BNC adapter -> male-to-two-female BNC tee
     connected_device: Sample Detector
     bulkhead: null
-    split_count: 1
-  - signal: Signal 2 +
+    split_count: 2
+  - signal: Signal 2 In (+)
     direction: Input
-    connected_to: Detector 2
+    connected_to: Reference detector via female-to-female BNC adapter -> male-to-two-female BNC tee
     connected_device: Reference Detector
     bulkhead: null
-    split_count: 1
+    split_count: 2
   - signal: DIO 0 (Ext Ref)
     direction: Input
     connected_to: CHA
@@ -383,14 +413,14 @@ device_io:
   picoscope_5244d:
   - signal: Channel A
     direction: Input
-    connected_to: SIG
-    connected_device: DMB1; AMB1
+    connected_to: Sample detector via female-to-female BNC adapter -> male-to-two-female BNC tee
+    connected_device: Sample Detector
     bulkhead: Front BNC
     split_count: 2
   - signal: Channel B
     direction: Input
-    connected_to: SIG
-    connected_device: DMB2; AMB2
+    connected_to: Reference detector via female-to-female BNC adapter -> male-to-two-female BNC tee
+    connected_device: Reference Detector
     bulkhead: Front BNC
     split_count: 2
   - signal: EXT Trigger
@@ -399,6 +429,8 @@ device_io:
     connected_device: DMB3
     bulkhead: Front BNC
     split_count: 1
+    active: false
+    note: Legacy inactive MUX route only; the detector wiring update does not select an EXT trigger source.
 mux_subsystem:
   active: false
   status: inactive_bypassed

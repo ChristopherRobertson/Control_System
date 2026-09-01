@@ -15,6 +15,14 @@ documentation state. Use
 for cross-phase methods and measurement coverage. The linked phase `plan.md` is
 the detailed procedure and acceptance authority for that phase.
 
+Current default wiring is defined in
+[`instrument/default_wiring_state.md`](../instrument/default_wiring_state.md):
+each detector signal passes through its own female-to-female BNC adapter and
+male-to-two-female BNC tee; sample feeds HF2LI Signal 1 In (+) and PicoScope
+CHA, and reference feeds HF2LI Signal 2 In (+) and PicoScope CHB. Temporary
+timing/IRF configurations and earlier restoration records retain their own
+topology identities; this update does not change any phase status or qualification.
+
 ## How to use this sequence
 
 For each authorized phase:
@@ -142,7 +150,8 @@ parallel only under separate authorization.
 
 - **Status:** planned. **Prerequisites:** MS-02.
 - **Purpose:** Import immutable MS-01/MS-02 corrections and qualify the installed
-  detector-output tee/adapter/cable/receiver network plus PicoScope timebase,
+  detector-output female-to-female BNC adapter -> male-to-two-female BNC tee
+  and branch cable/receiver network plus PicoScope timebase,
   amplitude, bandwidth, trigger, overflow, loading, reflection, and branch-skew
   behavior under normal simultaneous HF2LI/PicoScope recording.
 - **Primary products:** Installed topology/configuration manifests, native branch

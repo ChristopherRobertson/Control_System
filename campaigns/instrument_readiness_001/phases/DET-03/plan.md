@@ -16,6 +16,13 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 18. DET-03 — detector temporal-response and latency correction
 
+The normal acquisition path is the
+[default detector adapter/tee wiring](../../../../instrument/default_wiring_state.md),
+with sample feeding HF2LI Signal 1 In (+)/PicoScope CHA and reference feeding
+HF2LI Signal 2 In (+)/PicoScope CHB simultaneously. Import its MS-02.1 branch
+terms. For temporary OP-01 timing paths, record every disconnected branch and
+changed load separately; restore both default detector paths after measurement.
+
 Measure or authoritatively bound the response delay and temporal bandwidth of
 the exact detector/amplifier/cable/acquisition path used by OP-01. This is a
 new missing correction term; it does not repeat MS-01/MS-02 or T1-01.

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from control_app.config_loader import ConfigInventory, load_config_inventory
-from control_app.paths import LOG_ROOT
+from control_app.paths import output_log_root
 from control_app.devices.arduino_mux_service import (
     ArduinoMuxConfigurationError,
     ArduinoMuxError,
@@ -270,7 +270,7 @@ class MuxWidgetCommandHandler:
             raise ArduinoMuxError("Arduino MUX is not connected. Connect before routing signals.")
 
     def _command_log_path(self) -> Path:
-        return LOG_ROOT / f"{datetime.now().strftime('%Y%m%d')}_mux_ui_command_log.txt"
+        return output_log_root() / f"{datetime.now().strftime('%Y%m%d')}_mux_ui_command_log.txt"
 
 
 def _route_signal_label(route_config: dict[str, Any]) -> str:

@@ -440,8 +440,10 @@ Use the final `OG-01` sample-plane geometry. The record shall identify:
   dump, shutter/block state, and reproducible fiducials;
 - the optical element that creates sample/reference branches, each branch
   path, and the exact sample and reference detector identities;
-- Sample detector to HF2LI Sample input and Reference detector to HF2LI
-  Reference input, preserving the installed assignments; and
+- each detector signal through its own female-to-female BNC adapter ->
+  male-to-two-female BNC tee, with Sample feeding HF2LI Signal 1 In (+) and
+  PicoScope CHA, and Reference feeding HF2LI Signal 2 In (+) and PicoScope CHB,
+  following the [default wiring](../../../../instrument/default_wiring_state.md); and
 - the coupon face/orientation/site mapping to the paired FTIR record.
 
 Do not realign on the height, width, center, or residual of the Mylar band.
@@ -464,8 +466,12 @@ and relative timing must come from `DET-02`, not a family-data-sheet
 assumption [M3, M4]. The manufacturer family ratings and the current package
 PDF are safety/envelope sources only.
 
-Both channels shall be acquired simultaneously. Record detector power-supply
-IDs/status, coupling, termination, HF2LI ranges, clipping flags, phase, dark
+Both channels shall be acquired simultaneously. Record the MS-02.1-qualified
+adapter/tee/branch-cable network with both HF2LI and PicoScope receivers
+connected, even when the PicoScope is not recording.
+Record receiver loading and any temporary change as configuration provenance.
+Also record detector power-supply IDs/status, coupling, termination, HF2LI
+ranges, clipping flags, phase, dark
 offsets, and temperature/RH observations. Any change of detector, amplifier,
 gain, range, cable, optic, or branch alignment invalidates the relevant
 `DET-02`/`DET-04` link until reviewed.

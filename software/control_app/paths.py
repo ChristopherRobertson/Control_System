@@ -44,6 +44,37 @@ PROMOTED_BUNDLE_ROOT = _configured_root(
     "CONTROL_SYSTEM_BUNDLE_ROOT", INSTRUMENT_ROOT / "promoted_bundles"
 )
 
+# GUI selection affects new output only, never historic input resolution.
+_selected_save_location: Path | None = None
+
+
+def get_save_location() -> Path:
+    return _selected_save_location or RUN_ROOT
+
+
+def set_save_location(value: str | Path) -> Path:
+    global _selected_save_location
+    if not str(value).strip():
+        raise ValueError("Choose a non-empty save location")
+    path = Path(value).expanduser().resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    if not path.is_dir():
+        raise ValueError("Save Location must be a folder")
+    # Check actual write access, including network shares and Windows ACLs.
+    from tempfile import TemporaryFile
+    with TemporaryFile(dir=path):
+        pass
+    _selected_save_location = path
+    return path
+
+
+def output_run_root() -> Path:
+    return get_save_location()
+
+
+def output_log_root() -> Path:
+    return _selected_save_location / "logs" if _selected_save_location else LOG_ROOT
+
 HARDWARE_CONFIGURATION_CANDIDATES = (
     INSTRUMENT_ROOT / "hardware_configuration.yaml",
 )
@@ -77,11 +108,11 @@ def recipe_path(relative: str | Path) -> Path:
 
 
 def run_path(relative: str | Path) -> Path:
-    return (RUN_ROOT / relative).resolve()
+    return (output_run_root() / relative).resolve()
 
 
 def log_path(relative: str | Path) -> Path:
-    return (LOG_ROOT / relative).resolve()
+    return (output_log_root() / relative).resolve()
 
 
 def resolve_compat_path(value: str | Path) -> Path:

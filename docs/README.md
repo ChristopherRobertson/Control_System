@@ -46,6 +46,11 @@ The desktop application reads `instrument/hardware_configuration.yaml`,
 `evidence/experiments/`. Campaign evidence is created only when an authorized
 phase records or imports that output using the phase-record contract.
 
+The [default wiring convention](../instrument/default_wiring_state.md) defines
+the current detector adapter/tee paths to HF2LI Signal 1/2 In and PicoScope
+CHA/CHB, as well as the standing disconnected routes. Earlier phase wiring
+records remain historical evidence for their recorded configurations.
+
 The recipe-driven Workflows tab exposes only entries declared in
 `instrument/recipes/ui_workflows.yaml`. A workflow must validate and save an
 immutable configured snapshot before Run becomes available. Changing an exposed
@@ -59,6 +64,10 @@ editing, and configuring a definition do not access hardware. Execution remains
 gated until the engine has explicit device adapters and a valid immutable plan.
 Device communication stays in `software/control_app/devices/`; definitions and
 widgets do not duplicate SDK or serial behavior.
+
+The [Phase Scan tab](operating_procedures/phase_scan_tab.md) derives and exports
+single-scan phase-series plans from probe, sweep, cadence, and repetition controls.
+It currently provides planning and preview only; hardware acquisition is not connected.
 
 Every executable workflow must define stop, abort-to-safe, and failure-recovery
 behavior. Reserved or disconnected routes cannot become selectable merely because

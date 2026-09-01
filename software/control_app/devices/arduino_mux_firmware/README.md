@@ -3,7 +3,12 @@
 Status: archived/inactive. The Arduino MUX is disabled and bypassed in the
 active control system until the MUX inputs are rewired and requalified.
 
-Firmware for the Arduino UNO R4 Minima that controls the IR spectroscope MUX boards documented in `docs/Wiring Table.xlsx`.
+Firmware for the Arduino UNO R4 Minima that controls the IR spectroscope MUX
+boards retained as inactive wiring in `instrument/wiring_table.xlsx`.
+Current [default detector wiring](../../../../instrument/default_wiring_state.md)
+bypasses these boards: each detector signal passes through a female-to-female
+BNC adapter -> male-to-two-female BNC tee, with sample feeding HF2LI Signal 1
+In (+)/PicoScope CHA and reference feeding HF2LI Signal 2 In (+)/PicoScope CHB.
 
 ## Hardware Target
 
@@ -16,7 +21,7 @@ Firmware for the Arduino UNO R4 Minima that controls the IR spectroscope MUX boa
 
 ## Pin Topology
 
-The firmware follows the MUX topology in `hardware_configuration.yaml`:
+The firmware follows the inactive MUX topology in `instrument/hardware_configuration.yaml`:
 
 - DMB1 enable: `D2`, routes digital signals to MUX Output A
 - DMB2 enable: `D3`, routes digital signals to MUX Output B

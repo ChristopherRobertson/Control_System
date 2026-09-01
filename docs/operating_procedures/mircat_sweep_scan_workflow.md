@@ -9,6 +9,16 @@ The manufacturer correspondence defining the DB9 signals and required
 GUI-first process-trigger qualification is preserved in
 [daylight_db9_process_trigger_correspondence.md](../../references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md).
 
+## Detector wiring
+
+The [default wiring](../../instrument/default_wiring_state.md) uses one
+female-to-female BNC adapter -> male-to-two-female BNC tee per detector signal.
+Sample feeds HF2LI Signal 1 In (+) and PicoScope CHA; reference feeds HF2LI
+Signal 2 In (+) and PicoScope CHB. Both receivers stay connected throughout a
+normal sweep, including when only HF2LI streams are recorded. The MUX remains
+bypassed. Qualification and settings must cover this installed receiver load;
+temporary timing/IRF wiring is a separate configuration restored afterward.
+
 ## Sequence
 
 1. Complete the approved phase gate. The application fails before opening
