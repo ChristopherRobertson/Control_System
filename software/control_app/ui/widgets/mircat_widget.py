@@ -30,6 +30,8 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
         StatusField("scan_current_wavelength", "Scan Wavenumber", units="cm^-1"),
         StatusField("qcl_pulse_rate_hz", "Pulse Rate", units="Hz"),
         StatusField("qcl_pulse_width_ns", "Pulse Width", units="ns"),
+        StatusField("red_laser_pointer_installed", "Red Alignment Laser Installed"),
+        StatusField("red_laser_pointer_enabled", "Red Alignment Laser On", critical=True),
     ),
     parameter_fields=(
         ParameterField(
@@ -121,6 +123,19 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
     controls=(
         WidgetControl("initialize", "Initialize", "mircat.initialize"),
         WidgetControl("refresh_status", "Refresh", "mircat.refresh_status"),
+        WidgetControl(
+            "red_laser_pointer_on",
+            "Red Alignment Laser On",
+            "mircat.red_laser_pointer_on",
+            kind="guarded",
+            safety_approval_required=True,
+        ),
+        WidgetControl(
+            "red_laser_pointer_off",
+            "Red Alignment Laser Off",
+            "mircat.red_laser_pointer_off",
+            kind="danger",
+        ),
         WidgetControl("arm", "Arm", "mircat.arm", kind="guarded"),
         WidgetControl("safe_tune", "Direct Tune", "mircat.safe_tune", kind="guarded"),
         WidgetControl("configure_pulse", "Apply Pulse Params", "mircat.configure_pulse", kind="guarded"),
@@ -181,6 +196,8 @@ COMMON_PARAMETER_KEYS = (
 GLOBAL_CONTROL_KEYS = (
     "initialize",
     "refresh_status",
+    "red_laser_pointer_on",
+    "red_laser_pointer_off",
     "arm",
     "emission_off",
     "disarm",
