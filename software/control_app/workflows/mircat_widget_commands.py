@@ -115,6 +115,25 @@ class MircatWidgetCommandHandler:
         if name == "mircat.refresh_status":
             self._require_initialized()
             return self._complete("MIRcat status refreshed", command_log)
+        if name == "mircat.red_laser_pointer_on":
+            self._require_initialized()
+            pointer_status = service.set_red_laser_pointer_enabled(
+                True,
+                approved_laser_safety_condition=bool(command.safety_approval),
+            )
+            return self._complete(
+                "MIRcat red alignment laser on",
+                command_log,
+                extra_data={"red_laser_pointer": pointer_status},
+            )
+        if name == "mircat.red_laser_pointer_off":
+            self._require_initialized()
+            pointer_status = service.set_red_laser_pointer_enabled(False)
+            return self._complete(
+                "MIRcat red alignment laser off",
+                command_log,
+                extra_data={"red_laser_pointer": pointer_status},
+            )
         if name == "mircat.arm":
             self._require_initialized()
             self._assert_interlocks(service)

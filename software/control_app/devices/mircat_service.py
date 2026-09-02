@@ -64,6 +64,8 @@ PROC_TRIG_MODE_EXTERNAL = 2
 PROC_TRIG_MODE_MANUAL = 3
 STATUS_MASK_SCANNING = 0x00000020
 STATUS_MASK_MANUAL_TUNING = 0x00000040
+STATUS_MASK_RED_LASER_POINTER_INSTALLED = 0x00020000
+STATUS_MASK_RED_LASER_POINTER_ENABLED = 0x00040000
 
 RETURN_CODE_NAMES = {
     RET_SUCCESS: "SUCCESS",
@@ -147,6 +149,8 @@ class MircatState:
     status_mask: int | None = None
     status_mask_scanning: bool | None = None
     manual_tuning: bool | None = None
+    red_laser_pointer_installed: bool | None = None
+    red_laser_pointer_enabled: bool | None = None
     active_qcl: int | None = None
     qcl_pulse_rate_hz: float | None = None
     qcl_pulse_width_ns: float | None = None
@@ -205,15 +209,27 @@ class MircatService:
         self._initialized = True
 
     def deinitialize(self) -> None:
-        """Deinitialize the SDK session if it is active."""
+        """Turn off an active red pointer and deinitialize the SDK session."""
 
         if self._sdk is None:
             return
+        pointer_error: MircatError | None = None
+        if self._initialized:
+            try:
+                pointer_status = self.get_red_laser_pointer_status()
+                if pointer_status["installed"] and pointer_status["enabled"]:
+                    self.set_red_laser_pointer_enabled(False)
+            except MircatError as exc:
+                pointer_error = exc
         status = self._call("MIRcatSDK_DeInitialize")
         if status not in {RET_SUCCESS, RET_NOT_INITIALIZED}:
             self._raise(status, "MIRcatSDK_DeInitialize")
         self._initialized = False
         self._sdk = None
+        if pointer_error is not None:
+            raise MircatCommandError(
+                f"Red alignment laser safe-off before deinitialization failed: {pointer_error}"
+            ) from pointer_error
 
     def get_api_version(self) -> str:
         """Return the SDK API version string."""
@@ -303,6 +319,42 @@ class MircatService:
             "MIRcatSDK_GetStatusMask",
         )
         return int(status_mask.value)
+
+    def get_red_laser_pointer_status(self) -> dict[str, bool]:
+        """Return installed and enabled readbacks for the visible red pointer."""
+
+        status_mask = self.get_status_mask()
+        return {
+            "installed": bool(status_mask & STATUS_MASK_RED_LASER_POINTER_INSTALLED),
+            "enabled": bool(status_mask & STATUS_MASK_RED_LASER_POINTER_ENABLED),
+        }
+
+    def set_red_laser_pointer_enabled(
+        self,
+        enabled: bool,
+        *,
+        approved_laser_safety_condition: bool = False,
+    ) -> dict[str, bool]:
+        """Set the visible red pointer state and return its status-mask readback."""
+
+        requested = bool(enabled)
+        if requested and not approved_laser_safety_condition:
+            raise MircatSafetyError(
+                "Red alignment laser on requires approved_laser_safety_condition=True"
+            )
+        pointer_status = self.get_red_laser_pointer_status()
+        if not pointer_status["installed"]:
+            raise MircatCommandError("This MIRcat does not report a red laser pointer installed")
+        self._check(
+            self._call("MIRcatSDK_EnableRedLaserPointer", c_bool(requested)),
+            "MIRcatSDK_EnableRedLaserPointer",
+        )
+        readback = self.get_red_laser_pointer_status()
+        if readback["enabled"] != requested:
+            raise MircatCommandError(
+                "Red alignment laser readback did not match the requested state"
+            )
+        return readback
 
     def clear_system_error(self) -> bool:
         """Attempt to clear a system error and return the SDK's boolean result."""
@@ -804,6 +856,12 @@ class MircatService:
             status_mask=status_mask,
             status_mask_scanning=_status_mask_set(status_mask, STATUS_MASK_SCANNING),
             manual_tuning=_status_mask_set(status_mask, STATUS_MASK_MANUAL_TUNING),
+            red_laser_pointer_installed=_status_mask_set(
+                status_mask, STATUS_MASK_RED_LASER_POINTER_INSTALLED
+            ),
+            red_laser_pointer_enabled=_status_mask_set(
+                status_mask, STATUS_MASK_RED_LASER_POINTER_ENABLED
+            ),
             active_qcl=active_qcl,
             qcl_pulse_rate_hz=pulse_rate,
             qcl_pulse_width_ns=pulse_width,
@@ -985,6 +1043,8 @@ class MircatService:
         sdk.MIRcatSDK_GetWlTrigPulseWidth.restype = c_uint32
         sdk.MIRcatSDK_SetWlTrigPulseWidth.argtypes = [c_uint16]
         sdk.MIRcatSDK_SetWlTrigPulseWidth.restype = c_uint32
+        sdk.MIRcatSDK_EnableRedLaserPointer.argtypes = [c_bool]
+        sdk.MIRcatSDK_EnableRedLaserPointer.restype = c_uint32
 
     def _bool_call(self, name: str) -> bool:
         value = c_bool(False)
