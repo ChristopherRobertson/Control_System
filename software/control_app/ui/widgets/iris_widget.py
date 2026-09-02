@@ -180,8 +180,10 @@ class IrisWidget(QWidget):
         layout.addWidget(self._build_readback_group())
         layout.addWidget(self._build_controls_group())
         note = QLabel(
-            "The iris is a beam conditioner, not a safety shutter. Other tabs are locked "
-            "while an iris command is active."
+            "The iris is a beam conditioner, not a safety shutter. Diameter changes are "
+            "allowed while Nd:YAG alignment is running; phase scans and other active "
+            "workflows still block iris motion. Other tabs are locked only while an iris "
+            "command is executing."
         )
         note.setWordWrap(True)
         layout.addWidget(note)

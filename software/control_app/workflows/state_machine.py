@@ -51,6 +51,7 @@ REQUIRED_WORKFLOW_COMMANDS = (
 )
 WORKFLOW_DEVICE_KEYS = ("mircat", "t660", "t660_2", "picoscope", "hf2li")
 DEVICE_COMMAND_KEYS = WORKFLOW_DEVICE_KEYS + ("ndyag", "opo_iris")
+IRIS_MOTION_COMPATIBLE_ACTIVE_WORKFLOWS = frozenset({"ndyag_alignment_10hz"})
 INITIAL_STATE = "SAFE_IDLE"
 HARDWARE_REQUIRED_STATES = {
     "SAFE_SHUTDOWN_SENT",
@@ -319,7 +320,11 @@ class WorkflowStateMachine:
         blockers: list[str] = []
         if self.phase_scan_active:
             blockers.append("Phase Scan owns the instruments")
-        if self._active_ui_workflow is not None:
+        if (
+            self._active_ui_workflow is not None
+            and self._active_ui_workflow.workflow_id
+            not in IRIS_MOTION_COMPATIBLE_ACTIVE_WORKFLOWS
+        ):
             blockers.append(
                 f"configured workflow {self._active_ui_workflow.workflow_id!r} is active"
             )
