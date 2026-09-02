@@ -22,13 +22,17 @@ OPTICAL_ADAPTER_BLOCKER = (
     "No optical acquisition adapter is attached in this session. "
     "Use the normal hardware-enabled GUI launcher for optical scans."
 )
+RUN_CLASSIFICATION = "EXPLORATORY_PROOF_OF_CONCEPT"
+PUBLICATION_WARNING = (
+    "EXPLORATORY_PROOF_OF_CONCEPT: preliminary output only; not validated or eligible for publication."
+)
 
 
 class ScanAcquirer(Protocol):
     """Adapter contract: retain raw acquisition and provide measured coordinates.
 
     prepare returns stable read-back acquisition settings (no timestamps) and
-    verifies current=1000 mA, coverage, routing and readiness. capture executes
+    verifies current=750 mA, coverage, routing and readiness. capture executes
     exactly one sweep/event and supplies native payload plus Spectrum; the
     timestamps must share a device clock. close must stop outputs on every exit.
     Provisional wavelength previews must be labeled as such. Command time is
@@ -118,7 +122,10 @@ class PhaseScanRunner:
                 spectrum.validate()
                 if np.isfinite(spectrum.ratio()).sum() < 2:
                     raise ValueError("Background has fewer than two valid detector samples; no valid I0 reference")
-                save_scan_csv(store.path / "processed" / "background.csv", spectrum, spectrum.ratio(), background=True)
+                save_scan_csv(
+                    store.path / "processed" / "background.csv", spectrum, spectrum.ratio(),
+                    background=True, run_quality_status=RUN_CLASSIFICATION, publication_eligible=False,
+                )
                 candidate = Background(spectrum, native, acquisition_settings(plan.settings), readback, path)
                 result = {"kind": kind, "path": store.path, "background": candidate}
             else:
@@ -165,10 +172,12 @@ class PhaseScanRunner:
                     )
                     if kind == "test":
                         save_processed_attempt(store, item, background.spectrum,
-                                               run_quality_status="COMPLETE", publication_eligible=True)
+                                               run_quality_status=RUN_CLASSIFICATION, publication_eligible=False)
                         result = {"kind": kind, "path": store.path, "spectrum": item["spectrum"], "absorbance": values,
+                                  "run_classification": RUN_CLASSIFICATION, "publication_eligible": False,
                                   "warnings": sorted(set(item["spectrum"].metadata.get("warnings", []) +
-                                                         background.spectrum.metadata.get("warnings", [])))}
+                                                         background.spectrum.metadata.get("warnings", []) +
+                                                         [PUBLICATION_WARNING]))}
                 if kind != "test":
                     coverage_required = bool(
                         getattr(acquirer, "pulse_coverage_required", False) or
@@ -250,8 +259,12 @@ class PhaseScanRunner:
                         reconstruction.update({"completion_status": "COMPLETE", "publication_eligible": True,
                                                "deficient_missing_pulse_coverage": False})
                     run_completion_status = reconstruction["completion_status"]
+                    reconstruction["publication_eligible"] = False
+                    reconstruction["run_classification"] = RUN_CLASSIFICATION
+                    reconstruction["warnings"] = sorted(set(reconstruction.get("warnings", []) + [PUBLICATION_WARNING]))
+                    reconstruction["limitations"] = list(reconstruction.get("limitations", [])) + [PUBLICATION_WARNING]
                     if (not np.isfinite(reconstruction["absorbance"]).any() and
-                            reconstruction["publication_eligible"]):
+                            not reconstruction.get("deficient_missing_pulse_coverage", False)):
                         raise ValueError("No supported absorbance surface in the selected window; native data retained for diagnosis")
                     save_native(store.path / "processed" / "reconstruction.npz", reconstruction)
                     save_reconstruction_csv(store.path / "processed" / "reconstruction.csv", reconstruction)
@@ -259,7 +272,7 @@ class PhaseScanRunner:
                         save_processed_attempt(
                             store, item, background.spectrum,
                             run_quality_status=run_completion_status,
-                            publication_eligible=bool(reconstruction["publication_eligible"]),
+                            publication_eligible=False,
                         )
                     result = {"kind": kind, "path": store.path, "reconstruction": reconstruction}
         except Exception as exc:
@@ -279,8 +292,16 @@ class PhaseScanRunner:
                                       "cleanup_error": str(cleanup_error) if cleanup_error else None}
                     if kind == "run":
                         finish_details.update({
-                            "publication_eligible": status == "COMPLETE",
+                            "run_classification": RUN_CLASSIFICATION,
+                            "publication_eligible": False,
+                            "publication_warning": PUBLICATION_WARNING,
                             "missing_pulse_coverage_status": run_completion_status if not error else "NOT_COMPLETED",
+                        })
+                    elif kind in {"background", "test"}:
+                        finish_details.update({
+                            "run_classification": RUN_CLASSIFICATION,
+                            "publication_eligible": False,
+                            "publication_warning": PUBLICATION_WARNING,
                         })
                     store.finish(status, **finish_details)
                 if self.cancel.is_set() and error is None:

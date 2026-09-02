@@ -61,6 +61,10 @@ def make_surface_figure(result):
         title += " · INCOMPLETE MISSING-PULSE COVERAGE · NOT FOR PUBLICATION"
         figure.text(.5, .5, "INCOMPLETE · NOT FOR PUBLICATION", ha="center", va="center",
                     rotation=28, fontsize=24, color="#b00020", alpha=.22, weight="bold")
+    elif not result.get("publication_eligible", False):
+        title += " · EXPLORATORY PROOF OF CONCEPT · NOT FOR PUBLICATION"
+        figure.text(.5, .5, "EXPLORATORY · NOT FOR PUBLICATION", ha="center", va="center",
+                    rotation=28, fontsize=22, color="#b00020", alpha=.20, weight="bold")
     elif result.get("provisional"):
         title += " · PROVISIONAL wavenumber axis"
     elif electrical:

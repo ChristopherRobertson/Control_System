@@ -362,3 +362,68 @@ presets:
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
       expected_output: "USER_INPUT_REQUIRED_APPROVED_PHASE_DIRECTORY"
+
+  exploratory_phase_scan_poc:
+    purpose: "Disposable MbCO single-scan phase-delay proof of concept; not a campaign-qualified detector configuration and not eligible for publication."
+    operator_checks:
+      - "Confirm sample and reference detector inputs are positive and unsaturated at the selected 750 mA MIRcat current."
+      - "Confirm the 10 cm-1 sweep is centered on the experimentally observed MbCO A1 maximum."
+      - "Capture and inspect a pump-blocked background and test sweep before enabling photolysis."
+      - "Retain the configured and read-back detector rates, time constants, input ranges, and overload status with the exploratory run."
+    signal_inputs:
+      ch1:
+        index: 0
+        ac: false
+        impedance_50ohm: true
+        differential: false
+        range_v: 1.0
+      ch2:
+        index: 1
+        ac: false
+        impedance_50ohm: true
+        differential: false
+        range_v: 1.0
+    pll:
+      index: 0
+      enable: true
+      adcselect: 4
+      freqcenter_hz: 2000000.0
+      harmonic: 1
+      order: 4
+      adcthreshold: 0
+    demodulators:
+      - index: 0
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.00005
+        rate_sps: 20000.0
+        trigger: 0
+        enable: true
+      - index: 3
+        adcselect: 1
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.00005
+        rate_sps: 20000.0
+        trigger: 0
+        enable: true
+      # API index 2 carries the global DIO word. The Phase-Scan adapter raises
+      # this timing-stream rate from the saved seed value when the phase step
+      # requires denser observation of Sweep Active and wavelength markers.
+      - index: 2
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 5000.0
+        trigger: 0
+        enable: true
+    acquisition:
+      duration_s: 5.0
+      demodulators: [0, 3]
+      fields: ["x", "y", "r"]
+      expected_output: "EXPLORATORY_PHASE_SCAN_RUN_DIRECTORY"

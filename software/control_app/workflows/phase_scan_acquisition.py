@@ -28,7 +28,7 @@ from control_app.workflows.phase_scan_native import demodulator_samples, high_in
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
 
 
-PICOSCOPE_TRIGGER_BASIS = "t660_1_chd_process_marker"
+PICOSCOPE_TRIGGER_BASIS = "mircat_sweep_active"
 
 
 def channel_segments(start, stop, ranges):
@@ -58,13 +58,13 @@ def frequency_hz(value):
 
 
 def event_timing(event):
-    """One REM event schedules Fire, Q-switch, Process, and the scope marker.
+    """One REM event schedules Fire, Q-switch, and the MIRcat Process Trigger.
 
     Surelite nominal fire-to-light 180 us, Q-switch-to-light 170 ns, as in the
     installed alignment settings. These are scheduling values, not corrections
-    applied to measured time. T660-1 CHD exactly mirrors the active-low CHC
-    process-command pulse and is connected only to PicoScope EXT. T660-2 only
-    provides the continuous probe train.
+    applied to measured time. PicoScope EXT observes MIRcat DB9 pin 2 Tuned /
+    Sweep Active directly, so T660-1 CHD remains disabled. T660-2 only provides
+    the continuous probe train.
     """
     phase_s = float(event.phase_delay_us or 0) * 1e-6
     pump_s = .001 + max(.000180, -phase_s)
@@ -77,66 +77,53 @@ def event_timing(event):
             "force_eod": True,
             "channels": {"A": pulse(pump_s-.000180, .000010) if event.pump_enabled else {"enabled": False},
                          "B": pulse(pump_s-.000000170, .000010) if event.pump_enabled else {"enabled": False},
-                         "C": process, "D": dict(process)}}, max(pump_s, scan_s+.010)
+                         "C": process, "D": {"enabled": False}}}, max(pump_s, scan_s+.010)
 
 
-def qualified_picoscope_alignment(recipe, *, phase_interval_us, pulse_rate_hz, override=None):
-    """Return the measured CHD-to-Sweep-Active relationship or fail closed."""
-    alignment = deepcopy(override if override is not None else recipe.get("alignment"))
-    if not isinstance(alignment, dict):
-        raise RuntimeError("Phase Scan PicoScope alignment section is missing")
-    if alignment.get("trigger_basis") != PICOSCOPE_TRIGGER_BASIS:
+def direct_sweep_active_trigger_contract(recipe, *, override=None):
+    """Validate the nonpublication direct Sweep Active trigger configuration."""
+    contract = deepcopy(override if override is not None else recipe.get("trigger_contract"))
+    if not isinstance(contract, dict):
+        raise RuntimeError("Phase Scan PicoScope direct-trigger contract is missing")
+    if contract.get("trigger_basis") != PICOSCOPE_TRIGGER_BASIS:
         raise RuntimeError(
             f"Phase Scan PicoScope trigger basis must be {PICOSCOPE_TRIGGER_BASIS!r}"
         )
-    if str(alignment.get("qualification_status", "")).strip().upper() != "QUALIFIED":
+    if str(contract.get("status", "")).strip().upper() != "EXPLORATORY_DIRECT_TRIGGER":
         raise RuntimeError(
-            "T660-1 CHD to MIRcat Sweep Active timing is not qualified. Complete the "
-            "Phase Scan CHD alignment measurement and enter its delay, uncertainty, and qualification ID."
+            "Direct MIRcat Sweep Active triggering is permitted only under the explicit "
+            "EXPLORATORY_DIRECT_TRIGGER contract"
         )
-    qualification_id = str(alignment.get("qualification_id") or "").strip()
-    if not qualification_id:
-        raise RuntimeError("Qualified PicoScope alignment requires a human-readable qualification_id")
+    configuration_id = str(contract.get("configuration_id") or "").strip()
+    if not configuration_id:
+        raise RuntimeError("Direct Sweep Active triggering requires a human-readable configuration_id")
     try:
-        delay_us = float(alignment["process_trigger_to_sweep_active_delay_us"])
-        uncertainty_us = float(alignment["process_trigger_to_sweep_active_uncertainty_us"])
-        configured_limit_us = float(alignment["maximum_allowed_uncertainty_us"])
+        offset_us = float(contract["sweep_start_offset_us"])
     except (KeyError, TypeError, ValueError) as exc:
-        raise RuntimeError(f"Invalid qualified PicoScope alignment values: {exc}") from exc
-    values = (delay_us, uncertainty_us, configured_limit_us, float(phase_interval_us), float(pulse_rate_hz))
-    if not all(math.isfinite(value) for value in values):
-        raise RuntimeError("Qualified PicoScope alignment values must be finite")
-    if delay_us < 0 or uncertainty_us < 0 or configured_limit_us <= 0:
-        raise RuntimeError("PicoScope alignment delay/uncertainty values are outside their valid range")
-    if phase_interval_us <= 0 or pulse_rate_hz <= 0:
-        raise RuntimeError("Phase interval and T660-2 repetition rate must be positive")
-    physics_limit_us = min(0.5e6 / pulse_rate_hz, 0.05 * phase_interval_us)
-    allowed_us = min(configured_limit_us, physics_limit_us)
-    if uncertainty_us > allowed_us + 1e-12:
-        raise RuntimeError(
-            f"CHD-to-Sweep-Active uncertainty is {uncertainty_us:g} us; "
-            f"the current Phase Scan permits at most {allowed_us:g} us"
-        )
+        raise RuntimeError(f"Invalid direct Sweep Active trigger contract: {exc}") from exc
+    if not math.isfinite(offset_us) or offset_us != 0.0:
+        raise RuntimeError("Direct Sweep Active triggering requires a zero sweep_start_offset_us")
+    if contract.get("publication_eligible") is not False:
+        raise RuntimeError("The exploratory direct-trigger contract must set publication_eligible=false")
     return {
         "trigger_basis": PICOSCOPE_TRIGGER_BASIS,
-        "qualification_status": "QUALIFIED",
-        "qualification_id": qualification_id,
-        "process_trigger_to_sweep_active_delay_us": delay_us,
-        "process_trigger_to_sweep_active_uncertainty_us": uncertainty_us,
-        "maximum_allowed_uncertainty_us": allowed_us,
+        "status": "EXPLORATORY_DIRECT_TRIGGER",
+        "configuration_id": configuration_id,
+        "publication_eligible": False,
+        "sweep_start_offset_us": 0.0,
     }
 
 
 class LivePhaseScanAcquirer:
     def __init__(self, *, config_path=None, laser_factory=None, hf_factory=None, t660_factory=None,
-                 picoscope_factory=None, picoscope_recipe_path=None, picoscope_alignment_override=None):
+                 picoscope_factory=None, picoscope_recipe_path=None, picoscope_trigger_override=None):
         self.config_path = config_path
         self.laser_factory = laser_factory or MircatService.from_config
         self.hf_factory = hf_factory or HF2LIService.from_config
         self.t660_factory = t660_factory or T660Service.from_config
         self.picoscope_factory = picoscope_factory or PicoScopeService
         self.picoscope_recipe_path = picoscope_recipe_path or "instrument/recipes/phase_scan_pulse_coverage.yaml"
-        self.picoscope_alignment_override = picoscope_alignment_override
+        self.picoscope_trigger_override = picoscope_trigger_override
         self.authorized = False
         self.qcl = self.hf = self.pico = self.log = self.store = None
         self.units = {}
@@ -196,19 +183,13 @@ class LivePhaseScanAcquirer:
         pico_settings = deepcopy(capture_settings_from_recipe(pico_recipe))
         external_trigger = pico_settings.get("external_trigger") or {}
         if (str(external_trigger.get("source", "")).upper() != "EXT" or
-                int(external_trigger.get("direction", -1)) != 3 or
-                str(external_trigger.get("direction_name", "")).strip().lower() != "falling"):
+                int(external_trigger.get("direction", -1)) != 2 or
+                str(external_trigger.get("direction_name", "")).strip().lower() != "rising"):
             raise RuntimeError(
-                "Phase Scan PicoScope EXT must trigger on the falling edge of T660-1 CHD"
+                "Phase Scan PicoScope EXT must trigger on the rising edge of MIRcat DB9 pin 2 Sweep Active"
             )
-        self.picoscope_alignment = qualified_picoscope_alignment(
-            pico_recipe,
-            phase_interval_us=settings.phase_delay_us,
-            pulse_rate_hz=settings.probe_repetition_rate_hz,
-            override=self.picoscope_alignment_override,
-        )
-        sweep_start_offset_s = (
-            self.picoscope_alignment["process_trigger_to_sweep_active_delay_us"] * 1e-6
+        self.picoscope_trigger_contract = direct_sweep_active_trigger_contract(
+            pico_recipe, override=self.picoscope_trigger_override,
         )
         # Allocate for the complete requested span.  A multi-QCL segment is no
         # longer than this conservative upper bound.
@@ -216,8 +197,7 @@ class LivePhaseScanAcquirer:
                              settings.scan_speed_cm1_s)
         preferred_ns = float(pico_settings.get("preferred_sample_interval_ns", 16.0))
         pre_trigger_s = float(pico_settings.get("pre_trigger_duration_us", 10.0)) * 1e-6
-        capture_s = (sweep_start_offset_s +
-                     longest_segment_s * (1 + float(pico_settings.get("duration_margin_fraction", .05))) +
+        capture_s = (longest_segment_s * (1 + float(pico_settings.get("duration_margin_fraction", .05))) +
                      float(pico_settings.get("post_trigger_margin_us", 250.0)) * 1e-6)
         pico_settings["pre_trigger_samples"] = max(1, math.ceil(pre_trigger_s / (preferred_ns * 1e-9)))
         pico_settings["total_samples"] = pico_settings["pre_trigger_samples"] + math.ceil(capture_s / (preferred_ns * 1e-9))
@@ -242,8 +222,8 @@ class LivePhaseScanAcquirer:
         write_json(store.path / "picoscope_prepared.json", {
             "recipe": str(resolved_pico_recipe), "capture_settings": pico_settings,
             "validated_timing": timing, "maximum_adc_value": self.picoscope_maximum_adc,
-            "alignment": self.picoscope_alignment,
-            "wiring": "T660-1 CHD -> PicoScope EXT; MIRcat Sweep Active -> HF2LI DIO21",
+            "trigger_contract": self.picoscope_trigger_contract,
+            "wiring": "MIRcat DB9 pin 2 Sweep Active -> HF2LI DIO21 plus high-impedance probe branch -> PicoScope EXT; DB9 pin 7 -> probe ground; T660-1 CHD disconnected",
             "optical_pulse_threshold_fraction": settings.pulse_detection_threshold_fraction,
         })
         for name in ("t660_1", "t660_2"):
@@ -336,13 +316,15 @@ class LivePhaseScanAcquirer:
         self.clockbase = self.hf.get_clockbase()
         if not self.clockbase > 0:
             raise ValueError("Invalid HF2LI device clockbase")
-        self.warnings = ["First-light workflow: no optical timing or wavelength qualification has been applied.",
-                         "Saved detector filters/rates retained; timing demodulator rate is derived from the phase step."]
+        self.warnings = ["EXPLORATORY PROOF OF CONCEPT: outputs are not publication eligible.",
+                          "First-light workflow: no optical timing or wavelength qualification has been applied.",
+                          "Saved detector filters/rates retained; timing demodulator rate is derived from the phase step."]
         if len(self.segments) > 1:
             self.warnings.append("Multiple QCL sweeps contain real return/settling gaps; unsupported time regions remain blank.")
         write_json(store.path / "acquisition_preflight.json", {"qcls": configured_qcls, "segments": self.segments,
                    "timing_stream_requested_sps": self.timing_rate_requested, "clockbase_hz": self.clockbase,
-                   "warnings": self.warnings, "settings": asdict(settings), "calibration_status": "NOT_QUALIFIED"})
+                   "warnings": self.warnings, "settings": asdict(settings),
+                   "calibration_status": "EXPLORATORY_DIRECT_TRIGGER_NOT_CAMPAIGN_QUALIFIED"})
         # Exclude live PLL tracker values from background equality; frequency is
         # separately checked against the requested reference above.
         stable = {path: value for path, value in snapshot["nodes"].items()
@@ -354,7 +336,7 @@ class LivePhaseScanAcquirer:
                 "picoscope": {"model": pico_device.get("model"), "serial_number": pico_device.get("serial_number"),
                                "sample_interval_ns": timing["sample_interval_ns"],
                                "external_trigger_basis": PICOSCOPE_TRIGGER_BASIS,
-                               "trigger_alignment": self.picoscope_alignment,
+                                "trigger_contract": self.picoscope_trigger_contract,
                                "pulse_coverage_required": True}}
 
     def _poll(self, record, seconds=.02, *, interlock=True):
@@ -435,13 +417,8 @@ class LivePhaseScanAcquirer:
             record["picoscope"] = self.pico.capture_block_data(after_arm=fire_after_scope_arm)
             record["picoscope"].update({
                 "external_trigger_basis": PICOSCOPE_TRIGGER_BASIS,
-                "sweep_start_offset_s": self.picoscope_alignment[
-                    "process_trigger_to_sweep_active_delay_us"
-                ] * 1e-6,
-                "sweep_start_uncertainty_s": self.picoscope_alignment[
-                    "process_trigger_to_sweep_active_uncertainty_us"
-                ] * 1e-6,
-                "trigger_alignment_qualification_id": self.picoscope_alignment["qualification_id"],
+                "trigger_configuration_id": self.picoscope_trigger_contract["configuration_id"],
+                "publication_eligible": False,
                 "expected_pulse_rate_hz_readback": self.probe_rate_hz_readback,
                 "t660_2_rate_native_readback": self.probe_rate_readback_native,
             })

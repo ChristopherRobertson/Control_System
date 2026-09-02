@@ -3,10 +3,10 @@
 Expected opportunities come from the configured/read-back T660-2 rate.  Their
 phase is propagated between consecutive observed optical edges, so a missing
 edge creates an opportunity instead of shifting one global fitted grid.  The
-PicoScope EXT trigger is the dedicated T660-1 CHD process marker.  Its qualified
-offset locates the HF2LI-observed MIRcat Sweep Active interval in the PicoScope
-record. CHA and CHB remain independent optical witnesses and are never used as
-the timing authority.
+PicoScope EXT is triggered directly by the rising edge of MIRcat DB9 pin 2
+Tuned / Sweep Active. CHA and CHB remain independent optical witnesses and are
+never used as the timing authority. Legacy CHD-aligned payloads remain readable
+when they include their qualified offset metadata.
 """
 from __future__ import annotations
 

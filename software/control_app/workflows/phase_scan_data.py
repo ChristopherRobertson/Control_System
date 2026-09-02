@@ -19,8 +19,8 @@ from control_app.workflows.phase_scan import PhaseScanEvent, PhaseScanPlan, Phas
 
 SCHEMA_VERSION = "phase-scan/3.0"
 ANALYSIS_VERSION = "absolute-absorbance/3.0"
-QCL_CURRENT_MA = 1000.0
-HF2_PRESET = "campaign_sweep_qualification_candidate"
+QCL_CURRENT_MA = 750.0
+HF2_PRESET = "exploratory_phase_scan_poc"
 
 
 def utc_now() -> str:
@@ -114,6 +114,9 @@ class ScanStore:
         write_json(self.path / "run.json", {
             "schema_version": SCHEMA_VERSION, "run_id": self.id, "kind": kind,
             "created_utc": utc_now(), "plan": plan.to_dict(),
+            "run_classification": "EXPLORATORY_PROOF_OF_CONCEPT",
+            "publication_eligible": False,
+            "publication_warning": "Preliminary proof-of-concept output only; not validated or eligible for publication.",
             "acquisition_settings": acquisition_settings(plan.settings),
             "raw_format": "One self-contained NPZ per record; load with load_native, no pickle",
             "scan_index": "scan_index.jsonl", "result": "result.json",
@@ -232,18 +235,26 @@ def interpolate_spectrum(spectrum: Spectrum, values, target):
     return result
 
 
-def absorbance(scan: Spectrum, background: Spectrum) -> np.ndarray:
-    """A = -log10[(S/R)/(S0/R0)], retaining invalid readings as gaps."""
-    ratio = scan.ratio()
-    reference = interpolate_spectrum(background, background.ratio(), scan.wavenumber_cm1)
+def absorbance_from_ratios(ratio, reference) -> np.ndarray:
+    """Apply the logarithm after matched transmission ratios have been formed."""
+    ratio, reference = np.asarray(ratio, dtype=float), np.asarray(reference, dtype=float)
+    if ratio.shape != reference.shape:
+        raise ValueError("Sample/reference and background ratios must have matching shapes")
     valid = np.isfinite(ratio) & np.isfinite(reference) & (ratio > 0) & (reference > 0)
     result = np.full(ratio.shape, np.nan)
     result[valid] = -np.log10(ratio[valid] / reference[valid])
     return result
 
 
+def absorbance(scan: Spectrum, background: Spectrum) -> np.ndarray:
+    """A = -log10[(S/R)/(S0/R0)], retaining invalid readings as gaps."""
+    ratio = scan.ratio()
+    reference = interpolate_spectrum(background, background.ratio(), scan.wavenumber_cm1)
+    return absorbance_from_ratios(ratio, reference)
+
+
 def reconstruct_attempts(attempts: list[dict], background: Spectrum, plan: PhaseScanPlan, *, cancel=None) -> dict:
-    """Merge aligned valid regions from all attempts, then reconstruct a surface.
+    """Merge aligned transmission-ratio regions, then calculate absorbance.
 
     Each attempt retains its own marker-derived wavelength/time coordinates.
     Coverage weights are mapped to a common background-supported wavenumber grid;
@@ -263,6 +274,7 @@ def reconstruct_attempts(attempts: list[dict], background: Spectrum, plan: Phase
     background.validate()
     wn = np.sort(np.asarray(background.wavenumber_cm1))
     wn = wn[np.linspace(0, len(wn)-1, min(len(wn), 1024), dtype=int)]
+    background_ratio = interpolate_spectrum(background, background.ratio(), wn)
     groups = []
     for key in sorted(expected):
         group = sorted((item for item in pumped
@@ -276,6 +288,8 @@ def reconstruct_attempts(attempts: list[dict], background: Spectrum, plan: Phase
     event_repetitions = np.zeros(len(groups), dtype=np.int32)
     event_phase_indices = np.zeros(len(groups), dtype=np.int64)
     source_paths: list[list[str | None]] = []
+    merged_transmission_ratio = np.full((len(groups), len(wn)), np.nan)
+    merged_absorbance = np.full((len(groups), len(wn)), np.nan)
     entries = []
     event_complete = []
     spectra_for_metadata = []
@@ -287,7 +301,7 @@ def reconstruct_attempts(attempts: list[dict], background: Spectrum, plan: Phase
         event_repetitions[group_index] = event.repetition
         event_phase_indices[group_index] = int(event.phase_index)
         source_paths.append([str(item["source"]) for item in group] + [None] * (maximum_attempts-len(group)))
-        ages, values, weights, supported = [], [], [], []
+        ages, ratios, weights, supported = [], [], [], []
         for item in group:
             spectrum = item["spectrum"].validate()
             spectra_for_metadata.append(spectrum)
@@ -298,24 +312,30 @@ def reconstruct_attempts(attempts: list[dict], background: Spectrum, plan: Phase
             age = interpolate_spectrum(
                 spectrum, np.asarray(spectrum.sample_time_s)-spectrum.pump_time_s, wn
             )
-            value = interpolate_spectrum(spectrum, absorbance(spectrum, background), wn)
+            ratio = interpolate_spectrum(spectrum, spectrum.ratio(), wn)
             fraction, acceptable = coverage_for_wavenumbers(spectrum, item["coverage"], wn)
-            support = np.isfinite(age) & np.isfinite(value)
+            support = (
+                np.isfinite(age) & np.isfinite(ratio) & (ratio > 0) &
+                np.isfinite(background_ratio) & (background_ratio > 0)
+            )
             weight = np.where(support & acceptable, fraction, 0.0)
             ages.append(age)
-            values.append(value)
+            ratios.append(ratio)
             weights.append(weight)
             supported.append(support)
-        age_array, value_array, weight_array = np.asarray(ages), np.asarray(values), np.asarray(weights)
+        age_array, ratio_array, weight_array = np.asarray(ages), np.asarray(ratios), np.asarray(weights)
         supported_any = np.any(np.asarray(supported), axis=0)
         total_weight = np.sum(weight_array, axis=0)
         valid = total_weight > 0
         merged_age = np.full(len(wn), np.nan)
-        merged_value = np.full(len(wn), np.nan)
+        merged_ratio = np.full(len(wn), np.nan)
         merged_age[valid] = np.sum(np.where(np.isfinite(age_array), age_array, 0.0) * weight_array,
                                           axis=0)[valid] / total_weight[valid]
-        merged_value[valid] = np.sum(np.where(np.isfinite(value_array), value_array, 0.0) * weight_array,
+        merged_ratio[valid] = np.sum(np.where(np.isfinite(ratio_array), ratio_array, 0.0) * weight_array,
                                             axis=0)[valid] / total_weight[valid]
+        merged_value = absorbance_from_ratios(merged_ratio, background_ratio)
+        merged_transmission_ratio[group_index] = merged_ratio
+        merged_absorbance[group_index] = merged_value
         normalized = np.zeros_like(weight_array)
         np.divide(weight_array, total_weight, out=normalized, where=total_weight > 0)
         contribution_weights[group_index, :, :len(group)] = normalized.T.astype(np.float32)
@@ -338,10 +358,13 @@ def reconstruct_attempts(attempts: list[dict], background: Spectrum, plan: Phase
         "merge_event_repetition": event_repetitions,
         "merge_event_phase_index": event_phase_indices,
         "merge_target_wavenumber_cm1": wn,
+        "merge_background_ratio": background_ratio,
+        "merge_transmission_ratio": merged_transmission_ratio,
+        "merge_absorbance": merged_absorbance,
         "merge_coverage_complete": coverage_complete,
         "merge_contribution_weights": contribution_weights,
         "merge_attempt_sources": source_paths,
-        "merge_weight_meaning": "normalized pulse-coverage fraction among acceptable aligned attempts",
+        "merge_weight_meaning": "normalized pulse-coverage fraction among acceptable aligned transmission-ratio attempts",
     })
     if not complete:
         warning = ("INCOMPLETE_MISSING_PULSE_COVERAGE: deficient regions are NaN; "

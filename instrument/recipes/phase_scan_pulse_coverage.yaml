@@ -1,20 +1,20 @@
 name: phase_scan_pulse_coverage
-description: "Dual-detector PicoScope record triggered by the T660-1 CHD process marker for missing-pulse coverage analysis."
+description: "Exploratory dual-detector PicoScope record triggered directly by MIRcat DB9 pin 2 Tuned / Sweep Active for missing-pulse coverage analysis."
 approved_laser_safety_condition: false
 wiring:
   channel_a: "Sample detector optical output"
   channel_b: "Reference detector optical output (primary optical-pulse witness)"
-  external_trigger: "T660-1 CHD dedicated process-marker output; MIRcat Sweep Active remains connected only to HF2LI DIO21"
+  external_trigger: "High-impedance probe branch from MIRcat DB9 pin 2 Tuned / Sweep Active; the existing route to HF2LI DIO21 remains connected"
+  external_trigger_ground: "MIRcat DB9 pin 7 ground"
   t660_1_channel_c: "MIRcat DB9 pin 4 Process Trigger"
-  t660_1_channel_d: "PicoScope EXT; same programmed leading-edge timing and polarity as T660-1 CHC"
-alignment:
-  trigger_basis: "t660_1_chd_process_marker"
-  qualification_status: "PENDING_MEASUREMENT"
-  qualification_id: null
-  process_trigger_to_sweep_active_delay_us: null
-  process_trigger_to_sweep_active_uncertainty_us: null
-  maximum_allowed_uncertainty_us: 0.25
-  policy: "Production acquisition is blocked until the CHD falling edge to observed Sweep Active rising-edge delay and uncertainty are measured and entered here."
+  t660_1_channel_d: "DISCONNECTED AND DISABLED"
+trigger_contract:
+  trigger_basis: "mircat_sweep_active"
+  status: "EXPLORATORY_DIRECT_TRIGGER"
+  configuration_id: "EXPLORATORY-MIRCAT-DB9-PIN2-TO-PICOSCOPE-EXT"
+  publication_eligible: false
+  sweep_start_offset_us: 0.0
+  policy: "PicoScope trigger time is the observed rising edge of MIRcat DB9 pin 2 Tuned / Sweep Active. This exploratory configuration is not a campaign qualification or promoted configuration."
 picoscope:
   capture_mode: "one_block_per_qcl_sweep_segment"
   capture_settings:
@@ -33,8 +33,9 @@ picoscope:
     external_trigger:
       source: "EXT"
       threshold_adc: 5000
-      direction: 3
-      direction_name: "falling"
+      threshold_policy: "Verify the installed pin-2 low/high levels before acquisition and set the threshold between them; 5000 counts is only the initial direct-lead candidate."
+      direction: 2
+      direction_name: "rising"
       delay_samples: 0
       auto_trigger_ms: 0
     timebase: 4

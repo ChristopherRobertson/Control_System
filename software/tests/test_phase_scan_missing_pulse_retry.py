@@ -52,7 +52,7 @@ class CoverageAcquirer:
 
     def prepare(self, settings, store, cancel):
         self.settings = settings
-        return {"current_ma": 1000, "picoscope": {"pulse_coverage_required": True,
+        return {"current_ma": 750, "picoscope": {"pulse_coverage_required": True,
                 "sample_interval_ns": 16.0, "external_trigger_basis": "mircat_sweep_active"}}
 
     def capture(self, event, cancel):
@@ -71,7 +71,8 @@ class CoverageAcquirer:
         sample_time = sweep_start + np.linspace(0, duration, 41)
         pump_time = None if not event.pump_enabled else sweep_start-event.phase_delay_us*1e-6
         wn = np.linspace(2000, 1999, 41)
-        absorbance = np.zeros(41) if not event.pump_enabled else .02 + .001*(2000-wn)
+        absorbance = (np.zeros(41) if not event.pump_enabled else
+                      .02 + .001*(2000-wn) + .10*self.attempt_index)
         spectrum = Spectrum(wn, 2*10**(-absorbance), np.ones(41), sample_time, pump_time,
                             {**segment_metadata, "segment_metadata": [segment_metadata],
                              "provisional": False}, np.zeros(41, dtype=np.int32))
@@ -92,10 +93,20 @@ def test_retry_occurs_after_nominal_pass_and_merges_valid_regions(tmp_path):
     assert state.calls[plan.total_scans:] == [(plan.event_at(1).scan_index, 0, 1)]
     reconstruction = result["reconstruction"]
     assert reconstruction["completion_status"] == "COMPLETE"
-    assert reconstruction["publication_eligible"]
+    assert not reconstruction["publication_eligible"]
+    assert reconstruction["run_classification"] == "EXPLORATORY_PROOF_OF_CONCEPT"
     weights = reconstruction["merge_contribution_weights"][0]
     assert np.any((weights[:, 0] == 0) & (weights[:, 1] == 1))
     assert np.any((weights[:, 0] > 0) & (weights[:, 1] > 0))
+    both = np.flatnonzero((weights[:, 0] > 0) & (weights[:, 1] > 0))[0]
+    wn = reconstruction["merge_target_wavenumber_cm1"][both]
+    a0 = .02 + .001*(2000-wn)
+    a1 = a0 + .10
+    expected_ratio = weights[both, 0]*(2*10**(-a0)) + weights[both, 1]*(2*10**(-a1))
+    expected_absorbance = -np.log10(expected_ratio/reconstruction["merge_background_ratio"][both])
+    assert reconstruction["merge_transmission_ratio"][0, both] == expected_ratio
+    assert reconstruction["merge_absorbance"][0, both] == expected_absorbance
+    assert reconstruction["merge_absorbance"][0, both] != np.mean([a0, a1])
     summary = json.loads((result["path"] / "coverage" / "coverage_summary.json").read_text())
     assert len(summary["initial_affected_phase_delays"]) == 1
     assert summary["remaining_incomplete_phase_delays"] == []

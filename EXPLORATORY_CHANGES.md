@@ -98,15 +98,19 @@ gap-filling behavior:
 - Pulse detection, local expected-grid fitting, Sweep Active alignment,
   wavelength-marker alignment, and reconstruction-bin assignment occur before
   attempts are combined.
-- For repeated attempts, valid sample/reference transmission-ratio bins are to
-  be coverage-weighted and merged before applying the logarithm. Independently
+- For repeated attempts, valid sample/reference transmission-ratio bins are
+  coverage-weighted and merged before applying the logarithm. The merged ratio,
+  background ratio, resulting absorbance, normalized contribution weights, and
+  contributing attempt sources are retained with the reconstruction.
+  Independently
   merging sample and reference channels, or averaging already-log-transformed
   absorbance from unlike attempts, is not the intended final processing order.
 
-## Approved proof-of-concept acquisition settings
+## Implemented proof-of-concept acquisition settings
 
-The following settings were selected for the exploratory measurement but have
-not yet all been applied to the workflow defaults:
+The following settings are the exploratory workflow defaults. The spectral
+endpoints remain operator-adjustable and must be recentered after the sample's
+actual A1 maximum is located:
 
 | Setting | Exploratory value | Rationale |
 |---|---:|---|
@@ -126,17 +130,17 @@ coverage, and a 5-microsecond phase increment, the plan contains approximately
 1,601 pumped phase positions. A 250 ms minimum pump-shot interval gives a nominal
 duration of approximately 6.7 minutes before setup and missing-pulse retries.
 
-## Approved exploratory HF2LI change
+## Implemented exploratory HF2LI change
 
 The existing `campaign_sweep_qualification_candidate` preset is not to be
-modified for this proof of concept. A separate exploratory Phase-Scan preset is
-to be used so the campaign candidate retains its original settings and meaning.
+modified for this proof of concept. The separate
+`exploratory_phase_scan_poc` preset is used so the campaign candidate retains
+its original settings and meaning.
 
-The exploratory detector demodulators are to start near:
+The exploratory detector demodulators are configured for:
 
 - 20 kSa/s detector-stream rate for both sample and reference;
-- 50 to 100 microseconds time constant, with 50 microseconds as the initial
-  proof-of-concept value;
+- a 50-microsecond time constant;
 - the existing external 2 MHz reference topology and detector assignments;
 - the independently configured timing/DIO stream needed to observe Sweep Active,
   wavelength markers, and the electrical pump reference.
@@ -168,4 +172,10 @@ changes, the exploratory direct-trigger and missing-pulse implementation passed
 the offline suite with 151 tests passed, 11 skipped, and 24 subtests passed. The
 suite and diff checks must be rerun after each implementation update, and the
 result recorded here without treating a software test as hardware validation.
+
+After implementing the 750 mA current, 10 cm^-1 default window, 250 ms cadence,
+5 ms post-pump window, fast exploratory HF2LI preset, and ratio-before-log attempt
+merge, the focused Phase-Scan suite passed 58 tests with 6 skipped. The complete
+offline software suite then passed 154 tests with 11 skipped and 24 subtests
+passed.
 

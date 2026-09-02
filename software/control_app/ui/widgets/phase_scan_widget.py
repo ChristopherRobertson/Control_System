@@ -306,7 +306,7 @@ class PhaseScanWidget(QWidget):
         self.inputs["pump_reference"] = reference
         form.addRow("Pump Timing Reference", reference)
         controls_layout.addLayout(form)
-        note = QLabel("<b>Phase Delay is the phase increment and pulse-coverage bin width.</b><br>Scan starts span −(Before Pump + scan duration) through After Pump.<br>PicoScope CHA = sample detector, CHB = reference detector, EXT = T660-1 CHD process marker. MIRcat Sweep Active remains on HF2LI DIO21. Test scans keep the pump off.")
+        note = QLabel("<b>EXPLORATORY PROOF OF CONCEPT · NOT FOR PUBLICATION.</b><br><b>Phase Delay is the phase increment and pulse-coverage bin width.</b><br>Scan starts span −(Before Pump + scan duration) through After Pump.<br>PicoScope CHA = sample detector, CHB = reference detector, EXT = high-impedance branch from MIRcat DB9 pin 2 Sweep Active. Sweep Active remains connected to HF2LI DIO21; T660-1 CHD is disconnected. Test scans keep the pump off.")
         note.setWordWrap(True)
         controls_layout.addWidget(note)
         controls_layout.addWidget(self.validation)
@@ -515,7 +515,7 @@ class PhaseScanWidget(QWidget):
         self.start_button.setEnabled(valid and background and self.runner.available and not busy)
         self.start_button.setToolTip("Capture a compatible optical background before Start Scan.")
         self.background_button.setToolTip(OPTICAL_ADAPTER_BLOCKER if not self.runner.available else
-                                         "One unpumped sweep; QCL current 1000 mA; saved HF2LI preset.")
+                                         "One unpumped sweep; QCL current 750 mA; exploratory Phase-Scan HF2LI preset.")
         self.abort_button.setEnabled(busy)
         self.diagnostic_button.setEnabled(self.diagnostic is not None and not busy)
         self.show_background_button.setEnabled(bool(background) and not busy)
@@ -526,7 +526,7 @@ class PhaseScanWidget(QWidget):
             widget.setEnabled(not busy)
         self.inputs["pump_threshold_v"].setEnabled(not busy and self.inputs["pump_reference"].currentData() != "electrical_sync")
         self.execution.setText(
-            "QCL: 1000 mA. HF2LI observes Sweep Active and wavelength markers; PicoScope CHA/CHB record both optical detectors at ≤48 ns/sample and EXT receives T660-1 CHD. A qualified CHD-to-Sweep-Active offset is required before acquisition.\n"
+            "EXPLORATORY PROOF OF CONCEPT · NOT FOR PUBLICATION. QCL: 750 mA. HF2LI uses the fast exploratory Phase-Scan preset and observes Sweep Active and wavelength markers; PicoScope CHA/CHB record both optical detectors at ≤48 ns/sample and EXT receives a high-impedance branch of MIRcat DB9 pin 2 Sweep Active. T660-1 CHD remains disconnected.\n"
             + ("An acquisition is running. Abort requests safe shutdown." if busy else
                OPTICAL_ADAPTER_BLOCKER if not self.runner.available else
                "Background ready. One scan per phase per set." if background else
@@ -545,14 +545,14 @@ class PhaseScanWidget(QWidget):
             "A/B/D outputs remain disabled; only C timing outputs are exercised. HF2LI settings "
             "are restored afterward. This does not capture an optical background."
             if kind == "diagnostic" else
-            "Acquire one unpumped background sweep at 1000 mA using the displayed probe/scan settings."
+            "Acquire one unpumped background sweep at 750 mA using the displayed probe/scan settings and the exploratory Phase-Scan HF2LI preset."
             if kind == "background" else
-            "Acquire one probe-only test sweep at 1000 mA and calculate absorbance against the captured background. The pump remains OFF."
+            "Acquire one probe-only test sweep at 750 mA and calculate absorbance against the captured background. The pump remains OFF."
             if kind == "test" else
             f"Acquire {self.plan.total_scans:,} scans and {self.plan.total_pump_events:,} pump events "
             "at the displayed settings, using the captured optical background. This enables the Nd:YAG Fire and Q-switch outputs. "
             "After the nominal pass, affected phase delays may be acquired up to the displayed retry limit before reconstruction. "
-            "Confirm PicoScope CHA=sample, CHB=reference, EXT=T660-1 CHD, and MIRcat Sweep Active=HF2LI DIO21. The pump must already be configured "
+            "Confirm PicoScope CHA=sample, CHB=reference, EXT=MIRcat DB9 pin 2 Sweep Active via the installed high-impedance branch, DB9 pin 7=probe ground, T660-1 CHD=disconnected, and Sweep Active remains connected to HF2LI DIO21. The pump must already be configured "
             "for external operation and the beam path made safe."
         )
         if QMessageBox.question(self, "Confirm acquisition", description,
@@ -638,7 +638,7 @@ class PhaseScanWidget(QWidget):
             if self._surface_quality_status == "INCOMPLETE_MISSING_PULSE_COVERAGE":
                 self.scan_status.setText("INCOMPLETE_MISSING_PULSE_COVERAGE · diagnostic reconstruction only; not for publication.")
             else:
-                self.scan_status.setText("Completed run · reconstructed absorbance map. This view is not a live acquisition.")
+                self.scan_status.setText("Exploratory proof-of-concept run · reconstructed absorbance map · NOT FOR PUBLICATION. This view is not a live acquisition.")
 
     def show_reconstruction(self, result, run_path=None):
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -662,7 +662,7 @@ class PhaseScanWidget(QWidget):
                 "All outputs are not for publication."
             )
         else:
-            self.scan_status.setText(f"Run complete · absorbance vs wavenumber and {timing}. "
+            self.scan_status.setText(f"Exploratory proof of concept complete · NOT FOR PUBLICATION · absorbance vs wavenumber and {timing}. "
                 "Unsupported regions are left empty; phase increment is not time resolution. "
                 + ("PROVISIONAL wavenumber axis. " if result.get("provisional") else ""))
         self.plot_stack.setCurrentWidget(self._surface)

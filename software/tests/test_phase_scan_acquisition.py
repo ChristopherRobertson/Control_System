@@ -15,18 +15,17 @@ from control_app.workflows.phase_scan_runner import PhaseScanRunner
 from control_app.workflows.phase_scan_native import pump_reference_tick, spectrum_from_sweep
 
 
-TEST_PICOSCOPE_ALIGNMENT = {
+TEST_TRIGGER_CONTRACT = {
     "trigger_basis": live.PICOSCOPE_TRIGGER_BASIS,
-    "qualification_status": "QUALIFIED",
-    "qualification_id": "synthetic-chd-alignment",
-    "process_trigger_to_sweep_active_delay_us": 100.0,
-    "process_trigger_to_sweep_active_uncertainty_us": 0.01,
-    "maximum_allowed_uncertainty_us": 0.25,
+    "status": "EXPLORATORY_DIRECT_TRIGGER",
+    "configuration_id": "synthetic-direct-sweep-active",
+    "publication_eligible": False,
+    "sweep_start_offset_us": 0.0,
 }
 
 
 def small_plan(**kwargs):
-    return build_phase_scan_plan(replace(PhaseScanSettings(), stop_wavenumber_cm1=1998,
+    return build_phase_scan_plan(replace(PhaseScanSettings(), start_wavenumber_cm1=2000, stop_wavenumber_cm1=1998,
         scan_speed_cm1_s=1000, phase_delay_us=500, pre_pump_ms=1, post_pump_ms=1, rest_period_s=.1, **kwargs))
 
 
@@ -55,7 +54,7 @@ class World:
         return live.LivePhaseScanAcquirer(laser_factory=lambda **kw: Laser(self),
             hf_factory=lambda **kw: HF(self), t660_factory=lambda name, **kw: Timer(self, name),
             picoscope_factory=lambda device, settings, **kw: Pico(self, settings),
-            picoscope_alignment_override=TEST_PICOSCOPE_ALIGNMENT)
+            picoscope_trigger_override=TEST_TRIGGER_CONTRACT)
 
 
 class Pico:
@@ -129,9 +128,7 @@ class Timer:
     def fire_remote_trigger(self):
         assert self.name == "t660_1" and self.source == "REM"
         assert not self.world.units["t660_2"].channels["D"]["enabled"]
-        assert self.channels["D"]["enabled"]
-        for field in ("delay", "width", "polarity", "termination"):
-            assert self.channels["D"][field] == self.channels["C"][field]
+        assert not self.channels["D"]["enabled"]
         self.shots += 1
         self.world.fires.append(deepcopy(self.channels))
         if self.channels["A"]["enabled"]:
@@ -146,24 +143,23 @@ class Timer:
         self.world.qcl.triggered = True
 
 
-def test_chd_marker_mirrors_process_channel_and_alignment_is_qualification_gated():
+def test_direct_sweep_active_trigger_disables_chd_and_requires_nonpublication_contract():
     event = PhaseScanEvent(1, 0, 10.0, True, 0)
     timing, _ = live.event_timing(event)
-    assert timing["channels"]["D"] == timing["channels"]["C"]
-    assert timing["channels"]["D"]["enabled"]
-    assert timing["channels"]["D"]["polarity"] == "negative"
+    assert timing["channels"]["C"]["enabled"]
+    assert not timing["channels"]["D"]["enabled"]
 
-    pending = {"alignment": {**TEST_PICOSCOPE_ALIGNMENT, "qualification_status": "PENDING_MEASUREMENT"}}
-    with pytest.raises(RuntimeError, match="not qualified"):
-        live.qualified_picoscope_alignment(pending, phase_interval_us=5, pulse_rate_hz=2e6)
-    excessive = {"alignment": {**TEST_PICOSCOPE_ALIGNMENT,
-                                "process_trigger_to_sweep_active_uncertainty_us": .251}}
-    with pytest.raises(RuntimeError, match="permits at most 0.25 us"):
-        live.qualified_picoscope_alignment(excessive, phase_interval_us=5, pulse_rate_hz=2e6)
-    qualified = live.qualified_picoscope_alignment(
-        {"alignment": TEST_PICOSCOPE_ALIGNMENT}, phase_interval_us=5, pulse_rate_hz=2e6
+    production_claim = {"trigger_contract": {**TEST_TRIGGER_CONTRACT, "publication_eligible": True}}
+    with pytest.raises(RuntimeError, match="publication_eligible=false"):
+        live.direct_sweep_active_trigger_contract(production_claim)
+    nonzero_offset = {"trigger_contract": {**TEST_TRIGGER_CONTRACT, "sweep_start_offset_us": .01}}
+    with pytest.raises(RuntimeError, match="zero sweep_start_offset_us"):
+        live.direct_sweep_active_trigger_contract(nonzero_offset)
+    contract = live.direct_sweep_active_trigger_contract(
+        {"trigger_contract": TEST_TRIGGER_CONTRACT}
     )
-    assert qualified["process_trigger_to_sweep_active_delay_us"] == 100
+    assert contract["trigger_basis"] == "mircat_sweep_active"
+    assert not contract["publication_eligible"]
 
 
 class Laser:
@@ -279,7 +275,7 @@ def test_pump_and_process_share_one_hardware_event_with_signed_delays(delay):
     assert min(fire, qswitch, process) >= 0
     assert process-(fire+.000180) == pytest.approx(delay*1e-6, abs=1e-12)
     assert qswitch-fire == pytest.approx(.000179830)
-    assert channels["D"] == channels["C"]
+    assert not channels["D"]["enabled"]
     assert recipe["trigger_source"] == "REM"
 
 
@@ -316,7 +312,8 @@ def test_full_live_sequence_records_one_pump_per_phase_and_centered_map(world, t
     assert sum(f["A"]["enabled"] for f in world.fires) == p.total_pump_events
     reconstruction = result["reconstruction"]
     assert reconstruction["completion_status"] == "COMPLETE"
-    assert reconstruction["publication_eligible"]
+    assert not reconstruction["publication_eligible"]
+    assert reconstruction["run_classification"] == "EXPLORATORY_PROOF_OF_CONCEPT"
     np.testing.assert_allclose(reconstruction["time_s"], [-.001, -.0005, 0, .0005, .001])
     assert reconstruction["display_pump_time_ms"] == 1
     assert reconstruction["pump_reference_bases"] == ["electrical_sync"]

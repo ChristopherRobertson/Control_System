@@ -21,7 +21,7 @@ def spectrum(delay=0, *, background=False, offset=0):
 
 
 def plan(repetitions=1):
-    return build_phase_scan_plan(PhaseScanSettings(stop_wavenumber_cm1=1998, scan_speed_cm1_s=1000,
+    return build_phase_scan_plan(PhaseScanSettings(start_wavenumber_cm1=2000, stop_wavenumber_cm1=1998, scan_speed_cm1_s=1000,
                                   phase_delay_us=500, rest_period_s=.1, repetitions=repetitions))
 
 
@@ -75,7 +75,7 @@ def test_reconstruction_uses_time_within_scan_and_averages_complete_repetitions(
     assert np.all(result["repetition_count"][valid] == 2)
     np.testing.assert_allclose(result["standard_error"][valid], .01, atol=1e-10)
     assert np.isfinite(a[0, 0])  # Negative scan starts now supply early ages at the low-wavenumber end.
-    np.testing.assert_allclose(times[[0, -1]], [-.002, .002])
+    np.testing.assert_allclose(times[[0, -1]], [-.002, .005])
     records[1][1].metadata["pump_time_basis"] = "commanded"
     with pytest.raises(ValueError, match="Commanded"):
         reconstruct(records, spectrum(background=True), p)
@@ -85,7 +85,7 @@ class FakeAcquirer:
     def __init__(self, calls, *, background=False, fail_close=False, on_capture=None, readback=None):
         self.calls, self.background, self.fail_close = calls, background, fail_close
         self.on_capture = on_capture
-        self.readback = readback or {"current_ma": 1000, "rate": 2000, "timeconstant": .001}
+        self.readback = readback or {"current_ma": 750, "rate": 20_000, "timeconstant": 50e-6}
 
     def prepare(self, settings, store, cancel):
         return self.readback

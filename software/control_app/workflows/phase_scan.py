@@ -27,14 +27,14 @@ class PhaseScanPlanError(ValueError):
 class PhaseScanSettings:
     probe_repetition_rate_hz: float = 2_000_000.0
     probe_pulse_width_ns: float = 150.0
-    start_wavenumber_cm1: float = 2000.0
-    stop_wavenumber_cm1: float = 1900.0
+    start_wavenumber_cm1: float = 1950.0
+    stop_wavenumber_cm1: float = 1940.0
     scan_speed_cm1_s: float = 10_000.0
     phase_delay_us: float = 5.0
-    rest_period_s: float = 1.0
+    rest_period_s: float = 0.250
     repetitions: int = 1
     pre_pump_ms: float = 2.0
-    post_pump_ms: float = 2.0
+    post_pump_ms: float = 5.0
     pump_reference: str = "electrical_sync"
     pump_threshold_v: float = 0.1
     missing_pulse_consecutive_limit: int = 2
