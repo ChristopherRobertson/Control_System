@@ -27,6 +27,25 @@ Measure a module transition only if a retained window crosses one. Reuse SP-02
 axis calibration and MSW-01 timing; do not redetermine them or survey unused
 modules/ranges.
 
+For every retained externally triggered Phase-Scan condition, capture the sample
+detector on PicoScope CHA and the reference detector on CHB under the accepted
+CHD-to-EXT and CHD-to-Sweep-Active configuration. Treat CHB as the primary optical
+witness and CHA as corroboration. Generate expected opportunities from the
+configured and read-back T660-2 repetition rate, determine phase locally from
+consecutive optical edges, retain missing positions, and exclude partial boundary
+opportunities. Derive channel thresholds locally from baseline and pulse populations
+with noise and saturation checks; no absolute voltage threshold is transferable
+between wavenumbers, alignments, or electrical-trigger tests.
+
+Classify a MIRcat optical omission only when an expected opportunity is absent from
+both channels. Classify CHA-only and CHB-only observations separately as detector/
+path discrepancies. Across wavenumber, module, current, pulse width, repetition
+rate, duty, scan direction, scan position, and thermal history, report omission
+fraction, local density/clustering, run lengths, reconstruction-interval coverage,
+and correlations with pulse amplitude/width, saturation, Sweep Active state, and
+source readbacks. Do not infer adequacy from a whole-scan average or maximum
+strictly consecutive loss alone.
+
 Mandatory deliverables:
 
 - Synchronized MIRcat readbacks, trigger/DIO records, optical-meter data, module
@@ -34,6 +53,9 @@ Mandatory deliverables:
 - Power/pulse/stability versus wavenumber, module/crossover behavior, warm-up
   and repeatability tables, saturation limits, uncertainty, and recommended
   operating envelope.
+- Opportunity-level dual-channel classifications, local threshold/noise/saturation
+  records, cluster and reconstruction-interval coverage statistics, detector/path
+  discrepancy table, and a configuration-specific optical-omission envelope.
 - Measured-versus-manufacturer capability table and safe shutdown record.
 
 ## `EXPERIMENTS.md` allocation and decision contract
@@ -44,10 +66,13 @@ QB-01 implements the source-output portions of `EXP-CAL-06`, `EXP-CAL-07`,
 Requested and read-back wavenumber, mode, rate, pulse/trigger settings, power, stability,
 and module identity are configuration data. Acceptance is mode/window/power-specific;
 unsupported transitions, unstable output, saturation, or unbounded uncertainty reject
-that configuration. Module/source service, firmware, operating mode, scan profile,
-wavenumber window, repetition/pulse setting, alignment, or metrology changes trigger
+that configuration. Unclassified opportunities or an optical-omission regime outside
+the predeclared bound reject the affected configuration even when the aggregate loss
+fraction appears small. Module/source service, firmware, operating mode, scan profile,
+wavenumber window, repetition/pulse setting, alignment, detector path, trigger routing,
+or metrology changes trigger
 revalidation. This phase does not establish sample absorbance, timing zero, or detector
-normalization.
+normalization, and it does not by itself freeze the reconstruction retry policy.
 
 ## Closeout
 

@@ -153,10 +153,12 @@ parallel only under separate authorization.
   detector-output female-to-female BNC adapter -> male-to-two-female BNC tee
   and branch cable/receiver network plus PicoScope timebase,
   amplitude, bandwidth, trigger, overflow, loading, reflection, and branch-skew
-  behavior under normal simultaneous HF2LI/PicoScope recording.
+  behavior under normal simultaneous HF2LI/PicoScope recording; separately qualify
+  the T660-1 CHD-to-PicoScope-EXT electrical trigger route used by Phase Scan.
 - **Primary products:** Installed topology/configuration manifests, native branch
   captures, amplitude/timebase/trigger/bandwidth results, transfer and ringing model,
-  uncertainty, validity envelope, and normal-versus-timing topology bridge limits.
+  CHD-to-EXT trigger result, uncertainty, validity envelope, and normal-versus-timing
+  topology bridge limits.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`MS-02.1/plan.md`](instrument_readiness_001/phases/MS-02.1/plan.md).
@@ -298,9 +300,11 @@ parallel only under separate authorization.
 - **Status:** planned. **Prerequisites:** HF-01, CH-00.1, and MS-02.1.
 - **Purpose:** Establish the semantic and electrical mapping between MIRcat
   states/events and HF2LI DIO observations used for synchronization and loss
-  accounting.
+  accounting, including CHC process commands, their CHD Phase-Scan markers, and
+  observed Sweep Active intervals.
 - **Primary products:** DIO bit/event map, timing/state evidence, ambiguity and
-  failure handling, configuration record, and accepted mapping rules.
+  failure handling, CHC/CHD/Sweep-Active reconciliation, configuration record, and
+  accepted mapping rules.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`MD-01/plan.md`](instrument_readiness_001/phases/MD-01/plan.md).
@@ -310,9 +314,11 @@ parallel only under separate authorization.
 - **Status:** planned. **Prerequisites:** MC-01 and MD-01.
 - **Purpose:** Measure MIRcat sweep timing, direction behavior, event alignment,
   start/stop semantics, and wavenumber-versus-time behavior needed for sampled
-  spectral reconstruction.
+  spectral reconstruction, including the Phase-Scan CHD falling-edge to Sweep Active
+  rising-edge relation for each retained configuration.
 - **Primary products:** Native sweep/readback/DIO records, timing model, direction
-  comparison, repeatability, loss accounting, and uncertainty.
+  comparison, CHD-to-Sweep-Active qualification IDs/offsets, repeatability, loss
+  accounting, restoration, and uncertainty.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`MSW-01/plan.md`](instrument_readiness_001/phases/MSW-01/plan.md).
@@ -322,9 +328,11 @@ parallel only under separate authorization.
 - **Status:** planned. **Prerequisites:** HF-01.1, MD-01, MSW-01, and MS-02.1.
 - **Purpose:** Verify sustained alignment among MIRcat, DIO, HF2LI, and recorded
   streams; quantify missing, duplicated, misordered, or delayed records over
-  experiment-relevant durations.
+  experiment-relevant durations, including CHD-triggered PicoScope blocks aligned to
+  HF2LI-observed Sweep Active intervals under normal dual-detector Phase-Scan wiring.
 - **Primary products:** Endurance streams, alignment/loss metrics, fault evidence,
-  throughput envelope, recovery behavior, and acceptance limits.
+  recorder-loss versus optical-omission classification, throughput envelope, recovery
+  behavior, and acceptance limits.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`HF-02/plan.md`](instrument_readiness_001/phases/HF-02/plan.md).
@@ -402,9 +410,11 @@ parallel only under separate authorization.
 - **Status:** planned. **Prerequisites:** MD-01, MSW-01, HF-02, DET-02, and CH-00.1.
 - **Purpose:** Characterize the installed MIRcat probe across the required bands,
   pulse widths, currents, rates, scan behavior, stability, timing, and detector
-  operating constraints.
+  operating constraints, including locally clustered dual-detector optical omissions
+  and one-channel detector/path discrepancies.
 - **Primary products:** Source operating envelope, spectral/power/timing records,
-  stability and repeatability metrics, saturation limits, and accepted modes.
+  opportunity-level pulse classifications, local coverage/cluster metrics, stability
+  and repeatability metrics, saturation limits, and accepted modes.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`QB-01/plan.md`](instrument_readiness_001/phases/QB-01/plan.md).
@@ -462,10 +472,12 @@ parallel only under separate authorization.
   DET-03, DET-04, QB-01, OG-01, and OV-01.
 - **Purpose:** Jointly select experiment-specific scan speed, direction, HF2LI
   filtering/rate/range, record length, settling, throughput, and loss margins
-  using measured source, detector, geometry, and timing behavior.
+  using measured source, detector, geometry, and timing behavior, including the
+  Phase-Scan optical-pulse coverage and bounded-retry policy.
 - **Primary products:** Validated slow-scan and five-method architecture
   configurations across applicable room-temperature/77 K envelopes, response
-  residuals, native coverage, speed/dwell envelope, robustness, and uncertainty.
+  residuals, native coverage, Phase-Scan coverage/retry settings, speed/dwell envelope,
+  robustness, and uncertainty.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`AR-01/plan.md`](instrument_readiness_001/phases/AR-01/plan.md).
@@ -641,9 +653,11 @@ parallel only under separate authorization.
 - **Status:** planned. **Prerequisites:** E2E-01, SV-02B, IR-01, PF-01, and RP-01.
 - **Purpose:** Demonstrate slow scan and all five reconstruction methods on bounded
   nonbiological targets, including native coverage, missing-data/noise, direction,
-  filter-memory, interpolation, and topology tests before biological development.
+  filter-memory, interpolation, and topology tests before biological development;
+  validate Phase-Scan affected-delay retries and aligned-bin coverage-weighted merging.
 - **Primary products:** Native full-system data and coverage, reconstruction truth/
-  residuals, fault/noise robustness, configuration/calibration links,
+  residuals, attempt/bin provenance, retry-exhaustion and deficient-output evidence,
+  fault/noise robustness, configuration/calibration links,
   startup/safe-stop/restoration records, uncertainty, and method-specific decisions.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
@@ -889,9 +903,11 @@ parallel only under separate authorization.
 - **Status:** optional. **Prerequisites:** MB-05.
 - **Purpose:** Verify condition- and architecture-specific optical time zero/IRF,
   then assess room-temperature nanosecond/microsecond and single-scan methods plus
-  77 K nanosecond/microsecond and single-pump scan-burst discovery records.
+  77 K nanosecond/microsecond and single-pump scan-burst discovery records, importing
+  the promoted Phase-Scan marker-alignment and optical-pulse coverage policy.
 - **Primary products:** Time-zero/IRF links, discovery traces, identifiability
-  simulation, selected delay/rate/filter design, recovery, and stop decision.
+  simulation, Phase-Scan attempt/bin provenance and coverage disposition, selected
+  delay/rate/filter design, recovery, and stop decision.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`MB-06/plan.md`](mbco_cryo_001/phases/MB-06/plan.md).
@@ -912,9 +928,10 @@ parallel only under separate authorization.
 - **Status:** optional. **Prerequisites:** MB-07.
 - **Purpose:** Extend an accepted MVP with denser geminate timing, additional bands,
   concentration dependence, or a separately qualified comparison only when IRF,
-  SNR, sample, and model-identifiability gates support it.
+  SNR, sample, model-identifiability, and Phase-Scan coverage gates support it.
 - **Primary products:** Extension preregistration and data, model comparison,
-  sensitivity analysis, validity assessment, and bounded conclusions.
+  coverage/provenance disposition, sensitivity analysis, validity assessment, and
+  bounded conclusions.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
 - **Detailed plan:** [`MB-08/plan.md`](mbco_cryo_001/phases/MB-08/plan.md).

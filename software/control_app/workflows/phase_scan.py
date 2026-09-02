@@ -37,6 +37,11 @@ class PhaseScanSettings:
     post_pump_ms: float = 2.0
     pump_reference: str = "electrical_sync"
     pump_threshold_v: float = 0.1
+    missing_pulse_consecutive_limit: int = 2
+    minimum_reconstruction_interval_coverage: float = 0.90
+    maximum_scan_missing_fraction: float = 0.05
+    missing_pulse_retry_limit: int = 3
+    pulse_detection_threshold_fraction: float = 0.30
 
 
 @dataclass(frozen=True)
@@ -116,7 +121,7 @@ class PhaseScanPlan:
     def to_dict(self) -> dict[str, Any]:
         """Compact, versioned plan; a baseline is never a zero-delay pump shot."""
         return {
-            "schema_version": "2.0",
+            "schema_version": "3.0",
             "method": "phase_delayed_single_scan",
             "status": "PLANNING_ONLY",
             "settings": asdict(self.settings),
@@ -150,6 +155,17 @@ class PhaseScanPlan:
                 "rest_semantics": "minimum_pump_to_pump_interval_not_post_scan_sleep",
                 "duration_model": "one_rest_period_slot_per_record_including_baselines_no_trailing_rest",
                 "averaging": "corresponding_phase_across_complete_repetitions_keep_raw_records",
+                "missing_pulse_workaround": {
+                    "analysis_order": "analyze all nominal scans before targeted same-delay retries and reconstruction",
+                    "picoscope_channels": {"CHA": "sample detector", "CHB": "reference detector primary witness"},
+                    "missing_definition": "expected optical pulse absent from both detector channels",
+                    "reconstruction_interval_s": self.settings.phase_delay_us * 1e-6,
+                    "minimum_interval_coverage": self.settings.minimum_reconstruction_interval_coverage,
+                    "consecutive_missing_limit": self.settings.missing_pulse_consecutive_limit,
+                    "maximum_scan_missing_fraction": self.settings.maximum_scan_missing_fraction,
+                    "additional_attempt_limit": self.settings.missing_pulse_retry_limit,
+                    "merge": "observed-marker-aligned reconstruction bins weighted by pulse coverage",
+                },
             },
             "limitations": [
                 "Nominal linear trajectory only; use measured pump and scan timing for reconstruction.",
@@ -175,9 +191,14 @@ def build_phase_scan_plan(settings: PhaseScanSettings) -> PhaseScanPlan:
                 raise PhaseScanPlanError("Before Pump must not be negative")
             if name == "pump_threshold_v" and not -10 < value < 10:
                 raise PhaseScanPlanError("Pump threshold must lie inside the Aux input ±10 V range")
-        elif name == "repetitions":
+        elif name in {"repetitions", "missing_pulse_consecutive_limit", "missing_pulse_retry_limit"}:
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-                raise PhaseScanPlanError("Repetitions must be a positive whole number")
+                raise PhaseScanPlanError(f"{name.replace('_', ' ').title()} must be a positive whole number")
+        elif name in {"minimum_reconstruction_interval_coverage", "maximum_scan_missing_fraction",
+                      "pulse_detection_threshold_fraction"}:
+            if (isinstance(value, bool) or not isinstance(value, (int, float)) or
+                    not math.isfinite(value) or not 0 < value <= 1):
+                raise PhaseScanPlanError(f"{name.replace('_', ' ')} must be greater than zero and at most one")
         elif (
             isinstance(value, bool) or not isinstance(value, (int, float))
             or not math.isfinite(value) or value <= 0

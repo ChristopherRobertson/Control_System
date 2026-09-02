@@ -9,18 +9,26 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict
+from pathlib import Path
 from threading import Thread
 from time import monotonic
 import math
 
 import numpy as np
 
+from control_app.config_loader import load_hardware_config
 from control_app.devices.hf2li_service import HF2LIService, HF2LIPreset
 from control_app.devices.mircat_service import MircatService, PULSE_MODE_EXTERNAL_TRIGGER, PROC_TRIG_MODE_EXTERNAL, UNITS_CM1
+from control_app.devices.picoscope_service import PicoScopeService
 from control_app.devices.t660_service import T660Service
+from control_app.paths import resolve_compat_path
+from control_app.workflows.picoscope_settings_test import capture_settings_from_recipe, load_recipe
 from control_app.workflows.phase_scan_data import Spectrum, HF2_PRESET, QCL_CURRENT_MA, write_json, save_native
 from control_app.workflows.phase_scan_native import demodulator_samples, high_intervals, pump_reference_tick, spectrum_from_sweep
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
+
+
+PICOSCOPE_TRIGGER_BASIS = "t660_1_chd_process_marker"
 
 
 def channel_segments(start, stop, ranges):
@@ -41,12 +49,22 @@ def channel_segments(start, stop, ranges):
     return segments
 
 
+def frequency_hz(value):
+    text = str(value).strip().lower().replace(" ", "")
+    for suffix, multiplier in (("mhz", 1e6), ("khz", 1e3), ("hz", 1.0)):
+        if text.endswith(suffix):
+            return float(text[:-len(suffix)]) * multiplier
+    return float(text)
+
+
 def event_timing(event):
-    """One REM event on T660-1 schedules Fire, Q-switch and Process in hardware.
+    """One REM event schedules Fire, Q-switch, Process, and the scope marker.
 
     Surelite nominal fire-to-light 180 us, Q-switch-to-light 170 ns, as in the
     installed alignment settings. These are scheduling values, not corrections
-    applied to measured time. T660-2 only provides the continuous probe train.
+    applied to measured time. T660-1 CHD exactly mirrors the active-low CHC
+    process-command pulse and is connected only to PicoScope EXT. T660-2 only
+    provides the continuous probe train.
     """
     phase_s = float(event.phase_delay_us or 0) * 1e-6
     pump_s = .001 + max(.000180, -phase_s)
@@ -54,21 +72,73 @@ def event_timing(event):
     def pulse(delay_s, width_s):
         return {"enabled": True, "delay": f"{delay_s:.12f}s", "width": f"{width_s:.12f}s",
                 "polarity": "negative", "termination": "50OHM"}
+    process = pulse(scan_s, .010)
     return {"stop_first": True, "trigger_source": "REM", "gate_mode": 0, "burst_enabled": False,
             "force_eod": True,
             "channels": {"A": pulse(pump_s-.000180, .000010) if event.pump_enabled else {"enabled": False},
                          "B": pulse(pump_s-.000000170, .000010) if event.pump_enabled else {"enabled": False},
-                         "C": pulse(scan_s, .010), "D": {"enabled": False}}}, max(pump_s, scan_s+.010)
+                         "C": process, "D": dict(process)}}, max(pump_s, scan_s+.010)
+
+
+def qualified_picoscope_alignment(recipe, *, phase_interval_us, pulse_rate_hz, override=None):
+    """Return the measured CHD-to-Sweep-Active relationship or fail closed."""
+    alignment = deepcopy(override if override is not None else recipe.get("alignment"))
+    if not isinstance(alignment, dict):
+        raise RuntimeError("Phase Scan PicoScope alignment section is missing")
+    if alignment.get("trigger_basis") != PICOSCOPE_TRIGGER_BASIS:
+        raise RuntimeError(
+            f"Phase Scan PicoScope trigger basis must be {PICOSCOPE_TRIGGER_BASIS!r}"
+        )
+    if str(alignment.get("qualification_status", "")).strip().upper() != "QUALIFIED":
+        raise RuntimeError(
+            "T660-1 CHD to MIRcat Sweep Active timing is not qualified. Complete the "
+            "Phase Scan CHD alignment measurement and enter its delay, uncertainty, and qualification ID."
+        )
+    qualification_id = str(alignment.get("qualification_id") or "").strip()
+    if not qualification_id:
+        raise RuntimeError("Qualified PicoScope alignment requires a human-readable qualification_id")
+    try:
+        delay_us = float(alignment["process_trigger_to_sweep_active_delay_us"])
+        uncertainty_us = float(alignment["process_trigger_to_sweep_active_uncertainty_us"])
+        configured_limit_us = float(alignment["maximum_allowed_uncertainty_us"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(f"Invalid qualified PicoScope alignment values: {exc}") from exc
+    values = (delay_us, uncertainty_us, configured_limit_us, float(phase_interval_us), float(pulse_rate_hz))
+    if not all(math.isfinite(value) for value in values):
+        raise RuntimeError("Qualified PicoScope alignment values must be finite")
+    if delay_us < 0 or uncertainty_us < 0 or configured_limit_us <= 0:
+        raise RuntimeError("PicoScope alignment delay/uncertainty values are outside their valid range")
+    if phase_interval_us <= 0 or pulse_rate_hz <= 0:
+        raise RuntimeError("Phase interval and T660-2 repetition rate must be positive")
+    physics_limit_us = min(0.5e6 / pulse_rate_hz, 0.05 * phase_interval_us)
+    allowed_us = min(configured_limit_us, physics_limit_us)
+    if uncertainty_us > allowed_us + 1e-12:
+        raise RuntimeError(
+            f"CHD-to-Sweep-Active uncertainty is {uncertainty_us:g} us; "
+            f"the current Phase Scan permits at most {allowed_us:g} us"
+        )
+    return {
+        "trigger_basis": PICOSCOPE_TRIGGER_BASIS,
+        "qualification_status": "QUALIFIED",
+        "qualification_id": qualification_id,
+        "process_trigger_to_sweep_active_delay_us": delay_us,
+        "process_trigger_to_sweep_active_uncertainty_us": uncertainty_us,
+        "maximum_allowed_uncertainty_us": allowed_us,
+    }
 
 
 class LivePhaseScanAcquirer:
-    def __init__(self, *, config_path=None, laser_factory=None, hf_factory=None, t660_factory=None):
+    def __init__(self, *, config_path=None, laser_factory=None, hf_factory=None, t660_factory=None,
+                 picoscope_factory=None, picoscope_recipe_path=None, picoscope_alignment_override=None):
         self.config_path = config_path
         self.laser_factory = laser_factory or MircatService.from_config
         self.hf_factory = hf_factory or HF2LIService.from_config
         self.t660_factory = t660_factory or T660Service.from_config
+        self.picoscope_factory = picoscope_factory or PicoScopeService
+        self.picoscope_recipe_path = picoscope_recipe_path or "instrument/recipes/phase_scan_pulse_coverage.yaml"
+        self.picoscope_alignment_override = picoscope_alignment_override
         self.authorized = False
-        self.qcl = self.hf = self.log = self.store = None
+        self.qcl = self.hf = self.pico = self.log = self.store = None
         self.units = {}
         self.cancel = None
         self.progress = lambda message: None
@@ -76,9 +146,14 @@ class LivePhaseScanAcquirer:
         self._start_thread = None
         self.warnings = []
         self._last_pump_latest = None
+        self.pulse_coverage_required = True
+        self.attempt_index = 0
 
     def authorize(self, approved):
         self.authorized = approved is True
+
+    def set_attempt_context(self, attempt_index):
+        self.attempt_index = int(attempt_index)
 
     def _check(self, *, interlock=True):
         if self.cancel is not None and self.cancel.is_set():
@@ -113,6 +188,64 @@ class LivePhaseScanAcquirer:
         self.settings, self.store, self.cancel = settings, store, cancel
         self.log = (store.path / "commands.txt").open("x", encoding="utf-8")
         self._check(interlock=False)
+        config, _, _ = load_hardware_config(self.config_path)
+        pico_device = (config.get("devices") or {}).get("picoscope")
+        if not isinstance(pico_device, dict):
+            raise RuntimeError("PicoScope is missing from hardware configuration")
+        pico_recipe, resolved_pico_recipe = load_recipe(resolve_compat_path(Path(self.picoscope_recipe_path)))
+        pico_settings = deepcopy(capture_settings_from_recipe(pico_recipe))
+        external_trigger = pico_settings.get("external_trigger") or {}
+        if (str(external_trigger.get("source", "")).upper() != "EXT" or
+                int(external_trigger.get("direction", -1)) != 3 or
+                str(external_trigger.get("direction_name", "")).strip().lower() != "falling"):
+            raise RuntimeError(
+                "Phase Scan PicoScope EXT must trigger on the falling edge of T660-1 CHD"
+            )
+        self.picoscope_alignment = qualified_picoscope_alignment(
+            pico_recipe,
+            phase_interval_us=settings.phase_delay_us,
+            pulse_rate_hz=settings.probe_repetition_rate_hz,
+            override=self.picoscope_alignment_override,
+        )
+        sweep_start_offset_s = (
+            self.picoscope_alignment["process_trigger_to_sweep_active_delay_us"] * 1e-6
+        )
+        # Allocate for the complete requested span.  A multi-QCL segment is no
+        # longer than this conservative upper bound.
+        longest_segment_s = (abs(settings.stop_wavenumber_cm1-settings.start_wavenumber_cm1) /
+                             settings.scan_speed_cm1_s)
+        preferred_ns = float(pico_settings.get("preferred_sample_interval_ns", 16.0))
+        pre_trigger_s = float(pico_settings.get("pre_trigger_duration_us", 10.0)) * 1e-6
+        capture_s = (sweep_start_offset_s +
+                     longest_segment_s * (1 + float(pico_settings.get("duration_margin_fraction", .05))) +
+                     float(pico_settings.get("post_trigger_margin_us", 250.0)) * 1e-6)
+        pico_settings["pre_trigger_samples"] = max(1, math.ceil(pre_trigger_s / (preferred_ns * 1e-9)))
+        pico_settings["total_samples"] = pico_settings["pre_trigger_samples"] + math.ceil(capture_s / (preferred_ns * 1e-9))
+        pico_settings["timeout_s"] = max(float(pico_settings.get("timeout_s", 15.0)), capture_s + 5.0)
+        self.pico = self.picoscope_factory(pico_device, pico_settings, command_log=self.log)
+        self.pico.open_unit()
+        timing = self.pico.validate_sample_timing()
+        actual_interval_s = float(timing["sample_interval_ns"]) * 1e-9
+        maximum_interval_ns = float(pico_settings.get("maximum_sample_interval_ns", 48.0))
+        if timing["sample_interval_ns"] > maximum_interval_ns * (1 + 1e-9):
+            raise RuntimeError(
+                f"Phase Scan PicoScope interval is {timing['sample_interval_ns']:g} ns; maximum is {maximum_interval_ns:g} ns"
+            )
+        pico_settings["pre_trigger_samples"] = max(1, math.ceil(pre_trigger_s / actual_interval_s))
+        pico_settings["total_samples"] = pico_settings["pre_trigger_samples"] + math.ceil(capture_s / actual_interval_s)
+        timing = self.pico.validate_sample_timing()
+        if int(timing["max_samples"]) < int(pico_settings["total_samples"]):
+            raise RuntimeError("PicoScope memory cannot retain the requested complete Phase Scan sweep")
+        self.pico.apply_capture_settings()
+        self.picoscope_timing = timing
+        self.picoscope_maximum_adc = self.pico.get_maximum_adc_value()
+        write_json(store.path / "picoscope_prepared.json", {
+            "recipe": str(resolved_pico_recipe), "capture_settings": pico_settings,
+            "validated_timing": timing, "maximum_adc_value": self.picoscope_maximum_adc,
+            "alignment": self.picoscope_alignment,
+            "wiring": "T660-1 CHD -> PicoScope EXT; MIRcat Sweep Active -> HF2LI DIO21",
+            "optical_pulse_threshold_fraction": settings.pulse_detection_threshold_fraction,
+        })
         for name in ("t660_1", "t660_2"):
             unit = self.t660_factory(name, config_path=self.config_path, command_log=self.log)
             self.units[name] = unit
@@ -171,7 +304,13 @@ class LivePhaseScanAcquirer:
                                                               "C": {"enabled": False}, "D": {"enabled": False}}}
         probe = self.units["t660_2"]
         probe.apply_recipe(self.probe_recipe)
-        write_json(store.path / "t660_probe_prepared.json", self._verify_unit(probe, self.probe_recipe))
+        probe_readback = self._verify_unit(probe, self.probe_recipe)
+        write_json(store.path / "t660_probe_prepared.json", probe_readback)
+        # The machine-readable rate is the requested value after the active
+        # T660 synthesizer readback has been compared successfully to it.  Keep
+        # the native response alongside it for provenance.
+        self.probe_rate_readback_native = probe_readback["queries"]["synth_frequency"]
+        self.probe_rate_hz_readback = frequency_hz(self.probe_rate_readback_native["response"])
         probe.command("START", expect_response=False)
         self.hf = self.hf_factory(config_path=self.config_path, command_log=self.log)
         self.hf.connect()
@@ -209,7 +348,14 @@ class LivePhaseScanAcquirer:
         stable = {path: value for path, value in snapshot["nodes"].items()
                   if "/sigins/" in path or ("/demods/" in path and "/demods/2/" not in path)}
         return {"hf2li_device": snapshot["device_id"], "hf2li_detector_settings": stable,
-                "qcls": configured_qcls, "segments": self.segments}
+                "qcls": configured_qcls, "segments": self.segments,
+                "t660_2_probe_rate_hz_readback": self.probe_rate_hz_readback,
+                "t660_2_probe_rate_native_readback": self.probe_rate_readback_native,
+                "picoscope": {"model": pico_device.get("model"), "serial_number": pico_device.get("serial_number"),
+                               "sample_interval_ns": timing["sample_interval_ns"],
+                               "external_trigger_basis": PICOSCOPE_TRIGGER_BASIS,
+                               "trigger_alignment": self.picoscope_alignment,
+                               "pulse_coverage_required": True}}
 
     def _poll(self, record, seconds=.02, *, interlock=True):
         self._check(interlock=interlock)
@@ -282,8 +428,26 @@ class LivePhaseScanAcquirer:
             if event.pump_enabled and self._last_pump_latest is not None:
                 while monotonic() < self._last_pump_latest + settings.rest_period_s:
                     self._poll(record)
-            timer.fire_remote_trigger()  # The only pump-producing call in this event.
-            fired_at = monotonic()
+            fired_at_holder = []
+            def fire_after_scope_arm():
+                timer.fire_remote_trigger()  # The only pump-producing call in this event.
+                fired_at_holder.append(monotonic())
+            record["picoscope"] = self.pico.capture_block_data(after_arm=fire_after_scope_arm)
+            record["picoscope"].update({
+                "external_trigger_basis": PICOSCOPE_TRIGGER_BASIS,
+                "sweep_start_offset_s": self.picoscope_alignment[
+                    "process_trigger_to_sweep_active_delay_us"
+                ] * 1e-6,
+                "sweep_start_uncertainty_s": self.picoscope_alignment[
+                    "process_trigger_to_sweep_active_uncertainty_us"
+                ] * 1e-6,
+                "trigger_alignment_qualification_id": self.picoscope_alignment["qualification_id"],
+                "expected_pulse_rate_hz_readback": self.probe_rate_hz_readback,
+                "t660_2_rate_native_readback": self.probe_rate_readback_native,
+            })
+            if not fired_at_holder:
+                raise RuntimeError("PicoScope capture returned without firing the Phase Scan timing event")
+            fired_at = fired_at_holder[0]
             if event.pump_enabled:
                 # Conservative host upper bound; the actual reference timestamp
                 # remains in native device ticks and is used for reconstruction.
@@ -311,6 +475,8 @@ class LivePhaseScanAcquirer:
             # Prevent any additional Fire/Q-switch event, then close the probe gate.
             timer.set_trigger_source("OFF")
             timer.command("STOP", expect_response=False)
+            for channel in "ABCD":
+                timer.disable_channel(channel)
             self.units["t660_2"].disable_channel("B")
             self.qcl.stop_scan_if_needed()
             self.qcl.turn_emission_off()
@@ -320,7 +486,10 @@ class LivePhaseScanAcquirer:
     def capture(self, event, cancel):
         from control_app.workflows.phase_scan import PhaseScanEvent
         self._check()
-        raw = {"optical_valid": False, "clockbase_hz": self.clockbase, "segments": [], "event": asdict(event)}
+        raw = {"optical_valid": False, "clockbase_hz": self.clockbase, "segments": [], "event": asdict(event),
+               "probe_repetition_rate_hz_readback": self.probe_rate_hz_readback,
+               "probe_repetition_rate_native_readback": self.probe_rate_readback_native,
+               "pulse_coverage_required": True}
         spectra = []
         pump_tick = origin = None
         try:
@@ -360,7 +529,8 @@ class LivePhaseScanAcquirer:
             return raw, result
         except Exception as exc:
             raw["error"] = f"{type(exc).__name__}: {exc}"
-            save_native(self.store.path / "partial" / f"scan_{event.scan_index:07d}.npz", raw)
+            save_native(self.store.path / "partial" /
+                        f"scan_{event.scan_index:07d}_attempt_{self.attempt_index:02d}.npz", raw)
             raise
 
     @staticmethod
@@ -387,6 +557,9 @@ class LivePhaseScanAcquirer:
                 errors.append(f"{label}: {exc}")
         for unit in self.units.values():
             attempt(unit.name+" stop", lambda u=unit: self._stop_unit(u))
+        if self.pico is not None:
+            attempt("PicoScope stop", self.pico.stop)
+            attempt("PicoScope close", self.pico.close_unit)
         if self.qcl is not None:
             for label, operation in (("scan stop", self.qcl.stop_scan_if_needed), ("emission off", self.qcl.turn_emission_off),
                                      ("disarm", self.qcl.disarm)):

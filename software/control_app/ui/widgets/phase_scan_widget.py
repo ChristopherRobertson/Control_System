@@ -173,6 +173,7 @@ class PhaseScanWidget(QWidget):
         self.worker = None
         self._latest = None
         self._surface = None
+        self._surface_quality_status = None
         self._pending_result = None
         self.inputs = {}
         self.plan: PhaseScanPlan | None = None
@@ -222,7 +223,7 @@ class PhaseScanWidget(QWidget):
         root = QVBoxLayout(self)
         heading = QLabel("<b>Phase-delayed single scan</b> · Room-temperature MbCO")
         root.addWidget(heading)
-        intro = QLabel("One unpumped baseline, then one scan at each phase. Repeat the complete set and average matching phases across sets.")
+        intro = QLabel("One unpumped baseline, then one scan at each phase. After the nominal pass, PicoScope detector traces identify missing optical pulses and affected delays are retried before reconstruction.")
         intro.setWordWrap(True)
         root.addWidget(intro)
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -252,6 +253,12 @@ class PhaseScanWidget(QWidget):
              "Rising threshold for an optional rear Aux In photodetector. Unused for electrical DIO17 sync. Aux inputs accept ±10 V; verify detector output before connection."),
             ("rest_period_s", "Rest Period", " s", 0.1, 1_000_000.0, 6, 0.1,
              "Minimum spacing between pump events, not a sleep after each scan. Includes the phase delay and scan; reset/readiness may take longer."),
+            ("minimum_reconstruction_interval_coverage", "Minimum Interval Coverage", "", .01, 1.0, 3, .01,
+             "Repeat a phase when any Phase Delay-sized reconstruction interval falls below this optical-pulse coverage fraction. Exactly 0.90 is accepted."),
+            ("maximum_scan_missing_fraction", "Maximum Scan Missing Fraction", "", .001, 1.0, 3, .005,
+             "A larger whole-scan fraction of opportunities absent from both detectors forces a repeat."),
+            ("pulse_detection_threshold_fraction", "Local Pulse Threshold Fraction", "", .01, 1.0, 3, .05,
+             "Local detector threshold as a fraction of baseline-to-pulse amplitude. Thresholds are derived independently across each trace."),
         )
         for key, label, suffix, minimum, maximum, decimals, step, tooltip in fields:
             spin = QDoubleSpinBox()
@@ -275,6 +282,21 @@ class PhaseScanWidget(QWidget):
         repetitions.valueChanged.connect(self._refresh_plan)
         self.inputs["repetitions"] = repetitions
         form.addRow("Repetitions", repetitions)
+        for key, label, maximum, tooltip in (
+            ("missing_pulse_consecutive_limit", "Consecutive Missing Limit", 100,
+             "Repeat when this many consecutive expected pulses are absent from both detector channels."),
+            ("missing_pulse_retry_limit", "Additional Attempts", 20,
+             "Maximum additional acquisitions at an affected phase delay."),
+        ):
+            spin = QSpinBox()
+            spin.setObjectName(key)
+            spin.setRange(1, maximum)
+            spin.setValue(getattr(defaults, key))
+            spin.setToolTip(tooltip)
+            spin.setKeyboardTracking(False)
+            spin.valueChanged.connect(self._refresh_plan)
+            self.inputs[key] = spin
+            form.addRow(label, spin)
         reference = QComboBox()
         reference.addItem("Electrical sync · DIO17", "electrical_sync")
         reference.addItem("Photodetector · rear Aux In 1", "auxin0")
@@ -284,7 +306,7 @@ class PhaseScanWidget(QWidget):
         self.inputs["pump_reference"] = reference
         form.addRow("Pump Timing Reference", reference)
         controls_layout.addLayout(form)
-        note = QLabel("<b>Phase Delay is the phase increment.</b><br>Scan starts span −(Before Pump + scan duration) through After Pump.<br>Test scans keep the pump off. Start Scan runs the full pumped series.")
+        note = QLabel("<b>Phase Delay is the phase increment and pulse-coverage bin width.</b><br>Scan starts span −(Before Pump + scan duration) through After Pump.<br>PicoScope CHA = sample detector, CHB = reference detector, EXT = T660-1 CHD process marker. MIRcat Sweep Active remains on HF2LI DIO21. Test scans keep the pump off.")
         note.setWordWrap(True)
         controls_layout.addWidget(note)
         controls_layout.addWidget(self.validation)
@@ -321,7 +343,8 @@ class PhaseScanWidget(QWidget):
         for key, label in (
             ("duration", "One scan"), ("phases", "Pumped phases / set"),
             ("total", "Total records"), ("pump", "Pump events / cadence"),
-            ("probe", "Probe train"), ("elapsed", "Nominal elapsed time"),
+            ("probe", "Probe train"), ("coverage", "Missing-pulse policy"),
+            ("elapsed", "Nominal elapsed time"),
         ):
             value = QLabel()
             value.setWordWrap(True)
@@ -386,6 +409,14 @@ class PhaseScanWidget(QWidget):
             )
             self.summary_values["probe"].setText(
                 f"{plan.probe_duty_cycle:.3%} duty · ≈ {plan.nominal_probe_pulses_per_scan:,.9g} pulses / scan"
+            )
+            pulses_per_interval = plan.settings.probe_repetition_rate_hz * plan.settings.phase_delay_us * 1e-6
+            self.summary_values["coverage"].setText(
+                f"{plan.settings.minimum_reconstruction_interval_coverage:.1%} / interval "
+                f"(≈ {pulses_per_interval:,.6g} opportunities) · "
+                f"{plan.settings.missing_pulse_consecutive_limit} consecutive · "
+                f"{plan.settings.maximum_scan_missing_fraction:.1%} whole scan · "
+                f"+{plan.settings.missing_pulse_retry_limit} attempts"
             )
             self.summary_values["elapsed"].setText(
                 f"{_duration_text(plan.nominal_duration_s)} + setup / settling"
@@ -495,7 +526,7 @@ class PhaseScanWidget(QWidget):
             widget.setEnabled(not busy)
         self.inputs["pump_threshold_v"].setEnabled(not busy and self.inputs["pump_reference"].currentData() != "electrical_sync")
         self.execution.setText(
-            "QCL: 1000 mA. Saved HF2LI detector settings; faster timing stream. Optical qualification pending.\n"
+            "QCL: 1000 mA. HF2LI observes Sweep Active and wavelength markers; PicoScope CHA/CHB record both optical detectors at ≤48 ns/sample and EXT receives T660-1 CHD. A qualified CHD-to-Sweep-Active offset is required before acquisition.\n"
             + ("An acquisition is running. Abort requests safe shutdown." if busy else
                OPTICAL_ADAPTER_BLOCKER if not self.runner.available else
                "Background ready. One scan per phase per set." if background else
@@ -520,7 +551,9 @@ class PhaseScanWidget(QWidget):
             if kind == "test" else
             f"Acquire {self.plan.total_scans:,} scans and {self.plan.total_pump_events:,} pump events "
             "at the displayed settings, using the captured optical background. This enables the Nd:YAG Fire and Q-switch outputs. "
-            "The pump must already be configured for external operation and the beam path made safe."
+            "After the nominal pass, affected phase delays may be acquired up to the displayed retry limit before reconstruction. "
+            "Confirm PicoScope CHA=sample, CHB=reference, EXT=T660-1 CHD, and MIRcat Sweep Active=HF2LI DIO21. The pump must already be configured "
+            "for external operation and the beam path made safe."
         )
         if QMessageBox.question(self, "Confirm acquisition", description,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -602,7 +635,10 @@ class PhaseScanWidget(QWidget):
     def _show_map(self):
         if self._surface is not None:
             self.plot_stack.setCurrentWidget(self._surface)
-            self.scan_status.setText("Completed run · reconstructed absorbance map. This view is not a live acquisition.")
+            if self._surface_quality_status == "INCOMPLETE_MISSING_PULSE_COVERAGE":
+                self.scan_status.setText("INCOMPLETE_MISSING_PULSE_COVERAGE · diagnostic reconstruction only; not for publication.")
+            else:
+                self.scan_status.setText("Completed run · reconstructed absorbance map. This view is not a live acquisition.")
 
     def show_reconstruction(self, result, run_path=None):
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -616,12 +652,19 @@ class PhaseScanWidget(QWidget):
             self.plot_stack.removeWidget(self._surface)
             self._surface.deleteLater()
         self._surface = FigureCanvasQTAgg(figure)
+        self._surface_quality_status = result.get("completion_status", "COMPLETE")
         self.plot_stack.addWidget(self._surface)
         self.show_map_button.setEnabled(not self.command_running())
         timing = "electrical pump-sync reference" if "electrical_sync" in result.get("pump_reference_bases", []) else "observed pump reference"
-        self.scan_status.setText(f"Run complete · absorbance vs wavenumber and {timing}. "
-            "Unsupported regions are left empty; phase increment is not time resolution. "
-            + ("PROVISIONAL wavenumber axis. " if result.get("provisional") else ""))
+        if result.get("completion_status") == "INCOMPLETE_MISSING_PULSE_COVERAGE":
+            self.scan_status.setText(
+                "INCOMPLETE_MISSING_PULSE_COVERAGE · best-effort diagnostic reconstruction with deficient regions left empty. "
+                "All outputs are not for publication."
+            )
+        else:
+            self.scan_status.setText(f"Run complete · absorbance vs wavenumber and {timing}. "
+                "Unsupported regions are left empty; phase increment is not time resolution. "
+                + ("PROVISIONAL wavenumber axis. " if result.get("provisional") else ""))
         self.plot_stack.setCurrentWidget(self._surface)
         self._surface.draw_idle()
 

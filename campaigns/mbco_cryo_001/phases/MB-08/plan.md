@@ -23,6 +23,14 @@ temperature/geometry envelopes, and identifiability simulations. A new wavelengt
 pump path requires its own qualification; a model is not expanded beyond what remains
 identifiable after measured acquisition-kernel convolution.
 
+Any denser room-temperature single-scan phase-delay extension retains the promoted
+Phase-Scan marker-alignment, dual-detector pulse-coverage, retry, aligned-bin merge,
+and provenance rules without relaxation. Extension scans remain separate attempts at
+their acquired delays; deficient regions are not filled across different phase delays
+or biological states. A retry-exhausted result remains
+`INCOMPLETE_MISSING_PULSE_COVERAGE`, diagnostic only, visibly incomplete in every
+table and plot, and ineligible for mechanistic or publication claims.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

@@ -9,6 +9,7 @@ from control_app.paths import get_save_location, set_save_location
 
 from control_app.ui.contracts import WorkflowCommandHandler, blocked_handler
 from control_app.ui.widgets.mircat_widget import MircatWidget
+from control_app.ui.widgets.iris_widget import IrisWidget
 from control_app.ui.widgets.ndyag_widget import NdYagWidget
 from control_app.ui.widgets.scan_plotter_widget import ScanPlotterWidget
 from control_app.ui.widgets.t660_widget import T660Widget
@@ -69,6 +70,8 @@ class ControlSystemMainWindow(QMainWindow):
         tabs.addTab(self.t660_widget, "T660-2")
         self.ndyag_widget = NdYagWidget(handler)
         tabs.addTab(self.ndyag_widget, "Nd:YAG")
+        self.iris_widget = IrisWidget(handler, before_start=self._iris_start_blocker)
+        tabs.addTab(self.iris_widget, "OPO Iris")
         self.scan_plotter_widget = ScanPlotterWidget()
         tabs.addTab(self.scan_plotter_widget, "Plotter")
         self.mircat_widget.scan_data_ready_callback = self.scan_plotter_widget.set_rows
@@ -92,6 +95,7 @@ class ControlSystemMainWindow(QMainWindow):
         self.save_location.editingFinished.connect(self._apply_save_location)
         self.browse_save_location.clicked.connect(self._browse_save_location)
         self.phase_scan_widget.busy_changed.connect(self._phase_busy_changed)
+        self.iris_widget.busy_changed.connect(self._iris_busy_changed)
         self._save_timer = QTimer(self)
         self._save_timer.timeout.connect(self._update_save_enabled)
         self._save_timer.start(250)
@@ -117,6 +121,22 @@ class ControlSystemMainWindow(QMainWindow):
         setattr(self.command_handler, "phase_scan_active", busy) if hasattr(self.command_handler, "hardware_access") else None
         for index in range(self.tabs.count()):
             if self.tabs.widget(index) is not self.phase_scan_widget:
+                self.tabs.setTabEnabled(index, not busy)
+        self._update_save_enabled()
+
+    def _iris_start_blocker(self):
+        blockers = self._close_blockers()
+        handler_blockers = getattr(self.command_handler, "ui_iris_motion_blockers", None)
+        if callable(handler_blockers):
+            blockers.extend(str(blocker) for blocker in handler_blockers())
+        blockers = list(dict.fromkeys(blockers))
+        if blockers:
+            return "Stop other instrument activity first: " + "; ".join(blockers)
+        return None
+
+    def _iris_busy_changed(self, busy):
+        for index in range(self.tabs.count()):
+            if self.tabs.widget(index) is not self.iris_widget:
                 self.tabs.setTabEnabled(index, not busy)
         self._update_save_enabled()
 
@@ -219,6 +239,7 @@ class ControlSystemMainWindow(QMainWindow):
             ("MIRcat", self.mircat_widget),
             ("T660-2", self.t660_widget),
             ("Nd:YAG", self.ndyag_widget),
+            ("OPO Iris", self.iris_widget),
         )
         for label, widget in candidates:
             if widget is None:

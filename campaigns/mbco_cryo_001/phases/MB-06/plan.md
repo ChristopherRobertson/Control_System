@@ -25,6 +25,17 @@ and accepted MB-04 slow scan. Probe rate is selected independently of pump caden
 Reject an architecture that cannot meet reset, coverage, SNR, IRF, or identifiability
 criteria without deleting its evidence.
 
+The room-temperature single-scan phase-delay block imports the promoted Phase-Scan
+configuration, including the T660-1 CHD-to-PicoScope-EXT electrical qualification,
+CHD-to-Sweep-Active alignment quantity and ID, dual-detector optical-omission envelope,
+and E2E-CH-validated coverage/retry/merge policy. Preserve every nominal and repeated
+scan and its attempt/bin provenance. Stop biological acquisition for an invalid marker
+alignment or unclassifiable pulse record. If the retry budget is exhausted, retain the
+best-effort diagnostic reconstruction as
+`INCOMPLETE_MISSING_PULSE_COVERAGE`, with deficient regions visibly absent and every
+derived table and plot marked not for publication; do not use that delay/run for a
+biological conclusion.
+
 ## Closeout
 
 The phase-specific products above are additional to the common data

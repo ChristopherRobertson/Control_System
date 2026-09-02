@@ -41,6 +41,30 @@ Mandatory deliverables:
   scan/sample, drift, heteroscedastic-noise, phase, direction, edge, filter-memory,
   interpolation, and identifiable-region tests for each method.
 
+For each Phase-Scan method, exercise the accepted AR-01 coverage criteria using
+both observed omissions and predeclared fault-injection cases. Record CHA sample and
+CHB reference traces simultaneously, derive local thresholds, preserve the expected
+opportunity grid, and verify that a dual-channel omission is distinct from a
+one-channel detector/path discrepancy. Demonstrate all three repeat triggers:
+consecutive dual-channel omissions, deficient reconstruction-interval coverage, and
+excess whole-scan missing fraction.
+
+Verify that each affected phase delay receives no more than three additional
+attempts and stops early when the aligned valid regions collectively cover all
+required reconstruction bins. Preserve every attempt. Align attempts with observed
+Sweep Active timing, wavelength markers, and timestamps; retain valid original
+regions, fill invalid regions from valid repeats at the same phase delay, and use
+pulse-coverage weighting where multiple attempts are valid. The reconstruction must
+retain the contributing acquisition and normalized contribution weight for every
+region. A valid complete repeat may be selected, but an omission-free physical scan
+must not be required.
+
+Force at least one retry-exhaustion case and verify the exact
+`INCOMPLETE_MISSING_PULSE_COVERAGE` disposition. The best-effort diagnostic output
+must leave deficient regions as `NaN` or visibly flagged, label every table and plot
+not for publication, and keep the run from being reported complete. Any silent use
+of a deficient region or loss of attempt/bin provenance rejects the method.
+
 ## `EXPERIMENTS.md` allocation and decision contract
 
 E2E-CH is the nonbiological validation owner for `EXP-CHAR-12`, `EXP-CHAR-13`,
@@ -49,7 +73,8 @@ E2E-CH is the nonbiological validation owner for `EXP-CHAR-12`, `EXP-CHAR-13`,
 `EXP-VAL-07`. Each method/configuration is accepted or rejected separately against a
 frozen truth, native coverage, loss/noise/fault set, uncertainty, and algorithm version;
 no interpolation may manufacture unsupported regions. Hardware/path/topology/settings,
-thermal envelope, schedule/coverage, stream-loss regime, or algorithm changes trigger
+thermal envelope, schedule/coverage, optical-omission or stream-loss regime, retry/
+merge policy, or algorithm changes trigger
 revalidation. The phase does not establish biological equivalent-state reset, dose,
 sample identifiability, peaks, fractions, lifetimes, or kinetics.
 

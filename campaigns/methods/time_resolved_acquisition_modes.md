@@ -20,6 +20,13 @@ sample feeds HF2LI Signal 1 In (+) and PicoScope CHA; reference feeds HF2LI
 Signal 2 In (+) and PicoScope CHB. Both receivers remain connected in normal
 operation. Temporary timing/IRF work records changed branch connections/loading
 and restores both default split paths after measurement.
+For normal Phase-Scan acquisition, T660-1 CHD connects directly to PicoScope EXT
+as the qualified process marker while MIRcat Sweep Active remains on HF2LI DIO21;
+CHA and CHB therefore remain available for the sample and reference detector
+signals. The CHD marker route has its own configuration ID and accepted
+CHD-to-Sweep-Active delay and uncertainty. It is not a tee branch of Sweep Active
+and is not treated as coincident with Sweep Active merely because CHD mirrors the
+programmed CHC leading edge.
 Probe carrier/rate optimization is independent of the maximum pump-event rate.
 
 ## Mandatory initial slow scans
@@ -63,6 +70,51 @@ coverage, and state/reset evidence. This architecture is distinct from repeated
 rapid-scan stroboscopy and is rejected when recovery, fresh-position, or equivalent-
 state criteria fail. Its reconstruction must pass the same nonbiological bias,
 missing-data, noise, edge, filter-memory, and interpolation tests.
+
+Record both PicoScope detector channels concurrently with every physical scan.
+CHB, the reference detector, is the primary optical-pulse witness because it
+bypasses sample absorption; CHA corroborates it. Derive each channel's threshold
+from its local baseline and pulse population, initially using a configurable
+fraction near 30% of the local baseline-to-pulse amplitude, and reject or mark
+unclassifiable regions that fail noise or saturation checks. Do not use a fixed
+voltage threshold established at another wavenumber or alignment, and do not use
+an electrical-trigger threshold as an optical threshold. Sample no slower than
+48 ns/sample; approximately 10--20 ns/sample is preferred when the required record
+fits memory and transfer constraints.
+
+Generate expected pulse opportunities from the configured and read-back T660-2
+repetition rate. Fit opportunity phase locally between consecutive detected optical
+edges without deleting positions at which both detectors are silent; exclude partial
+opportunities at both capture boundaries. Align the optical record to the observed
+Sweep Active interval with the accepted T660-1 CHD-to-Sweep-Active offset, then align
+attempts at the reconstruction-bin level with observed Sweep Active timing,
+wavelength markers, and timestamps.
+
+The workflow exposes configurable missing-pulse controls initialized to the following
+candidate values for validation in AR-01 and E2E-CH: repeat a phase delay when two
+consecutive opportunities are absent from both detectors, when any reconstruction
+interval has less than 90% coverage, or when the whole-scan missing fraction exceeds
+5%. Coverage exactly equal to 90% is acceptable. At the illustrative 2 MHz probe
+rate and 5 us reconstruction interval, ten opportunities are expected, so one absent
+pulse is acceptable and two fail that interval. A one-channel-only observation is a
+detector/path discrepancy rather than a MIRcat omission and remains separately
+counted.
+
+After the nominal pass, permit at most three additional attempts for each affected
+phase delay and stop retrying as soon as the aligned valid regions collectively cover
+every required reconstruction region. Preserve every original, repeated, rejected,
+and diagnostic attempt. Use valid original regions, fill invalid regions from valid
+repeats at the same phase delay, and average regions valid in multiple attempts with
+pulse-coverage weighting. Retain the acquisition source and normalized contribution
+weight for every reconstructed region. A wholly valid repeat may supply the complete
+scan; an omission-free physical scan is not required.
+
+If required coverage is still absent after three additional attempts, finish only a
+best-effort diagnostic reconstruction with deficient regions left as `NaN` or visibly
+flagged. Mark the delay and run `INCOMPLETE_MISSING_PULSE_COVERAGE`, set every derived
+table and plot to not publication eligible, and do not label the run complete. These
+candidate controls become biological acquisition authority only after their measured
+configuration envelope and reconstruction behavior are accepted and promoted.
 
 ## Single-pump rapid/logarithmic scan-burst reconstruction
 

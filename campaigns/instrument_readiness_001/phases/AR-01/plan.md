@@ -30,6 +30,19 @@ model-derived and checked against HF-01. Enforce rate/bandwidth constraints. Sel
 one bounded speed envelope or named slow/high-resolution, normal analytical, and
 rapid/stroboscopic modes; do not optimize noise at the expense of required features.
 
+For single-scan and repeated rapid-scan Phase-Scan configurations, jointly evaluate
+PicoScope sample interval/record length, local pulse-threshold behavior, reconstruction-
+interval width, phase density, and bounded retry cost against the QB-01 omission
+envelope and measured reconstruction bias. The configurable candidate policy starts
+with a repeat at two consecutive dual-channel omissions, any interval below 90%
+coverage, or a whole-scan missing fraction above 5%, with at most three additional
+attempts per affected phase delay. Coverage equal to 90% passes. At the illustrative
+2 MHz and 5 us candidate settings, ten opportunities occupy one interval, so one
+omission passes and two fail. Test the combined criteria rather than treating
+consecutive loss as the sole gate, and retain all tested alternatives and rejection
+reasons. No candidate becomes final until the measured source, timing, detector,
+throughput, and reconstruction envelope supports it.
+
 Using an optically stable nonbiological signal and the qualified HF2LI setup,
 validate each of the five reconstruction methods across the normal dual-detector and
 temporary timing/IRF topologies: wavelength-by-wavelength, repeated rapid scan,
@@ -56,6 +69,9 @@ Mandatory deliverables:
 - Imported-versus-observed response residuals, scan-direction shift/broadening,
   minimum justified dwell, filtering/averaging rules, covariance behavior,
   uncertainty, and any predeclared bracket-escalation decision.
+- Phase-Scan pulse-coverage and retry candidate table, reconstruction-bias and
+  throughput tradeoff, accepted local-threshold and capture envelope, and explicit
+  rules for combined-attempt completion and retry exhaustion.
 - Separate frozen configuration IDs for every retained architecture linked to
   their permitted scan/record envelopes, including filter transfer, effective
   noise bandwidth, settling, temporal attenuation/bias, and any explicit

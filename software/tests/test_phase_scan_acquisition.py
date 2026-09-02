@@ -15,6 +15,16 @@ from control_app.workflows.phase_scan_runner import PhaseScanRunner
 from control_app.workflows.phase_scan_native import pump_reference_tick, spectrum_from_sweep
 
 
+TEST_PICOSCOPE_ALIGNMENT = {
+    "trigger_basis": live.PICOSCOPE_TRIGGER_BASIS,
+    "qualification_status": "QUALIFIED",
+    "qualification_id": "synthetic-chd-alignment",
+    "process_trigger_to_sweep_active_delay_us": 100.0,
+    "process_trigger_to_sweep_active_uncertainty_us": 0.01,
+    "maximum_allowed_uncertainty_us": 0.25,
+}
+
+
 def small_plan(**kwargs):
     return build_phase_scan_plan(replace(PhaseScanSettings(), stop_wavenumber_cm1=1998,
         scan_speed_cm1_s=1000, phase_delay_us=500, pre_pump_ms=1, post_pump_ms=1, rest_period_s=.1, **kwargs))
@@ -26,6 +36,7 @@ class World:
         self.now = 0.
         self.units = {}
         self.qcl = None
+        self.pico = None
         self.fires = []
         self.sample_present = False
         self.open_interlock = False
@@ -42,7 +53,41 @@ class World:
 
     def acquirer(self):
         return live.LivePhaseScanAcquirer(laser_factory=lambda **kw: Laser(self),
-            hf_factory=lambda **kw: HF(self), t660_factory=lambda name, **kw: Timer(self, name))
+            hf_factory=lambda **kw: HF(self), t660_factory=lambda name, **kw: Timer(self, name),
+            picoscope_factory=lambda device, settings, **kw: Pico(self, settings),
+            picoscope_alignment_override=TEST_PICOSCOPE_ALIGNMENT)
+
+
+class Pico:
+    def __init__(self, world, settings):
+        self.world, self.capture_settings = world, settings
+        self.closed = False
+        world.pico = self
+
+    def open_unit(self): pass
+    def apply_capture_settings(self): pass
+    def stop(self): pass
+    def close_unit(self): self.closed = True
+    def get_maximum_adc_value(self): return 32767
+    def validate_sample_timing(self):
+        return {"timebase": self.capture_settings["timebase"],
+                "requested_samples": self.capture_settings["total_samples"],
+                "sample_interval_ns": 16.0, "max_samples": 10_000_000}
+
+    def capture_block_data(self, *, after_arm=None):
+        if after_arm:
+            after_arm()
+        count = int(self.capture_settings["total_samples"])
+        pre = int(self.capture_settings["pre_trigger_samples"])
+        times = (np.arange(count)-pre)*16e-9
+        phase = np.mod(times, 500e-9)
+        pulse = phase < 96e-9
+        return {"timestamp_utc": "2026-01-01T00:00:00+00:00", "picoscope_model": "fake",
+                "picoscope_serial": "fake", "resolution": "8BIT", "timebase": 4,
+                "sample_interval_ns": 16.0, "total_samples": count, "pre_trigger_samples": pre,
+                "overflow": 0, "maximum_adc_value": 32767,
+                "ch_a_adc": np.where(pulse, 5000, 0).astype(np.int16),
+                "ch_b_adc": np.where(pulse, 15000, 0).astype(np.int16)}
 
 
 class Timer:
@@ -84,7 +129,9 @@ class Timer:
     def fire_remote_trigger(self):
         assert self.name == "t660_1" and self.source == "REM"
         assert not self.world.units["t660_2"].channels["D"]["enabled"]
-        assert not self.channels["D"]["enabled"]
+        assert self.channels["D"]["enabled"]
+        for field in ("delay", "width", "polarity", "termination"):
+            assert self.channels["D"][field] == self.channels["C"][field]
         self.shots += 1
         self.world.fires.append(deepcopy(self.channels))
         if self.channels["A"]["enabled"]:
@@ -97,6 +144,26 @@ class Timer:
         request = self.world.qcl.request
         self.world.scan_end = self.world.scan_start + abs(request["stop_cm1"]-request["start_cm1"])/request["scan_rate_cm1_s"]
         self.world.qcl.triggered = True
+
+
+def test_chd_marker_mirrors_process_channel_and_alignment_is_qualification_gated():
+    event = PhaseScanEvent(1, 0, 10.0, True, 0)
+    timing, _ = live.event_timing(event)
+    assert timing["channels"]["D"] == timing["channels"]["C"]
+    assert timing["channels"]["D"]["enabled"]
+    assert timing["channels"]["D"]["polarity"] == "negative"
+
+    pending = {"alignment": {**TEST_PICOSCOPE_ALIGNMENT, "qualification_status": "PENDING_MEASUREMENT"}}
+    with pytest.raises(RuntimeError, match="not qualified"):
+        live.qualified_picoscope_alignment(pending, phase_interval_us=5, pulse_rate_hz=2e6)
+    excessive = {"alignment": {**TEST_PICOSCOPE_ALIGNMENT,
+                                "process_trigger_to_sweep_active_uncertainty_us": .251}}
+    with pytest.raises(RuntimeError, match="permits at most 0.25 us"):
+        live.qualified_picoscope_alignment(excessive, phase_interval_us=5, pulse_rate_hz=2e6)
+    qualified = live.qualified_picoscope_alignment(
+        {"alignment": TEST_PICOSCOPE_ALIGNMENT}, phase_interval_us=5, pulse_rate_hz=2e6
+    )
+    assert qualified["process_trigger_to_sweep_active_delay_us"] == 100
 
 
 class Laser:
@@ -212,7 +279,7 @@ def test_pump_and_process_share_one_hardware_event_with_signed_delays(delay):
     assert min(fire, qswitch, process) >= 0
     assert process-(fire+.000180) == pytest.approx(delay*1e-6, abs=1e-12)
     assert qswitch-fire == pytest.approx(.000179830)
-    assert not channels["D"]["enabled"]
+    assert channels["D"] == channels["C"]
     assert recipe["trigger_source"] == "REM"
 
 
@@ -248,6 +315,8 @@ def test_full_live_sequence_records_one_pump_per_phase_and_centered_map(world, t
     result = runner.execute("run", tmp_path, p, laser_authorized=True)
     assert sum(f["A"]["enabled"] for f in world.fires) == p.total_pump_events
     reconstruction = result["reconstruction"]
+    assert reconstruction["completion_status"] == "COMPLETE"
+    assert reconstruction["publication_eligible"]
     np.testing.assert_allclose(reconstruction["time_s"], [-.001, -.0005, 0, .0005, .001])
     assert reconstruction["display_pump_time_ms"] == 1
     assert reconstruction["pump_reference_bases"] == ["electrical_sync"]
@@ -371,6 +440,7 @@ def test_actual_gui_buttons_complete_background_test_and_phase_run(world, tmp_pa
     import os
     import time
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication, QMessageBox
     from PySide6.QtTest import QTest
     from control_app import paths

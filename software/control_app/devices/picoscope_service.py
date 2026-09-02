@@ -21,6 +21,8 @@ import os
 import sys
 import time
 
+import numpy as np
+
 from control_app.config_loader import REPO_ROOT, load_hardware_config
 from control_app.paths import resolve_compat_path
 
@@ -327,14 +329,10 @@ class PicoScopeService:
             "max_samples": int(max_samples.value),
         }
 
-    def capture_block(
-        self,
-        raw_csv_path: str | Path,
-        *,
-        after_arm: Callable[[], None] | None = None,
+    def capture_block_data(
+        self, *, after_arm: Callable[[], None] | None = None
     ) -> dict[str, Any]:
-        """Capture a real block and save raw CH A/B ADC samples to CSV."""
-
+        """Capture a block and return lossless CH A/B arrays plus timing metadata."""
         self._require_open()
         self.configure_channels()
         self.set_external_trigger()
@@ -400,23 +398,56 @@ class PicoScopeService:
         )
         self._check(status, "ps5000aGetValues")
 
+        interval = c_float()
+        max_samples = c_int32()
+        status = self._driver.ps5000aGetTimebase2(
+            self._handle,
+            timebase,
+            total_samples,
+            byref(interval),
+            byref(max_samples),
+            segment_index,
+        )
+        self._check(status, "ps5000aGetTimebase2 capture")
+        maximum_adc = self.get_maximum_adc_value()
+        count = int(sample_count.value)
+        return {
+            "timestamp_utc": datetime.now(UTC).isoformat(timespec="microseconds"),
+            "picoscope_model": self.device_config.get("model"),
+            "picoscope_serial": self.device_config.get("serial_number"),
+            "resolution": self.capture_settings.get("resolution"),
+            "timebase": timebase,
+            "sample_interval_ns": float(interval.value),
+            "total_samples": count,
+            "pre_trigger_samples": pre_trigger,
+            "overflow": int(overflow.value),
+            "maximum_adc_value": maximum_adc,
+            "ch_a_adc": np.ctypeslib.as_array(buffer_a)[:count].copy(),
+            "ch_b_adc": np.ctypeslib.as_array(buffer_b)[:count].copy(),
+        }
+
+    def capture_block(
+        self,
+        raw_csv_path: str | Path,
+        *,
+        after_arm: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Capture a real block and save raw CH A/B ADC samples to CSV."""
+
+        data = self.capture_block_data(after_arm=after_arm)
+
         raw_path = Path(raw_csv_path)
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         with raw_path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow(["sample_index", "ch_a_adc", "ch_b_adc"])
-            for index in range(sample_count.value):
-                writer.writerow([index, int(buffer_a[index]), int(buffer_b[index])])
+            for index, (value_a, value_b) in enumerate(zip(data["ch_a_adc"], data["ch_b_adc"])):
+                writer.writerow([index, int(value_a), int(value_b)])
 
-        summary = {
-            "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "picoscope_model": self.device_config.get("model"),
-            "picoscope_serial": self.device_config.get("serial_number"),
-            "resolution": self.capture_settings.get("resolution"),
-            "total_samples": int(sample_count.value),
-            "overflow": int(overflow.value),
+        summary = {key: value for key, value in data.items() if key not in {"ch_a_adc", "ch_b_adc"}}
+        summary.update({
             "raw_data_file": str(raw_path),
-        }
+        })
         return summary
 
     def capture_rapid_blocks(

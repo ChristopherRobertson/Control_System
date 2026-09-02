@@ -19,6 +19,11 @@ def test_requested_example_distinguishes_baseline_and_zero_delay_pump():
     assert plan.last_phase_delay_us == 2000
     assert plan.probe_duty_cycle == pytest.approx(0.30)
     assert plan.nominal_probe_pulses_per_scan == pytest.approx(20_000)
+    workaround = plan.to_dict()["sequence"]["missing_pulse_workaround"]
+    assert workaround["consecutive_missing_limit"] == 2
+    assert workaround["minimum_interval_coverage"] == pytest.approx(.90)
+    assert workaround["maximum_scan_missing_fraction"] == pytest.approx(.05)
+    assert workaround["additional_attempt_limit"] == 3
     assert plan.pump_rate_hz == 1
     baseline, first, last = (plan.event_at(i) for i in (0, 1, 2801))
     assert not baseline.pump_enabled
@@ -79,6 +84,11 @@ def test_increasing_and_decreasing_scans_have_same_count_but_keep_direction():
     ({"scan_speed_cm1_s": 100}, "latest delayed scan"),
     ({"repetitions": 1.5}, "whole number"),
     ({"repetitions": True}, "whole number"),
+    ({"missing_pulse_consecutive_limit": 0}, "positive whole number"),
+    ({"missing_pulse_retry_limit": 0}, "positive whole number"),
+    ({"minimum_reconstruction_interval_coverage": 0}, "greater than zero"),
+    ({"maximum_scan_missing_fraction": 1.1}, "at most one"),
+    ({"pulse_detection_threshold_fraction": 0}, "greater than zero"),
 ])
 def test_invalid_or_overlapping_plans_are_rejected(changes, match):
     with pytest.raises(PhaseScanPlanError, match=match):

@@ -22,6 +22,7 @@ from control_app.workflows.mircat_widget_commands import (
     MIRCAT_WAVENUMBER_MIN_CM1,
     MircatWidgetCommandHandler,
 )
+from control_app.workflows.iris_widget_commands import IrisWidgetCommandHandler
 from control_app.workflows.ndyag_widget_commands import NdYagWidgetCommandHandler
 from control_app.workflows.picoscope_settings_test import (
     capture_settings_from_recipe,
@@ -49,7 +50,7 @@ REQUIRED_WORKFLOW_COMMANDS = (
     "abort_to_safe",
 )
 WORKFLOW_DEVICE_KEYS = ("mircat", "t660", "t660_2", "picoscope", "hf2li")
-DEVICE_COMMAND_KEYS = WORKFLOW_DEVICE_KEYS + ("ndyag",)
+DEVICE_COMMAND_KEYS = WORKFLOW_DEVICE_KEYS + ("ndyag", "opo_iris")
 INITIAL_STATE = "SAFE_IDLE"
 HARDWARE_REQUIRED_STATES = {
     "SAFE_SHUTDOWN_SENT",
@@ -128,6 +129,8 @@ class WorkflowStateMachine:
         self._mircat_handler: MircatWidgetCommandHandler | None = None
         self._t660_handler: T660WidgetCommandHandler | None = None
         self._ndyag_handler: NdYagWidgetCommandHandler | None = None
+        self._iris_handler: IrisWidgetCommandHandler | None = None
+        self.iris_command_active = False
         self.run_dir = self._resolve_run_dir(run_dir)
         self.raw_data_paths: list[str] = []
         self.command_log_paths: list[str] = []
@@ -158,6 +161,11 @@ class WorkflowStateMachine:
 
         if self.phase_scan_active:
             return WorkflowResult(status="blocked", message="Phase Scan owns the instruments. Use Abort Scan first.")
+        if self.iris_command_active:
+            return WorkflowResult(
+                status="blocked",
+                message="The OPO iris owns instrument control until its command finishes.",
+            )
         name = _normalize_command(command.command)
         if command.device_key == "workflow" and name == "configure_selected":
             return self._configure_selected_workflow(command)
@@ -299,6 +307,22 @@ class WorkflowStateMachine:
         """Return user actions that must happen before normal UI close."""
 
         blockers: list[str] = []
+        if self.iris_command_active:
+            blockers.append("An OPO iris command is still running. Wait for it to finish.")
+        if self._mircat_handler is not None:
+            blockers.extend(self._mircat_handler.close_blockers())
+        return blockers
+
+    def ui_iris_motion_blockers(self) -> list[str]:
+        """Return active acquisition/workflow states that prohibit iris movement."""
+
+        blockers: list[str] = []
+        if self.phase_scan_active:
+            blockers.append("Phase Scan owns the instruments")
+        if self._active_ui_workflow is not None:
+            blockers.append(
+                f"configured workflow {self._active_ui_workflow.workflow_id!r} is active"
+            )
         if self._mircat_handler is not None:
             blockers.extend(self._mircat_handler.close_blockers())
         return blockers
@@ -462,6 +486,26 @@ class WorkflowStateMachine:
                     inventory=self.inventory,
                 )
             result = self._ndyag_handler(command)
+        elif command.device_key == "opo_iris":
+            motion_blockers = self.ui_iris_motion_blockers()
+            if motion_blockers:
+                return WorkflowResult(
+                    status="blocked",
+                    message=(
+                        "Iris control is unavailable during instrument activity: "
+                        + "; ".join(motion_blockers)
+                    ),
+                )
+            if self._iris_handler is None:
+                self._iris_handler = IrisWidgetCommandHandler(
+                    operator=self.operator,
+                    inventory=self.inventory,
+                )
+            self.iris_command_active = True
+            try:
+                result = self._iris_handler(command)
+            finally:
+                self.iris_command_active = False
         else:
             message = (
                 f"{command.device_key} direct widget command namespace is not exposed; "

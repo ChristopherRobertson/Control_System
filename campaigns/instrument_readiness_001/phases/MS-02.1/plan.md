@@ -44,6 +44,16 @@ only one instrument records. Explicitly identify the removed branch and changed
 load for single-destination controls and temporary timing/IRF configurations.
 Restoration returns both detector signals to both default receivers.
 
+The Phase-Scan external-trigger configuration is a separate named configuration
+within this phase. It retains both detector split paths, keeps MIRcat DB9 pin 2
+`Tuned / Sweep Active` on HF2LI DIO21, and connects T660-1 CHD directly to
+PicoScope EXT. T660-1 CHC remains the active-low MIRcat process command; CHD is
+programmed with the same leading-edge timing and polarity and remains disabled
+outside an armed capture. Record the T660-1 output connector, CHD cable,
+PicoScope EXT connector, source/load setting, grounding, and receiver configuration.
+No equality between CHC, CHD, or Sweep Active is inferred from the programmed
+settings or cable lengths.
+
 For each retained normal dual-detector and sample-detector/pump-detector timing
 configuration, freeze a human-readable `configuration_id` containing detector,
 amplifier, tee, adapter, connector, cable, termination, HF2LI input, PicoScope
@@ -57,6 +67,16 @@ qualified electrical source plane to the HF2LI and PicoScope receiver planes:
   pretrigger baseline, record length, segment loss, and overflow behavior; and
 - change in detector output when the HF2LI and PicoScope are connected
   simultaneously versus the qualified single-destination controls.
+
+For the CHD-to-EXT route, stage all outputs disabled and use a non-emitting
+electrical verification to measure the delivered high/low levels, falling-edge
+polarity, rise/fall behavior, overshoot/ringing, loading, threshold margin,
+false/missed-trigger behavior, trigger latency, and repeatability. Confirm returned
+sample interval and complete-record behavior at capture settings capable of no more
+than 48 ns/sample, including the preferred approximately 10--20 ns/sample region
+when memory and transfer constraints permit. This phase qualifies the electrical
+source-to-EXT path only; MSW-01 measures the CHD-edge to observed-Sweep-Active
+relation under the retained MIRcat configurations.
 
 Import the accepted `MS-01` channel/path and `MS-02` splitter correction terms by
 stable evidence ID. Do not repeat their acquisition grids. Physical cable-length
@@ -74,14 +94,16 @@ and closure residuals at every retained configuration.
 
 ## Acceptance, rejection, and scope boundary
 
-Accept a configuration only when both destinations remain inside their qualified
-input envelopes, the measured transfer and latency model closes within the
-predeclared uncertainty criterion, trigger/pretrigger behavior is repeatable,
+Accept a configuration only when both detector destinations remain inside their
+qualified input envelopes, the measured transfer and latency model closes within
+the predeclared uncertainty criterion, trigger/pretrigger behavior is repeatable,
 overflow/loss is reconciled, and reconnect/revisit results remain inside the
-declared tolerance. Retain and cause-code every clipped, unstable, reflected,
-mis-triggered, lossy, or out-of-envelope attempt. Failure rejects that
-configuration or opens separately authorized bounded work; it does not alter
-`MS-01` or `MS-02`.
+declared tolerance. The Phase-Scan trigger configuration additionally requires a
+delivered CHD waveform and PicoScope EXT threshold/hysteresis setting with bounded
+margin, no unexplained false or missed triggers, and a retained uncertainty term for
+MSW-01. Retain and cause-code every clipped, unstable, reflected, mis-triggered,
+lossy, or out-of-envelope attempt. Failure rejects that configuration or opens
+separately authorized bounded work; it does not alter `MS-01` or `MS-02`.
 
 The output is a machine-readable branch-transfer and PicoScope calibration bundle
 with stable quantity IDs, reference planes, covariance, validity envelope, and
@@ -89,7 +111,7 @@ revalidation triggers. Revalidate after a detector/amplifier, tee, adapter, cabl
 termination, HF2LI input mode, PicoScope channel/mode, external trigger, material
 rewiring, service, or firmware/software change outside the recorded envelope.
 
-Downstream consumers are `HF-01.1`, `MD-01`, `HF-02`, `DET-01` through `DET-04`,
+Downstream consumers are `HF-01.1`, `MD-01`, `MSW-01`, `HF-02`, `DET-01` through `DET-04`,
 `OP-01`, `CL-01`, `IR-01`, `E2E-01`, `RPT-01`, and every architecture using
 PicoScope timing support. This phase does not establish detector optical
 responsivity, biological time zero, pump/probe arrival, HF2LI filter response,

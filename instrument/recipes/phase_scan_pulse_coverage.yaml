@@ -1,0 +1,55 @@
+name: phase_scan_pulse_coverage
+description: "Dual-detector PicoScope record triggered by the T660-1 CHD process marker for missing-pulse coverage analysis."
+approved_laser_safety_condition: false
+wiring:
+  channel_a: "Sample detector optical output"
+  channel_b: "Reference detector optical output (primary optical-pulse witness)"
+  external_trigger: "T660-1 CHD dedicated process-marker output; MIRcat Sweep Active remains connected only to HF2LI DIO21"
+  t660_1_channel_c: "MIRcat DB9 pin 4 Process Trigger"
+  t660_1_channel_d: "PicoScope EXT; same programmed leading-edge timing and polarity as T660-1 CHC"
+alignment:
+  trigger_basis: "t660_1_chd_process_marker"
+  qualification_status: "PENDING_MEASUREMENT"
+  qualification_id: null
+  process_trigger_to_sweep_active_delay_us: null
+  process_trigger_to_sweep_active_uncertainty_us: null
+  maximum_allowed_uncertainty_us: 0.25
+  policy: "Production acquisition is blocked until the CHD falling edge to observed Sweep Active rising-edge delay and uncertainty are measured and entered here."
+picoscope:
+  capture_mode: "one_block_per_qcl_sweep_segment"
+  capture_settings:
+    resolution: "8BIT"
+    channels:
+      A:
+        enabled: true
+        coupling: "DC"
+        range: "5V"
+        analog_offset_v: 0.0
+      B:
+        enabled: true
+        coupling: "DC"
+        range: "10V"
+        analog_offset_v: 0.0
+    external_trigger:
+      source: "EXT"
+      threshold_adc: 5000
+      direction: 3
+      direction_name: "falling"
+      delay_samples: 0
+      auto_trigger_ms: 0
+    timebase: 4
+    preferred_sample_interval_ns: 16.0
+    maximum_sample_interval_ns: 48.0
+    pre_trigger_duration_us: 10.0
+    post_trigger_margin_us: 250.0
+    duration_margin_fraction: 0.05
+    total_samples: 100000
+    pre_trigger_samples: 625
+    timeout_s: 15.0
+    pulse_count_threshold_adc: 0
+    pulse_count_threshold_policy: "Unused compatibility field; optical thresholds are derived locally after capture and this value must not classify detector pulses."
+  pulse_detection:
+    threshold_fraction_of_local_amplitude: 0.30
+    local_window_opportunities: 100
+    saturation_check_fraction_of_adc_range: 0.98
+    minimum_signal_to_noise_ratio: 6.0

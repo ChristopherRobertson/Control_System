@@ -57,7 +57,11 @@ def make_surface_figure(result):
                 axes.set_zticks(np.arange(np.ceil(lower*2)/2, upper+1e-9, .5))
         axes.plot([np.min(x), np.max(x)], [np.nanmin(values)]*2, [shift_ms]*2, color="#b96323", ls="--")
     title = "Reconstructed absorbance"
-    if result.get("provisional"):
+    if result.get("completion_status") == "INCOMPLETE_MISSING_PULSE_COVERAGE":
+        title += " · INCOMPLETE MISSING-PULSE COVERAGE · NOT FOR PUBLICATION"
+        figure.text(.5, .5, "INCOMPLETE · NOT FOR PUBLICATION", ha="center", va="center",
+                    rotation=28, fontsize=24, color="#b00020", alpha=.22, weight="bold")
+    elif result.get("provisional"):
         title += " · PROVISIONAL wavenumber axis"
     elif electrical:
         title += " · electrical pump-sync reference"
