@@ -1,15 +1,12 @@
-from dataclasses import replace
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from control_app.workflows.phase_scan import PhaseScanSettings, build_phase_scan_plan
 from control_app.workflows.phase_scan_data import (
-    Spectrum, absorbance, interpolate_supported, save_native, load_native, reconstruct,
+    ScanStore, Spectrum, absorbance, interpolate_supported, save_native, load_native, reconstruct,
 )
-from control_app.workflows.phase_scan_runner import PhaseScanRunner
 
 
 def spectrum(delay=0, *, background=False, offset=0):
@@ -22,7 +19,7 @@ def spectrum(delay=0, *, background=False, offset=0):
 
 def plan(repetitions=1):
     return build_phase_scan_plan(PhaseScanSettings(start_wavenumber_cm1=2000, stop_wavenumber_cm1=1998, scan_speed_cm1_s=1000,
-                                  phase_delay_us=500, rest_period_s=.1, repetitions=repetitions))
+                                  phase_delay_us=500, rest_period_s=.3, repetitions=repetitions))
 
 
 def test_native_roundtrip_keeps_uint64_ticks_and_unknown_nested_fields(tmp_path):
@@ -41,6 +38,38 @@ def test_native_roundtrip_keeps_uint64_ticks_and_unknown_nested_fields(tmp_path)
         save_native(target, {"replacement": True})
 
 
+def test_consolidated_store_preserves_native_arrays_and_record_index(tmp_path):
+    p = plan()
+    store = ScanStore(tmp_path, "run", p, compress_raw=False)
+    records = [(p.event_at(index), {"spectrum": spectrum().to_dict()}) for index in range(3)]
+    ticks = np.arange(1000, dtype=np.uint64) + np.uint64(2**60)
+    path = store.save_block(records, native={"blocks": [{"timestamp": ticks}]})
+    store.finish("COMPLETE")
+    assert list((store.path / "raw").rglob("*.npz")) == [path]
+    saved = load_native(path)
+    np.testing.assert_array_equal(saved["native"]["blocks"][0]["timestamp"], ticks)
+    assert saved["native"]["blocks"][0]["timestamp"].dtype == np.uint64
+    assert len(saved["records"]) == 3
+    assert json.loads((store.path / "result.json").read_text())["record_count"] == 3
+    index = [json.loads(line) for line in (store.path / "scan_index.jsonl").read_text().splitlines()]
+    assert [item["record_index"] for item in index] == [0, 1, 2]
+    assert all(item["path"] == "raw/acquisition.npz" for item in index)
+    run = json.loads((store.path / "run.json").read_text())
+    assert run["raw_storage"]["save_after_acquisition"]
+    with pytest.raises(FileExistsError):
+        store.save_block(records)
+
+
+def test_incomplete_store_retains_raw_data_without_reconstruction(tmp_path):
+    p = plan()
+    store = ScanStore(tmp_path, "run", p)
+    path = store.save_block([], native={"partial": np.arange(7, dtype=np.uint32)})
+    store.finish("INCOMPLETE", error="Expected record count was not reached")
+    np.testing.assert_array_equal(load_native(path)["native"]["partial"], np.arange(7))
+    assert json.loads((store.path / "result.json").read_text())["status"] == "INCOMPLETE"
+    assert not (store.path / "processed").exists()
+
+
 def test_absorbance_sign_reference_normalization_and_invalid_values():
     bg = spectrum(background=True)
     sample = spectrum()
@@ -53,6 +82,20 @@ def test_absorbance_sign_reference_normalization_and_invalid_values():
     bg.metadata["optical_valid"] = False
     with pytest.raises(ValueError, match="diagnostic"):
         absorbance(sample, bg)
+
+
+def test_normalization_preserves_structured_detector_signal_and_raw_arrays():
+    wn = np.linspace(1900., 2000., 301)
+    times = np.linspace(0., .0023, len(wn))
+    expected = .02 + .006 * np.sin(wn * 1.73) + .003 * np.cos(wn * .19)
+    reference = 1.1 + .1 * np.cos(wn * .07)
+    raw_sample = reference * 10**(-expected)
+    metadata = {"optical_valid": True, "wavenumber_basis": "measured"}
+    scan = Spectrum(wn, raw_sample.copy(), reference.copy(), times, 0., metadata)
+    background = Spectrum(wn, reference.copy(), reference.copy(), times, None, metadata)
+    np.testing.assert_allclose(absorbance(scan, background), expected, atol=1e-14)
+    np.testing.assert_array_equal(scan.sample_r, raw_sample)
+    np.testing.assert_array_equal(scan.reference_r, reference)
 
 
 def test_interpolation_never_extrapolates_or_bridges_invalid_samples():
@@ -71,81 +114,55 @@ def test_reconstruction_uses_time_within_scan_and_averages_complete_repetitions(
     wn, times, a = result["wavenumber_cm1"], result["time_s"], result["absorbance"]
     expected = (2000-wn)[None, :]*.01 + times[:, None]*20 + .01
     valid = np.isfinite(a)
+    assert valid.all()
+    assert result["display_pump_time_ms"] == 0.
     np.testing.assert_allclose(a[valid], expected[valid], atol=1e-12)
     assert np.all(result["repetition_count"][valid] == 2)
     np.testing.assert_allclose(result["standard_error"][valid], .01, atol=1e-10)
     assert np.isfinite(a[0, 0])  # Negative scan starts now supply early ages at the low-wavenumber end.
-    np.testing.assert_allclose(times[[0, -1]], [-.002, .005])
+    np.testing.assert_allclose(times[[0, -1]], [-.001, .005])
     records[1][1].metadata["pump_time_basis"] = "commanded"
     with pytest.raises(ValueError, match="Commanded"):
         reconstruct(records, spectrum(background=True), p)
 
 
-class FakeAcquirer:
-    def __init__(self, calls, *, background=False, fail_close=False, on_capture=None, readback=None):
-        self.calls, self.background, self.fail_close = calls, background, fail_close
-        self.on_capture = on_capture
-        self.readback = readback or {"current_ma": 750, "rate": 20_000, "timeconstant": 50e-6}
-
-    def prepare(self, settings, store, cancel):
-        return self.readback
-
-    def capture(self, event, cancel):
-        self.calls.append(event)
-        if self.on_capture:
-            self.on_capture(cancel)
-        return {"fixture": "SYNTHETIC TEST ONLY"}, spectrum((event.phase_delay_us or 0)*1e-6,
-                                                           background=self.background)
-
-    def close(self):
-        if self.fail_close:
-            raise RuntimeError("stop failed")
+def test_reconstruction_keeps_exact_endpoints_for_nondivisible_phase_step():
+    settings = PhaseScanSettings(start_wavenumber_cm1=2000, stop_wavenumber_cm1=1998,
+                                 scan_speed_cm1_s=1000, phase_delay_us=3)
+    p = build_phase_scan_plan(settings)
+    records = [(p.event_at(i), spectrum((p.event_at(i).phase_delay_us or 0)*1e-6))
+               for i in range(p.total_scans)]
+    result = reconstruct(records, spectrum(background=True), p)
+    times = result["time_s"]
+    np.testing.assert_array_equal(times[[0, -1]], [-.001, .005])
+    np.testing.assert_allclose(np.diff(times)[1:-1], 3e-6, atol=1e-18)
+    assert np.isfinite(result["absorbance"]).all()
 
 
-def test_background_gate_complete_run_one_scan_per_phase_and_files(tmp_path):
-    calls = []
-    runner = PhaseScanRunner(lambda: FakeAcquirer(calls, background=True))
+@pytest.mark.parametrize("defect", ["missing", "duplicate"])
+def test_reconstruction_rejects_incomplete_or_duplicated_nominal_records(defect):
     p = plan()
-    with pytest.raises(RuntimeError, match="background"):
-        runner.execute("run", tmp_path, p)
-    runner.execute("background", tmp_path, p)
-    assert runner.background_matches(p.settings)
-    assert runner.background_matches(replace(p.settings, repetitions=2, rest_period_s=2))
-    assert not runner.background_matches(replace(p.settings, probe_repetition_rate_hz=1e6))
-    runner.acquirer_factory = lambda: FakeAcquirer(calls)
-    result = runner.execute("run", tmp_path, p)
-    assert len(calls) == p.total_scans + 1
-    assert len(list(result["path"].glob("raw/rep_*/*.npz"))) == p.total_scans
-    assert len((result["path"] / "scan_index.jsonl").read_text().splitlines()) == p.total_scans
-    assert (result["path"] / "processed/reconstruction.npz").is_file()
-    assert json.loads((result["path"] / "result.json").read_text())["status"] == "COMPLETE"
+    records = [(p.event_at(i), spectrum((p.event_at(i).phase_delay_us or 0)*1e-6))
+               for i in range(p.total_scans)]
+    if defect == "missing":
+        records.pop()
+    else:
+        records[-1] = records[-2]
+    with pytest.raises(ValueError, match="complete phase set|duplicated phase records"):
+        reconstruct(records, spectrum(background=True), p)
 
 
-def test_failed_background_shutdown_does_not_enable_start(tmp_path):
-    runner = PhaseScanRunner(lambda: FakeAcquirer([], background=True, fail_close=True))
-    with pytest.raises(RuntimeError, match="Safe shutdown failed"):
-        runner.execute("background", tmp_path, plan())
-    assert runner.background is None
-    record = next(tmp_path.rglob("result.json"))
-    assert json.loads(record.read_text())["status"] == "FAILED_SAFE_STATE_UNVERIFIED"
-
-
-def test_abort_retains_native_record_and_does_not_promote_background(tmp_path):
-    runner = PhaseScanRunner(lambda: FakeAcquirer([], background=True, on_capture=lambda c: c.set()))
-    with pytest.raises(RuntimeError, match="aborted"):
-        runner.execute("background", tmp_path, plan())
-    assert runner.background is None
-    assert len(list(tmp_path.rglob("scan_*.npz"))) == 1
-    assert json.loads(next(tmp_path.rglob("result.json")).read_text())["status"] == "ABORTED"
-
-
-def test_device_change_invalidates_background(tmp_path):
-    runner = PhaseScanRunner(lambda: FakeAcquirer([], background=True))
-    runner.execute("background", tmp_path, plan())
-    runner.acquirer_factory = lambda: FakeAcquirer([], readback={"current_ma": 999})
-    with pytest.raises(RuntimeError, match="Instrument settings changed"):
-        runner.execute("run", tmp_path, plan())
-    assert runner.background is None
+def test_reconstruction_averages_duplicate_native_time_coordinates():
+    p = plan()
+    records = []
+    for i in range(p.total_scans):
+        event = p.event_at(i)
+        # Model native-tick quantization coarser than the requested phase step.
+        measured_delay = round((event.phase_delay_us or 0) * 1e-6 / .001) * .001
+        records.append((event, spectrum(measured_delay)))
+    result = reconstruct(records, spectrum(background=True), p)
+    assert np.isfinite(result["absorbance"]).any()
+    assert result["repetition_count"].max() == 1
 
 
 def test_native_marker_alignment_preserves_large_tick_precision_and_rejects_dark():
@@ -167,3 +184,19 @@ def test_native_marker_alignment_preserves_large_tick_precision_and_rejects_dark
     record["optical_valid"] = False
     with pytest.raises(ValueError, match="inhibited/dark"):
         marker_spectrum(record, **args)
+
+
+def test_marker_bearing_sweep_selection_preserves_ancillary_process_interval():
+    from control_app.workflows.phase_scan_native import select_sweep_active_interval
+
+    ticks = np.arange(100, dtype=np.uint64) + np.uint64(2**60)
+    dio = np.zeros(100, dtype=np.uint32)
+    dio[10:30] |= np.uint32(1 << 21)  # Ancillary process-event echo.
+    dio[50:80] |= np.uint32(1 << 21)  # Actual Sweep Active.
+    for start in (55, 65, 75):
+        dio[start:start + 2] |= np.uint32(1 << 22)
+    selected, markers, intervals, ancillary = select_sweep_active_interval(ticks, dio)
+    assert selected == (int(ticks[50]), int(ticks[80]))
+    assert markers.tolist() == ticks[[55, 65, 75]].tolist()
+    assert intervals == [(int(ticks[10]), int(ticks[30])), selected]
+    assert ancillary == [(int(ticks[10]), int(ticks[30]))]

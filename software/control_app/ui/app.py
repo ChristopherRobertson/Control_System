@@ -39,6 +39,9 @@ def main() -> int:
         persist_settings=True,
     )
     window.resize(1100, 780)
+    if "--mircat-scan" in sys.argv:
+        window.tabs.setCurrentWidget(window.mircat_widget)
+        window.mircat_widget.parameter_tabs.setCurrentIndex(1)
     window.show()
     shutdown_state = {"safe_completed": False, "emergency_done": False}
 

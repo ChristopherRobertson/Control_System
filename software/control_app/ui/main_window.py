@@ -64,7 +64,7 @@ class ControlSystemMainWindow(QMainWindow):
             before_start=self._phase_start_blocker,
         )
         tabs.addTab(self.phase_scan_widget, "Phase Scan")
-        self.mircat_widget = MircatWidget(handler)
+        self.mircat_widget = MircatWidget(handler, before_scan=self._mircat_scan_start_blocker)
         tabs.addTab(self.mircat_widget, "MIRcat")
         self.t660_widget = T660Widget(handler)
         tabs.addTab(self.t660_widget, "T660-2")
@@ -75,6 +75,7 @@ class ControlSystemMainWindow(QMainWindow):
         self.scan_plotter_widget = ScanPlotterWidget()
         tabs.addTab(self.scan_plotter_widget, "Plotter")
         self.mircat_widget.scan_data_ready_callback = self.scan_plotter_widget.set_rows
+        self.mircat_widget.scan_metadata_ready_callback = self.scan_plotter_widget.set_diagnostic_metadata
         self.workflow_selector_widget.scan_data_ready_callback = self.scan_plotter_widget.set_rows
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -95,6 +96,7 @@ class ControlSystemMainWindow(QMainWindow):
         self.save_location.editingFinished.connect(self._apply_save_location)
         self.browse_save_location.clicked.connect(self._browse_save_location)
         self.phase_scan_widget.busy_changed.connect(self._phase_busy_changed)
+        self.mircat_widget.scan_busy_changed.connect(self._mircat_scan_busy_changed)
         self.iris_widget.busy_changed.connect(self._iris_busy_changed)
         self._save_timer = QTimer(self)
         self._save_timer.timeout.connect(self._update_save_enabled)
@@ -133,6 +135,27 @@ class ControlSystemMainWindow(QMainWindow):
         if blockers:
             return "Stop other instrument activity first: " + "; ".join(blockers)
         return None
+
+    def _mircat_scan_start_blocker(self):
+        blocker = self._phase_start_blocker()
+        if blocker:
+            return blocker
+        check = getattr(self.command_handler, "ui_mircat_scan_blockers", None)
+        blockers = check() if callable(check) else []
+        return "; ".join(blockers) if blockers else None
+
+    def _mircat_scan_busy_changed(self, busy):
+        if hasattr(self.command_handler, "mircat_scan_active"):
+            self.command_handler.mircat_scan_active = busy
+            if busy:
+                self.command_handler.mircat_scan_cancel.clear()
+        if busy:
+            self.phase_scan_widget.runner.invalidate_background()
+        self.phase_scan_widget._update_buttons()
+        for index in range(self.tabs.count()):
+            if self.tabs.widget(index) is not self.mircat_widget:
+                self.tabs.setTabEnabled(index, not busy)
+        self._update_save_enabled()
 
     def _iris_busy_changed(self, busy):
         for index in range(self.tabs.count()):

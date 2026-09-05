@@ -372,6 +372,13 @@ class HF2LIService:
             "after_read_errors": after.get("read_errors", {}),
         }
 
+    def create_daq_module(self):
+        """Create a real LabOne Data Acquisition Module without starting it."""
+        factory = getattr(self._require_server(), "dataAcquisitionModule", None)
+        if factory is None:
+            raise HF2LIError("The installed LabOne API has no Data Acquisition Module")
+        return factory()
+
     def start_acquisition(
         self,
         *,

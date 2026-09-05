@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from control_app.config_loader import load_config_inventory
-from control_app.paths import RECIPE_ROOT, output_run_root, output_log_root
+from control_app.paths import output_run_root, output_log_root
 from control_app.devices.mircat_service import RET_NOT_INITIALIZED, MircatError, MircatService
 from control_app.manifest import new_manifest, write_manifest
 from control_app.ui.contracts import WorkflowCommand, WorkflowResult
@@ -24,8 +24,8 @@ from control_app.workflows.mircat_detector_alignment import (
     MircatDetectorAlignmentRequest,
     MircatDetectorAlignmentWorkflow,
 )
-from control_app.workflows.mircat_sweep_scan import run_sweep_scan
-import yaml
+from threading import Event, Lock
+from control_app.workflows.air_scan import run_air_scan, settings_from_mircat_controls
 
 
 MIRCAT_WAVENUMBER_MIN_CM1 = 1638.8
@@ -50,6 +50,11 @@ class MircatWidgetCommandHandler:
         self.alignment_run_dir: Path | None = None
         self.alignment_running = False
         self.scan_running = False
+        self.scan_cancel = Event()
+        self.scan_lock = Lock()
+        self.scan_progress = lambda message: None
+        self.scan_state = lambda state: None
+        self.scan_cleanup_failed = False
 
     def __call__(self, command: WorkflowCommand) -> WorkflowResult:
         """Handle one MIRcat widget command."""
@@ -74,6 +79,13 @@ class MircatWidgetCommandHandler:
 
     def _handle(self, command: WorkflowCommand, command_log: TextIO) -> WorkflowResult:
         name = command.command
+        if name == "mircat.start_sweep_scan":
+            return self._start_current_wiring_sweep(command, command_log)
+        if self.scan_running:
+            if name in {"mircat.stop_scan", "mircat.emission_off", "mircat.disarm", "mircat.deinitialize"}:
+                self.scan_cancel.set()
+                return WorkflowResult(status="accepted", message="Stop requested; waiting for sweep shutdown and saving.")
+            return WorkflowResult(status="blocked", message="Sweep running; use Stop Scan first.")
         if name == "mircat.start_detector_alignment":
             return self._start_detector_alignment(command, command_log)
         if name == "mircat.stop_detector_alignment":
@@ -195,8 +207,6 @@ class MircatWidgetCommandHandler:
                 command_log,
                 extra_data={"pulse_settings": pulse_settings},
             )
-        if name == "mircat.start_sweep_scan":
-            return self._start_current_wiring_sweep(command, command_log)
         if name == "mircat.stop_scan":
             self._require_initialized()
             stop_status = service.stop_scan_if_needed()
@@ -245,21 +255,55 @@ class MircatWidgetCommandHandler:
     def _start_current_wiring_sweep(
         self, command: WorkflowCommand, command_log: TextIO
     ) -> WorkflowResult:
-        """Run the all-device TRIG-OUT-started sweep workflow."""
+        """Run the existing Sweep Scan action using the tested T660 process sequence."""
         if not command.safety_approval:
             return WorkflowResult(status="blocked", message="Safety approval must be checked before starting a MIRcat scan.")
-        recipe_path = RECIPE_ROOT / "mircat_sweep_scan.yaml"
-        recipe = yaml.safe_load(recipe_path.read_text(encoding="utf-8"))
-        mircat = recipe["mircat"]
-        for key, target in (("scan_start_cm1", "start_cm1"), ("scan_stop_cm1", "stop_cm1"), ("scan_rate_cm1_s", "scan_rate_cm1_s"), ("scan_repetitions", "repetitions"), ("pulse_rate_hz", "pulse_rate_hz"), ("pulse_width_ns", "pulse_width_ns")):
-            if key in command.parameters:
-                mircat[target] = command.parameters[key]
-        run_dir = output_run_root() / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_mircat_sweep_scan"
+        if self.scan_cleanup_failed:
+            return WorkflowResult(status="blocked", message="Previous sweep shutdown was not verified; resolve the reported hardware error before restarting the app.")
+        if self.alignment_running or self.alignment_workflow is not None:
+            return WorkflowResult(status="blocked", message="Stop Alignment before Start Scan.")
+        settings = settings_from_mircat_controls(command.parameters)
+        if not self.scan_lock.acquire(blocking=False):
+            return WorkflowResult(status="blocked", message="A MIRcat sweep is already running.")
         try:
-            result = run_sweep_scan(request=recipe, run_dir=run_dir, command_log=command_log)
-        except Exception as exc:  # noqa: BLE001
-            return WorkflowResult(status="failed", message=str(exc), data={"run_dir": str(run_dir)})
-        return WorkflowResult(status="complete", message="MIRcat sweep completed; data are held in the Plotter until exported or replaced.", data={"run_dir": str(run_dir), **result})
+            # Release the tab's previous SDK client before the sweep owns it.
+            if self.initialized and self.service is not None:
+                self.service.stop_scan_if_needed()
+                self.service.turn_emission_off()
+                self.service.disarm()
+                self.service.deinitialize()
+                self.initialized, self.service = False, None
+            self.scan_running = True
+            result = run_air_scan(output_run_root(), cancel=self.scan_cancel,
+                                  progress=self.scan_progress, on_state=self.scan_state,
+                                  settings=settings, laser_authorized=True, pump_blocked=True,
+                                  config_path=self.inventory.config_path)
+            self.scan_cleanup_failed = not result['cleanup']['safe_state_and_retained_settings_verified']
+            errors = ([result.get('acquisition_error_message') or result['acquisition_error']]
+                      if result.get('acquisition_error') else [])
+            errors += result['cleanup']['errors'] + result.get('save_errors', [])
+            if result.get('analysis_error'):
+                errors.append(result['analysis_error'])
+            analysis = result.get('analysis', {})
+            message = ('; '.join(errors) if errors else
+                       'MIRcat sweep complete. T660 supplied external optical and process triggers. '
+                       'IR OFF; settings retained. Detector data are in Plotter.')
+            if errors and result['cleanup']['safe_state_and_retained_settings_verified']:
+                message += '\nIR OFF; MIRcat disarmed; timing outputs stopped. Settings retained.'
+            if result.get('warnings'):
+                message += '\nWarnings: ' + ' '.join(result['warnings'])
+            return WorkflowResult(status='failed' if errors else 'complete',
+                                  message=message + '\nSaved: ' + result['path'],
+                                  data={**result, 'run_dir': result['path'],
+                                        'scan_rows': analysis.get('scan_rows'),
+                                        'scan_metadata': analysis})
+        finally:
+            self.scan_running = False
+            self.scan_cancel.clear()
+            self.scan_lock.release()
+
+    def request_scan_stop(self):
+        self.scan_cancel.set()
 
     def _start_detector_alignment(
         self,

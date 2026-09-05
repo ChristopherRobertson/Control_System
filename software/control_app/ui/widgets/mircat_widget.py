@@ -74,7 +74,11 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             minimum=0.001,
             step=0.1,
         ),
-        ParameterField("scan_repetitions", "Repetitions", "int", 1, minimum=1, maximum=65535, step=1),
+        ParameterField("scan_repetitions", "Repetitions", "int", 1, minimum=1, maximum=1, step=1),
+        ParameterField("scan_trigger_rate_hz", "T660-2 Reference / Trigger Rate", "float", 2000000., units="Hz", minimum=1),
+        ParameterField("scan_trigger_width_ns", "T660-2 Trigger Width", "float", 150., units="ns", minimum=1),
+        ParameterField("scan_internal_rate_hz", "MIRcat Internal Rate", "float", 2100000., units="Hz", minimum=1),
+        ParameterField("scan_internal_width_ns", "MIRcat Internal Width", "float", 142., units="ns", minimum=1),
         ParameterField(
             "pulse_rate_hz",
             "Pulse Repetition Rate",
@@ -97,7 +101,7 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             "current_ma",
             "Current",
             "float",
-            1000.0,
+            750.0,
             units="mA",
             minimum=0.001,
             step=10.0,
@@ -175,8 +179,10 @@ SCAN_PARAMETER_KEYS = (
     "scan_stop_cm1",
     "scan_rate_cm1_s",
     "scan_repetitions",
-    "pulse_rate_hz",
-    "pulse_width_ns",
+    "scan_trigger_rate_hz",
+    "scan_trigger_width_ns",
+    "scan_internal_rate_hz",
+    "scan_internal_width_ns",
     "current_ma",
 )
 ALIGNMENT_PARAMETER_KEYS = (
@@ -220,7 +226,7 @@ ALIGNMENT_CONTROL_KEYS = (
 
 
 try:
-    from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
+    from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal, Slot
     from PySide6.QtWidgets import (
         QCheckBox,
         QDoubleSpinBox,
@@ -231,6 +237,7 @@ try:
         QHBoxLayout,
         QLabel,
         QPushButton,
+        QScrollArea,
         QSpinBox,
         QTabWidget,
         QTextEdit,
@@ -245,7 +252,8 @@ except ImportError:  # pragma: no cover - import-safe in non-UI hardware environ
     QThread = object
     QTimer = object
     Signal = None
-    Slot = None
+    def Slot(*types, **kwargs):
+        return lambda method: method
     QCheckBox = object
     QDoubleSpinBox = object
     QFormLayout = object
@@ -255,6 +263,7 @@ except ImportError:  # pragma: no cover - import-safe in non-UI hardware environ
     QHBoxLayout = object
     QLabel = object
     QPushButton = object
+    QScrollArea = object
     QSpinBox = object
     QTabWidget = object
     QTextEdit = object
@@ -268,6 +277,8 @@ if PYSIDE6_AVAILABLE:
         """Run one workflow command away from the GUI thread."""
 
         finished = Signal(object)
+        progress = Signal(str)
+        state = Signal(object)
 
         def __init__(
             self,
@@ -281,7 +292,11 @@ if PYSIDE6_AVAILABLE:
         @Slot()
         def run(self) -> None:
             try:
-                result = self.handler(self.command)
+                scan = getattr(self.handler, 'run_mircat_scan', None)
+                if self.command.command == 'mircat.start_sweep_scan' and callable(scan):
+                    result = scan(self.command, progress=self.progress.emit, on_state=self.state.emit)
+                else:
+                    result = self.handler(self.command)
             except Exception as exc:  # noqa: BLE001 - widget boundary reports workflow errors
                 result = WorkflowResult(status="failed", message=str(exc))
             self.finished.emit(result)
@@ -290,11 +305,15 @@ if PYSIDE6_AVAILABLE:
 class MircatWidget(QWidget):
     """Independent MIRcat panel designed for the unified desktop interface."""
 
+    if PYSIDE6_AVAILABLE:
+        scan_busy_changed = Signal(bool)
+
     def __init__(
         self,
         command_handler: WorkflowCommandHandler | None = None,
         *,
         parent: QWidget | None = None,
+        before_scan=None,
     ) -> None:
         if not PYSIDE6_AVAILABLE:
             raise RuntimeError("PySide6 is required to instantiate MircatWidget")
@@ -309,10 +328,20 @@ class MircatWidget(QWidget):
         self._active_worker: Any = None
         self._active_command: str | None = None
         self.scan_data_ready_callback = None
+        self.scan_metadata_ready_callback = None
+        self.before_scan = before_scan or (lambda: None)
+        self.buttons_by_command = {}
         self.result_log = QTextEdit()
         self.result_log.setReadOnly(True)
+        self.result_log.setMaximumHeight(100)
+        self.operation_status = QLabel('Ready. Choose an action below.')
+        self.operation_status.setObjectName('mircat_operation_status')
+        self.operation_status.setWordWrap(True)
+        self.operation_status.setTextFormat(Qt.PlainText)
+        self.operation_status.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self._build()
 
+    @Slot(object)
     def update_state(self, state: dict[str, Any]) -> None:
         """Update status labels from a workflow state dictionary."""
 
@@ -344,29 +373,35 @@ class MircatWidget(QWidget):
         title = QLabel(MIRCAT_WIDGET_SPEC.title)
         title.setObjectName("deviceTitle")
         layout.addWidget(title)
+        layout.addWidget(self.operation_status)
         layout.addWidget(self._build_status_group())
-        layout.addWidget(self._build_parameter_group())
+        self.parameter_scroll = QScrollArea()
+        self.parameter_scroll.setWidgetResizable(True)
+        self.parameter_scroll.setMinimumHeight(180)
+        self.parameter_scroll.setWidget(self._build_parameter_group())
+        layout.addWidget(self.parameter_scroll, 1)
         layout.addWidget(self._build_controls_group(GLOBAL_CONTROL_KEYS, title="Device Controls"))
         layout.addWidget(self.result_log)
 
     def _build_status_group(self) -> QGroupBox:
         group = QGroupBox("Status")
         grid = QGridLayout(group)
-        for row, field in enumerate(MIRCAT_WIDGET_SPEC.status_fields):
+        for index, field in enumerate(MIRCAT_WIDGET_SPEC.status_fields):
+            row, column = index % 6, (index // 6)*2
             name = QLabel(field.label)
             value = QLabel("--")
             value.setFrameShape(QFrame.Panel)
             value.setFrameShadow(QFrame.Sunken)
             value.setMinimumWidth(160)
-            grid.addWidget(name, row, 0)
-            grid.addWidget(value, row, 1)
+            grid.addWidget(name, row, column)
+            grid.addWidget(value, row, column+1)
             self.status_labels[field.key] = value
         return group
 
     def _build_parameter_group(self) -> QGroupBox:
         group = QGroupBox("Parameters")
         layout = QVBoxLayout(group)
-        tabs = QTabWidget()
+        self.parameter_tabs = tabs = QTabWidget()
         tabs.addTab(
             self._build_parameter_page(DIRECT_PARAMETER_KEYS, DIRECT_CONTROL_KEYS),
             "Direct Tune",
@@ -394,11 +429,25 @@ class MircatWidget(QWidget):
     ) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
+        if keys == SCAN_PARAMETER_KEYS:
+            approval = QFormLayout()
+            self._add_parameter_fields(approval, ('approved_laser_safety_condition',))
+            layout.addLayout(approval)
+            layout.addWidget(self._build_controls_group(control_keys, title="Actions"))
         form_container = QWidget()
         form = QFormLayout(form_container)
         self._add_parameter_fields(form, keys)
         layout.addWidget(form_container)
-        layout.addWidget(self._build_controls_group(control_keys, title="Actions"))
+        if keys == SCAN_PARAMETER_KEYS:
+            note = QLabel('Start Scan arms MIRcat and runs one unpumped sweep. T660-2 supplies the reference and optical train; '
+                          'T660-1 CHC starts the sweep after Pico EXT is armed. Pump A/B and CHD stay disabled.\n'
+                          'HF2LI inputs use the 2 V range. Clipping is recorded without stopping the scan.\n'
+                          'Confirm the pump is physically blocked under Safety Approval. Close PicoScope 7 before Start. '
+                          'Settings remain after completion; IR turns off. Exploratory — NOT FOR PUBLICATION.')
+            note.setWordWrap(True)
+            layout.addWidget(note)
+        if keys != SCAN_PARAMETER_KEYS:
+            layout.addWidget(self._build_controls_group(control_keys, title="Actions"))
         layout.addStretch(1)
         return page
 
@@ -457,6 +506,7 @@ class MircatWidget(QWidget):
                 button.setProperty("danger", True)
             row.addWidget(button)
             self.control_buttons.append(button)
+            self.buttons_by_command[control.command] = button
             if (index + 1) % 4 == 0:
                 rows.addLayout(row)
                 row = QHBoxLayout()
@@ -465,6 +515,20 @@ class MircatWidget(QWidget):
         return group
 
     def _dispatch(self, control: WidgetControl) -> None:
+        if self.command_running():
+            if self._active_command == 'mircat.start_sweep_scan' and control.command in {
+                'mircat.stop_scan', 'mircat.emission_off', 'mircat.disarm', 'mircat.deinitialize',
+            }:
+                stop = getattr(self.command_handler, 'request_mircat_scan_stop', None)
+                if callable(stop):
+                    stop()
+                    self._show_result(WorkflowResult(status='accepted', message='Stop requested; waiting for device calls, shutdown and saving.'))
+            return
+        if control.command == 'mircat.start_sweep_scan':
+            blocker = self.before_scan()
+            if blocker:
+                self._show_result(WorkflowResult(status='blocked', message=str(blocker)))
+                return
         parameters = self.current_parameters()
         safety_approval = bool(parameters.get("approved_laser_safety_condition"))
         if control.safety_approval_required and not safety_approval:
@@ -487,18 +551,34 @@ class MircatWidget(QWidget):
         self._set_controls_enabled(False)
         thread = QThread(self)
         worker = _CommandWorker(self.command_handler, command)
+        # A context-free Python lambda runs in the emitting worker's thread.
+        # GUI updates must be queued to slots owned by this GUI-thread widget.
+        worker.progress.connect(self._handle_progress, Qt.ConnectionType.QueuedConnection)
+        worker.state.connect(self.update_state, Qt.ConnectionType.QueuedConnection)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.finished.connect(self._handle_worker_result)
+        worker.finished.connect(self._handle_worker_result, Qt.ConnectionType.QueuedConnection)
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._clear_active_worker)
+        thread.finished.connect(self._clear_active_worker, Qt.ConnectionType.QueuedConnection)
         self._active_thread = thread
         self._active_worker = worker
         self._active_command = control.command
+        if control.command == 'mircat.start_sweep_scan':
+            self.scan_busy_changed.emit(True)
+            for name in ('mircat.stop_scan', 'mircat.emission_off'):
+                self.buttons_by_command[name].setEnabled(True)
+            for widgets in self.parameter_inputs.values():
+                for widget in widgets:
+                    widget.setEnabled(False)
         thread.start()
 
+    @Slot(str)
+    def _handle_progress(self, message: str) -> None:
+        self._show_result(WorkflowResult(status='accepted', message=message))
+
+    @Slot(object)
     def _handle_worker_result(self, result: WorkflowResult) -> None:
         self._show_result(result)
         state = result.data.get("state") if isinstance(result.data, dict) else None
@@ -506,6 +586,8 @@ class MircatWidget(QWidget):
             self.update_state(state)
         if isinstance(result.data, dict) and result.data.get("scan_rows") and callable(self.scan_data_ready_callback):
             self.scan_data_ready_callback(result.data["scan_rows"])
+            if callable(self.scan_metadata_ready_callback):
+                self.scan_metadata_ready_callback(result.data.get('scan_metadata', {}))
         if self._active_command == "mircat.arm":
             self._show_result(
                 WorkflowResult(
@@ -514,13 +596,21 @@ class MircatWidget(QWidget):
                 )
             )
             QTimer.singleShot(5000, lambda: self._set_controls_enabled(True))
-        else:
+        elif self._active_command != 'mircat.start_sweep_scan':
             self._set_controls_enabled(True)
 
+    @Slot()
     def _clear_active_worker(self) -> None:
+        was_scan = self._active_command == 'mircat.start_sweep_scan'
         self._active_thread = None
         self._active_worker = None
         self._active_command = None
+        if was_scan:
+            self._set_controls_enabled(True)
+            for widgets in self.parameter_inputs.values():
+                for widget in widgets:
+                    widget.setEnabled(True)
+            self.scan_busy_changed.emit(False)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         for button in self.control_buttons:
@@ -555,6 +645,12 @@ class MircatWidget(QWidget):
 
     def _show_result(self, result: WorkflowResult) -> None:
         self.result_log.append(f"{result.status.upper()}: {result.message}")
+        # Keep progress and failures visible even when the parameter form is scrolled.
+        message = result.message.split('\nSaved:', 1)[0]
+        self.operation_status.setText(f'{result.status.upper()}: {message}')
+        self.operation_status.setToolTip(result.message)
+        color = '#a12622' if result.status in {'failed', 'blocked'} else '#205c39' if result.status == 'complete' else '#164d7a'
+        self.operation_status.setStyleSheet(f'QLabel {{ color: {color}; background: #f3f5f7; padding: 8px; border: 1px solid {color}; }}')
 
 
 def _display_value(value: Any) -> str:

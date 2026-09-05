@@ -173,7 +173,6 @@ class PhaseScanWidget(QWidget):
         self.worker = None
         self._latest = None
         self._surface = None
-        self._surface_quality_status = None
         self._pending_result = None
         self.inputs = {}
         self.plan: PhaseScanPlan | None = None
@@ -221,9 +220,9 @@ class PhaseScanWidget(QWidget):
 
     def _build(self):
         root = QVBoxLayout(self)
-        heading = QLabel("<b>Phase-delayed single scan</b> · Room-temperature MbCO")
+        heading = QLabel("<b>Phase-delay acquisition</b> · Room-temperature MbCO")
         root.addWidget(heading)
-        intro = QLabel("One unpumped baseline, then one scan at each phase. After the nominal pass, PicoScope detector traces identify missing optical pulses and affected delays are retried before reconstruction.")
+        intro = QLabel("One unpumped baseline, then one frame at each nominal phase. The complete timing table is preloaded; finite Sweep Active captures are retained and saved together after acquisition.")
         intro.setWordWrap(True)
         root.addWidget(intro)
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -233,10 +232,14 @@ class PhaseScanWidget(QWidget):
         form = QFormLayout()
         defaults = PhaseScanSettings()
         fields = (
-            ("probe_repetition_rate_hz", "Probe Repetition Rate", " Hz", 1.0, 10_000_000.0, 0, 1000.0,
-             "MIRcat probe pulse rate, independent of the pump cadence. Device-specific limits require readback."),
-            ("probe_pulse_width_ns", "Probe Pulse Width", " ns", 0.001, 1_000_000.0, 3, 1.0,
-             "MIRcat probe pulse width. Rate × width determines the duty cycle."),
+            ("probe_repetition_rate_hz", "T660-1 Trigger Rate", " Hz", 2_000_000.0, 2_000_000.0, 0, 1000.0,
+             "Continuous train: T660-1 A drives HF2LI DIO0 reference, B drives MIRcat TRIG IN, and C drives the externally predivided T660-2 frame input."),
+            ("probe_pulse_width_ns", "T660-1 Trigger Width", " ns", 0.001, 1_000_000.0, 3, 1.0,
+             "Width of the external T660-1 A/B/C TTL pulses, not the MIRcat internal laser pulse width."),
+            ("mircat_internal_repetition_rate_hz", "MIRcat Internal Rate", " Hz", 1.0, 10_000_000.0, 0, 1000.0,
+             "Must exceed the T660-1 trigger rate to avoid MIRcat trigger blocking. The operator-reported tested pair is 2.1 MHz internal versus 2 MHz external (100 kHz margin). MIRcat remains externally triggered."),
+            ("mircat_internal_pulse_width_ns", "MIRcat Internal Width", " ns", 0.001, 1_000_000.0, 3, 1.0,
+             "MIRcat QCL pulse-width setting. 2.1 MHz × 142 ns is 29.82% internal duty, below the 30% ceiling; hardware limits and readbacks are checked separately."),
             ("start_wavenumber_cm1", "Start Wavenumber", " cm⁻¹", 1.0, 10_000.0, 3, 1.0,
              "Requested sweep start. The instrument preset must confirm QCL coverage."),
             ("stop_wavenumber_cm1", "Stop Wavenumber", " cm⁻¹", 1.0, 10_000.0, 3, 1.0,
@@ -246,19 +249,11 @@ class PhaseScanWidget(QWidget):
             ("phase_delay_us", "Phase Delay", " µs", 0.001, 1_000_000_000.0, 3, 1.0,
              "Increment between signed scan-start offsets. Negative offsets start the scan before its pump."),
             ("pre_pump_ms", "Before Pump", " ms", 0.0, 1_000_000.0, 3, .5,
-             "Requested pre-pump observation window at every wavenumber. Also the displayed position of the pump."),
+             "Requested pre-pump reconstruction interval at every wavenumber. Hardware phase bounds require the calibrated sweep trajectory."),
             ("post_pump_ms", "After Pump", " ms", .001, 1_000_000.0, 3, .5,
              "Requested post-pump observation window at every wavenumber."),
-            ("pump_threshold_v", "Pump Input Threshold", " V", -9.999, 9.999, 3, .01,
-             "Rising threshold for an optional rear Aux In photodetector. Unused for electrical DIO17 sync. Aux inputs accept ±10 V; verify detector output before connection."),
-            ("rest_period_s", "Rest Period", " s", 0.1, 1_000_000.0, 6, 0.1,
-             "Minimum spacing between pump events, not a sleep after each scan. Includes the phase delay and scan; reset/readiness may take longer."),
-            ("minimum_reconstruction_interval_coverage", "Minimum Interval Coverage", "", .01, 1.0, 3, .01,
-             "Repeat a phase when any Phase Delay-sized reconstruction interval falls below this optical-pulse coverage fraction. Exactly 0.90 is accepted."),
-            ("maximum_scan_missing_fraction", "Maximum Scan Missing Fraction", "", .001, 1.0, 3, .005,
-             "A larger whole-scan fraction of opportunities absent from both detectors forces a repeat."),
-            ("pulse_detection_threshold_fraction", "Local Pulse Threshold Fraction", "", .01, 1.0, 3, .05,
-             "Local detector threshold as a fraction of baseline-to-pulse amplitude. Thresholds are derived independently across each trace."),
+            ("rest_period_s", "Frame Period", " s", 0.3, 0.3, 6, 0.1,
+             "Spacing between preloaded frames. The qualified 2 MHz input and external predivider of 600,000 give a 300 ms frame period."),
         )
         for key, label, suffix, minimum, maximum, decimals, step, tooltip in fields:
             spin = QDoubleSpinBox()
@@ -277,36 +272,19 @@ class PhaseScanWidget(QWidget):
         repetitions.setObjectName("repetitions")
         repetitions.setRange(1, 1_000_000)
         repetitions.setValue(defaults.repetitions)
-        repetitions.setToolTip("Repeat the entire baseline + phase series, then average matching phases across sets. One scan per phase in each set.")
+        repetitions.setToolTip("Acquire one baseline for the run, then repeat the complete nominal phase series and average matching phases across sets.")
         repetitions.setKeyboardTracking(False)
         repetitions.valueChanged.connect(self._refresh_plan)
         self.inputs["repetitions"] = repetitions
         form.addRow("Repetitions", repetitions)
-        for key, label, maximum, tooltip in (
-            ("missing_pulse_consecutive_limit", "Consecutive Missing Limit", 100,
-             "Repeat when this many consecutive expected pulses are absent from both detector channels."),
-            ("missing_pulse_retry_limit", "Additional Attempts", 20,
-             "Maximum additional acquisitions at an affected phase delay."),
-        ):
-            spin = QSpinBox()
-            spin.setObjectName(key)
-            spin.setRange(1, maximum)
-            spin.setValue(getattr(defaults, key))
-            spin.setToolTip(tooltip)
-            spin.setKeyboardTracking(False)
-            spin.valueChanged.connect(self._refresh_plan)
-            self.inputs[key] = spin
-            form.addRow(label, spin)
         reference = QComboBox()
         reference.addItem("Electrical sync · DIO17", "electrical_sync")
-        reference.addItem("Photodetector · rear Aux In 1", "auxin0")
-        reference.addItem("Photodetector · rear Aux In 2", "auxin1")
-        reference.setToolTip("Electrical sync uses the existing Nd:YAG Variable Sync connection; it is not optical pump arrival. Aux inputs need an attached detector and suitable pulse amplitude/duration.")
+        reference.setToolTip("Synchronized DIO17 pump-event timestamps retain electrical timing even when the pump occurs outside the short Sweep Active detector record.")
         reference.currentIndexChanged.connect(self._refresh_plan)
         self.inputs["pump_reference"] = reference
         form.addRow("Pump Timing Reference", reference)
         controls_layout.addLayout(form)
-        note = QLabel("<b>EXPLORATORY PROOF OF CONCEPT · NOT FOR PUBLICATION.</b><br><b>Phase Delay is the phase increment and pulse-coverage bin width.</b><br>Scan starts span −(Before Pump + scan duration) through After Pump.<br>PicoScope CHA = sample detector, CHB = reference detector, EXT = high-impedance branch from MIRcat DB9 pin 2 Sweep Active. Sweep Active remains connected to HF2LI DIO21; T660-1 CHD is disconnected. Test scans keep the pump off.")
+        note = QLabel("<b>EXPLORATORY PROOF OF CONCEPT - NOT FOR PUBLICATION.</b><br>Phase Delay sets the nominal phase increment. The reconstruction window is relative to the observed pump; the calibrated sweep trajectory determines the hardware delay range.<br>T660-1 provides the continuous probe train. T660-2 provides preloaded pump/process frames. HF2LI captures Sweep Active on DIO21 and synchronized pump events on DIO17. Test scans keep the pump off.")
         note.setWordWrap(True)
         controls_layout.addWidget(note)
         controls_layout.addWidget(self.validation)
@@ -341,9 +319,10 @@ class PhaseScanWidget(QWidget):
         summary = QGroupBox("Derived plan")
         summary_form = QFormLayout(summary)
         for key, label in (
-            ("duration", "One scan"), ("phases", "Pumped phases / set"),
+            ("duration", "Sweep duration preview"), ("window", "Reconstruction interval"),
+            ("phases", "Pumped phases / set"),
             ("total", "Total records"), ("pump", "Pump events / cadence"),
-            ("probe", "Probe train"), ("coverage", "Missing-pulse policy"),
+            ("probe", "T660-1 continuous train"), ("mircat", "MIRcat internal settings"),
             ("elapsed", "Nominal elapsed time"),
         ):
             value = QLabel()
@@ -395,34 +374,39 @@ class PhaseScanWidget(QWidget):
             self.save_button.setEnabled(False)
         else:
             plan = self.plan
-            self.validation.setText("Plan updated. Instrument limits and sample reset still require validation.")
+            self.validation.setText("Planning preview. Acquisition requires a qualified sweep trajectory, frame capacity, and capture readbacks.")
             self.summary_values["duration"].setText(f"{plan.scan_duration_s * 1000:,.6g} ms")
+            self.summary_values["duration"].setToolTip(
+                "The qualified Sweep Active interval and acquisition readback determine detector capture duration during preflight."
+            )
+            self.summary_values["window"].setText(
+                f"{-plan.settings.pre_pump_ms:g} to +{plan.settings.post_pump_ms:g} ms relative to pump sync"
+            )
             self.summary_values["phases"].setText(
                 f"{plan.phases_per_repetition:,} · {plan.first_phase_delay_us:,.9g} → {plan.last_phase_delay_us:,.9g} µs"
             )
             self.summary_values["total"].setText(
-                f"{plan.total_scans:,} = {plan.scans_per_repetition:,} / set × {plan.settings.repetitions:,} sets "
-                f"({plan.settings.repetitions:,} unpumped baseline(s))"
+                f"{plan.total_scans:,} = 1 unpumped baseline + "
+                f"{plan.phases_per_repetition:,} / set × {plan.settings.repetitions:,} sets"
             )
             self.summary_values["pump"].setText(
                 f"{plan.total_pump_events:,} · at most {plan.pump_rate_hz:,.6g} Hz"
             )
             self.summary_values["probe"].setText(
-                f"{plan.probe_duty_cycle:.3%} duty · ≈ {plan.nominal_probe_pulses_per_scan:,.9g} pulses / scan"
+                f"{plan.settings.probe_repetition_rate_hz:,.9g} Hz / {plan.settings.probe_pulse_width_ns:g} ns · "
+                f"{plan.probe_duty_cycle:.3%} TTL duty · ≈ {plan.nominal_probe_pulses_per_scan:,.9g} opportunities / scan"
             )
-            pulses_per_interval = plan.settings.probe_repetition_rate_hz * plan.settings.phase_delay_us * 1e-6
-            self.summary_values["coverage"].setText(
-                f"{plan.settings.minimum_reconstruction_interval_coverage:.1%} / interval "
-                f"(≈ {pulses_per_interval:,.6g} opportunities) · "
-                f"{plan.settings.missing_pulse_consecutive_limit} consecutive · "
-                f"{plan.settings.maximum_scan_missing_fraction:.1%} whole scan · "
-                f"+{plan.settings.missing_pulse_retry_limit} attempts"
+            self.summary_values["mircat"].setText(
+                f"{plan.settings.mircat_internal_repetition_rate_hz:,.9g} Hz / "
+                f"{plan.settings.mircat_internal_pulse_width_ns:g} ns · "
+                f"{plan.mircat_internal_duty_cycle:.3%} duty · "
+                f"+{plan.mircat_internal_rate_margin_hz:,.9g} Hz headroom · external pulse triggering"
             )
             self.summary_values["elapsed"].setText(
                 f"{_duration_text(plan.nominal_duration_s)} + setup / settling"
             )
             self.summary_values["elapsed"].setToolTip(
-                "One Rest Period slot per record, including baselines; no trailing rest. "
+                "One preloaded frame slot per record, including baselines; no trailing frame interval. "
                 "This cadence budget is not a measured runtime or a guaranteed reset time."
             )
             self._populate_sequence(plan)
@@ -462,7 +446,7 @@ class PhaseScanWidget(QWidget):
     def _populate_sequence(self, plan: PhaseScanPlan):
         # Keep UI work bounded even when a fine phase grid represents millions
         # of scans. All actual indices remain available in the compact plan.
-        count = plan.scans_per_repetition
+        count = 1 + plan.phases_per_repetition
         indices = list(range(min(4, count)))
         if count > 6:
             indices.append(None)
@@ -524,9 +508,8 @@ class PhaseScanWidget(QWidget):
         self.save_button.setEnabled(valid and not busy)
         for widget in self.inputs.values():
             widget.setEnabled(not busy)
-        self.inputs["pump_threshold_v"].setEnabled(not busy and self.inputs["pump_reference"].currentData() != "electrical_sync")
         self.execution.setText(
-            "EXPLORATORY PROOF OF CONCEPT · NOT FOR PUBLICATION. QCL: 750 mA. HF2LI uses the fast exploratory Phase-Scan preset and observes Sweep Active and wavelength markers; PicoScope CHA/CHB record both optical detectors at ≤48 ns/sample and EXT receives a high-impedance branch of MIRcat DB9 pin 2 Sweep Active. T660-1 CHD remains disconnected.\n"
+            "EXPLORATORY PROOF OF CONCEPT - NOT FOR PUBLICATION. QCL: 750 mA, externally triggered. MIRcat internal rate/width settings provide trigger-acceptance headroom. T660-1 supplies the continuous 2 MHz reference/probe train; externally predivided T660-2 supplies the preloaded pump/process frames. Finite HF2LI Sweep Active records and synchronized DIO17 pump events are saved after acquisition.\n"
             + ("An acquisition is running. Abort requests safe shutdown." if busy else
                OPTICAL_ADAPTER_BLOCKER if not self.runner.available else
                "Background ready. One scan per phase per set." if background else
@@ -551,10 +534,16 @@ class PhaseScanWidget(QWidget):
             if kind == "test" else
             f"Acquire {self.plan.total_scans:,} scans and {self.plan.total_pump_events:,} pump events "
             "at the displayed settings, using the captured optical background. This enables the Nd:YAG Fire and Q-switch outputs. "
-            "After the nominal pass, affected phase delays may be acquired up to the displayed retry limit before reconstruction. "
-            "Confirm PicoScope CHA=sample, CHB=reference, EXT=MIRcat DB9 pin 2 Sweep Active via the installed high-impedance branch, DB9 pin 7=probe ground, T660-1 CHD=disconnected, and Sweep Active remains connected to HF2LI DIO21. The pump must already be configured "
+            "Both DDGs remain armed during each preloaded block. HF2LI records Sweep Active on DIO21 and pump synchronization on DIO17. The pump must already be configured "
             "for external operation and the beam path made safe."
         )
+        if kind != "diagnostic":
+            settings = self.plan.settings
+            description += (
+                f" T660-1 A/B/C: {settings.probe_repetition_rate_hz:g} Hz / {settings.probe_pulse_width_ns:g} ns; "
+                f"MIRcat internal settings: {settings.mircat_internal_repetition_rate_hz:g} Hz / "
+                f"{settings.mircat_internal_pulse_width_ns:g} ns. Optical triggering remains external."
+            )
         if QMessageBox.question(self, "Confirm acquisition", description,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
@@ -635,10 +624,7 @@ class PhaseScanWidget(QWidget):
     def _show_map(self):
         if self._surface is not None:
             self.plot_stack.setCurrentWidget(self._surface)
-            if self._surface_quality_status == "INCOMPLETE_MISSING_PULSE_COVERAGE":
-                self.scan_status.setText("INCOMPLETE_MISSING_PULSE_COVERAGE · diagnostic reconstruction only; not for publication.")
-            else:
-                self.scan_status.setText("Exploratory proof-of-concept run · reconstructed absorbance map · NOT FOR PUBLICATION. This view is not a live acquisition.")
+            self.scan_status.setText("Exploratory proof-of-concept run - reconstructed absorbance map - NOT FOR PUBLICATION. This view is not a live acquisition.")
 
     def show_reconstruction(self, result, run_path=None):
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -652,19 +638,12 @@ class PhaseScanWidget(QWidget):
             self.plot_stack.removeWidget(self._surface)
             self._surface.deleteLater()
         self._surface = FigureCanvasQTAgg(figure)
-        self._surface_quality_status = result.get("completion_status", "COMPLETE")
         self.plot_stack.addWidget(self._surface)
         self.show_map_button.setEnabled(not self.command_running())
         timing = "electrical pump-sync reference" if "electrical_sync" in result.get("pump_reference_bases", []) else "observed pump reference"
-        if result.get("completion_status") == "INCOMPLETE_MISSING_PULSE_COVERAGE":
-            self.scan_status.setText(
-                "INCOMPLETE_MISSING_PULSE_COVERAGE · best-effort diagnostic reconstruction with deficient regions left empty. "
-                "All outputs are not for publication."
-            )
-        else:
-            self.scan_status.setText(f"Exploratory proof of concept complete · NOT FOR PUBLICATION · absorbance vs wavenumber and {timing}. "
-                "Unsupported regions are left empty; phase increment is not time resolution. "
-                + ("PROVISIONAL wavenumber axis. " if result.get("provisional") else ""))
+        self.scan_status.setText(f"Exploratory proof of concept complete - NOT FOR PUBLICATION - absorbance vs wavenumber and {timing}. "
+            "Unsupported regions are left empty; phase increment is not time resolution. "
+            + ("PROVISIONAL wavenumber axis. " if result.get("provisional") else ""))
         self.plot_stack.setCurrentWidget(self._surface)
         self._surface.draw_idle()
 

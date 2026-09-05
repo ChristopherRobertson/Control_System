@@ -370,6 +370,7 @@ presets:
       - "Confirm the 10 cm-1 sweep is centered on the experimentally observed MbCO A1 maximum."
       - "Capture and inspect a pump-blocked background and test sweep before enabling photolysis."
       - "Retain the configured and read-back detector rates, time constants, input ranges, and overload status with the exploratory run."
+      - "Verify both detector streams read back at 28782.894736842107 Sa/s; this installed HF2LI rounds a 20000 Sa/s request down to 14391.447368421053 Sa/s."
     signal_inputs:
       ch1:
         index: 0
@@ -398,7 +399,7 @@ presets:
         harmonic: 1
         order: 4
         timeconstant_s: 0.00005
-        rate_sps: 20000.0
+        rate_sps: 28782.894736842107
         trigger: 0
         enable: true
       - index: 3
@@ -407,7 +408,7 @@ presets:
         harmonic: 1
         order: 4
         timeconstant_s: 0.00005
-        rate_sps: 20000.0
+        rate_sps: 28782.894736842107
         trigger: 0
         enable: true
       # API index 2 carries the global DIO word. The Phase-Scan adapter raises

@@ -330,9 +330,11 @@ class PicoScopeService:
         }
 
     def capture_block_data(
-        self, *, after_arm: Callable[[], None] | None = None
+        self, *, after_arm: Callable[[], None] | None = None,
+        while_waiting: Callable[[], None] | None = None,
+        before_transfer: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
-        """Capture a block and return lossless CH A/B arrays plus timing metadata."""
+        """Capture CH A/B arrays, optionally servicing another stream while waiting."""
         self._require_open()
         self.configure_channels()
         self.set_external_trigger()
@@ -381,10 +383,14 @@ class PicoScopeService:
         while time.time() < deadline and not ready.value:
             status = self._driver.ps5000aIsReady(self._handle, byref(ready))
             self._check(status, "ps5000aIsReady")
+            if not ready.value and while_waiting is not None:
+                while_waiting()
             time.sleep(0.01)
         if not ready.value:
             raise PicoScopeError("PicoScope block capture timed out before ready")
 
+        if before_transfer is not None:
+            before_transfer()
         sample_count = c_uint32(total_samples)
         overflow = c_int16()
         status = self._driver.ps5000aGetValues(

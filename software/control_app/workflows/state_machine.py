@@ -149,10 +149,14 @@ class WorkflowStateMachine:
         self._configured_ui_workflow: ConfiguredWorkflow | None = None
         self._active_ui_workflow: ConfiguredWorkflow | None = None
         self.phase_scan_active = False
+        self.mircat_scan_active = False
+        from threading import Event
+        self.mircat_scan_cancel = Event()
         from control_app.workflows.phase_scan_runner import PhaseScanRunner
         from control_app.workflows.phase_scan_acquisition import LivePhaseScanAcquirer
         self.phase_scan_runner = PhaseScanRunner(
-            (lambda: LivePhaseScanAcquirer(config_path=self.config_path)) if hardware_access else None
+            (lambda: LivePhaseScanAcquirer(config_path=self.config_path,
+                                          promoted_bundle=self.promoted_bundle)) if hardware_access else None
         )
         if command_log is not None and getattr(command_log, "name", None):
             self._remember_command_log(str(command_log.name))
@@ -160,6 +164,8 @@ class WorkflowStateMachine:
     def __call__(self, command: WorkflowCommand) -> WorkflowResult:
         """Handle one UI command through the workflow state machine."""
 
+        if self.mircat_scan_active and command.command != 'mircat.start_sweep_scan':
+            return WorkflowResult(status="blocked", message="MIRcat Sweep Scan owns the instruments. Use Stop Scan first.")
         if self.phase_scan_active:
             return WorkflowResult(status="blocked", message="Phase Scan owns the instruments. Use Abort Scan first.")
         if self.iris_command_active:
@@ -308,16 +314,43 @@ class WorkflowStateMachine:
         """Return user actions that must happen before normal UI close."""
 
         blockers: list[str] = []
+        if self.mircat_scan_active:
+            blockers.append("MIRcat Sweep Scan is running. Press Stop Scan and wait for shutdown and saving to finish.")
         if self.iris_command_active:
             blockers.append("An OPO iris command is still running. Wait for it to finish.")
         if self._mircat_handler is not None:
             blockers.extend(self._mircat_handler.close_blockers())
         return blockers
 
+    def ui_mircat_scan_blockers(self) -> list[str]:
+        blockers = []
+        if self._active_ui_workflow is not None:
+            blockers.append("Stop the configured workflow before MIRcat Sweep Scan")
+        if any(service is not None for service in (
+            self._mircat_service, self._picoscope_service, self._hf2li_service,
+        )):
+            blockers.append("Use workflow Safe Shutdown to release configured device sessions before MIRcat Sweep Scan")
+        return blockers
+
+    def run_mircat_scan(self, command, *, progress, on_state):
+        if not self.hardware_access:
+            return self(command)
+        if self._mircat_handler is None:
+            self._mircat_handler = MircatWidgetCommandHandler(operator=self.operator)
+        self._mircat_handler.scan_cancel = self.mircat_scan_cancel
+        self._mircat_handler.scan_progress = progress
+        self._mircat_handler.scan_state = on_state
+        return self(command)
+
+    def request_mircat_scan_stop(self):
+        self.mircat_scan_cancel.set()
+
     def ui_iris_motion_blockers(self) -> list[str]:
         """Return active acquisition/workflow states that prohibit iris movement."""
 
         blockers: list[str] = []
+        if self.mircat_scan_active:
+            blockers.append("MIRcat Sweep Scan owns the instruments")
         if self.phase_scan_active:
             blockers.append("Phase Scan owns the instruments")
         if (
@@ -348,6 +381,7 @@ class WorkflowStateMachine:
         """Best-effort shutdown for forced process exit paths."""
 
         self.phase_scan_runner.abort()
+        self.request_mircat_scan_stop()
         return self._ui_shutdown(reason=reason, emergency=True)
 
     def _ui_shutdown(self, *, reason: str, emergency: bool) -> WorkflowResult:

@@ -17,7 +17,7 @@ import numpy as np
 
 from control_app.workflows.phase_scan import PhaseScanEvent, PhaseScanPlan, PhaseScanSettings
 
-SCHEMA_VERSION = "phase-scan/3.0"
+SCHEMA_VERSION = "phase-scan/4.0"
 ANALYSIS_VERSION = "absolute-absorbance/3.0"
 QCL_CURRENT_MA = 750.0
 HF2_PRESET = "exploratory_phase_scan_poc"
@@ -37,7 +37,7 @@ def write_json(path: Path, payload: Any) -> None:
         os.fsync(handle.fileno())
 
 
-def save_native(path: Path, payload: Any) -> None:
+def save_native(path: Path, payload: Any, *, compressed: bool = True) -> None:
     """Store nested LabOne payloads with native array dtypes, shapes and ticks."""
     arrays = {}
 
@@ -67,7 +67,8 @@ def save_native(path: Path, payload: Any) -> None:
     temporary = path.with_name(path.name + f".{uuid4().hex}.partial")
     # A failed/incomplete write is retained for diagnosis, not indexed as complete.
     with temporary.open("xb") as handle:
-        np.savez_compressed(handle, **arrays)
+        writer = np.savez_compressed if compressed else np.savez
+        writer(handle, **arrays)
         handle.flush()
         os.fsync(handle.fileno())
     if path.exists():
@@ -95,15 +96,15 @@ def acquisition_settings(settings: PhaseScanSettings) -> dict:
     """Explicit background compatibility fields; phase/cadence do not change I0."""
     fields = asdict(settings)
     for name in ("phase_delay_us", "rest_period_s", "repetitions", "pre_pump_ms", "post_pump_ms",
-                 "pump_reference", "pump_threshold_v", "missing_pulse_consecutive_limit",
-                 "minimum_reconstruction_interval_coverage", "maximum_scan_missing_fraction",
-                 "missing_pulse_retry_limit", "pulse_detection_threshold_fraction"):
+                 "pump_reference"):
         fields.pop(name)
     return {**fields, "qcl_current_ma": QCL_CURRENT_MA, "hf2_preset": HF2_PRESET}
 
 
 class ScanStore:
-    def __init__(self, root: Path, kind: str, plan: PhaseScanPlan):
+    """Save the retained finite acquisition once, after timing has stopped."""
+
+    def __init__(self, root: Path, kind: str, plan: PhaseScanPlan, *, compress_raw: bool = True):
         if kind not in {"run", "background", "diagnostic", "test"}:
             raise ValueError("Unknown Phase Scan record type")
         self.kind = kind
@@ -111,6 +112,7 @@ class ScanStore:
         self.path = Path(root) / "Phase Scan" / datetime.now(UTC).strftime("%Y-%m-%d") / self.id
         self.path.mkdir(parents=True, exist_ok=False)
         self.record_count = 0
+        self.compress_raw = bool(compress_raw)
         write_json(self.path / "run.json", {
             "schema_version": SCHEMA_VERSION, "run_id": self.id, "kind": kind,
             "created_utc": utc_now(), "plan": plan.to_dict(),
@@ -118,22 +120,48 @@ class ScanStore:
             "publication_eligible": False,
             "publication_warning": "Preliminary proof-of-concept output only; not validated or eligible for publication.",
             "acquisition_settings": acquisition_settings(plan.settings),
-            "raw_format": "One self-contained NPZ per record; load with load_native, no pickle",
+            "raw_format": ("Diagnostic records; load with load_native, no pickle" if kind == "diagnostic" else
+                           "One consolidated acquisition NPZ; load with load_native, no pickle"),
+            "raw_storage": {
+                "save_after_acquisition": True,
+                "compressed": self.compress_raw,
+                "completion_rule": "The retained acquisition is atomically saved before analysis and result.json",
+            },
             "scan_index": "scan_index.jsonl", "result": "result.json",
         })
 
-    def save_scan(self, event: PhaseScanEvent, payload: dict, *, attempt_index: int = 0) -> Path:
-        if isinstance(attempt_index, bool) or int(attempt_index) != attempt_index or attempt_index < 0:
-            raise ValueError("attempt_index must be a nonnegative integer")
-        condition = "baseline" if not event.pump_enabled else f"phase_{event.phase_index:06d}"
-        path = (self.path / "raw" / f"rep_{event.repetition:04d}" /
-                f"scan_{event.scan_index:07d}_{condition}_attempt_{attempt_index:02d}.npz")
-        save_native(path, {"schema_version": SCHEMA_VERSION, "event": asdict(event),
-                           "attempt_index": attempt_index, **payload})
+    def save_block(self, records: list[tuple[PhaseScanEvent, dict]], *, native=None) -> Path:
+        """Persist nominal records and native bounded blocks without discarding partial data.
+
+        The caller owns acquisition timing and calls this only after the block
+        sequence has completed or stopped. A run has exactly one raw artifact.
+        """
+        path = self.path / "raw" / "acquisition.npz"
+        payload = {"schema_version": SCHEMA_VERSION,
+                   "records": [{**values, "event": asdict(event)} for event, values in records],
+                   "native": native}
+        save_native(path, payload, compressed=self.compress_raw)
+        self.record_count = len(records)
+        saved = utc_now()
+        with (self.path / "scan_index.jsonl").open("x", encoding="utf-8") as handle:
+            for index, (event, _) in enumerate(records):
+                handle.write(json.dumps({"event": asdict(event),
+                                         "path": path.relative_to(self.path).as_posix(),
+                                         "record_index": index, "saved_utc": saved}) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        return path
+
+    def save_scan(self, event: PhaseScanEvent, payload: dict) -> Path:
+        """Retain compatibility for the separate inhibited timing diagnostic."""
+        if self.kind != "diagnostic":
+            raise RuntimeError("Optical Phase Scan records must be saved as a consolidated block")
+        path = self.path / "raw" / f"scan_{event.scan_index:07d}.npz"
+        save_native(path, {"schema_version": SCHEMA_VERSION, **payload, "event": asdict(event)},
+                    compressed=self.compress_raw)
         with (self.path / "scan_index.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({"event": asdict(event), "path": path.relative_to(self.path).as_posix(),
-                                     "attempt_index": attempt_index, "bytes": path.stat().st_size,
-                                     "saved_utc": utc_now()}) + "\n")
+                                     "bytes": path.stat().st_size, "saved_utc": utc_now()}) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
         self.record_count += 1
@@ -204,8 +232,16 @@ def interpolate_supported(x, y, target, *, max_gap=None):
     if len(np.unique(x)) != len(x):
         raise ValueError("Duplicate interpolation coordinates")
     indices = np.searchsorted(x, target)
-    exact = (indices < len(x)) & (x[np.minimum(indices, len(x)-1)] == target)
-    result[exact] = y[indices[exact]]
+    left_candidate = np.clip(indices-1, 0, len(x)-1)
+    right_candidate = np.minimum(indices, len(x)-1)
+    nearest = np.where(np.abs(target-x[left_candidate]) <= np.abs(target-x[right_candidate]),
+                       left_candidate, right_candidate)
+    # Subtracting measured floating-point timestamps can displace an endpoint
+    # by a few ULPs. Treat numerical equality as an observed point, so the
+    # requested -1 ms/+5 ms boundaries do not become artificial empty rows.
+    tolerance = 8 * np.finfo(float).eps * max(1., float(np.max(np.abs(x))))
+    exact = np.abs(target-x[nearest]) <= tolerance
+    result[exact] = y[nearest[exact]]
     interior = (~exact) & (indices > 0) & (indices < len(x))
     right = indices[interior]
     left = right - 1
@@ -216,6 +252,27 @@ def interpolate_supported(x, y, target, *, max_gap=None):
     calculated = y[left] + (target[interior]-x[left]) / width * (y[right]-y[left])
     result[interior] = np.where(valid, calculated, np.nan)
     return result
+
+
+def _average_duplicate_coordinates(x, y):
+    """Average observations that share one measured coordinate.
+
+    Adjacent phase commands can resolve to the same native HF2LI tick when the
+    requested phase increment is close to the timing-stream sample interval.
+    They are repeated observations at one measured time, not an invalid axis.
+    """
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    unique, inverse = np.unique(x, return_inverse=True)
+    if len(unique) == len(x):
+        return x, y
+    finite = np.isfinite(y)
+    total = np.zeros(len(unique), dtype=float)
+    count = np.zeros(len(unique), dtype=np.uint32)
+    np.add.at(total, inverse[finite], y[finite])
+    np.add.at(count, inverse[finite], 1)
+    averaged = np.full(len(unique), np.nan)
+    np.divide(total, count, out=averaged, where=count > 0)
+    return unique, averaged
 
 
 def interpolate_spectrum(spectrum: Spectrum, values, target):
@@ -253,153 +310,6 @@ def absorbance(scan: Spectrum, background: Spectrum) -> np.ndarray:
     return absorbance_from_ratios(ratio, reference)
 
 
-def reconstruct_attempts(attempts: list[dict], background: Spectrum, plan: PhaseScanPlan, *, cancel=None) -> dict:
-    """Merge aligned transmission-ratio regions, then calculate absorbance.
-
-    Each attempt retains its own marker-derived wavelength/time coordinates.
-    Coverage weights are mapped to a common background-supported wavenumber grid;
-    deficient regions remain NaN and contributor weights are retained per event
-    and reconstruction wavenumber.
-    """
-    from control_app.workflows.phase_scan_pulse_coverage import (
-        combined_interval_coverage_complete, coverage_for_wavenumbers,
-    )
-
-    pumped = [item for item in attempts if item["event"].pump_enabled]
-    expected = {(r, p) for r in range(1, plan.settings.repetitions+1)
-                for p in range(plan.phases_per_repetition)}
-    keys = {(item["event"].repetition, item["event"].phase_index) for item in pumped}
-    if keys != expected:
-        raise ValueError("Reconstruction requires at least one retained attempt for every phase")
-    background.validate()
-    wn = np.sort(np.asarray(background.wavenumber_cm1))
-    wn = wn[np.linspace(0, len(wn)-1, min(len(wn), 1024), dtype=int)]
-    background_ratio = interpolate_spectrum(background, background.ratio(), wn)
-    groups = []
-    for key in sorted(expected):
-        group = sorted((item for item in pumped
-                        if (item["event"].repetition, item["event"].phase_index) == key),
-                       key=lambda item: item["attempt_index"])
-        groups.append(group)
-    maximum_attempts = max(len(group) for group in groups)
-    contribution_weights = np.zeros((len(groups), len(wn), maximum_attempts), dtype=np.float32)
-    coverage_complete = np.zeros((len(groups), len(wn)), dtype=bool)
-    event_scan_indices = np.zeros(len(groups), dtype=np.int64)
-    event_repetitions = np.zeros(len(groups), dtype=np.int32)
-    event_phase_indices = np.zeros(len(groups), dtype=np.int64)
-    source_paths: list[list[str | None]] = []
-    merged_transmission_ratio = np.full((len(groups), len(wn)), np.nan)
-    merged_absorbance = np.full((len(groups), len(wn)), np.nan)
-    entries = []
-    event_complete = []
-    spectra_for_metadata = []
-    for group_index, group in enumerate(groups):
-        if cancel:
-            cancel()
-        event = group[0]["event"]
-        event_scan_indices[group_index] = event.scan_index
-        event_repetitions[group_index] = event.repetition
-        event_phase_indices[group_index] = int(event.phase_index)
-        source_paths.append([str(item["source"]) for item in group] + [None] * (maximum_attempts-len(group)))
-        ages, ratios, weights, supported = [], [], [], []
-        for item in group:
-            spectrum = item["spectrum"].validate()
-            spectra_for_metadata.append(spectrum)
-            if spectrum.pump_time_s is None or not np.isfinite(spectrum.pump_time_s):
-                raise ValueError("An observed pump timestamp is required for every pumped scan attempt")
-            if spectrum.metadata.get("pump_time_basis") not in {"measured", "electrical_sync", "aux_input"}:
-                raise ValueError("Commanded phase delays cannot substitute for measured pump timing")
-            age = interpolate_spectrum(
-                spectrum, np.asarray(spectrum.sample_time_s)-spectrum.pump_time_s, wn
-            )
-            ratio = interpolate_spectrum(spectrum, spectrum.ratio(), wn)
-            fraction, acceptable = coverage_for_wavenumbers(spectrum, item["coverage"], wn)
-            support = (
-                np.isfinite(age) & np.isfinite(ratio) & (ratio > 0) &
-                np.isfinite(background_ratio) & (background_ratio > 0)
-            )
-            weight = np.where(support & acceptable, fraction, 0.0)
-            ages.append(age)
-            ratios.append(ratio)
-            weights.append(weight)
-            supported.append(support)
-        age_array, ratio_array, weight_array = np.asarray(ages), np.asarray(ratios), np.asarray(weights)
-        supported_any = np.any(np.asarray(supported), axis=0)
-        total_weight = np.sum(weight_array, axis=0)
-        valid = total_weight > 0
-        merged_age = np.full(len(wn), np.nan)
-        merged_ratio = np.full(len(wn), np.nan)
-        merged_age[valid] = np.sum(np.where(np.isfinite(age_array), age_array, 0.0) * weight_array,
-                                          axis=0)[valid] / total_weight[valid]
-        merged_ratio[valid] = np.sum(np.where(np.isfinite(ratio_array), ratio_array, 0.0) * weight_array,
-                                            axis=0)[valid] / total_weight[valid]
-        merged_value = absorbance_from_ratios(merged_ratio, background_ratio)
-        merged_transmission_ratio[group_index] = merged_ratio
-        merged_absorbance[group_index] = merged_value
-        normalized = np.zeros_like(weight_array)
-        np.divide(weight_array, total_weight, out=normalized, where=total_weight > 0)
-        contribution_weights[group_index, :, :len(group)] = normalized.T.astype(np.float32)
-        coverage_complete[group_index] = valid
-        event_complete.append(bool(
-            np.all(valid[supported_any]) and np.any(supported_any) and
-            combined_interval_coverage_complete([item["coverage"] for item in group])
-        ))
-        entries.append((event, merged_age, merged_value))
-    result = _reconstruct_entries(
-        entries, spectra_for_metadata, background, plan, cancel=cancel, allow_empty=True
-    )
-    complete = bool(all(event_complete))
-    quality_status = "COMPLETE" if complete else "INCOMPLETE_MISSING_PULSE_COVERAGE"
-    result.update({
-        "completion_status": quality_status,
-        "publication_eligible": complete,
-        "deficient_missing_pulse_coverage": not complete,
-        "merge_event_scan_index": event_scan_indices,
-        "merge_event_repetition": event_repetitions,
-        "merge_event_phase_index": event_phase_indices,
-        "merge_target_wavenumber_cm1": wn,
-        "merge_background_ratio": background_ratio,
-        "merge_transmission_ratio": merged_transmission_ratio,
-        "merge_absorbance": merged_absorbance,
-        "merge_coverage_complete": coverage_complete,
-        "merge_contribution_weights": contribution_weights,
-        "merge_attempt_sources": source_paths,
-        "merge_weight_meaning": "normalized pulse-coverage fraction among acceptable aligned transmission-ratio attempts",
-    })
-    if not complete:
-        warning = ("INCOMPLETE_MISSING_PULSE_COVERAGE: deficient regions are NaN; "
-                   "outputs are diagnostic only and must not be used for publication.")
-        result["warnings"] = sorted(set(result["warnings"] + [warning]))
-        result["limitations"] = result["limitations"] + [warning]
-    return result
-
-
-def aligned_attempt_coverage_complete(attempts: list[dict], background: Spectrum) -> bool:
-    """Return whether aligned valid regions collectively cover one phase event."""
-    from control_app.workflows.phase_scan_pulse_coverage import (
-        combined_interval_coverage_complete, coverage_for_wavenumbers,
-    )
-
-    if not attempts:
-        return False
-    background.validate()
-    wn = np.sort(np.asarray(background.wavenumber_cm1))
-    wn = wn[np.linspace(0, len(wn)-1, min(len(wn), 1024), dtype=int)]
-    supported_any = np.zeros(len(wn), dtype=bool)
-    accepted_any = np.zeros(len(wn), dtype=bool)
-    for item in attempts:
-        spectrum = item["spectrum"].validate()
-        values = interpolate_spectrum(spectrum, absorbance(spectrum, background), wn)
-        support = np.isfinite(values)
-        _, acceptable = coverage_for_wavenumbers(spectrum, item["coverage"], wn)
-        supported_any |= support
-        accepted_any |= support & acceptable
-    return bool(
-        np.any(supported_any) and np.all(accepted_any[supported_any]) and
-        combined_interval_coverage_complete([item["coverage"] for item in attempts])
-    )
-
-
 def reconstruct(records: list[tuple[PhaseScanEvent, Spectrum]], background: Spectrum,
                 plan: PhaseScanPlan, *, cancel=None) -> dict:
     """Regrid each repetition using measured per-point pump ages, then average.
@@ -432,18 +342,27 @@ def reconstruct(records: list[tuple[PhaseScanEvent, Spectrum]], background: Spec
     return _reconstruct_entries(entries, [s for _, s in pumped], background, plan, cancel=cancel)
 
 
-def _reconstruct_entries(entries, metadata_spectra, background, plan, *, cancel=None, allow_empty=False):
+def _reconstruct_entries(entries, metadata_spectra, background, plan, *, cancel=None):
     finite_ages = [v[1][np.isfinite(v[1])] for v in entries]
-    if not allow_empty and not any(len(values) for values in finite_ages):
+    if not any(len(values) for values in finite_ages):
         raise ValueError("No common measured wavelength support")
     wn = np.sort(np.asarray(background.wavenumber_cm1))
     wn = wn[np.linspace(0, len(wn)-1, min(len(wn), 1024), dtype=int)]
     step = plan.settings.phase_delay_us * 1e-6
-    first = -int(np.floor(plan.settings.pre_pump_ms / 1000 / step + 1e-9))
-    last = int(np.floor(plan.settings.post_pump_ms / 1000 / step + 1e-9))
+    start = -plan.settings.pre_pump_ms / 1000
+    stop = plan.settings.post_pump_ms / 1000
+    first = -int(np.floor(-start / step + 1e-9))
+    last = int(np.floor(stop / step + 1e-9))
     if (last-first+1)*len(wn) > 16_000_000:
         raise ValueError("Requested reconstruction exceeds 16 million cells; increase Phase Delay or narrow the time window")
-    times = np.arange(first, last+1, dtype=np.int64) * step
+    regular = np.arange(first, last+1, dtype=np.int64) * step
+    tolerance = 8 * np.finfo(float).eps * max(1., abs(start), abs(stop))
+    interior = regular[(regular > start+tolerance) & (regular < stop-tolerance)]
+    # Keep the requested endpoints even when the nominal step does not divide
+    # the observation interval. Only these boundary intervals are shorter.
+    times = np.concatenate(([start], interior, [stop]))
+    if len(times)*len(wn) > 16_000_000:
+        raise ValueError("Requested reconstruction exceeds 16 million cells; increase Phase Delay or narrow the time window")
     total = np.zeros((len(times), len(wn)))
     total2 = np.zeros_like(total)
     counts = np.zeros(total.shape, dtype=np.uint32)
@@ -456,6 +375,9 @@ def _reconstruct_entries(entries, metadata_spectra, background, plan, *, cancel=
             valid = np.isfinite(age[:, column])
             # Missing optical values remain in the interpolation vector as NaN.
             a, v = age[valid, column], values[valid, column]
+            if len(a) < 2:
+                continue
+            a, v = _average_duplicate_coordinates(a, v)
             if len(a) < 2:
                 continue
             # Large timing holes are unsupported; never draw across a missing phase.
@@ -477,7 +399,7 @@ def _reconstruct_entries(entries, metadata_spectra, background, plan, *, cancel=
     return {"analysis_version": ANALYSIS_VERSION, "wavenumber_cm1": wn, "time_s": times,
             "absorbance": mean, "repetition_count": counts, "standard_error": stderr,
             "time_basis": "native_sample_time_minus_observed_reference", "pump_reference_bases": bases,
-            "display_pump_time_ms": plan.settings.pre_pump_ms,
+            "display_pump_time_ms": 0.,
             "observation_window_s": [-plan.settings.pre_pump_ms/1000, plan.settings.post_pump_ms/1000],
             "provisional": provisional, "warnings": warnings,
             "limitations": ["Phase increment is not temporal resolution.",

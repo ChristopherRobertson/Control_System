@@ -21,6 +21,9 @@ CHANNEL_EDGES = {
 
 TRIGGER_SOURCES = {"OFF", "SYN", "EXT", "INT", "REM"}
 UINT32_MAX = (1 << 32) - 1
+# T660 Manual, revision F5, sections 5.3 and 5.4: indices 0..8191.
+T660_FRAME_CAPACITY = 8192
+T660_FRAME_CAPACITY_SOURCE = "Highland T660 Manual F5, sections 5.3-5.4"
 
 
 class T660Error(RuntimeError):
@@ -160,6 +163,164 @@ class T660Service:
         """Clear the elapsed-shot counter without implying a finite-shot limit."""
 
         self.command("TRIG:SHOTS 0", expect_response=False)
+
+    def set_external_trigger_predivider(self, divisor: int) -> None:
+        """Set the documented predivider (0 and 1 both mean divide by one)."""
+        value = _uint32_value(divisor, field="predivider")
+        self.command(f"TRIGger:EXTernal:PREDiv {value}", expect_response=False)
+
+    def verified_frame_capacity(self) -> int:
+        """Check the actual feature, then use the manufacturer's documented limit.
+
+        The T660 provides a feature query, but no frame-memory-size query. Do
+        not infer this capability from a configured role or a free memory guess.
+        """
+        available = self.command("FEATure:FRAMe?").strip()
+        if available != "1":
+            raise T660ConfigurationError(
+                f"{self.name} does not report Trains and Frames support: {available!r}"
+            )
+        return T660_FRAME_CAPACITY
+
+    def configure_train(self, *, count: int = 0, spacing_s: float = 80e-9,
+                        stage: str = "QUEue") -> None:
+        """Set additional pulses per shot; count zero disables train repetition."""
+        count = _uint32_value(count, field="train.count")
+        normalized = str(stage).upper()
+        stages = {"ACTIVE": "ACTive", "NEXT": "NEXT", "QUEUE": "QUEue"}
+        if normalized not in stages:
+            raise T660ConfigurationError("train stage must be ACTive, NEXT, or QUEue")
+        spacing = float(spacing_s)
+        # Use the stricter operational manual minimum (80 ns) and a 20 ns grid.
+        if (not math.isfinite(spacing) or not 80e-9 <= spacing <= 10.0 or
+                not math.isclose(spacing / 20e-9, round(spacing / 20e-9), abs_tol=1e-6)):
+            raise T660ConfigurationError("train spacing must be 80 ns..10 s on the 20 ns grid")
+        prefix = f"TRAin:{stages[normalized]}"
+        self.command(f"{prefix}:CouNT {count}", expect_response=False)
+        self.command(f"{prefix}:SPACe {spacing:.12g}s", expect_response=False)
+
+    def configure_continuous_clock(self, *, frequency_hz: float = 2_000_000.0,
+                                   pulse_width_ns: float = 150.0) -> dict[str, Any]:
+        """Preconfigure T660-1 A/B/C for the common 2 MHz clock, source OFF."""
+        frequency, width = float(frequency_hz), float(pulse_width_ns)
+        if (not math.isfinite(frequency) or not math.isclose(frequency, 2_000_000.0) or
+                not math.isfinite(width) or width <= 0 or frequency * width / 1e9 > .3):
+            raise T660ConfigurationError("phase-scan clock requires 2 MHz and a positive width at most 30% duty")
+        settings = {
+            "stop_first": True, "trigger_source": "OFF", "predivider": 1,
+            "gate_mode": 0, "burst_enabled": False,
+            "clock": {"frequency": f"{frequency:g}Hz", "shots": 0},
+            "channels": {channel: {"enabled": channel != "D", "delay": "0ns",
+                "width": f"{width:g}ns", "polarity": "positive", "termination": "50OHM"}
+                for channel in "ABCD"},
+        }
+        self.set_trigger_source("OFF")
+        for rising, _ in CHANNEL_EDGES.values():
+            self.command(f"TIME:RELTo{rising} 0", expect_response=False)
+        self.apply_recipe(settings)
+        return settings
+
+    def start_continuous_clock(self) -> None:
+        """Enable the preconfigured clock after finite acquisition is armed."""
+        self.set_trigger_source("SYN")
+        self.command("START", expect_response=False)
+
+    def preload_frame_table(self, frames: list[dict[str, Any]], *,
+                            predivider: int = 600_000) -> dict[str, Any]:
+        """Load a bounded finite table with trigger input disabled throughout.
+
+        Frame entries contain a complete ``channels`` mapping, using the same
+        delay/width, polarity and termination fields as a recipe. Only pending
+        staging commands are used while storing frames. A single acquisition
+        needs an inert second frame because the hardware requires FIRST < LAST.
+        No software-trigger/per-record programming fallback is provided.
+        """
+        if not frames:
+            raise T660ConfigurationError("frame table must contain at least one acquisition")
+        capacity = self.verified_frame_capacity()
+        if len(frames) > capacity:
+            raise T660ConfigurationError(f"frame table needs {len(frames)} entries; verified capacity is {capacity}")
+        divisor = _uint32_value(predivider, field="predivider")
+        if divisor != 600_000:
+            raise T660ConfigurationError("phase-scan frame predivider must be 600000")
+        table = list(frames)
+        # Validate the entire block before any instrument mutation.
+        for index, frame in enumerate(table):
+            channels = frame.get("channels")
+            if not isinstance(channels, dict) or set(channels) != set("ABCD"):
+                raise T660ConfigurationError(f"frame {index} must explicitly configure A/B/C/D")
+            self.validate_recipe_section(self.name, {"channels": channels})
+            for channel, settings in channels.items():
+                if not {"enabled", "delay", "width", "polarity", "termination"} <= set(settings):
+                    raise T660ConfigurationError(f"frame {index} channel {channel} has incomplete settings")
+                if _seconds_value(settings["delay"]) < 0 or _seconds_value(settings["width"]) <= 0:
+                    raise T660ConfigurationError("frame delays must be nonnegative and widths positive")
+                if _seconds_value(settings["delay"]) + _seconds_value(settings["width"]) >= .3 - 1e-6:
+                    raise T660ConfigurationError("frame channel timing must finish before the next 300 ms trigger")
+        if len(table) == 1:
+            table.append({"channels": {ch: {**table[0]["channels"][ch], "enabled": False}
+                                         for ch in "ABCD"}, "inert_terminator": True})
+        self.set_trigger_source("OFF")
+        self.command("STOP", expect_response=False)
+        self.command("TFRame:STOp", expect_response=False)
+        self.set_external_trigger_predivider(divisor)
+        self.command("GATE:MODe 0", expect_response=False)
+        self.command("BURst:MODe OFF", expect_response=False)
+        self.command("TRIGger:INPut:POLarity POSitive", expect_response=False)
+        self.command("TRIGger:INPut:TERMination 50OHM", expect_response=False)
+        self.command("TRIGger:INPut:VOLTage 2", expect_response=False)
+        self.reset_shot_counter()
+        for channel in "ABCD":
+            self.set_channel_timing_mode(channel, "delay_width")
+            self.command(f"TIME:RELTo{CHANNEL_EDGES[channel][0]} 0", expect_response=False)
+        self.configure_train(count=0)
+        for index, frame in enumerate(table):
+            commands = []
+            for channel in "ABCD":
+                settings = frame["channels"][channel]
+                rising, falling = CHANNEL_EDGES[channel]
+                commands.append(f":TIME:QUEue{rising} {settings['delay']}")
+                commands.append(f":TIME:QUEue{falling} {settings['width']}")
+                commands.append(f":CHANnel:QUEue:MODe {channel}, {'ON' if settings['enabled'] else 'OFF'}")
+                polarity = _normalize_polarity(settings["polarity"], field="polarity")
+                commands.append(f":CHANnel:QUEue:POLarity {channel}, {polarity}")
+                termination = _normalize_channel_termination(settings["termination"])
+                commands.append(f":CHANnel:QUEue:TERMination {channel}, {termination}")
+            commands.append(f":TFRame:STORe {index}")
+            self.command_sequence(commands)
+        self.command("TFRame:LOOP:FIRST 0", expect_response=False)
+        self.command(f"TFRame:LOOP:LAST {len(table)-1}", expect_response=False)
+        self.command("TFRame:LOOP:CouNT 0", expect_response=False)
+        self.command("TFRame:LoadCouNT 0", expect_response=False)
+        expected = {"first": ("TFRame:LOOP:FIRST?", 0),
+                    "last": ("TFRame:LOOP:LAST?", len(table)-1),
+                    "loop_count": ("TFRame:LOOP:CouNT?", 0),
+                    "predivider": ("TRIGger:EXTernal:PREDiv?", divisor)}
+        readback = {}
+        for field, (command, value) in expected.items():
+            actual = int(self.command(command))
+            if actual != value:
+                raise T660CommandError(f"{self.name} {field} readback {actual} != {value}")
+            readback[field] = actual
+        return {"acquisition_frame_count": len(frames), "physical_frame_count": len(table),
+                "inert_terminator_count": len(table)-len(frames),
+                "capacity": capacity, "capacity_source": T660_FRAME_CAPACITY_SOURCE,
+                "frame_period_s": divisor / 2_000_000.0, "readback": readback}
+
+    def start_frame_table(self) -> None:
+        """Arm the finite engine, then accept divided external triggers."""
+        # Changing trigger configuration may force EOD. Select EXT while STOP
+        # still inhibits triggers, before the engine has loaded its first frame.
+        # START only removes that inhibit (Programming Guide pp. 61-62).
+        self.set_trigger_source("EXT")
+        self.command("TFRame:STArt", expect_response=False)
+        self.command("START", expect_response=False)
+
+    def get_frames_status(self) -> str:
+        status = self.command("TFRame:STATus?").strip().upper()
+        if status not in {"OFF", "RUNNING", "DONE", "ERROR"}:
+            raise T660CommandError(f"{self.name} invalid frames-engine status {status!r}")
+        return status
 
     def get_shot_count(self) -> int:
         """Return the elapsed-shot counter."""
@@ -522,6 +683,27 @@ class T660Service:
             raise T660CommandError(f"{self.name} command {command!r} returned no response")
         return stripped
 
+    def command_sequence(self, commands: list[str] | tuple[str, ...]) -> list[str]:
+        """Execute one documented semicolon-delimited P500 command line.
+
+        The T660 processes every command in the line before replying. This is
+        useful for timing updates that must become active between one-shot REM
+        events without paying a serial round trip for every edge setting.
+        """
+        values = [str(value).strip() for value in commands]
+        if not values or any(not value or ";" in value for value in values):
+            raise T660ConfigurationError("T660 command sequences require nonempty individual commands")
+        response = self.command(";".join(values))
+        parts = [part.strip() for part in response.split(";")]
+        if len(parts) != len(values):
+            raise T660CommandError(
+                f"{self.name} compound command returned {len(parts)} responses for {len(values)} commands: {response!r}"
+            )
+        failed = [part for part in parts if part.startswith("?") or not part]
+        if failed:
+            raise T660CommandError(f"{self.name} compound command failed: {response}")
+        return parts
+
     def _set_p500_session(self) -> None:
         """Select P500-style commands using documented short or long form."""
 
@@ -611,6 +793,22 @@ def _integer_value(value: Any, *, field: str) -> int:
     if not math.isfinite(numeric) or numeric != converted:
         raise T660ConfigurationError(f"{field} must be an integer")
     return converted
+
+
+def _seconds_value(value: Any) -> float:
+    text = str(value).strip().lower()
+    scale = 1.0
+    for suffix, multiplier in (("ps", 1e-12), ("ns", 1e-9), ("us", 1e-6), ("ms", 1e-3), ("s", 1.0)):
+        if text.endswith(suffix):
+            text, scale = text[:-len(suffix)], multiplier
+            break
+    try:
+        seconds = float(text) * scale
+    except (ValueError, OverflowError) as exc:
+        raise T660ConfigurationError(f"invalid frame time {value!r}") from exc
+    if not math.isfinite(seconds):
+        raise T660ConfigurationError("frame time must be finite")
+    return seconds
 
 
 def _uint32_value(value: Any, *, field: str) -> int:

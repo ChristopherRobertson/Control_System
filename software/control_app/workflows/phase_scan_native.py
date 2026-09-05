@@ -34,6 +34,46 @@ def high_intervals(ticks, high):
             for start in starts if np.any(stops > start)]
 
 
+def sweep_interval_observations(ticks, dio):
+    """Return DIO21 intervals and those independently identified by markers.
+
+    The installed timing stream can also expose a complete 10 ms process-event
+    interval on DIO21 during pumped records.  A real wavelength sweep is the
+    unique DIO21 interval containing at least two DIO22 wavelength-marker
+    rising edges.  The ancillary interval is retained, never deleted or used
+    as the wavelength/time basis.
+    """
+    ticks = np.asarray(ticks)
+    dio = np.asarray(dio, dtype=np.uint32)
+    intervals = high_intervals(ticks, (dio & (1 << 21)) != 0)
+    marker_high = (dio & (1 << 22)) != 0
+    marker_rises = ticks[np.flatnonzero(~marker_high[:-1] & marker_high[1:]) + 1]
+    marker_bearing = [
+        interval for interval in intervals
+        if np.count_nonzero((marker_rises >= interval[0]) & (marker_rises <= interval[1])) >= 2
+    ]
+    return intervals, marker_bearing, marker_rises
+
+
+def select_sweep_active_interval(ticks, dio):
+    """Select one marker-identified sweep, preserving ancillary DIO21 highs."""
+    intervals, marker_bearing, marker_rises = sweep_interval_observations(ticks, dio)
+    if len(marker_bearing) == 1:
+        selected = marker_bearing[0]
+    elif not marker_bearing and len(intervals) == 1:
+        # Preserve the established provisional-axis path when wavelength
+        # markers are missing but exactly one complete Sweep Active exists.
+        selected = intervals[0]
+    else:
+        raise ValueError(
+            "Expected one identifiable complete Sweep Active interval for this QCL; "
+            f"observed {len(intervals)} DIO21 intervals and {len(marker_bearing)} marker-bearing intervals"
+        )
+    ancillary = [interval for interval in intervals if interval != selected]
+    markers = marker_rises[(marker_rises >= selected[0]) & (marker_rises <= selected[1])]
+    return selected, markers, intervals, ancillary
+
+
 def pump_reference_tick(record, reference, threshold_v):
     timing = demodulator_samples(record, 2)
     if reference == "electrical_sync":
@@ -62,16 +102,15 @@ def spectrum_from_sweep(record, *, start_cm1, stop_cm1, targets_cm1, origin_tick
         raise ValueError("An inhibited record cannot become an optical spectrum")
     timing = demodulator_samples(record, 2)
     ticks, dio = timing["timestamp"], timing["dio"].astype(np.uint32)
-    intervals = high_intervals(ticks, (dio & (1 << 21)) != 0)
-    if len(intervals) != 1:
-        raise ValueError(f"Expected one complete Sweep Active interval for this QCL; observed {len(intervals)}")
-    start, stop = intervals[0]
-    high = (dio & (1 << 22)) != 0
-    rises = ticks[np.flatnonzero(~high[:-1] & high[1:]) + 1]
-    markers = rises[(rises >= start) & (rises <= stop)]
+    (start, stop), markers, intervals, ancillary = select_sweep_active_interval(ticks, dio)
     targets = np.asarray(targets_cm1, dtype=float)
     identified = len(markers) == len(targets) and len(markers) >= 2
     warnings = ["Optical timing, filter response, and wavelength accuracy have not been qualified."]
+    if ancillary:
+        warnings.append(
+            f"Ignored {len(ancillary)} complete ancillary DIO21 interval(s) without wavelength markers; "
+            "all intervals remain preserved in native data."
+        )
     if identified:
         map_ticks, map_wn = markers, targets
     else:
@@ -97,6 +136,8 @@ def spectrum_from_sweep(record, *, start_cm1, stop_cm1, targets_cm1, origin_tick
                 "pump_reference": pump_reference, "timestamp_origin_ticks": int(origin_tick), "clockbase_hz": clockbase,
                 "timing_sample_interval_s": tick_spacing, "marker_ticks": markers.tolist(),
                 "expected_marker_wavenumbers_cm1": targets.tolist(), "sweep_active_ticks": [start, stop],
+                "observed_dio21_intervals": [list(value) for value in intervals],
+                "ancillary_dio21_intervals_ignored": [list(value) for value in ancillary],
                 "warnings": warnings}
     if pump_tick is not None and pump_reference == "electrical_sync":
         warnings.append("Time zero is observed Nd:YAG electrical sync, not measured optical arrival at the sample.")
