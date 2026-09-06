@@ -1,129 +1,134 @@
-schema_version: "0.2"
-
+schema_version: '0.3'
 system:
-  name: "IR Spectroscope"
-  default_wiring_convention: "instrument/default_wiring_state.md"
+  name: IR Spectroscope
+  default_wiring_convention: instrument/default_wiring_state.md
   default_detector_connections:
-    - "Detector 1 (sample) signal -> female-to-female BNC adapter -> male-to-two-female BNC tee -> HF2LI Signal 1 In (+) and PicoScope CHA"
-    - "Detector 2 (reference) signal -> female-to-female BNC adapter -> male-to-two-female BNC tee -> HF2LI Signal 2 In (+) and PicoScope CHB"
+  - Detector 1 (sample) signal -> female-to-female BNC adapter -> male-to-two-female BNC tee -> HF2LI
+    Signal 1 In (+) and PicoScope CHA
+  - Detector 2 (reference) signal -> female-to-female BNC adapter -> male-to-two-female BNC tee -> HF2LI
+    Signal 2 In (+) and PicoScope CHB
   default_wiring_standing_exclusions:
-    - "T660-1 channel D disconnected and unused"
-    - "MIRcat DB9 pin 5 disconnected"
-    - "MIRcat DB9 pin 6 unused and unwired"
-    - "MIRcat DB9 pin 8 unused and unwired"
-
+  - T660-1 channel D SPARE, disconnected and disabled
+  - T660-2 channel D SPARE, disconnected and disabled
+  - HF2LI DIO1 unconnected; optional acquisition-window input
+  - MIRcat DB9 pin 5 disconnected
+  - MIRcat DB9 pin 6 unused and unwired
+  - MIRcat DB9 pin 8 unused and unwired
 devices:
-
   t660_2:
-    display_name: "T660-2"
-    role: "master_timing_trains_frames"
-    serial_number: "00431"
+    display_name: T660-2
+    role: master_clock_and_pump_timing_trains_frames
+    serial_number: '00431'
     dash: 2
-    preferred_port: "COM7"
+    preferred_port: COM7
     baudrate: 38400
     channel_map:
-      A: "hf2li_extref"
-      B: "mircat_trig_in"
-      C: "hf2li_daq_trigger"
-      D: "t660_1_trig_in"
-
+      A: ndyag_fire
+      B: ndyag_q_switch
+      C: mircat_db9_pin_4_process_trigger
+      D: null
+    trigger_input:
+      source_device: t660_1
+      source_channel: C
+      polarity: positive
+      termination: 50OHM
+      threshold_v: 2.0
+    clock_connector:
+      mode: OUT
+      frequency_hz: 10000000
   t660_1:
-    display_name: "T660-1"
-    role: "pump_timing"
-    serial_number: "00369"
+    display_name: T660-1
+    role: continuous_probe_reference_and_event_trigger
+    serial_number: 00369
     dash: 1
-    preferred_port: "COM3"
+    preferred_port: COM3
     baudrate: 38400
     trigger_input:
-      source_device: "t660_2"
-      source_channel: "D"
-      polarity: "positive"
-      termination: "50OHM"
-      threshold_v: 2.0
-      predivider: 1
+      connected: false
     channel_map:
-      A: "ndyag_fire"
-      B: "ndyag_q_switch"
-      C: "mircat_db9_pin_4_process_trigger"
+      A: hf2li_extref
+      B: mircat_trig_in
+      C: t660_2_trig_in
       D: null
-
+    clock_connector:
+      mode: IN
+      source_device: t660_2
+      frequency_hz: 10000000
   arduino_mux:
-    display_name: "Arduino MUX Controller"
-    role: "mux_controller"
+    display_name: Arduino MUX Controller
+    role: mux_controller
     enabled: false
-    status: "inactive_bypassed"
-    disabled_reason: "Removed from active operation until the MUX is rewired; HF2LI DIO inputs do not map to HF2LI DIO outputs."
-    preferred_port: "COM6"
+    status: inactive_bypassed
+    disabled_reason: Removed from active operation until the MUX is rewired; HF2LI DIO inputs do not map
+      to HF2LI DIO outputs.
+    preferred_port: COM6
     baudrate: 115200
-    expected_identity: "ARDUINO_MUX_V1"
-    firmware_version: "0.1.0"
-    protocol_version: "MUX_ROUTE_PROTOCOL_1"
-    firmware_sketch: "software/control_app/devices/arduino_mux_firmware/arduino_mux_firmware.ino"
+    expected_identity: ARDUINO_MUX_V1
+    firmware_version: 0.1.0
+    protocol_version: MUX_ROUTE_PROTOCOL_1
+    firmware_sketch: software/control_app/devices/arduino_mux_firmware/arduino_mux_firmware.ino
     command_protocol:
-      identify: "WHOAMI"
-      version: "VERSION"
-      status: "STATUS"
-      protocol: "PROTOCOL"
-      query_active_route: "ROUTES?"
-      set_output_a_route: "ROUTE A {route}"
-      set_output_b_route: "ROUTE B {route}"
-      set_output_ext_route: "ROUTE EXT {route}"
-      safe_idle: "SAFE"
-
+      identify: WHOAMI
+      version: VERSION
+      status: STATUS
+      protocol: PROTOCOL
+      query_active_route: ROUTES?
+      set_output_a_route: ROUTE A {route}
+      set_output_b_route: ROUTE B {route}
+      set_output_ext_route: ROUTE EXT {route}
+      safe_idle: SAFE
   mircat:
-    display_name: "Daylight MIRcat"
-    role: "probe_laser"
-    preferred_port: "COM9"
-    baudrate: "default"
-    model_number: "MIRcat-QT-Z-2100"
-    serial_number: "10524"
+    display_name: Daylight MIRcat
+    role: probe_laser
+    preferred_port: COM9
+    baudrate: default
+    model_number: MIRcat-QT-Z-2100
+    serial_number: '10524'
     timing_input:
-      source_device: "t660_2"
-      source_channel: "B"
-
+      source_device: t660_1
+      source_channel: B
   slopo:
-    display_name: "SLOPO / Horizon OPO"
-    role: "opo_controller"
-    preferred_port: "COM4"
+    display_name: SLOPO / Horizon OPO
+    role: opo_controller
+    preferred_port: COM4
     baudrate: 9600
-    model_number: "SLOPO PLUS"
-    serial_number: "24366-2"
-    procurement_identity: "Surelite OPO Plus Blue"
-
+    model_number: SLOPO PLUS
+    serial_number: 24366-2
+    procurement_identity: Surelite OPO Plus Blue
   optical_power_meter:
-    display_name: "Newport 1918-R Optical Power Meter"
-    role: "average_optical_power_working_reference"
-    manufacturer: "Newport"
-    model_number: "1918-R"
-    serial_number: "15879"
-    firmware_readback: "v1.0.2 04/06/12"
-    qualification_status: "OM-01_qualified_bounded_not_canonically_promoted"
-    interface: "newport_usb_dll"
+    display_name: Newport 1918-R Optical Power Meter
+    role: average_optical_power_working_reference
+    manufacturer: Newport
+    model_number: 1918-R
+    serial_number: '15879'
+    firmware_readback: v1.0.2 04/06/12
+    qualification_status: OM-01_qualified_bounded_not_canonically_promoted
+    interface: newport_usb_dll
     usb_address_observed_OM-01: 2
-    usb_product_id_hex: "CEC7"
-    driver_dll: "C:/Program Files/Newport/Newport USB Driver/Bin/usbdll.dll"
-    driver_dll_version: "5.0.8"
-    software_service: "software/control_app/devices/newport_1918_service.py"
-    qualified_mode: "DC Continuous"
+    usb_product_id_hex: CEC7
+    driver_dll: C:/Program Files/Newport/Newport USB Driver/Bin/usbdll.dll
+    driver_dll_version: 5.0.8
+    software_service: software/control_app/devices/newport_1918_service.py
+    qualified_mode: DC Continuous
     qualified_range_code: 0
     analog_filter_hz: 0.5
-    digital_filter: "off"
-    qualification_bundle: "CAL-system_recalibration_001-OM01-v1"
+    digital_filter: 'off'
+    qualification_bundle: CAL-system_recalibration_001-OM01-v1
     manufacturer_documents:
-      - "references/manuals/Power_Meter/1918-R_Power_Meter_Users_Manual_RevA.pdf"
-      - "references/manuals/Power_Meter/1918-R_Power_Meter_Datasheet.pdf"
+    - references/manuals/Power_Meter/1918-R_Power_Meter_Users_Manual_RevA.pdf
+    - references/manuals/Power_Meter/1918-R_Power_Meter_Datasheet.pdf
     operational_constraints:
-      - "The OM-01 result is bounded average-power metrology and is not a pulse-energy distribution or peak-power measurement."
-      - "The OM-01 OPO observation is mixed-spectrum pre-iris evidence and is not post-iris 540 nm dose."
-
+    - The OM-01 result is bounded average-power metrology and is not a pulse-energy distribution or peak-power
+      measurement.
+    - The OM-01 OPO observation is mixed-spectrum pre-iris evidence and is not post-iris 540 nm dose.
   optical_power_sensor:
-    display_name: "Newport 919P-010-16 Thermopile Sensor"
-    role: "average_optical_power_sensor"
-    manufacturer: "Newport"
-    model_number: "919P-010-16"
-    serial_number: "161791"
-    qualification_status: "OM-01_qualified_bounded_not_canonically_promoted"
-    sensor_type: "broadband thermopile"
+    display_name: Newport 919P-010-16 Thermopile Sensor
+    role: average_optical_power_sensor
+    manufacturer: Newport
+    model_number: 919P-010-16
+    serial_number: '161791'
+    qualification_status: OM-01_qualified_bounded_not_canonically_promoted
+    sensor_type: broadband thermopile
     active_diameter_mm: 16.0
     active_area_cm2: 2.01
     nominal_maximum_average_power_w: 10.0
@@ -131,350 +136,416 @@ devices:
     spectral_range_nm:
       minimum: 190
       maximum: 11000
-    certificate_id: "3161791-001"
-    certificate_calibration_date: "2025-01-12"
-    certificate_recommended_recalibration: "2026-07"
-    qualification_bundle: "CAL-system_recalibration_001-OM01-v1"
+    certificate_id: 3161791-001
+    certificate_calibration_date: '2025-01-12'
+    certificate_recommended_recalibration: 2026-07
+    qualification_bundle: CAL-system_recalibration_001-OM01-v1
     manufacturer_documents:
-      - "references/manuals/Power_Meter/919-P_Sensor_Datasheet.pdf"
-      - "references/certificates/Power_Meter/919-P_Sensor_Certificate_of_Calibration.pdf"
+    - references/manuals/Power_Meter/919-P_Sensor_Datasheet.pdf
+    - references/certificates/Power_Meter/919-P_Sensor_Certificate_of_Calibration.pdf
     operational_constraints:
-      - "The certificate date is not extended by campaign use."
-      - "OM-01 qualified binary visible-footprint containment only; quantitative beam geometry remains downstream work."
-
+    - The certificate date is not extended by campaign use.
+    - OM-01 qualified binary visible-footprint containment only; quantitative beam geometry remains downstream
+      work.
   ndyag_355_power_sensor:
-    display_name: "Newport 919P-050-18HP High-Power Thermopile Sensor"
-    role: "terminal_direct_355_nm_average_power_sensor"
-    manufacturer: "Newport"
-    model_number: "919P-050-18HP"
-    serial_number: "USER_INPUT_REQUIRED"
-    installed_readout: "optical_power_meter"
-    installation_status: "operator_reported_installed"
-    qualification_status: "unqualified_pending_supplemental_PB-01"
+    display_name: Newport 919P-050-18HP High-Power Thermopile Sensor
+    role: terminal_direct_355_nm_average_power_sensor
+    manufacturer: Newport
+    model_number: 919P-050-18HP
+    serial_number: USER_INPUT_REQUIRED
+    installed_readout: optical_power_meter
+    installation_status: operator_reported_installed
+    qualification_status: unqualified_pending_supplemental_PB-01
     manufacturer_documents:
-      - "references/manuals/Power_Meter/919-P_Sensor_Datasheet.pdf"
+    - references/manuals/Power_Meter/919-P_Sensor_Datasheet.pdf
     phase_entry_required_fields:
-      - "serial_number"
-      - "calibration_basis"
-      - "accepted_355_nm_single_pulse_energy_density_limit"
-    absorber_type: "PF type plus diffuser"
+    - serial_number
+    - calibration_basis
+    - accepted_355_nm_single_pulse_energy_density_limit
+    absorber_type: PF type plus diffuser
     active_diameter_mm: 17.5
-    active_area_cm2: 2.40
+    active_area_cm2: 2.4
     spectral_range_um:
       minimum: 0.24
       maximum: 2.2
-    measurement_mode: "average optical power through compatible Newport meter; exact PB-01 meter settings pending"
-    calibration_basis: "USER_INPUT_REQUIRED"
+    measurement_mode: average optical power through compatible Newport meter; exact PB-01 meter settings
+      pending
+    calibration_basis: USER_INPUT_REQUIRED
     maximum_average_power_w: 50.0
-    maximum_average_power_density_kw_per_cm2: ">10"
-    minimum_energy_j: 0.060
+    maximum_average_power_density_kw_per_cm2: '>10'
+    minimum_energy_j: 0.06
     maximum_energy_j: 200.0
     manufacturer_sub_100ns_energy_density_limit_at_1064nm_j_per_cm2: 4.0
-    manufacturer_355nm_derating_statement: "Derate 60% at 355 nm; accepted numerical interpretation remains pending PB-01 review."
-    accepted_355_nm_single_pulse_energy_density_limit: "USER_INPUT_REQUIRED"
+    manufacturer_355nm_derating_statement: Derate 60% at 355 nm; accepted numerical interpretation remains
+      pending PB-01 review.
+    accepted_355_nm_single_pulse_energy_density_limit: USER_INPUT_REQUIRED
     operational_constraints:
-      - "This detector is reserved for supplemental post-promotion PB-01 direct-355 thesis characterization and is outside every completion, promotion, biological-entry, and OPO-540 gate."
-      - "PB-01 emission is prohibited until every phase-entry field is observed from the installed device or applicable documentation and the worst-case load margin is accepted."
-      - "For Gaussian beams multiply power and energy density by 2 and for hot spots by 3 when comparing incident loading with the datasheet threshold, as instructed by the manufacturer datasheet."
-
+    - This detector is reserved for supplemental post-promotion PB-01 direct-355 thesis characterization
+      and is outside every completion, promotion, biological-entry, and OPO-540 gate.
+    - PB-01 emission is prohibited until every phase-entry field is observed from the installed device
+      or applicable documentation and the worst-case load margin is accepted.
+    - For Gaussian beams multiply power and energy density by 2 and for hot spots by 3 when comparing
+      incident loading with the datasheet threshold, as instructed by the manufacturer datasheet.
   opo_iris:
-    display_name: "Thorlabs ELL15 Motorized Iris"
-    role: "permanent_opo_beam_conditioner"
-    manufacturer: "Thorlabs"
-    procurement_model: "ELL15K"
-    device_model: "ELL15"
-    protocol_model_code_hex: "0F"
-    serial_number: "11500020"
+    display_name: Thorlabs ELL15 Motorized Iris
+    role: permanent_opo_beam_conditioner
+    manufacturer: Thorlabs
+    procurement_model: ELL15K
+    device_model: ELL15
+    protocol_model_code_hex: 0F
+    serial_number: '11500020'
     manufacture_year: 2024
-    firmware_field_hex: "10"
-    hardware_field_hex: "21"
-    qualification_status: "connected_unqualified_pending_ATT-01"
-    interface: "usb_serial"
-    preferred_port: "COM5"
-    usb_vid_hex: "0403"
-    usb_pid_hex: "6015"
-    usb_serial_number: "DP06U124"
-    port_serial_number: "DP06U124A"
-    usb_converter: "FTDI FT230X Basic UART"
-    driver_provider: "FTDI"
-    driver_version_observed: "2.12.36.20"
+    firmware_field_hex: '10'
+    hardware_field_hex: '21'
+    qualification_status: connected_unqualified_pending_ATT-01
+    interface: usb_serial
+    preferred_port: COM5
+    usb_vid_hex: '0403'
+    usb_pid_hex: '6015'
+    usb_serial_number: DP06U124
+    port_serial_number: DP06U124A
+    usb_converter: FTDI FT230X Basic UART
+    driver_provider: FTDI
+    driver_version_observed: 2.12.36.20
     baudrate: 9600
     bytesize: 8
-    parity: "N"
+    parity: N
     stopbits: 1
-    flow_control: "none"
-    device_address: "0"
-    aperture_units: "mm_diameter"
+    flow_control: none
+    device_address: '0'
+    aperture_units: mm_diameter
     minimum_aperture_mm: 1.0
     maximum_aperture_mm: 11.5
     encoder_counts_per_mm: 1000
     minimum_incremental_motion_mm: 0.01
-    unidirectional_repeatability_mm: 0.10
-    homing_repeatability_mm: 0.10
-    backlash_mm: 0.20
-    power_requirement: "5 VDC +/-10%; 800 mA typical during movement"
+    unidirectional_repeatability_mm: 0.1
+    homing_repeatability_mm: 0.1
+    backlash_mm: 0.2
+    power_requirement: 5 VDC +/-10%; 800 mA typical during movement
     manufacturer_documents:
-      - "references/manuals/Iris/ELL15K_Iris_Manual.pdf"
-      - "references/manuals/Iris/Ellx_Iris_Communication_Protocol.pdf"
-    software_service: "software/control_app/devices/ell15_iris_service.py"
+    - references/manuals/Iris/ELL15K_Iris_Manual.pdf
+    - references/manuals/Iris/Ellx_Iris_Communication_Protocol.pdf
+    software_service: software/control_app/devices/ell15_iris_service.py
     operational_constraints:
-      - "The iris is a static beam conditioner, not a safety shutter, pulse picker, interlock, or finite-event gate."
-      - "No scientific acquisition is permitted while the iris is homing or moving."
-      - "Target diameters are approached from a larger aperture for repeatability."
-      - "The 950 nm home-sensor leakage is controlled and measured in ATT-01."
-      - "The Z/X/Y mount and accepted 540 nm diameter are ATT-01 outputs and remain unqualified until promotion."
-
+    - The iris is a static beam conditioner, not a safety shutter, pulse picker, interlock, or finite-event
+      gate.
+    - No scientific acquisition is permitted while the iris is homing or moving.
+    - Target diameters are approached from a larger aperture for repeatability.
+    - The 950 nm home-sensor leakage is controlled and measured in ATT-01.
+    - The Z/X/Y mount and accepted 540 nm diameter are ATT-01 outputs and remain unqualified until promotion.
   wavemaster:
-    display_name: "Coherent WaveMaster Wavelength Meter"
-    role: "visible_near_ir_wavelength_working_reference"
-    manufacturer: "Coherent"
-    model_number: "WaveMaster"
-    catalog_number: "33-2650"
-    part_number: "33-2650-000"
-    reported_label_serial: "WO 339"
-    serial_number: "W0339"
-    instrument_identity_response: "*IDN$ Coherent Inc,WaveMaster,W0339,A1.1V1.6"
-    firmware_revision: "A1.1V1.6"
-    qualification_status: "electronic_checks_passed_optical_qualification_failed_WM-01_deferred_pending_replacement_spectrometer"
-    interface: "rs232_via_usb_adapter"
-    preferred_port: "COM8"
-    usb_vid_hex: "0403"
-    usb_pid_hex: "6001"
-    usb_serial_number: "BG03ADXP"
-    port_serial_number: "BG03ADXPA"
-    usb_adapter_model: "FTDI FT232R USB UART"
-    driver_provider: "FTDI"
-    driver_version_observed: "2.12.36.20"
-    driver_date_observed: "2024-10-27"
-    driver_inf_observed: "oem182.inf"
-    cable_configuration: "straight-through; not null modem; RTS/CTS carried"
+    display_name: Coherent WaveMaster Wavelength Meter
+    role: visible_near_ir_wavelength_working_reference
+    manufacturer: Coherent
+    model_number: WaveMaster
+    catalog_number: 33-2650
+    part_number: 33-2650-000
+    reported_label_serial: WO 339
+    serial_number: W0339
+    instrument_identity_response: '*IDN$ Coherent Inc,WaveMaster,W0339,A1.1V1.6'
+    firmware_revision: A1.1V1.6
+    qualification_status: electronic_checks_passed_optical_qualification_failed_WM-01_deferred_pending_replacement_spectrometer
+    interface: rs232_via_usb_adapter
+    preferred_port: COM8
+    usb_vid_hex: '0403'
+    usb_pid_hex: '6001'
+    usb_serial_number: BG03ADXP
+    port_serial_number: BG03ADXPA
+    usb_adapter_model: FTDI FT232R USB UART
+    driver_provider: FTDI
+    driver_version_observed: 2.12.36.20
+    driver_date_observed: '2024-10-27'
+    driver_inf_observed: oem182.inf
+    cable_configuration: straight-through; not null modem; RTS/CTS carried
     baudrate: 9600
     bytesize: 8
-    parity: "N"
+    parity: N
     stopbits: 1
-    flow_control: "RTS/CTS hardware"
-    response_terminator: "CR/LF"
-    command_terminator: "CR"
+    flow_control: RTS/CTS hardware
+    response_terminator: CR/LF
+    command_terminator: CR
     operator_confirmed_safe_operation: true
-    manufacturer_support_status: "obsolete; no manufacturer service, replacement parts, or additional documentation available (operator-reported Coherent support response, 2026-08-20)"
+    manufacturer_support_status: obsolete; no manufacturer service, replacement parts, or additional documentation
+      available (operator-reported Coherent support response, 2026-08-20)
     wavelength_range_nm:
       minimum: 380.0
       maximum: 1095.0
     manufacturer_accuracy_nm: 0.005
     resolution_nm: 0.001
     display_update_hz: 3
-    measurement_authority: "not_qualified_installed_WaveMaster_optical_failure_replacement_spectrometer_pending"
+    measurement_authority: not_qualified_installed_WaveMaster_optical_failure_replacement_spectrometer_pending
     connection_intake:
-      observed_utc: "2026-08-20T17:58:23.012Z"
-      query_scope: "read_only_no_settings_changed"
-      self_test_raw: "*TST$ 01"
-      autocalibration_raw: "CAL$ ON"
-      measurement_mode_raw: "MDE$ P"
-      units_raw: "UNI$ A"
-      period_raw: "PRD$ 0"
-      value_raw: "VAL$ 29397,NO SIGNAL"
-      evidence_record: "references/manuals/WaveMaster/connection_intake_20260820.json"
+      observed_utc: '2026-08-20T17:58:23.012Z'
+      query_scope: read_only_no_settings_changed
+      self_test_raw: '*TST$ 01'
+      autocalibration_raw: CAL$ ON
+      measurement_mode_raw: MDE$ P
+      units_raw: UNI$ A
+      period_raw: PRD$ 0
+      value_raw: VAL$ 29397,NO SIGNAL
+      evidence_record: references/manuals/WaveMaster/connection_intake_20260820.json
     manufacturer_documents:
-      - "references/manuals/WaveMaster/WaveMaster_Manual.pdf"
-      - "references/manuals/WaveMaster/Coherent_WaveMaster_33-2650_Datasheet.pdf"
-      - "references/manuals/WaveMaster/WaveMaster_USB_driver_install.pdf"
-    software_service: "software/control_app/devices/coherent_wavemaster_service.py"
+    - references/manuals/WaveMaster/WaveMaster_Manual.pdf
+    - references/manuals/WaveMaster/Coherent_WaveMaster_33-2650_Datasheet.pdf
+    - references/manuals/WaveMaster/WaveMaster_USB_driver_install.pdf
+    software_service: software/control_app/devices/coherent_wavemaster_service.py
     phase_entry_required_fields:
-      - "serial_number"
-      - "instrument_identity_response"
-      - "firmware_revision"
-      - "preferred_port"
-      - "usb_vid_hex"
-      - "usb_pid_hex"
-      - "usb_serial_number"
-      - "port_serial_number"
-      - "usb_adapter_model"
-      - "driver_provider"
-      - "driver_version_observed"
+    - serial_number
+    - instrument_identity_response
+    - firmware_revision
+    - preferred_port
+    - usb_vid_hex
+    - usb_pid_hex
+    - usb_serial_number
+    - port_serial_number
+    - usb_adapter_model
+    - driver_provider
+    - driver_version_observed
     operational_constraints:
-      - "WM-01 cannot start while any phase_entry_required_fields value is [VALUE_REQUIRED]."
-      - "The instrument identifies wavelength but does not apportion optical power among spectral components."
-      - "The qualified range does not include the 355 nm OPO drive."
-      - "Quantitative qualification uses explicit air/vacuum units, pulse mode, autocalibration state, input status, and thermal-stability record."
-      - "A Multi-Line result is retained as evidence and is not converted into a wavelength or spectral-power fraction."
-
+    - WM-01 cannot start while any phase_entry_required_fields value is [VALUE_REQUIRED].
+    - The instrument identifies wavelength but does not apportion optical power among spectral components.
+    - The qualified range does not include the 355 nm OPO drive.
+    - Quantitative qualification uses explicit air/vacuum units, pulse mode, autocalibration state, input
+      status, and thermal-stability record.
+    - A Multi-Line result is retained as evidence and is not converted into a wavelength or spectral-power
+      fraction.
   ndyag:
-    display_name: "Surelite EX Nd:YAG"
-    role: "pump_laser"
-    model_number: "SL EX"
-    serial_number: "24366-1"
-    procurement_identity: "Surelite EX"
-
+    display_name: Surelite EX Nd:YAG
+    role: pump_laser
+    model_number: SL EX
+    serial_number: 24366-1
+    procurement_identity: Surelite EX
   hf2li:
-    display_name: "Zurich Instruments HF2LI"
-    role: "lockin_amplifier"
-    device_id: "18500"
+    display_name: Zurich Instruments HF2LI
+    role: lockin_amplifier
+    device_id: '18500'
     timing_inputs:
       extref:
-        source_device: "t660_2"
-        source_channel: "A"
+        source_device: t660_1
+        source_channel: A
+        hf2li_dio_bit: 0
       daq_trigger:
-        source_device: "t660_2"
-        source_channel: "C"
-
+        source_device: null
+        source_channel: null
+        hf2li_dio_bit: 1
+        connected: false
+        note: Optional acquisition-window input; no source is assigned in default wiring.
+      scan_direction:
+        source_device: mircat
+        source_connector: DB9
+        source_pin: 1
+        hf2li_dio_bit: 20
+      sweep_active:
+        source_device: mircat
+        source_connector: DB9
+        source_pin: 2
+        hf2li_dio_bit: 21
+        parallel_destination: picoscope.EXT
+      wavelength_trigger:
+        source_device: mircat
+        source_connector: DB9
+        source_pin: 3
+        hf2li_dio_bit: 22
+    clock_connector:
+      source_device: t660_2
+      source_connector: CLOCK
+      source_mode: OUT
+      clock_source: external
+      frequency_hz: 10000000
+      splitter_id: CLOCK-SPLITTER-01
   picoscope:
-    display_name: "PicoScope 5000 Series"
-    role: "oscilloscope"
-    model: "5244D"
-    serial_number: "10261"
-    sdk_serial_number: "10261/0071"
-    sdk_api: "ps5000a"
+    display_name: PicoScope 5000 Series
+    role: oscilloscope
+    model: 5244D
+    serial_number: '10261'
+    sdk_serial_number: 10261/0071
+    sdk_api: ps5000a
     driver_search_paths:
-      - "references\\sdk\\picosdk\\win64"
-      - "C:\\Program Files\\Pico Technology\\SDK\\lib"
-      - "C:\\Program Files\\Pico Technology\\PicoScope 7 T&M Stable"
-      - "C:\\Program Files\\Pico Technology\\PicoLog"
-    settings_source: "workflow_recipe"
-    settings_test_recipe: "instrument/recipes/picoscope_settings_test.yaml"
+    - references\sdk\picosdk\win64
+    - C:\Program Files\Pico Technology\SDK\lib
+    - C:\Program Files\Pico Technology\PicoScope 7 T&M Stable
+    - C:\Program Files\Pico Technology\PicoLog
+    settings_source: workflow_recipe
+    settings_test_recipe: instrument/recipes/picoscope_settings_test.yaml
     signal_generator_capabilities:
-      source: "references/manuals/PicoScope/PicoScope 5000D Series Data Sheet.pdf"
-      function_generator_frequency_hz: {minimum: 0.025, maximum: 20000000.0}
-      output_voltage_overall_v: {minimum: -2.0, maximum: 2.0}
+      source: references/manuals/PicoScope/PicoScope 5000D Series Data Sheet.pdf
+      function_generator_frequency_hz:
+        minimum: 0.025
+        maximum: 20000000.0
+      output_voltage_overall_v:
+        minimum: -2.0
+        maximum: 2.0
       arbitrary_waveform_update_rate_sps: 200000000.0
       arbitrary_waveform_buffer_samples: 32000
       arbitrary_waveform_resolution_bits: 14
-      hf01_use: "Monitored electrical stimulus only; actual connected output at the HF2LI input is the stimulus authority."
+      hf01_use: Monitored electrical stimulus only; actual connected output at the HF2LI input is the
+        stimulus authority.
     capture_capabilities:
       resolutions:
-        - "8BIT"
-        - "12BIT"
-        - "14BIT"
-        - "15BIT"
-        - "16BIT"
+      - 8BIT
+      - 12BIT
+      - 14BIT
+      - 15BIT
+      - 16BIT
       channel_ranges:
-        - "10MV"
-        - "20MV"
-        - "50MV"
-        - "100MV"
-        - "200MV"
-        - "500MV"
-        - "1V"
-        - "2V"
-        - "5V"
-        - "10V"
-        - "20V"
-        - "50V"
+      - 10MV
+      - 20MV
+      - 50MV
+      - 100MV
+      - 200MV
+      - 500MV
+      - 1V
+      - 2V
+      - 5V
+      - 10V
+      - 20V
+      - 50V
       coupling_modes:
-        - "AC"
-        - "DC"
+      - AC
+      - DC
       analog_channels:
-        - "A"
-        - "B"
+      - A
+      - B
       trigger_sources:
         external:
-          api_source: "EXT"
+          api_source: EXT
           ps5000a_source_value: 4
       threshold:
-        units: "adc_counts"
+        units: adc_counts
         minimum: -32767
         maximum: 32767
       recipe_required_fields:
-        - "resolution"
-        - "channels.A.coupling"
-        - "channels.A.range"
-        - "channels.B.coupling"
-        - "channels.B.range"
-        - "external_trigger.source"
-        - "external_trigger.threshold_adc"
-        - "external_trigger.direction"
-        - "total_samples"
-        - "pre_trigger_samples"
-        - "timebase"
-        - "pulse_count_threshold_adc"
-
+      - resolution
+      - channels.A.coupling
+      - channels.A.range
+      - channels.B.coupling
+      - channels.B.range
+      - external_trigger.source
+      - external_trigger.threshold_adc
+      - external_trigger.direction
+      - total_samples
+      - pre_trigger_samples
+      - timebase
+      - pulse_count_threshold_adc
 timing_routes:
   t660_ttl_routes_are_direct: true
   mux_routes_t660_ttl: false
   direct_ttl_destinations:
-    t660_2_channel_a: "HF2LI DIO 0 external reference BNC"
-    t660_2_channel_b: "MIRcat TRIG IN"
-    t660_2_channel_c: "HF2LI DIO 1 DAQ trigger BNC"
-    t660_2_channel_d: "T660-1 TRIG IN"
-    t660_1_channel_a: "Nd:YAG FIRE"
-    t660_1_channel_b: "Nd:YAG Q-SWITCH"
-    t660_1_channel_c: "MIRcat DB9 pin 4 Process Trigger"
-    t660_1_channel_d: "DISCONNECTED AND UNUSED"
-
+    t660_1_channel_a: HF2LI DIO 0 external reference BNC
+    t660_1_channel_b: MIRcat TRIG IN
+    t660_1_channel_c: T660-2 TRIG IN
+    t660_1_channel_d: SPARE; disconnected and disabled
+    t660_2_channel_a: Nd:YAG FIRE
+    t660_2_channel_b: Nd:YAG Q-SWITCH
+    t660_2_channel_c: MIRcat DB9 pin 4 Process Trigger
+    t660_2_channel_d: SPARE; disconnected and disabled
+  clock_distribution:
+    frequency_hz: 10000000
+    source: t660_2.CLOCK
+    source_mode: OUT
+    splitter_id: CLOCK-SPLITTER-01
+    destinations:
+    - t660_1.CLOCK
+    - hf2li.clock_input
+    t660_1_mode: IN
+    hf2li_clock_source: external
+  observed_timing_inputs:
+    mircat_db9_pin_1:
+      signal: Scan Direction
+      hf2li_dio_bit: 20
+    mircat_db9_pin_2:
+      signal: Tuned / Sweep Active
+      hf2li_dio_bit: 21
+      picoscope_input: EXT
+    mircat_db9_pin_3:
+      signal: Wavelength Trigger
+      hf2li_dio_bit: 22
+    ndyag_variable_sync:
+      hf2li_dio_bit: 17
+  optional_acquisition_window:
+    destination: hf2li.DIO1
+    connected: false
+    candidate_source: t660_2.D
+    note: DIO1 has no source in default wiring. A frame-relative gate may use T660-2 D after an explicit
+      route assignment and qualification.
 arduino_mux_topology:
   enabled: false
-  status: "inactive_bypassed"
-  disabled_reason: "MUX routes are not valid for YAG/MIRcat sync observation; use direct scope/HF2LI input wiring."
-  controller_device: "arduino_mux"
-  source_document: "instrument/wiring_table.xlsx"
-  control_section: "arduino_mux_control"
-  routes_section: "mux_routes"
+  status: inactive_bypassed
+  disabled_reason: MUX routes are not valid for YAG/MIRcat sync observation; use direct scope/HF2LI input
+    wiring.
+  controller_device: arduino_mux
+  source_document: instrument/wiring_table.xlsx
+  control_section: arduino_mux_control
+  routes_section: mux_routes
   routed_signal_sources:
-    digital: "HF2LI DIO 9-15 diagnostic outputs"
-    analog: "HF2LI AUX 1-4 diagnostic outputs"
+    digital: HF2LI DIO 9-15 diagnostic outputs
+    analog: HF2LI AUX 1-4 diagnostic outputs
   outputs:
     output_a:
-      label: "MUX Output A"
+      label: MUX Output A
       source_mux_boards:
-        - "dmb1"
-        - "amb1"
+      - dmb1
+      - amb1
     output_b:
-      label: "MUX Output B"
+      label: MUX Output B
       source_mux_boards:
-        - "dmb2"
-        - "amb2"
+      - dmb2
+      - amb2
     output_ext:
-      label: "MUX Output EXT"
+      label: MUX Output EXT
       source_mux_boards:
-        - "dmb3"
-
+      - dmb3
 picoscope_connectors:
   channel_a:
-    input_label: "PicoScope Channel A"
-    connector: "Front BNC"
+    input_label: PicoScope Channel A
+    connector: Front BNC
   channel_b:
-    input_label: "PicoScope Channel B"
-    connector: "Front BNC"
+    input_label: PicoScope Channel B
+    connector: Front BNC
   external_trigger:
-    input_label: "PicoScope External Trigger"
-    connector: "Front BNC"
-
+    input_label: PicoScope External Trigger
+    connector: Front BNC
+    source_device: mircat
+    source_connector: DB9 pin 2
+    signal: Tuned / Sweep Active
+    parallel_destination: HF2LI DIO21
+    ground_reference: MIRcat DB9 pin 7
 arduino_mux_control:
   enabled: false
-  status: "inactive_bypassed"
-  disabled_reason: "Arduino MUX controls are disabled in the UI and workflow."
-  source_document: "instrument/wiring_table.xlsx"
+  status: inactive_bypassed
+  disabled_reason: Arduino MUX controls are disabled in the UI and workflow.
+  source_document: instrument/wiring_table.xlsx
   enable_pins:
-    dmb1: "D2"
-    dmb2: "D3"
-    amb1: "D4"
-    amb2: "D5"
-    dmb3: "A0"
+    dmb1: D2
+    dmb2: D3
+    amb1: D4
+    amb2: D5
+    dmb3: A0
   select_buses:
     output_a:
       boards:
-        - "dmb1"
-        - "amb1"
+      - dmb1
+      - amb1
       pins:
-        S0: "D6"
-        S1: "D7"
-        S2: "D8"
-        S3: "D9"
+        S0: D6
+        S1: D7
+        S2: D8
+        S3: D9
     output_b:
       boards:
-        - "dmb2"
-        - "amb2"
+      - dmb2
+      - amb2
       pins:
-        S0: "D10"
-        S1: "D11"
-        S2: "D12"
-        S3: "D13"
+        S0: D10
+        S1: D11
+        S2: D12
+        S3: D13
     output_ext:
       boards:
-        - "dmb3"
+      - dmb3
       pins:
-        S0: "A1"
-        S1: "A2"
-        S2: "A3"
-        S3: "A4"
-
+        S0: A1
+        S1: A2
+        S2: A3
+        S3: A4
 mux_routes: {}

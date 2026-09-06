@@ -19,7 +19,7 @@ the campaign `../../requirements.md`.
 This gate belongs only to the optional branch after HRP closeout, restoration, and
 handoff. Qualify cryostat geometry/windows/transmission, temperature stability,
 gradients, condensation and recovery; MIRcat 20-25 ns through 1005 ns pulse widths,
-T660-2 rate, current, wavelength/linewidth, latency/jitter, power stability;
+T660-1 probe rate, current, wavelength/linewidth, latency/jitter, power stability;
 detector/Pico response/saturation; HF2LI only inside its measured envelope; and all
 three acquisition modes in `campaigns/methods/time_resolved_acquisition_modes.md`.
 

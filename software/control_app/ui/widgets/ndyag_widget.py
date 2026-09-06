@@ -31,13 +31,13 @@ NDYAG_WIDGET_SPEC = DeviceWidgetSpec(
     status_fields=(
         StatusField("recipe_name", "Recipe"),
         StatusField("repetition_rate_hz", "Rate", units="Hz", critical=True),
-        StatusField("shot_count", "Shot Count"),
-        StatusField("t6602_trigger_source", "T660-2 Trigger", critical=True),
-        StatusField("t6602_synth_frequency", "T660-2 Frequency", units="Hz", critical=True),
-        StatusField("t6602_drive_enabled", "T660-2 Drive", critical=True),
-        StatusField("t6602_drive_delay", "Drive Delay"),
-        StatusField("t6602_drive_width", "Drive Width"),
+        StatusField("shot_count", "Elapsed T660-2 Events"),
         StatusField("t6601_trigger_source", "T660-1 Trigger", critical=True),
+        StatusField("t6601_synth_frequency", "T660-1 Frequency", units="Hz", critical=True),
+        StatusField("t6601_drive_enabled", "T660-1 Drive", critical=True),
+        StatusField("t6601_drive_delay", "Drive Delay"),
+        StatusField("t6601_drive_width", "Drive Width"),
+        StatusField("t6602_trigger_source", "T660-2 Trigger", critical=True),
         StatusField("fire_enabled", "Fire Enabled", critical=True),
         StatusField("fire_delay", "Fire Delay"),
         StatusField("fire_width", "Fire Width"),
@@ -238,9 +238,9 @@ class NdYagWidget(QWidget):
         self.shot_count_input.setSingleStep(1)
         self.shot_count_input.setValue(NDYAG_SHOT_COUNT_DEFAULT)
         values: tuple[tuple[str, str, str | Any, str, str], ...] = (
-            ("Drive", "T660-2 CHD", "10 Hz", "10 us", "positive"),
-            ("Fire", "T660-1 CHA", "0 us", "10 us", "negative"),
-            ("Q-switch", "T660-1 CHB", self.q_switch_delay_input, "10 us", "negative"),
+            ("Drive", "T660-1 CHC", "10 Hz", "10 us", "positive"),
+            ("Fire", "T660-2 CHA", "0 us", "10 us", "negative"),
+            ("Q-switch", "T660-2 CHB", self.q_switch_delay_input, "10 us", "negative"),
         )
         for col, header in enumerate(("Signal", "Route", "Delay / Rate", "Width", "Polarity")):
             grid.addWidget(QLabel(header), 0, col)

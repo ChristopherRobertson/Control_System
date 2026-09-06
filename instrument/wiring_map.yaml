@@ -1,33 +1,24 @@
-schema_version: '0.1'
+schema_version: '0.2'
 source:
   file: instrument/wiring_table.xlsx
   sheet: Sheet1
   range: A1:F165
   generated_from_spreadsheet: true
   notes:
-  - This file separates fixed wiring from hardware identity configuration.
-  - Preferred routing uses the confirmed timing architecture where spreadsheet rows
-    conflict.
-  - Operator-reported detector wiring update, 2026-08-31; each detector signal passes
-    through its own female-to-female BNC adapter, then a male-to-two-female BNC tee.
-    Detector 1 (sample) branches to HF2LI Signal 1 In (+) and PicoScope CHA;
-    detector 2 (reference) branches to HF2LI Signal 2 In (+) and PicoScope CHB.
-    Both receivers remain connected. PicoScope CHA and CHB carry detector signals,
-    not T660 trigger signals, in this default wiring.
-  - Legacy spreadsheet labels "RS232 7" and "RS232 6" mean the Surelite Nd:YAG
-    DB9 EXT TTL fire-command pin 7 and Q-switch-command pin 6. They are not
-    RS-232 electrical-level signals and must never be driven as an RS-232 port.
-  - Arduino MUX boards are bypassed/inactive until rewired; HF2LI DIO16-DIO22
-    inputs do not mirror to HF2LI DIO9-DIO15 outputs.
-  - MIRcat DB9 pin 5 is reserved for Laser Output On/Off and is disconnected.
-    DB9 pins 6 and 8 are unused and unwired in the installed topology.
-  - The phrase "default wiring restored" includes both detector split paths,
-    T660-1 CHD disconnected,
-    MIRcat DB9 pin 5 disconnected, and MIRcat DB9 pins 6 and 8 unused/unwired.
-    These remain standing conditions unless the operator explicitly reports a
-    change; see instrument/default_wiring_state.md.
-  - Manufacturer correspondence is preserved at
-    references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md.
+  - Fixed wiring and hardware identity are represented separately; this table matches instrument/default_wiring_state.md.
+  - T660-2 is the 10 MHz reference master and the pump/process trains-and-frames sequencer. T660-1 generates
+    the continuous reference, probe, and frame-input pulse train.
+  - Detector 1 (sample) branches through its BNC adapter and tee to HF2LI Signal 1 In (+) and PicoScope
+    CHA; detector 2 (reference) branches to Signal 2 In (+) and PicoScope CHB. Both receivers remain connected.
+  - Surelite DB9 EXT pins 7 and 6 are TTL Fire and Q-switch command inputs, not RS-232 electrical-level
+    signals.
+  - Arduino MUX boards are inactive and bypassed. HF2LI DIO16-DIO22 inputs do not mirror to DIO9-DIO15
+    outputs.
+  - Both T660 channel-D outputs are SPARE, unwired and disabled. HF2LI DIO1 has no default source.
+  - MIRcat DB9 pin 2 branches to HF2LI DIO21 and PicoScope EXT; DIO20 is Scan Direction from pin 1. DIO
+    numbers identify logical bits, not connector-pin numbers.
+  - MIRcat DB9 pins 5, 6 and 8 are disconnected. Pin 7 provides the Sweep Active branch ground reference.
+  - Manufacturer Process Trigger correspondence is retained in references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md.
 detector_signal_paths:
   sample:
     source: Sample Detector output
@@ -75,16 +66,17 @@ critical_timing_chain:
     clock_output:
     - t660_1.clock_input
     - hf2li.clock_input
-    CHA: hf2li.dio0_ext_ref
-    CHB: mircat.trig_in
-    CHC: hf2li.dio1_daq_trigger
-    CHD: t660_1.trig_in
-  t660_1:
-    clock_input: t660_2.clock_output
-    trig_in: t660_2.CHD
+    trig_in: t660_1.CHC
     CHA: surelite_ndyag.db9_ext_pin_7_fire_command
     CHB: surelite_ndyag.db9_ext_pin_6_q_switch_command
     CHC: mircat.db9_4_process_trigger
+    CHD: null
+  t660_1:
+    clock_input: t660_2.clock_output
+    trig_in: null
+    CHA: hf2li.dio0_ext_ref
+    CHB: mircat.trig_in
+    CHC: t660_2.trig_in
     CHD: null
 device_io:
   t660_2:
@@ -94,42 +86,11 @@ device_io:
     connected_device: T660-1; HF2LI
     bulkhead: null
     split_count: 3
-  - signal: CHA
-    direction: Output
-    connected_to: DIO 0
-    connected_device: HF2LI
-    bulkhead: null
-    split_count: 1
-  - signal: CHB
-    direction: Output
-    connected_to: TRIG IN
-    connected_device: MIRcat
-    bulkhead: null
-    split_count: 1
-  - signal: CHC
-    direction: Output
-    connected_to: DIO 1
-    connected_device: HF2LI
-    bulkhead: null
-    split_count: 1
-  - signal: CHD
-    direction: Output
-    connected_to: TRIG IN
-    connected_device: T660-1
-    bulkhead: null
-    split_count: 1
-  t660_1:
-  - signal: Clock
-    direction: Input
-    connected_to: Clock
-    connected_device: T660-2
-    bulkhead: null
-    split_count: 3
   - signal: TRIG IN
     direction: Input
-    connected_to: CHD
-    connected_device: T660-2
     bulkhead: null
+    connected_to: CHC
+    connected_device: T660-1
     split_count: 1
   - signal: CHA
     direction: Output
@@ -147,25 +108,65 @@ device_io:
     direction: Output
     connected_to: DB9 4
     connected_device: MIRcat
+    bulkhead: null
+    split_count: 1
+  - signal: CHD
+    direction: Output
+    connected_to: SPARE
+    connected_device: UNCONNECTED
+    bulkhead: null
+    split_count: 0
+    active: false
+  t660_1:
+  - signal: Clock
+    direction: Input
+    connected_to: Clock
+    connected_device: T660-2
+    bulkhead: null
+    split_count: 3
+  - signal: TRIG IN
+    direction: Input
+    connected_to: SPARE
+    connected_device: UNCONNECTED
+    bulkhead: null
+    split_count: 0
+    active: false
+  - signal: CHA
+    direction: Output
+    connected_to: DIO 0
+    connected_device: HF2LI
+    bulkhead: null
+    split_count: 1
+  - signal: CHB
+    direction: Output
+    connected_to: TRIG IN
+    connected_device: MIRcat
+    bulkhead: null
+    split_count: 1
+  - signal: CHC
+    direction: Output
+    connected_to: TRIG IN
+    connected_device: T660-2
     bulkhead: Back BNC
     split_count: 1
   - signal: CHD
     direction: Output
-    connected_to: DISCONNECTED
-    connected_device: UNUSED
+    connected_to: SPARE
+    connected_device: UNCONNECTED
     bulkhead: null
     split_count: 0
+    active: false
   surelite_ndyag:
   - signal: DB9 EXT pin 7 - TTL Fire Command
     direction: Input
     connected_to: CHA
-    connected_device: T660-1
+    connected_device: T660-2
     bulkhead: null
     split_count: 1
   - signal: DB9 EXT pin 6 - TTL Q-Switch Command
     direction: Input
     connected_to: CHB
-    connected_device: T660-1
+    connected_device: T660-2
     bulkhead: null
     split_count: 1
   - signal: Fixed Sync OUT
@@ -190,7 +191,7 @@ device_io:
   - signal: TRIG IN
     direction: Input
     connected_to: CHB
-    connected_device: T660-2
+    connected_device: T660-1
     bulkhead: null
     split_count: 1
   - signal: TRIG OUT
@@ -207,10 +208,10 @@ device_io:
     split_count: 1
   - signal: DB9 2 - Tuned / Sweep Active
     direction: Output
-    connected_to: DIO 21
-    connected_device: HF2LI
+    connected_to: DIO 21; EXT Trigger
+    connected_device: HF2LI; PicoScope
     bulkhead: null
-    split_count: 1
+    split_count: 2
   - signal: DB9 3 - Wavelength Trigger
     direction: Output
     connected_to: DIO 22
@@ -220,7 +221,7 @@ device_io:
   - signal: DB9 4 - Process Trigger
     direction: Input
     connected_to: CHC
-    connected_device: T660-1
+    connected_device: T660-2
     bulkhead: Back Terminal
     split_count: 1
   - signal: DB9 5 - Reserved (Laser Output On/Off)
@@ -275,15 +276,16 @@ device_io:
   - signal: DIO 0 (Ext Ref)
     direction: Input
     connected_to: CHA
-    connected_device: T660-2
+    connected_device: T660-1
     bulkhead: null
     split_count: 1
-  - signal: DIO 1 (DAQ Trigger)
+  - signal: DIO 1 (optional acquisition window)
     direction: Input
-    connected_to: CHC
-    connected_device: T660-2
+    connected_to: UNCONNECTED
+    connected_device: UNCONNECTED
     bulkhead: null
-    split_count: 1
+    split_count: 0
+    active: false
   - signal: DIO 2-8
     direction: Output
     connected_to: UNUSED
@@ -292,46 +294,60 @@ device_io:
     split_count: 0
   - signal: DIO 9
     direction: Output
-    connected_to: DIO 16 / C0
-    connected_device: HF2LI / DMB 1-3
+    connected_to: C0
+    connected_device: DMB 1-3
     bulkhead: null
     split_count: 3
+    active: false
+    status: inactive_bypassed
   - signal: DIO 10
     direction: Output
-    connected_to: DIO 17 / C1
-    connected_device: HF2LI / DMB 1-3
+    connected_to: C1
+    connected_device: DMB 1-3
     bulkhead: null
     split_count: 3
+    active: false
+    status: inactive_bypassed
   - signal: DIO 11
     direction: Output
-    connected_to: DIO 18 / C2
-    connected_device: HF2LI / DMB 1-3
+    connected_to: C2
+    connected_device: DMB 1-3
     bulkhead: null
     split_count: 3
+    active: false
+    status: inactive_bypassed
   - signal: DIO 12
     direction: Output
-    connected_to: DIO 19 / C3
-    connected_device: HF2LI / DMB 1-3
+    connected_to: C3
+    connected_device: DMB 1-3
     bulkhead: null
     split_count: 3
+    active: false
+    status: inactive_bypassed
   - signal: DIO 13
     direction: Output
-    connected_to: DIO 20 / C4
-    connected_device: HF2LI / DMB 1-3
+    connected_to: C4
+    connected_device: DMB 1-3
     bulkhead: null
     split_count: 3
+    active: false
+    status: inactive_bypassed
   - signal: DIO 14
     direction: Output
-    connected_to: DIO 21 / C5
-    connected_device: HF2LI / DMB 1-3
+    connected_to: C5
+    connected_device: DMB 1-3
     bulkhead: null
     split_count: 3
+    active: false
+    status: inactive_bypassed
   - signal: DIO 15
     direction: Output
-    connected_to: DIO 22 / C6
-    connected_device: HF2LI / DMB 1-3
+    connected_to: C6
+    connected_device: DMB 1-3
     bulkhead: null
     split_count: 3
+    active: false
+    status: inactive_bypassed
   - signal: DIO 16
     direction: Input
     connected_to: Fixed Sync OUT
@@ -364,10 +380,10 @@ device_io:
     split_count: 1
   - signal: DIO 21
     direction: Input
-    connected_to: DB9 2 - Tuned / Scan Firing
+    connected_to: DB9 2 - Tuned / Sweep Active
     connected_device: MIRcat
     bulkhead: null
-    split_count: 1
+    split_count: 2
   - signal: DIO 22
     direction: Input
     connected_to: DB9 3 - Wavelength Trigger
@@ -392,24 +408,32 @@ device_io:
     connected_device: AMB1-2
     bulkhead: Back BNC
     split_count: 2
+    active: false
+    status: inactive_bypassed
   - signal: AUX 2 (Y)
     direction: Output
     connected_to: C1
     connected_device: AMB1-2
     bulkhead: Back BNC
     split_count: 2
+    active: false
+    status: inactive_bypassed
   - signal: AUX 3 (R)
     direction: Output
     connected_to: C2
     connected_device: AMB1-2
     bulkhead: Back BNC
     split_count: 2
+    active: false
+    status: inactive_bypassed
   - signal: AUX 4 (Theta)
     direction: Output
     connected_to: C3
     connected_device: AMB1-2
     bulkhead: Back BNC
     split_count: 2
+    active: false
+    status: inactive_bypassed
   picoscope_5244d:
   - signal: Channel A
     direction: Input
@@ -425,12 +449,11 @@ device_io:
     split_count: 2
   - signal: EXT Trigger
     direction: Input
-    connected_to: SIG
-    connected_device: DMB3
+    connected_to: DB9 2 - Tuned / Sweep Active
+    connected_device: MIRcat
     bulkhead: Front BNC
-    split_count: 1
-    active: false
-    note: Legacy inactive MUX route only; the detector wiring update does not select an EXT trigger source.
+    split_count: 2
+    active: true
 mux_subsystem:
   active: false
   status: inactive_bypassed
@@ -573,7 +596,9 @@ arduino_mux_control:
   - A5
 breakouts:
   hf2li_dio_breakout:
-    note: Physical breakout labels are recorded below, but the corresponding complete-DIO-word bit indices for MIRcat DB9 pins 1-3 remain unverified and must be measured before calibrated sweep acquisition.
+    note: DIO numbers denote logical bits in the HF2LI complete DIO word, not connector pin numbers. The
+      P0 MIRcat DIO mapping side experiment identifies DB9 pins 1/2/3 as bits 20/21/22. The input edges
+      and parallel Sweep Active branch require route-transfer qualification in MS-02.1 and MD-01.
     inputs:
       DIO16: surelite_ndyag.fixed_sync_out
       DIO17: surelite_ndyag.variable_sync_out
@@ -592,9 +617,10 @@ breakouts:
       DIO14: dmb1_dmb2_dmb3.C5
       DIO15: dmb1_dmb2_dmb3.C6
     timing_inputs:
-      DIO0_EXT_REF: t660_2.CHA
-      DIO1_DAQ_TRIGGER: t660_2.CHC
-    analog_outputs:
+      DIO0_EXT_REF: t660_1.CHA
+      DIO1_DAQ_TRIGGER: null
+    mapping_evidence: campaigns/instrument_readiness_001/phases/P0/mircat_dio_mapping_side_experiment.md
+    inactive_analog_outputs_to_muxes:
       AUX1: amb1_amb2.C0
       AUX2: amb1_amb2.C1
       AUX3: amb1_amb2.C2
@@ -608,6 +634,10 @@ breakouts:
       signal: tuned_sweep_active
       direction: output
       destination: hf2li.DIO21
+      parallel_destination: picoscope.EXT
+      split_count: 2
+      input_loading: High-impedance inputs on both branches; no 50-ohm terminator.
+      signal_ground_pin: 7
     pin_3:
       signal: wavelength_trigger
       direction: output
@@ -615,7 +645,7 @@ breakouts:
     pin_4:
       signal: process_trigger
       direction: input
-      source: t660_1.CHC
+      source: t660_2.CHC
     pin_5:
       signal: reserved
       connection: DISCONNECTED
@@ -637,21 +667,10 @@ breakouts:
       signal: ground
       direction: bidirectional
       destination: ground_bus
-generated_warnings:
-- issue: MIRcat TRIG IN appears inconsistent.
-  spreadsheet_rows:
-  - T660-2 CHB -> MIRcat TRIG IN
-  - MIRcat TRIG IN <- T660-1 CHA
-  recommended_resolution: 'Use the confirmed architecture: T660-2 CHB -> MIRcat TRIG
-    IN.'
-- issue: HF2LI DIO 0 / ExtRef appears inconsistent.
-  spreadsheet_rows:
-  - T660-2 CHA -> HF2LI DIO 0
-  - HF2LI DIO 0 (Ext Ref) <- T660-2 CHC
-  recommended_resolution: 'Use the confirmed architecture: T660-2 CHA -> HF2LI DIO
-    0 / ExtRef.'
-- issue: Arduino D5 row appears inconsistent.
-  spreadsheet_rows:
-  - AMB2 EN <- Arduino D5
-  - Arduino D5 -> EN AMB1
-  recommended_resolution: Use Arduino D5 -> AMB2 EN.
+generated_warnings: []
+optional_acquisition_window:
+  destination: hf2li.DIO1
+  connected: false
+  candidate_source: t660_2.D
+  note: DIO1 has no source in default wiring. A frame-relative gate may use T660-2 D after an explicit
+    route assignment and qualification.

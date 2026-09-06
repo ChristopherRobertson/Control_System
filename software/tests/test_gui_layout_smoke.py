@@ -23,7 +23,7 @@ def test_eight_tab_gui_shell_instantiates_without_hardware():
         "Configured Workflows",
         "Phase Scan",
         "MIRcat",
-        "T660-2",
+        "T660-1",
         "Nd:YAG",
         "OPO Iris",
         "Plotter",

@@ -35,11 +35,11 @@ remain connected, with the MUX bypassed. MS-02.1 qualifies this installed branch
 network. Temporary timing/IRF wiring uses the sample IR detector on CHA and the
 pump detector on CHB, records any disconnected branch and changed loading, and
 restores both default detector split paths afterward.
-The normal Phase-Scan configuration retains those detector paths, leaves MIRcat
-Sweep Active on HF2LI DIO21, and connects T660-1 CHD directly to PicoScope EXT as
-the qualified process marker. It imports the MSW-01 CHD-to-Sweep-Active offset and
-uncertainty and the promoted QB-01/AR-01/E2E-CH optical-pulse coverage, retry, merge,
-provenance, and deficient-output rules.
+Normal Phase Scan retains those detector paths and observes MIRcat DB9 pin 2
+Sweep Active on HF2LI DIO21 and PicoScope EXT. It imports qualified branch and
+cross-recorder timing, the T660-2 finite train/frame schedule, synchronized pump
+records, and the QB-01/AR-01/E2E-CH single-pass signal-quality and coverage envelope.
+
 Chemical time zero is the independently observed sample-plane pump/probe relation.
 Each architecture requires its own IRF, native-coverage/missing-data validation,
 temperature/cryostat/beam envelope, recovery/reset rule, and accepted initial slow scan.
@@ -422,20 +422,26 @@ The current documented routing is the configuration to be verified, not silently
 
 | Source | Channel | Destination | Intended role |
 |---|---|---|---|
-| T660-2 | A | HF2LI DIO0 / external reference | Probe/reference clock marker |
-| T660-2 | B | MIRcat rear-panel `TRIG IN` | One externally triggered QCL optical pulse per accepted edge in External Trigger mode |
-| T660-2 | C | HF2LI DIO1 | DAQ/acquisition trigger marker |
-| T660-2 | D | T660-1 `TRIG IN` | Slow pump-sequence trigger |
-| T660-1 | A | Surelite `FIRE`, DB9 pin 7 | Flashlamp fire command |
-| T660-1 | B | Surelite Q-switch, DB9 pin 6 | External Q-switch command |
-| T660-1 | C | MIRcat process trigger, DB9 pin 4 | Active-low sweep/process step |
-| T660-1 | D | PicoScope EXT only in the qualified Phase-Scan configuration; disconnected otherwise | Dedicated active-low process marker with the same programmed leading-edge timing and polarity as CHC; disabled outside an armed capture |
+| T660-1 | A | HF2LI DIO0 / external reference | Probe/reference clock marker |
+| T660-1 | B | MIRcat rear-panel `TRIG IN` | One externally triggered QCL optical pulse per accepted edge in External Trigger mode |
+| T660-1 | C | T660-2 TRIG IN | Probe-derived event-frame clock |
+| T660-1 | D | Unwired | Disabled spare output |
+| T660-2 | A | Surelite `FIRE`, DB9 pin 7 | Flashlamp fire command |
+| T660-2 | B | Surelite Q-switch, DB9 pin 6 | External Q-switch command |
+| T660-2 | C | MIRcat process trigger, DB9 pin 4 | Active-low sweep/process step |
+| T660-2 | D | Unwired | Disabled spare output |
 
-MIRcat DB9 pin 5 remains reserved/disconnected and pins 6/8 remain unused/unwired. The Arduino multiplexer remains bypassed/disabled. The named Phase-Scan CHD-to-EXT route does not tee or remove Sweep Active from HF2LI DIO21. Any other change is a new configuration requiring the applicable calibration/characterization validity review.
+MIRcat DB9 pin 5 remains reserved/disconnected and pins 6/8 remain unused/unwired. The Arduino multiplexer remains bypassed/disabled. MIRcat DB9 pin 2 Sweep Active branches to HF2LI DIO21 and PicoScope EXT; DIO1 is unwired. T660-2 CLOCK OUT distributes the separate 10 MHz reference to T660-1 and HF2LI. Any other change is a new configuration requiring the applicable calibration/characterization validity review.
 
 ### 9.2 Master clock and repetition architecture
 
-The master reference, lock state, and frequency come from promoted CL-01/HF-01/MD-01 evidence. T660-2 supplies the fast probe/reference/DAQ sequence; its D output triggers T660-1 for the slow pump event. During Phase Scan, T660-1 CHD mirrors the programmed CHC process-command leading edge solely as the PicoScope EXT marker; the accepted MSW-01 offset locates observed Sweep Active. The effective pump rate is an integer division/pulse-picking relationship to the verified reference. Every acquisition records commanded and measured rates and missed/extra-trigger diagnostics.
+The frequency reference and lock state come from promoted CL-01/HF-01/MD-01
+evidence. T660-1 supplies the probe/reference train and clocks T660-2 TRIG IN
+from channel C. T660-2 uses independent per-frame channel settings and preloaded frames
+for FIRE, Q-switch, and Process Trigger. Scan onset is observed Sweep Active on
+DIO21/PicoScope EXT. Record pulse source, predivider, train/frame program,
+physical frame and logical scan counts, observed pump events, and all errors.
+Clock distribution from T660-2 CLOCK OUT is separate from the probe pulse train.
 
 T660 specifications provide 10 ps programmed resolution, nominal 21 ns insertion delay, and <35 ps typical jitter, but these are manufacturer constraints—not the installed end-to-end time solution. The installed timing correction and uncertainty come from promoted calibration. [M03]
 
@@ -445,7 +451,7 @@ Surelite Direct Access Triggering Mode 2 requires two negative-going TTL command
 
 Accordingly:
 
-- T660-1 A and B polarity/width/level/termination must meet the installed Surelite receiver at the DB9, verified electrically with the laser inhibited before optical use.
+- T660-2 A and B polarity/width/level/termination must meet the installed Surelite receiver at the DB9, verified electrically with the laser inhibited before optical use.
 - FIRE-to-Q delay is frozen by the ATT-01 preliminary search and PB-02 final locked-iris search, with OP-01/IR-01 supplying timing validity; the repository's nominal 179830 ns value is explicitly uncalibrated and is not authority. Supplemental PB-01 direct-355 measurement does not select or gate the delay.
 - OPO wavelength motion finishes and a wavelength/readback/power stability gate passes before pump arming. The OPO's internal calibration tables and GUI position do not replace wavelength verification. [M02]
 - Pump optical arrival is measured at the sample plane for the chosen wavelength/path; electrical FIRE/Q edges are retained as diagnostics.
@@ -460,16 +466,15 @@ MIRcat pulse width, trigger rate, current, wavelength, tuning dwell, and optical
 
 No final numeric delay, pulse width, or termination can be frozen before CL-01/MD-01/OP-01. The configuration table below is the required selection rule:
 
-| Channel | Polarity/receiver requirement | Width rule | Termination rule | Interaction rule |
-|---|---|---|---|---|
-| T660-2 A | Positive reference marker, exact HF2LI logic mapping verified in MD-01 | Long enough for reliable DIO edge capture; short enough not to overlap the next reference event | Choose 50 Ω source or low-Z only from measured receiver voltage and cable termination; never assume logic level | Must be phase-consistent with B and acquisition windows. |
-| T660-2 B | Positive rising edge to MIRcat `TRIG IN` in External Trigger mode | Meet MIRcat trigger minimum and T660 busy/rate constraints; optical width remains MIRcat-set | Verify delivered high/low at receiver and absence of double termination | Each accepted electrical edge creates one expected optical opportunity. Electrical trigger loss/duplication aborts; a downstream optical omission invokes the promoted dual-detector coverage policy. |
-| T660-2 C | Positive DAQ marker to HF2LI DIO1 | Meet DIO capture requirement | As measured in MD-01/HF-01 | Must precede/cover acquisition window without leaking into demodulated signal. |
-| T660-2 D | Trigger edge to T660-1 | Meet T660-1 trigger amplitude/slew and rate constraints | Verify at receiver | Must not retrigger while a T660-1 shot is busy; rate errors abort. |
-| T660-1 A | Negative-going Surelite FIRE command | 10 µs manufacturer nominal [M01] unless installed receiver verification requires a documented adjustment | Delivered 5-to-0 V logic must be verified; source/load pairing selected accordingly | FIRE-to-Q interval held at the promoted optical optimum; lamp rhythm preserved. |
-| T660-1 B | Negative-going Surelite external Q-switch | 10 µs manufacturer nominal [M01] unless verified otherwise | Same delivered-level rule | Q event must never occur without an accepted FIRE sequence and safe optical state. |
-| T660-1 C | Active-low MIRcat process trigger | 1–100 ms allowed; 10 ms nominal [M05] | Verify DB9 receiver level | Used only for an approved discrete step; cannot overlap unsafe tuning/emission transitions. |
-| T660-1 D | Active-low Phase-Scan marker; disabled for other configurations | Same programmed leading-edge timing and width as CHC | Use only the MS-02.1-qualified direct route to PicoScope EXT | It is a command marker, not Sweep Active or chemical time zero; an unarmed or unpaired edge is a fault. |
+| Channel | Required edge/width | Termination and level | Delay/interaction rule |
+|---|---|---|---|
+| T660-1 A → HF2LI DIO0 | Qualified positive reference pulse | Delivered logic and loading qualified in HF-01.1 | Phase coherent with B; probe rate selected independently of pump rate |
+| T660-1 B → MIRcat TRIG IN | Qualified positive pulse; optical width is MIRcat-set | Verify receiver high/low and source/load pairing | Reconcile expected and observed optical opportunities |
+| T660-1 C → T660-2 TRIG IN | Qualified pulse clock for event frames | Verify trigger level, polarity, slew, and termination | Record predivider and accepted trigger/frame counts; rate errors abort |
+| T660-2 A → Surelite FIRE | Negative 5-to-0 V command; 10 us manufacturer candidate | Qualify with laser inhibited | Per-channel train preserves accepted source cadence |
+| T660-2 B → Surelite Q-switch | Negative command; 10 us manufacturer candidate | Qualify installed receiver | Promoted FIRE-to-Q delay; channel OFF suppresses unrequested pump commands |
+| T660-2 C → MIRcat DB9 pin 4 | Active-low process command; width qualified in MD-01/MSW-01 | Qualify DB9 ground and delivered level | Program one transition for each scheduled scan; reconcile with Sweep Active |
+| T660-1 D and T660-2 D | Disabled and unwired | Safe idle | No automatic assignment to HF2LI DIO1 |
 
 T660 settings are first staged with all outputs disabled. Configuration readback, delivered waveforms, polarity, amplitude, and channel interactions are verified in a non-emitting state. Configuration changes may force end-of-delay and abort active shots, so changes occur only with triggering disabled and acquisition stopped. [M03]
 
@@ -483,7 +488,7 @@ Final PicoScope setup obeys these requirements:
 
 - enable only required channels and select the highest resolution that still samples the fastest required edge/IRF with sufficient bandwidth;
 - set each range so accepted waveforms do not clip while using meaningful ADC span;
-- trigger from the promoted architecture-specific edge—T660-1 CHD for Phase Scan—and record source, threshold, hysteresis, polarity, coupling, impedance, and delay;
+- trigger from the promoted architecture-specific edge—MIRcat DB9 pin 2 Sweep Active on PicoScope EXT for scan diagnostics—and record source, threshold, hysteresis, polarity, coupling, impedance, and delay;
 - pretrigger duration must include an artifact-free baseline longer than the promoted IRF/time-zero uncertainty; posttrigger duration must cover the required waveform/latency diagnostic;
 - sample interval must resolve the fastest rise/latency quantity used in the claim; record the API-returned actual interval, not only the request;
 - record length follows pretrigger + IRF support + normalization windows + safety margin and is checked against memory/rate constraints;
@@ -492,9 +497,9 @@ Final PicoScope setup obeys these requirements:
 
 The prior MS timing capture (8 bit, 10 V range, timebase 1, 100000 samples, 1000 pretrigger) is campaign-local evidence, not the biological setup.
 
-For Phase Scan, record CHA sample and CHB reference detector traces concurrently;
+During Phase Scan pulse-fidelity diagnostics, record CHA sample and CHB reference traces concurrently;
 CHB is the primary optical-pulse witness and CHA corroborates it. Expected
-opportunities come from configured and read-back T660-2 rate and a local consecutive-
+opportunities come from configured and read-back T660-1 rate and a local consecutive-
 edge grid with partial boundary opportunities excluded. A MIRcat optical omission
 requires absence from both channels; a one-channel observation is a detector/path
 discrepancy. Use local baseline-to-pulse thresholds with noise and saturation checks,
@@ -502,17 +507,21 @@ not fixed voltage thresholds from a different wavenumber, alignment, or trigger-
 test. Sample no slower than 48 ns/sample, with approximately 10--20 ns/sample
 preferred when memory and transfer constraints permit.
 
-The biological workflow imports the promoted configurable interval/whole-scan/
-consecutive-loss criteria and the maximum of three additional attempts per affected
-phase delay. Attempts merge only at aligned reconstruction bins using observed Sweep
-Active timing, wavelength markers, timestamps, and pulse-coverage weighting, with
-contributor provenance retained. Retry exhaustion produces
-`INCOMPLETE_MISSING_PULSE_COVERAGE`; deficient regions remain visibly absent and all
-derived outputs are diagnostic and not for publication.
+Finite Phase Scan preloads the bounded T660-2 frame table and uses channel OFF
+states for the unpumped baseline and terminal padding, with train count zero
+selecting no additional pulses. Frame cadence
+and recovery are specific to the selected method; 0.3 s is not a general MbCO
+setting. LabOne retains bounded Sweep-Active-triggered detector histories and a
+separate synchronized pump-event record. PicoScope diagnostics establish pulse
+fidelity and the operating envelope; they are not a mandatory per-scan retry
+recorder. Each nominal phase is acquired once per planned repetition. Preserve
+missing regions and incomplete disposition; no automatic retry, coverage merge,
+or programmatic etalon removal supplies scientific data. Native event IDs,
+readbacks, expected/observed counts, and calibrated trajectory are mandatory.
 
 ### 9.7 HF2LI configuration and dwell
 
-HF2LI device `dev18500` uses the documented sample path on signal input 1/demodulator 0 and reference path on signal input 2/demodulator 3, subject to HF-01 confirmation. DIO0 is the external reference and DIO1 the acquisition marker. Final oscillator/reference mapping, harmonic, phase, input coupling/range, 50 Ω setting, demodulator order/time constant, sample rate, and enabled data streams must come from promoted HF-01/HF-02/PF-01. [R06, M04]
+HF2LI device `dev18500` uses the documented sample path on signal input 1/demodulator 0 and reference path on signal input 2/demodulator 3, subject to HF-01 confirmation. DIO0 is the external reference; DIO21 observes Sweep Active for scan acquisition and DIO1 is unwired. Final oscillator/reference mapping, harmonic, phase, input coupling/range, 50 Ω setting, demodulator order/time constant, sample rate, and enabled data streams must come from promoted HF-01/HF-02/PF-01. [R06, M04]
 
 The HF2 manual distinguishes signal bandwidth from noise-equivalent power bandwidth (NEPBW). For filter orders 1–8,
 
@@ -567,9 +576,9 @@ With pump and probe contained or emission off:
 The allowed sequence is:
 
 1. Start/arm acquisition and monitoring with outputs disabled.
-2. Enable MIRcat emission gate and verify stable probe/reference response **before** starting T660 trigger pulses.
-3. Enable only the approved T660-2 probe/reference/DAQ sequence and verify one-to-one triggers, lock, no error, and stable detector levels.
-4. Enable the slow pump timing path with the pump physically blocked; verify FIRE/Q timing and accepted pulse division from electrical/diagnostic markers.
+2. Enable the MIRcat emission gate and verify its readback before starting the staged probe trigger train.
+3. Enable only the approved T660-1 probe/reference train and verify one-to-one triggers, lock, no error, and stable detector levels.
+4. With the pump physically blocked, verify the staged T660-2 per-channel FIRE/Q/process train/frame schedule and its accepted source cadence; arm the finite table only after acquisition readiness.
 5. Open/enable the final pump shutter or beam gate last, after operator confirmation. Begin with the lowest accepted dose and longest pulse separation.
 6. For every acquisition, write readbacks/conditions before or with raw data, monitor error/overload/trigger counts/power/temperature/reference, and interleave required controls/anchors.
 
@@ -868,15 +877,15 @@ Separate contaminated protein/reductant liquid, sharps/broken windows, solvent/c
 | Imported result | Source phase(s) | Used for | Required content/validity |
 |---|---|---|---|
 | Installed identities/topology/configuration | P0, S0, TR-01 | All device/sample records and wiring | Exact serial/device/cable/adapter/reference-detector identity; wiring unchanged or reviewed. |
-| Scope/cable/splitter and Phase-Scan trigger timing | MS-01, MS-02, MS-02.1, MSW-01 | Electrical timing uncertainty and CHD-triggered PicoScope alignment to observed Sweep Active | Corrected reference-plane offsets/uncertainty, qualified CHD-to-EXT route, CHD-to-Sweep-Active quantity and configuration ID; campaign-local values only after promotion. |
-| T660-2 route delays | T2-01 | Probe/reference/DAQ/pump-chain alignment | Per route corrected intercept/slope/uncertainty and valid configuration. |
-| T660-1 FIRE/Q timing | T1-01 | Surelite DAT2 timing | Trigger-to-FIRE/Q offsets, closure, adapter/cable IDs, uncertainty. |
+| Scope/cable/splitter and Phase-Scan trigger timing | MS-01, MS-02, MS-02.1, MSW-01 | Electrical timing uncertainty and Sweep-Active-triggered PicoScope alignment to observed Sweep Active | Corrected reference-plane offsets/uncertainty, qualified Sweep Active-to-EXT route, cross-recorder Sweep Active quantity and configuration ID; campaign-local values only after promotion. |
+| Retained electrical route delays | T2-01, T1-01; prospective MS-02.1/MD-01/FE-01/CL-01 closure | Current probe/reference/event-frame paths | Import only matching device/route/receiver configurations; qualify uncovered terms with uncertainty and stable IDs. |
+| T660-2 FIRE/Q timing | OP-01, FE-01, CL-01; compatible T1-01 inputs only | Surelite DAT2 and finite frame timing | Installed trigger-to-FIRE/Q offsets, train counts, optical closure, adapter/cable IDs, and uncertainty; preserved measurements retain their recorded identities. |
 | Power-meter readiness | OM-01 | Bounded meter operation and historical pre-iris mixed-output evidence | Meter identity, wavelength response, geometry, zero/range, validity; OM-01 mixed-spectrum indication is not used as post-iris 540 nm dose. |
 | Wavelength working reference | WM-01 | Independent 540 nm center-wavelength/status evidence | Coherent WaveMaster identity, cable/adapter/probe configuration, air-nanometre pulsed settings, native response states/time tags, repeatability, uncertainty, validity, 355 nm exclusion, and no spectral-power-fraction authority. |
 | Electronic iris/optical transfer/splitter | ATT-01, DET-04 | Halo rejection, final sample-plane pump power, and sample/reference normalization | Qualified iris USB/API control, permanent far-field mount, accepted 540 nm diameter/tolerance, residual-contamination and core-clipping bounds, measured ratios versus wavelength/configuration with uncertainty, and no 50/50 assumption. |
 | HF2LI configuration/streams | HF-01, HF-02 | Reference/demodulators/filter/sample rate/data fields | Exact node mapping, demods 0/3, DIO mapping, LabOne version, τ/order/rates/readbacks. |
-| MIRcat DIO/process mapping | MD-01 | TRIG IN/process/Trigger Out behavior and CHC/CHD/Sweep-Active semantics | One-to-one event behavior, active levels, widths, DIO20/21/22 mapping, Phase-Scan marker rules, no reserved-pin use. |
-| MIRcat sweep/settling and pulse coverage | MSW-01, HF-02, QB-01, AR-01, E2E-CH | Wavelength order/dwell, optical-pulse opportunity accounting, retry, and reconstruction | Direction-dependent tune latency/stability, CHD-to-Sweep-Active alignment, dual-detector omission envelope, validated coverage/retry/merge policy, provenance, and deficient-output behavior. |
+| MIRcat DIO/process mapping | MD-01 | TRIG IN/process/Trigger Out behavior and T660-2 C/frame/Sweep-Active semantics | One-to-one event behavior, active levels, widths, DIO20/21/22 mapping, Phase-Scan marker rules, no reserved-pin use. |
+| MIRcat sweep/settling and pulse coverage | MSW-01, HF-02, QB-01, AR-01, E2E-CH | Wavelength order/dwell, optical-pulse opportunity accounting, finite frames, and reconstruction | Direction-dependent tune latency/stability, cross-recorder Sweep Active alignment, dual-detector omission envelope, validated single-pass coverage policy, provenance, and deficient-output behavior. |
 | Detector dark/linearity/latency/normalization | DET-01–DET-04 | Ranges, noise, IRF, dual normalization | Exact sample/reference detector identities, gains/bandwidths, latency offset, linear envelope, covariance. |
 | Spectral references and axis | SP-01, SP-02, SV-01, SV-02 | 1933–1966 cm⁻¹ setpoints/uncertainty | Reference provenance, axis correction/uncertainty, verified usable range, resolution. |
 | Pump command-to-sample timing | OP-01 | Optical time zero | Permanent-iris 540 nm sample-plane arrival, reference plane, path/configuration uncertainty. |
@@ -965,11 +974,11 @@ calendar dates.
 ### Timing and acquisition
 
 - [ ] Fixed wiring/pin reservations match the recorded topology; Arduino multiplexer is bypassed.
-- [ ] Every T660 channel delay/width/polarity/termination is derived from promoted receiver/timing evidence; T660-1 D is armed only as the qualified Phase-Scan PicoScope marker and is off otherwise.
+- [ ] Every T660 channel delay/width/polarity/termination is derived from promoted receiver/timing evidence; both T660 D outputs remain disabled and unwired.
 - [ ] Surelite lamp repetition/thermal behavior and DAT2 FIRE/Q requirements are preserved.
 - [ ] MIRcat External Trigger mode and process trigger are verified; every accepted edge creates an accounted optical opportunity and trigger faults are distinguished from downstream dual-detector optical omissions.
 - [ ] PicoScope actual interval/range/trigger/pretrigger/record/capture sequence passes with no overflow.
-- [ ] Phase-Scan CHD-to-Sweep-Active qualification, dual-detector pulse classification, coverage/retry disposition, aligned-bin provenance, and incomplete-output labeling pass.
+- [ ] Phase-Scan cross-recorder Sweep Active qualification, dual-detector pulse classification, one-pass coverage disposition, aligned-bin provenance, and incomplete-output labeling pass.
 - [ ] HF2 sample/reference demodulators, reference lock, sample rate, τ/order/NEPBW, and 99% settling dwell pass.
 - [ ] Pump–probe sign convention, sample-plane zero, IRF, accessible range, and adaptive grid are documented.
 - [ ] Effective pump rate, complete recovery, cumulative-dose ceiling, sample refresh/replacement, and inter-scan anchors pass.

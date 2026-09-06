@@ -273,6 +273,10 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         for fn in [lambda: unit.set_trigger_source('OFF'), lambda: unit.command('STOP', expect_response=False), *[lambda c=c: unit.disable_channel(c) for c in 'ABCD']]:
             try: fn()
             except Exception as exc: failures.append(str(exc))
+        if unit.name == 't660_2':
+            for command in ('TFRame:STOp', *(f'TRAin:{stage}:CouNT 0' for stage in ('ACTive', 'NEXT', 'QUEue'))):
+                try: unit.command(command, expect_response=False)
+                except Exception as exc: failures.append(str(exc))
         if failures: raise RuntimeError('; '.join(failures))
 
     def verify_unit(unit, recipe, name):
@@ -368,7 +372,7 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
                 timing['max_samples'] < pico_settings['total_samples']):
             raise RuntimeError(f'PicoScope memory/timing mismatch: {timing}')
         write_json(out / 'picoscope_prepared.json', {'settings': pico_settings, 'timing': timing})
-        for name in ('t660_1', 't660_2'):
+        for name in ('t660_2', 't660_1'):
             check_cancel()
             unit = t660_factory(name, config_path=config_path, command_log=log)
             units[name] = unit
@@ -407,15 +411,15 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         if laser.set_wavelength_trigger_pulse_width_us(500) != 500: raise RuntimeError('Marker width mismatch')
         write_json(out / 'mircat_configured.json', {'trigger': trigger, 'qcl': verify_qcl(), 'limits': limits, 'range': coverage})
         pulse = {'enabled': True, 'delay': '0ns', 'width': f'{external_width:g}ns', 'polarity': 'positive', 'termination': '50OHM'}
-        probe_recipe = {'stop_first': True, 'trigger_source': 'SYN', 'frames_engine': 'OFF', 'gate_mode': 0, 'burst_enabled': False, 'clock': {'frequency': f'{external_rate:g}Hz'}, 'force_eod': True, 'channels': {'A': pulse, 'B': {**pulse, 'enabled': False}, 'C': {'enabled': False}, 'D': {'enabled': False}}}
-        units['t660_2'].apply_recipe(probe_recipe)
-        verify_unit(units['t660_2'], probe_recipe, 't660_2_reference_prepared.json')
-        units['t660_2'].command('START', expect_response=False)
-        timer_recipe = {'stop_first': True, 'trigger_source': 'REM', 'gate_mode': 0, 'burst_enabled': False, 'force_eod': True, 'channels': {'A': {'enabled': False}, 'B': {'enabled': False}, 'C': {'enabled': True, 'delay': '1ms', 'width': '10ms', 'polarity': 'negative', 'termination': '50OHM'}, 'D': {'enabled': False}}}
-        units['t660_1'].apply_recipe(timer_recipe)
-        verify_unit(units['t660_1'], timer_recipe, 't660_1_process_only.json')
+        probe_recipe = {'stop_first': True, 'trigger_source': 'SYN', 'predivider': 1, 'gate_mode': 0, 'burst_enabled': False, 'clock': {'frequency': f'{external_rate:g}Hz'}, 'force_eod': True, 'channels': {'A': pulse, 'B': {**pulse, 'enabled': False}, 'C': {'enabled': False}, 'D': {'enabled': False}}}
+        units['t660_1'].apply_recipe(probe_recipe)
+        verify_unit(units['t660_1'], probe_recipe, 't660_1_reference_prepared.json')
         units['t660_1'].command('START', expect_response=False)
-        record['shot_counter_before'] = units['t660_1'].get_shot_count()
+        timer_recipe = {'stop_first': True, 'trigger_source': 'REM', 'frames_engine': 'OFF', 'predivider': 1, 'gate_mode': 0, 'burst_enabled': False, 'force_eod': True, 'channels': {'A': {'enabled': False}, 'B': {'enabled': False}, 'C': {'enabled': True, 'delay': '1ms', 'width': '10ms', 'polarity': 'negative', 'termination': '50OHM'}, 'D': {'enabled': False}}}
+        units['t660_2'].apply_recipe(timer_recipe)
+        verify_unit(units['t660_2'], timer_recipe, 't660_2_process_only.json')
+        units['t660_2'].command('START', expect_response=False)
+        record['shot_counter_before'] = units['t660_2'].get_shot_count()
         hf = hf_factory(config_path=config_path, command_log=log)
         hf.connect()
         preset = air_scan_preset(external_rate)
@@ -504,9 +508,9 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         # then reject StartSweepScan while the sweep state re-establishes its TEC
         # setpoint. Require a fresh stable interval after leaving manual tune.
         wait_for_stable_tecs('after_manual_tune_cancel')
-        units['t660_2'].enable_channel('B')
+        units['t660_1'].enable_channel('B')
         probe_recipe['channels']['B']['enabled'] = True
-        verify_unit(units['t660_2'], probe_recipe, 't660_2_optical_trigger_prepared.json')
+        verify_unit(units['t660_1'], probe_recipe, 't660_1_optical_trigger_prepared.json')
         start_errors=[]
         def start():
             try: laser.start_sweep_scan(start_cm1=start_cm1, stop_cm1=stop_cm1, scan_rate_cm1_s=rate, qcl=qcl, repetitions=1)
@@ -544,8 +548,8 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
             check()
             if not laser.get_scan_waiting_process_trigger(): raise RuntimeError('MIRcat process wait lost')
             verify_external_trigger('before_process_trigger')
-            verify_unit(units['t660_1'], timer_recipe, 't660_1_before_process.json')
-            units['t660_1'].fire_remote_trigger()
+            verify_unit(units['t660_2'], timer_recipe, 't660_2_before_process.json')
+            units['t660_2'].fire_remote_trigger()
             fired.append(time.monotonic())
             record['process_trigger_utc'] = datetime.now(timezone.utc).isoformat()
             stage('PicoScope EXT armed; one process trigger sent, pump outputs disabled')
@@ -577,7 +581,7 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         record['qcl_after_transfer'] = verify_qcl()
         record['hf2li_input_status_after'] = read_input_status('after_transfer')
         record['reference_frequency_after_hz'] = hf.get_oscillator_frequency(0)
-        record['shot_counter_after'] = units['t660_1'].get_shot_count()
+        record['shot_counter_after'] = units['t660_2'].get_shot_count()
         if (record['shot_counter_after']-record['shot_counter_before'])%2**32 != 1: raise RuntimeError('Expected exactly one process event')
         if raw['overflow']: record['picoscope_overflow_warning']=raw['overflow']
         if raw['total_samples'] != pico_settings['total_samples']: raise RuntimeError('PicoScope partial transfer')

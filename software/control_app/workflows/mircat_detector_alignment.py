@@ -100,7 +100,7 @@ class MircatDetectorAlignmentWorkflow:
         existing_mircat_service: MircatService | None = None,
         existing_mircat_initialized: bool = False,
     ) -> dict[str, Any]:
-        """Configure MIRcat, open emission, then optionally start T660-2 timing."""
+        """Configure MIRcat, open emission, then optionally start T660-1 timing."""
 
         self._validate_request(request)
         self.uses_t660_timing = bool(request.use_t660_timing)

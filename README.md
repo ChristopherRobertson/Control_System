@@ -63,6 +63,11 @@ The [default wiring diagram](instrument/default_wiring_state.md) shows the
 detector split connections: each signal passes through a female-to-female BNC
 adapter and a male-to-two-female BNC tee. Sample feeds HF2LI Signal 1 In (+)
 and PicoScope CHA; reference feeds HF2LI Signal 2 In (+) and PicoScope CHB.
+T660-1 supplies the probe/reference train and clocks T660-2's event input.
+T660-2 executes FIRE, Q-switch, and MIRcat Process Trigger trains/frames and
+supplies the separate 10 MHz clock distribution. Sweep Active on MIRcat DB9
+pin 2 feeds HF2LI DIO21 and PicoScope EXT. Both T660 D outputs and HF2LI DIO1
+are unwired.
 
 The repository boundary and authority rules are in `docs/README.md`, and the
 shared acquisition/evidence rules are in `docs/phase_record_contract.md`.

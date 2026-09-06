@@ -7,6 +7,7 @@ import unittest
 import yaml
 
 from control_app.devices.t660_service import (
+    T660CommandError,
     T660ConfigurationError,
     T660Service,
 )
@@ -39,6 +40,24 @@ class _RecordingT660Service(T660Service):
 
 
 class T660PersistentStateTests(unittest.TestCase):
+    def test_clock_connector_readbacks_are_informational_and_never_switch_modes(self) -> None:
+        class ClockDevice(_RecordingT660Service):
+            def command(self, command, **kwargs):
+                result = super().command(command, **kwargs)
+                if command == "CLOCk:STATus?":
+                    raise T660CommandError("readback not available on this firmware")
+                return {"CLOCk:MODe?": "INP", "CLOCk:EXTernaL?": "1",
+                        "CLOCk:FREQuency?": "10000000"}.get(command, result)
+        device = ClockDevice(role="continuous_probe_reference_and_frame_trigger")
+        settings = device.read_active_settings()
+        self.assertEqual(settings["queries"]["clock_connector_mode"]["response"], "INP")
+        self.assertEqual(settings["queries"]["clock_external_frequency_hz"]["response"], "10000000")
+        self.assertFalse(settings["queries"]["clock_lock_status"]["ok"])
+        commands = [command for command, _ in device.commands]
+        self.assertTrue(all(command.endswith("?") for command in commands if command.startswith("CLOCk:")))
+        self.assertNotIn("TFRame:STATus?", commands)
+        self.assertNotIn("TRAin:ACTive:CouNT?", commands)
+
     def test_apply_recipe_uses_documented_persistent_state_commands(self) -> None:
         service = _RecordingT660Service()
         service.apply_recipe(
@@ -78,6 +97,12 @@ class T660PersistentStateTests(unittest.TestCase):
             [
                 "STOP",
                 "TFRame:STOp",
+                "TRAin:ACTive:CouNT 0",
+                "TRAin:ACTive:SPACe 8e-08s",
+                "TRAin:NEXT:CouNT 0",
+                "TRAin:NEXT:SPACe 8e-08s",
+                "TRAin:QUEue:CouNT 0",
+                "TRAin:QUEue:SPACe 8e-08s",
                 "TRIGger:EXTernal:PREDiv 0",
                 "GATE:MODe 0",
                 "BURst:MODe OFF",
@@ -198,6 +223,7 @@ class T660PersistentStateTests(unittest.TestCase):
                     "gate_mode": {"ok": True, "response": "0"},
                     "burst": {"ok": True, "response": "OFF"},
                     "frames_engine": {"ok": True, "response": "OFF"},
+                    "train_count": {"ok": True, "response": "0"},
                     "trigger_source": {"ok": True, "response": "REM"},
                     "trigger_input_polarity": {
                         "ok": True,
@@ -323,12 +349,12 @@ class T660PersistentStateTests(unittest.TestCase):
                     self.assertIs(channel_settings["enabled"], False)
                     self.assertEqual(channel_settings["timing_mode"], "delay_width")
                     self.assertEqual(channel_settings["delay"], "0ns")
-                    if unit == "t660_1" and channel == "C":
+                    if unit == "t660_2" and channel == "C":
                         self.assertEqual(channel_settings["width"], "10ms")
                         self.assertEqual(channel_settings["polarity"], "negative")
                     else:
                         self.assertEqual(channel_settings["width"], "150ns")
-                        self.assertEqual(channel_settings["polarity"], "positive")
+                        self.assertEqual(channel_settings["polarity"], "negative" if unit == "t660_2" and channel in "AB" else "positive")
                     self.assertEqual(channel_settings["termination"], "50OHM")
         self.assertEqual(resolved["t660_2"]["frames_engine"], "OFF")
         self.assertNotIn("frames_engine", resolved["t660_1"])

@@ -209,18 +209,39 @@ not from direct observation of every CO docking site.
 
 ### 5.1 Timing and source roles
 
-- The Nd:YAG/OPO pump can emit at no more than 10 Hz. The effective pump rate
-  delivered to the sample may need to be much lower and must be determined from
-  recovery and damage tests.
-- The MIRcat probe frequency is independent of the 10 Hz pump limit. Its pulse
-  width and repetition rate may be combined only within the manufacturer's
-  duty-cycle limit and the narrower installed-system stability, detector,
-  synchronization, and heating envelope established by characterization.
-- The T660 timing system defines commanded relationships, but optical
-  pump–probe delay is obtained only after the electrical-to-optical timing chain
-  is calibrated.
-- MIRcat `Tuned/Sweep Active`, scan-direction, wavelength-trigger, actual
-  wavenumber, module, and emission/status records are retained whenever relevant.
+T660-1 supplies the probe/reference pulse train: channel A feeds HF2LI DIO0,
+channel B feeds MIRcat TRIG IN, and channel C feeds T660-2 TRIG IN. T660-2
+uses its train/frame engine for the event schedule: channel A drives Surelite
+FIRE, B drives Q-switch, and C drives MIRcat DB9 pin 4 Process Trigger. Both
+channel-D outputs are disabled and unwired; HF2LI DIO1 is unwired. MIRcat DB9
+pin 2 Sweep Active feeds HF2LI DIO21 and PicoScope EXT through the qualified
+high-impedance branch; pin 1 direction feeds DIO20 and pin 3 wavelength markers
+feed DIO22. Connector pin numbers and captured DIO bit indices are distinct.
+T660-2 CLOCK OUT supplies the 10 MHz clock distribution to T660-1 CLOCK IN and
+HF2LI CLOCK IN. This frequency-reference distribution is separate from the
+T660-1 probe pulse train.
+
+A finite run preloads the complete bounded T660-2 frame table while outputs
+are disabled. Per-frame channel OFF states suppress unrequested outputs,
+including pump outputs in unpumped baselines; terminal padding has all outputs
+OFF. Train count zero disables additional pulses, not the first pulse of an
+enabled channel. Train count and spacing are shared by enabled channels within
+each frame. The frame predivider, frame repetition, train count/spacing,
+channel enables/delays/widths/polarities, terminal padding, and physical frame
+count are recorded and checked against readback before arming. Acquisition
+is ready before the event sequence starts; software polling does not schedule
+pump/probe/scan edges. Frames and train counts schedule electrical commands;
+independent optical observation establishes emitted pump counts and sample time
+zero. Each experiment freezes its own cadence, recovery interval, and data budget;
+the Phase Scan 0.3 s frame period is not a default for other experiment types.
+
+The Nd:YAG/OPO pump cannot exceed 10 Hz. Sample exposure may be much rarer and
+must satisfy measured recovery and damage limits. Probe rate is independent of
+this pump limit and remains inside the manufacturer's duty-cycle bound and the
+measured source, detector, lock, heating, and acquisition envelope. Each design
+specifies what every frame and channel output must do, including probe-only
+baseline, pumped event, recovery, scan burst, and terminal behavior. A frame grid
+or small delay increment does not establish optical temporal resolution.
 
 ### 5.2 HF2LI and PicoScope roles
 
@@ -248,22 +269,22 @@ Two explicitly qualified wiring configurations are required:
    paths differ, reference-path latency and response must be measured separately
    when they enter the normalization or timing model.
 
-The adapter/tee topology is the operator-reported default as of 2026-08-31;
-its documentation is not evidence of qualified electrical transfer. MS-02.1
-qualifies the installed branches without rewriting completed MS-01/MS-02 or
-HF-01 records. Temporary timing/IRF work records any disconnected detector
-branch and changed loading, then restores both default split paths.
+MS-02.1 qualifies the installed adapter/tee/receiver transfer and the direct
+Sweep Active branch to PicoScope EXT. Temporary timing/IRF work records changed
+receiver loading and restores both detector split paths. The EXT branch uses
+MIRcat DB9 pin 7 as ground and a qualified high-impedance receiver; cable
+characteristic impedance does not authorize a 50 ohm load on the DB9 signal.
 
-The PicoScope external-trigger source, polarity, threshold, impedance, and
-latency must be selected and qualified. An electrical trigger may aid stable
-capture, but the optically observed pump remains the chemical time-zero
-authority. Using a presently unused T660 output would constitute a topology
-change and requires the corresponding wiring, timing, and safe-idle updates; it
-is not assumed here.
+Sweep captures use the observed rising Sweep Active edge on PicoScope EXT and
+HF2LI DIO21. MS-02.1, MD-01, MSW-01, and HF-02 establish branch latency,
+thresholds, event semantics, scan timing, and the cross-recorder bridge. An
+electrical process command does not replace observed scan onset or optical
+pump arrival. Other experiment types declare their observed acquisition event
+and readout window explicitly; no workflow assumes a connected DIO1 gate.
 
 ### 5.3 MIRcat process trigger and readiness
 
-The legacy MIRcat manual excerpt describes an active-low external-process pulse
+The MIRcat manual excerpt describes an active-low external-process pulse
 of 250–500 ms. Later manufacturer correspondence specific to this installation
 states that approximately 1–100 ms is sufficient. These values describe command
 widths, not wavelength-settling times. The installed acceptable pulse-width

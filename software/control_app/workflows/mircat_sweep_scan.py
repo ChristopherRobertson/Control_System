@@ -213,7 +213,7 @@ def run_sweep_scan(*, request: dict, run_dir: str | Path, command_log=None) -> d
             raise MircatSweepScanError(
                 "HF2LI external reference is not locked to the required 2 MHz clock "
                 f"(Oscillator 1 reads {reference_hz:.6g} Hz; expected {expected_reference_hz:.6g} Hz). "
-                "Verify T660-2 trigger source is SYN, CHA is enabled, and the CHA cable reaches HF2LI DIO0."
+                "Verify T660-1 trigger source is SYN, CHA is enabled, and the CHA cable reaches HF2LI DIO0."
             )
         mircat.initialize()
         mircat.arm()

@@ -16,6 +16,10 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 22. OP-01 — operational pump-command-to-sample timing
 
+The electrical pump-command plane is T660-2 CHB at the Q-switch-command route.
+Record T660-1 event-clock and T660-2 frame/train settings, with direct Sweep Active
+observation where scans are used. Both D outputs and DIO1 remain unwired.
+
 At a nonbiological sample-equivalent plane, independently observe both the
 permanent-iris 540 nm pump arrival and MIRcat probe arrival for every retained probe
 mode/region. Capture and report them under separate room-temperature/77 K HRP-C-CO

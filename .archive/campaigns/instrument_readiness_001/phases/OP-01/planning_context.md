@@ -1,13 +1,17 @@
 # OP-01 planning context
 
-This prospective summary supplements the canonical `plan.md`. All numeric
-settings and validity decisions require the phase evidence and review.
+This file preserves the phase-specific row or rows from the pre-migration
+cross-phase planning matrices. The canonical phase plan is `plan.md`; this
+context is retained so no planning detail is lost during the phase-primary
+restructure.
 
-| Field | Planned value |
+## Source: calibration measurement matrix
+
+| Field | Preserved value |
 | --- | --- |
 | `calibration_id` | OP01 |
 | `measured_quantity` | pump-command-to-sample timing for the shared retained biological optical path under separate acquisition configurations |
-| `physical_reference_plane` | T660-2 CHB command plane |
+| `physical_reference_plane` | T660-1 CHB command plane |
 | `target_reference_plane` | sample-equivalent optical plane |
 | `measurement_method` | electrical monitor plus optical detector capture |
 | `required_equipment` | T660s Pico splitter adapter detector NdYAG OPO and static qualified electronic iris for OPO-540 |

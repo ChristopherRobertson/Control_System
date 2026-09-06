@@ -50,9 +50,9 @@ class ExperimentBuilderTests(unittest.TestCase):
 
     def test_trigger_wiring_duty_cycle_and_prohibited_routes(self):
         document = _document()
-        document["devices"] = [item for item in document["devices"] if item["device"] != "t660_2"]
-        document["required_devices"].remove("t660_2")
-        document["resource_ownership"].pop("t660_2")
+        document["devices"] = [item for item in document["devices"] if item["device"] != "t660_1"]
+        document["required_devices"].remove("t660_1")
+        document["resource_ownership"].pop("t660_1")
         document["metadata"]["routes"] = ["mircat.db9_pin_8"]
         next(item for item in document["devices"] if item["device"] == "mircat")["capabilities"]["pulse_width_ns"] = 1000.0
         codes = {error.code for error in validate_experiment(ExperimentDefinition.from_dict(document))}
@@ -63,6 +63,22 @@ class ExperimentBuilderTests(unittest.TestCase):
         next(item for item in document["devices"] if item["device"] == "mircat")["capabilities"]["process_trigger_mode"] = "external"
         errors = validate_experiment(ExperimentDefinition.from_dict(document))
         self.assertTrue(any(error.code == "unconfirmed_process_trigger" for error in errors))
+
+    def test_pump_requires_its_upstream_trigger_and_both_spares_are_prohibited(self):
+        document = _document()
+        document["required_devices"].append("t660_2")
+        document["resource_ownership"]["t660_2"] = "experiment_engine"
+        document["devices"].append({"device": "t660_2", "capabilities": {"channel_a_ndyag_fire": True}})
+        errors = validate_experiment(ExperimentDefinition.from_dict(document))
+        self.assertTrue(any(error.code == "trigger_route" for error in errors))
+        source = next(item for item in document["devices"] if item["device"] == "t660_1")
+        source["capabilities"]["channel_c_t660_2_trigger"] = True
+        errors = validate_experiment(ExperimentDefinition.from_dict(document))
+        self.assertFalse(any(error.code == "trigger_route" for error in errors))
+        for unit in ("t660_1", "t660_2"):
+            document["metadata"]["routes"] = [f"{unit}.channel_d"]
+            errors = validate_experiment(ExperimentDefinition.from_dict(document))
+            self.assertTrue(any(error.code == "prohibited_route" for error in errors))
 
     def test_generic_engine_run_stop_abort_and_failure_cleanup(self):
         builder = ExperimentBuilder()

@@ -65,7 +65,7 @@ def main() -> int:
     assert fields["wavenumber_cm1"].default == 1850.0
     assert fields["pulse_rate_hz"].default == 2_000_000.0
     assert fields["pulse_width_ns"].default == 150.0
-    assert fields["current_ma"].default == 1000.0
+    assert fields["current_ma"].default == 750.0
     assert fields["use_t660_timing"].default is False
 
     handler = MircatWidgetCommandHandler(operator="test")
@@ -120,7 +120,7 @@ def main() -> int:
     assert preset["pll"]["adcselect"] == 4
     assert preset["pll"]["freqcenter_hz"] == 2_000_000.0
     assert "daq_trigger" not in preset
-    assert preset["labone_plotter"]["trigger"]["source"] == "DIO1"
+    assert preset["labone_plotter"]["trigger"]["source"] is None
     assert preset["labone_plotter"]["trigger"]["demodulator_trigger_value"] == 0
     assert "continuous demodulator stream" in preset["labone_plotter"]["trigger"]["trigger_name"]
     assert {item["index"] for item in preset["demodulators"]} == {0, 3}
@@ -137,9 +137,10 @@ def main() -> int:
     assert pulse_setup["current_ma"] == 1000.0
     assert pulse_setup["pulse_rate_hz"] == 2_000_000
     assert timing_recipe["hf2li_setup"]["plotter_trigger"]["demodulator_trigger_value"] == 0
-    trigger_signal = timing_recipe["t660"]["t660_2"]["signals"]["hf2li_daq_trigger"]
-    assert trigger_signal["enabled"] is True
-    assert "Plotter UI trigger" in trigger_signal["role"]
+    assert timing_recipe["hf2li_setup"]["plotter_trigger"]["input"] is None
+    for unit, settings in timing_recipe["t660"].items():
+        for channel, output in settings["channels"].items():
+            assert output["enabled"] is (unit == "t660_1" and channel in "AB")
 
     print("PASS detector-alignment UI defaults and preset metadata are valid")
     return 0

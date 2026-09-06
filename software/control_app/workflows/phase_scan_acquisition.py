@@ -230,6 +230,12 @@ class LivePhaseScanAcquirer:
                 operation()
             except Exception as exc:
                 errors.append(str(exc))
+        if unit.name == "t660_2":
+            for command in ("TFRame:STOp", *(f"TRAin:{stage}:CouNT 0" for stage in ("ACTive", "NEXT", "QUEue"))):
+                try:
+                    unit.command(command, expect_response=False)
+                except Exception as exc:
+                    errors.append(str(exc))
         if errors:
             raise RuntimeError("; ".join(errors))
 

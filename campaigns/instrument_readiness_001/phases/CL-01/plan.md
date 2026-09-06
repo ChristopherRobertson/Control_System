@@ -26,7 +26,10 @@ CH-00.1 architecture configuration across both normal dual-detector and temporar
 timing/IRF topologies. Distinguish slow scan, wavelength-by-wavelength, repeated rapid
 scan, nanosecond and microsecond fixed-wavelength, single-scan phase-delay, and
 single-pump scan-burst histories wherever their correction terms differ.
-Use existing completed electrical sweeps; do not reacquire them. Include the
+Import completed electrical sweeps only where their recorded device, route, receiver,
+and settings match the present reference-plane graph. Qualify uncovered installed
+route/frame interactions in the prospective MS-02.1, MD-01, FE-01, and closure work;
+do not rewrite or repeat completed phases. Include the
 FE-01 observed-event clock bridge over both the longest planned HRP recovery
 record and the retained MbCO record.
 The OPO-540 chain is valid only for the ATT-01 iris configuration imported by

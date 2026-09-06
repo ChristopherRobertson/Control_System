@@ -49,7 +49,7 @@ REQUIRED_WORKFLOW_COMMANDS = (
     "acquire_scan",
     "abort_to_safe",
 )
-WORKFLOW_DEVICE_KEYS = ("mircat", "t660", "t660_2", "picoscope", "hf2li")
+WORKFLOW_DEVICE_KEYS = ("mircat", "t660", "t660_1", "picoscope", "hf2li")
 DEVICE_COMMAND_KEYS = WORKFLOW_DEVICE_KEYS + ("ndyag", "opo_iris")
 IRIS_MOTION_COMPATIBLE_ACTIVE_WORKFLOWS = frozenset({"ndyag_alignment_10hz"})
 INITIAL_STATE = "SAFE_IDLE"
@@ -511,7 +511,7 @@ class WorkflowStateMachine:
             if self._mircat_handler is None:
                 self._mircat_handler = MircatWidgetCommandHandler(operator=self.operator)
             result = self._mircat_handler(command)
-        elif command.device_key == "t660_2":
+        elif command.device_key == "t660_1":
             if self._t660_handler is None:
                 self._t660_handler = T660WidgetCommandHandler(
                     operator=self.operator,

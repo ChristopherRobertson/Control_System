@@ -16,7 +16,7 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### AR-01 — joint scan-speed/HF2LI acquisition optimization and optical validation
 
-The 2026-08-26 reconstruction expands this phase. Freeze a deterministic candidate
+Freeze a deterministic candidate
 rule before optical results and use a stable nonbiological target that is not Mylar.
 Jointly select scan speed within the accepted installed-source envelope, window,
 direction, HF2LI time constant,
@@ -30,18 +30,15 @@ model-derived and checked against HF-01. Enforce rate/bandwidth constraints. Sel
 one bounded speed envelope or named slow/high-resolution, normal analytical, and
 rapid/stroboscopic modes; do not optimize noise at the expense of required features.
 
-For single-scan and repeated rapid-scan Phase-Scan configurations, jointly evaluate
-PicoScope sample interval/record length, local pulse-threshold behavior, reconstruction-
-interval width, phase density, and bounded retry cost against the QB-01 omission
-envelope and measured reconstruction bias. The configurable candidate policy starts
-with a repeat at two consecutive dual-channel omissions, any interval below 90%
-coverage, or a whole-scan missing fraction above 5%, with at most three additional
-attempts per affected phase delay. Coverage equal to 90% passes. At the illustrative
-2 MHz and 5 us candidate settings, ten opportunities occupy one interval, so one
-omission passes and two fail. Test the combined criteria rather than treating
-consecutive loss as the sole gate, and retain all tested alternatives and rejection
-reasons. No candidate becomes final until the measured source, timing, detector,
-throughput, and reconstruction envelope supports it.
+For finite single-scan and repeated rapid-scan configurations, jointly evaluate
+frame cadence, channel enables/delays and shared train count/spacing, scan-window padding, phase density,
+resident history capacity, record duration, and data volume against measured source
+fidelity and reconstruction bias. Use qualified paired-detector scope diagnostics
+to establish pulse fidelity and optical-omission limits. Select one-pass coverage
+and deficient-output criteria before the validation data are examined; no automatic
+retry/merge supplies missing scientific regions. Preserve all candidate settings,
+readbacks, rejection reasons, and independent repetitions. A cadence, rate, or
+capture window from one experiment is not a default for another.
 
 Using an optically stable nonbiological signal and the qualified HF2LI setup,
 validate each of the five reconstruction methods across the normal dual-detector and
@@ -69,9 +66,10 @@ Mandatory deliverables:
 - Imported-versus-observed response residuals, scan-direction shift/broadening,
   minimum justified dwell, filtering/averaging rules, covariance behavior,
   uncertainty, and any predeclared bracket-escalation decision.
-- Phase-Scan pulse-coverage and retry candidate table, reconstruction-bias and
-  throughput tradeoff, accepted local-threshold and capture envelope, and explicit
-  rules for combined-attempt completion and retry exhaustion.
+- Phase-Scan frame/train and one-pass coverage candidate table, reconstruction
+  bias and throughput/storage tradeoff, resident-capacity and capture envelope,
+  and explicit incomplete-record and deficient-region disposition.
+
 - Separate frozen configuration IDs for every retained architecture linked to
   their permitted scan/record envelopes, including filter transfer, effective
   noise bandwidth, settling, temporal attenuation/bias, and any explicit

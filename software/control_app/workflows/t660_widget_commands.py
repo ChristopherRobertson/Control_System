@@ -1,4 +1,4 @@
-"""Workflow command handler for the T660-2 desktop widget."""
+"""Workflow command handler for the T660-1 desktop widget."""
 
 from __future__ import annotations
 
@@ -13,14 +13,14 @@ from control_app.ui.contracts import WorkflowCommand, WorkflowResult
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
 
 
-T6602_UI_RATE = "2MHz"
-T6602_UI_WIDTH = "150ns"
-T6602_UI_CHA_DELAY = 0
-T6602_UI_CHB_DELAY = "5ms"
+T6601_UI_RATE = "2MHz"
+T6601_UI_WIDTH = "150ns"
+T6601_UI_CHA_DELAY = 0
+T6601_UI_CHB_DELAY = "5ms"
 
 
 class T660WidgetCommandHandler:
-    """Stateful command handler for fixed-purpose T660-2 controls."""
+    """Stateful command handler for fixed-purpose T660-1 controls."""
 
     def __init__(
         self,
@@ -33,9 +33,9 @@ class T660WidgetCommandHandler:
         self.config_path = Path(self.inventory.config_path)
 
     def __call__(self, command: WorkflowCommand) -> WorkflowResult:
-        """Handle one T660-2 widget command."""
+        """Handle one T660-1 widget command."""
 
-        if command.device_key != "t660_2":
+        if command.device_key != "t660_1":
             return WorkflowResult(status="blocked", message=f"Unsupported device {command.device_key}")
         log_path = self._command_log_path()
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,21 +55,21 @@ class T660WidgetCommandHandler:
 
     def _handle(self, command: WorkflowCommand, command_log: TextIO) -> WorkflowResult:
         name = command.command
-        if name == "t660_2.refresh_status":
-            readback = self._read_t6602(command_log)
+        if name == "t660_1.refresh_status":
+            readback = self._read_t6601(command_log)
             return self._complete(
-                "T660-2 status refreshed",
+                "T660-1 status refreshed",
                 command_log,
                 readback=readback,
             )
-        if name == "t660_2.safe_idle":
+        if name == "t660_1.safe_idle":
             readback = self._apply_recipe(
                 command_log,
                 RECIPE_ROOT / "safe_idle.yaml",
                 "safe_idle_readback.json",
             )
             return self._complete("T660 safe idle applied", command_log, readback=readback)
-        if name == "t660_2.apply_manual_cha":
+        if name == "t660_1.apply_manual_cha":
             source = str(command.parameters.get("trigger_source", "SYN")).strip().upper()
             if source != "SYN":
                 return WorkflowResult(
@@ -87,51 +87,51 @@ class T660WidgetCommandHandler:
             readback = self._apply_recipe(
                 command_log,
                 _manual_cha_recipe(frequency=frequency, delay=delay, width=width),
-                "t6602_manual_cha_readback.json",
+                "t6601_manual_cha_readback.json",
             )
             return self._complete(
-                f"T660-2 CHA started: SYN, {frequency}, delay {delay}, width {width}; all other outputs are off",
+                f"T660-1 CHA started: SYN, {frequency}, delay {delay}, width {width}; all other outputs are off",
                 command_log,
                 readback=readback,
             )
-        if name == "t660_2.start_cha":
+        if name == "t660_1.start_cha":
             readback = self._apply_recipe(
                 command_log,
                 _fixed_recipe(enable_cha=True, enable_chb=False),
-                "t6602_cha_2mhz_150ns_readback.json",
+                "t6601_cha_2mhz_150ns_readback.json",
             )
-            return self._complete("T660-2 CHA started at 2 MHz / 150 ns", command_log, readback=readback)
-        if name == "t660_2.start_chb":
+            return self._complete("T660-1 CHA started at 2 MHz / 150 ns", command_log, readback=readback)
+        if name == "t660_1.start_chb":
             if not command.safety_approval:
                 return WorkflowResult(
                     status="blocked",
-                    message="Safety approval is required before enabling T660-2 CHB to MIRcat TRIG IN.",
-                    data={"state": self._state_from_readback(self._read_t6602(command_log))},
+                    message="Safety approval is required before enabling T660-1 CHB to MIRcat TRIG IN.",
+                    data={"state": self._state_from_readback(self._read_t6601(command_log))},
                 )
             readback = self._apply_recipe(
                 command_log,
                 _fixed_recipe(enable_cha=False, enable_chb=True),
-                "t6602_chb_2mhz_150ns_delay_5ms_readback.json",
+                "t6601_chb_2mhz_150ns_delay_5ms_readback.json",
             )
             return self._complete(
-                "T660-2 CHB started at 2 MHz / 150 ns with 5 ms delay",
+                "T660-1 CHB started at 2 MHz / 150 ns with 5 ms delay",
                 command_log,
                 readback=readback,
             )
-        if name == "t660_2.start_cha_chb":
+        if name == "t660_1.start_cha_chb":
             if not command.safety_approval:
                 return WorkflowResult(
                     status="blocked",
-                    message="Safety approval is required before enabling T660-2 CHB to MIRcat TRIG IN.",
-                    data={"state": self._state_from_readback(self._read_t6602(command_log))},
+                    message="Safety approval is required before enabling T660-1 CHB to MIRcat TRIG IN.",
+                    data={"state": self._state_from_readback(self._read_t6601(command_log))},
                 )
             readback = self._apply_recipe(
                 command_log,
                 _fixed_recipe(enable_cha=True, enable_chb=True),
-                "t6602_cha_chb_2mhz_150ns_delay_5ms_readback.json",
+                "t6601_cha_chb_2mhz_150ns_delay_5ms_readback.json",
             )
             return self._complete(
-                "T660-2 CHA and CHB started; CHB delay set to 5 ms",
+                "T660-1 CHA and CHB started; CHB delay set to 5 ms",
                 command_log,
                 readback=readback,
             )
@@ -147,9 +147,9 @@ class T660WidgetCommandHandler:
         output_path = self._run_dir() / output_name
         return manager.apply_recipe(recipe, output_path=output_path)
 
-    def _read_t6602(self, command_log: TextIO) -> dict[str, Any]:
+    def _read_t6601(self, command_log: TextIO) -> dict[str, Any]:
         service = T660Service.from_config(
-            "t660_2",
+            "t660_1",
             config_path=self.config_path,
             command_log=command_log,
         )
@@ -157,8 +157,8 @@ class T660WidgetCommandHandler:
             service.connect()
             service.identify()
             return {
-                "recipe_name": "t660_2_direct_readback",
-                "devices": {"t660_2": service.read_active_settings()},
+                "recipe_name": "t660_1_direct_readback",
+                "devices": {"t660_1": service.read_active_settings()},
                 "matches_recipe": None,
                 "mismatches": [],
             }
@@ -184,7 +184,7 @@ class T660WidgetCommandHandler:
         )
 
     def _state_from_readback(self, readback: dict[str, Any]) -> dict[str, Any]:
-        device = (readback.get("devices") or {}).get("t660_2", {})
+        device = (readback.get("devices") or {}).get("t660_1", {})
         queries = device.get("queries") or {}
         channels = device.get("channels") or {}
         state: dict[str, Any] = {
@@ -192,6 +192,10 @@ class T660WidgetCommandHandler:
             "identity": _response(queries.get("identity")),
             "trigger_source": _response(queries.get("trigger_source")),
             "synth_frequency": _response(queries.get("synth_frequency")),
+            "clock_connector_mode": _response(queries.get("clock_connector_mode")),
+            "clock_external_lock_enabled": _response(queries.get("clock_external_lock_enabled")),
+            "clock_external_frequency_hz": _response(queries.get("clock_external_frequency_hz")),
+            "clock_lock_status": _response(queries.get("clock_lock_status")),
             "shots": _response(queries.get("shots")),
             "matches_recipe": readback.get("matches_recipe"),
             "last_error": _readback_errors(readback),
@@ -207,7 +211,7 @@ class T660WidgetCommandHandler:
         return state
 
     def _run_dir(self) -> Path:
-        path = output_run_root() / f"{datetime.now().strftime('%Y%m%d')}_t6602_ui"
+        path = output_run_root() / f"{datetime.now().strftime('%Y%m%d')}_t6601_ui"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -217,47 +221,54 @@ class T660WidgetCommandHandler:
 
 def _fixed_recipe(*, enable_cha: bool, enable_chb: bool) -> dict[str, Any]:
     return {
-        "name": "t6602_ui_fixed_2mhz_150ns",
-        "description": "Fixed T660-2 UI recipe: 2 MHz / 150 ns on CHA and/or CHB.",
+        "name": "t6601_ui_fixed_2mhz_150ns",
+        "description": "Fixed T660-1 UI recipe: 2 MHz / 150 ns on CHA and/or CHB.",
         "approved_laser_safety_condition": enable_chb,
         "t660": {
-            "t660_1": {
+            "t660_2": {
                 "stop_first": True,
+                "frames_engine": "OFF",
+                "predivider": 1,
+                "gate_mode": 0,
+                "burst_enabled": False,
                 "trigger_source": "OFF",
                 "force_eod": True,
                 "channels": {
-                    "A": {"enabled": False},
-                    "B": {"enabled": False},
-                    "C": {"enabled": False},
+                    "A": {"enabled": False, "polarity": "negative"},
+                    "B": {"enabled": False, "polarity": "negative"},
+                    "C": {"enabled": False, "polarity": "negative"},
                     "D": {"enabled": False},
                 },
             },
-            "t660_2": {
+            "t660_1": {
                 "stop_first": True,
+                "predivider": 1,
+                "gate_mode": 0,
+                "burst_enabled": False,
                 "clock": {
-                    "frequency": T6602_UI_RATE,
+                    "frequency": T6601_UI_RATE,
                     "shots": 0,
                 },
                 "trigger_source": "SYN",
                 "force_eod": True,
                 "start": True,
+                "channels": {"D": {"enabled": False}},
                 "signals": {
                     "hf2li_extref": {
-                        "delay": T6602_UI_CHA_DELAY,
-                        "width": T6602_UI_WIDTH,
+                        "delay": T6601_UI_CHA_DELAY,
+                        "width": T6601_UI_WIDTH,
                         "polarity": "positive",
                         "termination": "50OHM",
                         "enabled": enable_cha,
                     },
                     "mircat_trig_in": {
-                        "delay": T6602_UI_CHB_DELAY,
-                        "width": T6602_UI_WIDTH,
+                        "delay": T6601_UI_CHB_DELAY,
+                        "width": T6601_UI_WIDTH,
                         "polarity": "positive",
                         "termination": "50OHM",
                         "enabled": enable_chb,
                     },
-                    "hf2li_daq_trigger": {"enabled": False},
-                    "t660_1_trig_in": {"enabled": False},
+                    "t660_2_trig_in": {"enabled": False},
                 },
             },
         },
@@ -265,14 +276,14 @@ def _fixed_recipe(*, enable_cha: bool, enable_chb: bool) -> dict[str, Any]:
 
 
 def _manual_cha_recipe(*, frequency: str, delay: str, width: str) -> dict[str, Any]:
-    """Laser-safe manual reference recipe: only T660-2 CHA may be active."""
+    """Laser-safe manual reference recipe: only T660-1 CHA may be active."""
 
     recipe = _fixed_recipe(enable_cha=True, enable_chb=False)
-    t660_2 = recipe["t660"]["t660_2"]
-    t660_2["clock"]["frequency"] = frequency
-    t660_2["signals"]["hf2li_extref"]["delay"] = delay
-    t660_2["signals"]["hf2li_extref"]["width"] = width
-    recipe["name"] = "t6602_ui_manual_cha_reference"
+    t660_1 = recipe["t660"]["t660_1"]
+    t660_1["clock"]["frequency"] = frequency
+    t660_1["signals"]["hf2li_extref"]["delay"] = delay
+    t660_1["signals"]["hf2li_extref"]["width"] = width
+    recipe["name"] = "t6601_ui_manual_cha_reference"
     recipe["description"] = "Manual, CHA-only reference diagnostic; all laser-driving channels are disabled."
     return recipe
 

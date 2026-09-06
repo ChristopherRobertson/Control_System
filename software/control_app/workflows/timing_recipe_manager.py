@@ -89,16 +89,48 @@ class TimingRecipeManager:
                     deepcopy(self.inventory.t660_devices[unit]),
                     command_log=self.command_log,
                 )
+                services[unit] = service
                 service.connect()
                 service.identify()
-                services[unit] = service
 
+            # Inhibit the source before arming an externally triggered receiver.
+            # Existing persistent SYN state must not advance a new finite table.
+            for service in services.values():
+                service.set_trigger_source("OFF")
+                service.command("STOP", expect_response=False)
             for unit, unit_recipe in resolved.items():
                 services[unit].apply_recipe(unit_recipe)
                 readback["devices"][unit] = services[unit].read_active_settings()
+                mismatches = self._compare_readback(
+                    {unit: unit_recipe}, {unit: readback["devices"][unit]}
+                )
+                if mismatches:
+                    readback["mismatches"].extend(mismatches)
+                    raise TimingRecipeError(f"readback mismatch before advancing recipe: {mismatches}")
 
             readback["mismatches"] = self._compare_readback(resolved, readback["devices"])
             readback["matches_recipe"] = not readback["mismatches"]
+        except BaseException as exc:
+            readback["matches_recipe"] = False
+            readback["error"] = f"{type(exc).__name__}: {exc}"
+            cleanup_errors = []
+            for service in services.values():
+                commands = ["TRIG:SOUR OFF", "STOP", *(f"CHAN:OFF {ch}" for ch in "ABCD")]
+                if service.name == "t660_2":
+                    commands.extend(["TFRame:STOp", *(f"TRAin:{stage}:CouNT 0" for stage in ("ACTive", "NEXT", "QUEue"))])
+                for command in commands:
+                    try:
+                        service.command(command, expect_response=False)
+                    except Exception as cleanup_exc:
+                        cleanup_errors.append(f"{service.name} {command}: {cleanup_exc}")
+            readback["cleanup_errors"] = cleanup_errors
+            try:
+                target = Path(output_path)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(readback, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            except OSError as save_exc:
+                exc.add_note(f"Could not save failure readback: {save_exc}")
+            raise
         finally:
             for service in services.values():
                 service.close()
@@ -176,9 +208,11 @@ class TimingRecipeManager:
                     channels[mapping["channel"]] = dict(settings)
                     channels[mapping["channel"]]["signal"] = mapping["signal"]
             resolved_unit["channels"] = channels
-            if "frames_engine" in resolved_unit:
+            if channels.get("D", {}).get("enabled") is True:
+                raise TimingRecipeError(f"{unit} channel D is spare and unwired in the default wiring")
+            if "frames_engine" in resolved_unit or "finite_frame_count" in resolved_unit:
                 role = str(self.inventory.t660_devices[unit].get("role", "")).lower()
-                if "frame" not in role:
+                if "trains_frames" not in role:
                     raise TimingRecipeError(
                         f"{unit} is not configured with the Trains and Frames feature"
                     )
@@ -189,6 +223,18 @@ class TimingRecipeManager:
             resolved[unit] = resolved_unit
         if not resolved:
             raise TimingRecipeError("recipe has no T660 settings")
+        if any("finite_frame_count" in unit for unit in resolved.values()):
+            receiver = resolved.get("t660_2", {})
+            source = resolved.get("t660_1", {})
+            if "finite_frame_count" not in receiver or not source.get("channels", {}).get("C", {}).get("enabled"):
+                raise TimingRecipeError("finite timing requires T660-2 frames driven by T660-1 channel C")
+            expected = float(receiver["frame_input_frequency_hz"])
+            actual = _parse_frequency_hz(source.get("clock", {}).get("frequency", ""))
+            if actual != expected or source.get("trigger_source") != "SYN":
+                raise TimingRecipeError("finite frame input frequency must match the T660-1 synthesizer")
+            # The receiver must be fully loaded, armed and read back before its
+            # source can start. This is independent of input YAML key ordering.
+            resolved = dict(sorted(resolved.items(), key=lambda item: item[0] != "t660_2"))
         return resolved
 
     def _signal_for(self, unit: str, channel: str) -> str:
@@ -279,13 +325,25 @@ class TimingRecipeManager:
                                 "actual": " ".join(actual),
                             }
                         )
-            if str(unit_recipe.get("frames_engine", "")).strip().upper() == "OFF":
+            if "finite_frame_count" in unit_recipe:
+                _append_text_query_mismatch(
+                    mismatches, device=unit, field="frames_engine",
+                    query=queries.get("frames_engine", {}),
+                    expected="RUNNING" if unit_recipe.get("start", False) else "OFF",
+                )
+            elif str(unit_recipe.get("frames_engine", "")).strip().upper() == "OFF":
                 _append_text_query_mismatch(
                     mismatches,
                     device=unit,
                     field="frames_engine",
                     query=queries.get("frames_engine", {}),
                     expected="OFF",
+                )
+            if "frames_engine" in unit_recipe or "finite_frame_count" in unit_recipe:
+                _append_numeric_query_mismatch(
+                    mismatches, device=unit, field="train_count",
+                    query=queries.get("train_count", {}), expected=0.0,
+                    absolute_tolerance=0.0,
                 )
             external_trigger = unit_recipe.get("external_trigger") or {}
             if external_trigger:

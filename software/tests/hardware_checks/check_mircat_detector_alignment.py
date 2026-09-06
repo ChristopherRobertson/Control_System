@@ -6,7 +6,7 @@ Usage:
 
 By default this operational hardware check uses the T660 external timing path.
 Pass --use-internal-mircat-timing to use MIRcat internal pulsing
-without starting T660-2. The UI Start Alignment button defaults to the internal
+without starting T660-1. The UI Start Alignment button defaults to the internal
 MIRcat mode.
 """
 
@@ -223,8 +223,8 @@ def alignment_next_actions(errors: list[str]) -> list[str]:
         [
             "Run this script with --stop-only to force T660 safe idle and MIRcat emission off.",
             "Verify T660-2 COM7 and T660-1 COM3 are not held by another process.",
-            "Verify T660-2 CHB is physically connected to MIRcat TRIG IN.",
-            "Verify T660-2 CHA is physically connected to HF2LI DIO 0 external reference.",
+            "Verify T660-1 CHB is physically connected to MIRcat TRIG IN.",
+            "Verify T660-1 CHA is physically connected to HF2LI DIO 0 external reference.",
         ]
     )
     return list(dict.fromkeys(actions))

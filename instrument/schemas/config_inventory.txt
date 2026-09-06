@@ -1,6 +1,6 @@
 Hardware Configuration Inventory
 config_path: C:\Users\Chris\Documents\GitHub\Control_System\instrument\hardware_configuration.yaml
-schema_version: 0.2
+schema_version: 0.3
 
 Devices:
 - arduino_mux: Arduino MUX Controller (mux_controller)
@@ -13,32 +13,67 @@ Devices:
 - optical_power_sensor: Newport 919P-010-16 Thermopile Sensor (average_optical_power_sensor)
 - picoscope: PicoScope 5000 Series (oscilloscope)
 - slopo: SLOPO / Horizon OPO (opo_controller)
-- t660_1: T660-1 (pump_timing)
-- t660_2: T660-2 (master_timing_trains_frames)
+- t660_1: T660-1 (continuous_probe_reference_and_event_trigger)
+- t660_2: T660-2 (master_clock_and_pump_timing_trains_frames)
 - wavemaster: Coherent WaveMaster Wavelength Meter (visible_near_ir_wavelength_working_reference)
 
 T660 signal map:
-- hf2li_daq_trigger: t660_2 channel C
-- hf2li_extref: t660_2 channel A
-- mircat_db9_pin_4_process_trigger: t660_1 channel C
-- mircat_trig_in: t660_2 channel B
-- ndyag_fire: t660_1 channel A
-- ndyag_q_switch: t660_1 channel B
-- t660_1_trig_in: t660_2 channel D
+- hf2li_extref: t660_1 channel A
+- mircat_db9_pin_4_process_trigger: t660_2 channel C
+- mircat_trig_in: t660_1 channel B
+- ndyag_fire: t660_2 channel A
+- ndyag_q_switch: t660_2 channel B
+- t660_2_trig_in: t660_1 channel C
 
 Timing routes:
 {
+  "clock_distribution": {
+    "destinations": [
+      "t660_1.CLOCK",
+      "hf2li.clock_input"
+    ],
+    "frequency_hz": 10000000,
+    "hf2li_clock_source": "external",
+    "source": "t660_2.CLOCK",
+    "source_mode": "OUT",
+    "splitter_id": "CLOCK-SPLITTER-01",
+    "t660_1_mode": "IN"
+  },
   "direct_ttl_destinations": {
-    "t660_1_channel_a": "Nd:YAG FIRE",
-    "t660_1_channel_b": "Nd:YAG Q-SWITCH",
-    "t660_1_channel_c": "MIRcat DB9 pin 4 Process Trigger",
-    "t660_1_channel_d": "DISCONNECTED AND UNUSED",
-    "t660_2_channel_a": "HF2LI DIO 0 external reference BNC",
-    "t660_2_channel_b": "MIRcat TRIG IN",
-    "t660_2_channel_c": "HF2LI DIO 1 DAQ trigger BNC",
-    "t660_2_channel_d": "T660-1 TRIG IN"
+    "t660_1_channel_a": "HF2LI DIO 0 external reference BNC",
+    "t660_1_channel_b": "MIRcat TRIG IN",
+    "t660_1_channel_c": "T660-2 TRIG IN",
+    "t660_1_channel_d": "SPARE; disconnected and disabled",
+    "t660_2_channel_a": "Nd:YAG FIRE",
+    "t660_2_channel_b": "Nd:YAG Q-SWITCH",
+    "t660_2_channel_c": "MIRcat DB9 pin 4 Process Trigger",
+    "t660_2_channel_d": "SPARE; disconnected and disabled"
   },
   "mux_routes_t660_ttl": false,
+  "observed_timing_inputs": {
+    "mircat_db9_pin_1": {
+      "hf2li_dio_bit": 20,
+      "signal": "Scan Direction"
+    },
+    "mircat_db9_pin_2": {
+      "hf2li_dio_bit": 21,
+      "picoscope_input": "EXT",
+      "signal": "Tuned / Sweep Active"
+    },
+    "mircat_db9_pin_3": {
+      "hf2li_dio_bit": 22,
+      "signal": "Wavelength Trigger"
+    },
+    "ndyag_variable_sync": {
+      "hf2li_dio_bit": 17
+    }
+  },
+  "optional_acquisition_window": {
+    "candidate_source": "t660_2.D",
+    "connected": false,
+    "destination": "hf2li.DIO1",
+    "note": "DIO1 has no source in default wiring. A frame-relative gate may use T660-2 D after an explicit route assignment and qualification."
+  },
   "t660_ttl_routes_are_direct": true
 }
 

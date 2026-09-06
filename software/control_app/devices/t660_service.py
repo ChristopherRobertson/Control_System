@@ -226,7 +226,8 @@ class T660Service:
         self.command("START", expect_response=False)
 
     def preload_frame_table(self, frames: list[dict[str, Any]], *,
-                            predivider: int = 600_000) -> dict[str, Any]:
+                            predivider: int = 600_000,
+                            input_frequency_hz: float = 2_000_000.0) -> dict[str, Any]:
         """Load a bounded finite table with trigger input disabled throughout.
 
         Frame entries contain a complete ``channels`` mapping, using the same
@@ -241,8 +242,10 @@ class T660Service:
         if len(frames) > capacity:
             raise T660ConfigurationError(f"frame table needs {len(frames)} entries; verified capacity is {capacity}")
         divisor = _uint32_value(predivider, field="predivider")
-        if divisor != 600_000:
-            raise T660ConfigurationError("phase-scan frame predivider must be 600000")
+        frequency = float(input_frequency_hz)
+        if not math.isfinite(frequency) or frequency <= 0:
+            raise T660ConfigurationError("frame input frequency must be finite and positive")
+        frame_period_s = max(divisor, 1) / frequency
         table = list(frames)
         # Validate the entire block before any instrument mutation.
         for index, frame in enumerate(table):
@@ -255,8 +258,8 @@ class T660Service:
                     raise T660ConfigurationError(f"frame {index} channel {channel} has incomplete settings")
                 if _seconds_value(settings["delay"]) < 0 or _seconds_value(settings["width"]) <= 0:
                     raise T660ConfigurationError("frame delays must be nonnegative and widths positive")
-                if _seconds_value(settings["delay"]) + _seconds_value(settings["width"]) >= .3 - 1e-6:
-                    raise T660ConfigurationError("frame channel timing must finish before the next 300 ms trigger")
+                if _seconds_value(settings["delay"]) + _seconds_value(settings["width"]) >= frame_period_s - 1e-6:
+                    raise T660ConfigurationError("frame channel timing must finish before the next frame trigger")
         if len(table) == 1:
             table.append({"channels": {ch: {**table[0]["channels"][ch], "enabled": False}
                                          for ch in "ABCD"}, "inert_terminator": True})
@@ -273,7 +276,8 @@ class T660Service:
         for channel in "ABCD":
             self.set_channel_timing_mode(channel, "delay_width")
             self.command(f"TIME:RELTo{CHANNEL_EDGES[channel][0]} 0", expect_response=False)
-        self.configure_train(count=0)
+        for stage in ("ACTIVE", "NEXT", "QUEUE"):
+            self.configure_train(count=0, stage=stage)
         for index, frame in enumerate(table):
             commands = []
             for channel in "ABCD":
@@ -305,7 +309,8 @@ class T660Service:
         return {"acquisition_frame_count": len(frames), "physical_frame_count": len(table),
                 "inert_terminator_count": len(table)-len(frames),
                 "capacity": capacity, "capacity_source": T660_FRAME_CAPACITY_SOURCE,
-                "frame_period_s": divisor / 2_000_000.0, "readback": readback}
+                "frame_period_s": frame_period_s, "input_frequency_hz": frequency,
+                "readback": readback}
 
     def start_frame_table(self) -> None:
         """Arm the finite engine, then accept divided external triggers."""
@@ -365,6 +370,19 @@ class T660Service:
         self.validate_recipe_section(self.name, recipe)
         applied: dict[str, Any] = {"device": self.name, "commands": []}
 
+        if "finite_frame_count" in recipe:
+            channels = _finite_recipe_channels(recipe)
+            count = int(recipe["finite_frame_count"])
+            applied["timing_table"] = self.preload_frame_table(
+                [{"channels": channels} for _ in range(count)],
+                predivider=int(recipe.get("predivider", 1)),
+                input_frequency_hz=float(recipe["frame_input_frequency_hz"]),
+            )
+            if recipe.get("start", False):
+                self.start_frame_table()
+                applied["start"] = True
+            return applied
+
         if recipe.get("stop_first", False):
             self.command("STOP", expect_response=False)
             applied["commands"].append("STOP")
@@ -375,6 +393,10 @@ class T660Service:
                     f"{self.name} does not have the configured Trains and Frames feature"
                 )
             self.command("TFRame:STOp", expect_response=False)
+            # The frame engine and train registers persist between workflows.
+            # Clear every staging bank before returning to single-shot timing.
+            for stage in ("ACTIVE", "NEXT", "QUEUE"):
+                self.configure_train(count=0, stage=stage)
             applied["frames_engine"] = "OFF"
 
         if "predivider" in recipe:
@@ -499,6 +521,26 @@ class T660Service:
                 raise T660ConfigurationError(
                     f"{name} unsupported frames_engine mode {recipe['frames_engine']!r}"
                 )
+        if "finite_frame_count" in recipe:
+            count = _uint32_value(recipe["finite_frame_count"], field="finite_frame_count")
+            if not 1 <= count <= T660_FRAME_CAPACITY:
+                raise T660ConfigurationError("finite_frame_count must be in 1..8192")
+            if str(recipe.get("trigger_source", "")).upper() != "EXT":
+                raise T660ConfigurationError("finite frame recipes require external triggering")
+            try:
+                frequency = float(recipe["frame_input_frequency_hz"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise T660ConfigurationError("finite frame recipes require frame_input_frequency_hz") from exc
+            if not math.isfinite(frequency) or frequency <= 0:
+                raise T660ConfigurationError("frame input frequency must be finite and positive")
+            channels = _finite_recipe_channels(recipe)
+            period = max(_uint32_value(recipe.get("predivider", 1), field="predivider"), 1) / frequency
+            for channel, settings in channels.items():
+                if not {"enabled", "delay", "width", "polarity", "termination"} <= set(settings):
+                    raise T660ConfigurationError(f"finite frame channel {channel} is incomplete")
+                delay, width = _seconds_value(settings["delay"]), _seconds_value(settings["width"])
+                if delay < 0 or width <= 0 or delay + width >= period - 1e-6:
+                    raise T660ConfigurationError("finite channel timing must finish before the next frame trigger")
         if "predivider" in recipe:
             _uint32_value(recipe["predivider"], field=f"{name}.predivider")
         if "gate_mode" in recipe:
@@ -614,6 +656,12 @@ class T660Service:
         query_commands = [
             ("trigger_source", "TRIG:SOUR?"),
             ("synth_frequency", "TRIG:FREQ:SYN?"),
+            # Physical 10 MHz CLOCK routing is distinct from the pulse-trigger
+            # synthesizer. These are informational readbacks, never setters.
+            ("clock_connector_mode", "CLOCk:MODe?"),
+            ("clock_external_lock_enabled", "CLOCk:EXTernaL?"),
+            ("clock_external_frequency_hz", "CLOCk:FREQuency?"),
+            ("clock_lock_status", "CLOCk:STATus?"),
             ("shots", "TRIG:SHOTS?"),
             ("predivider", "TRIGger:EXTernal:PREDiv?"),
             ("trigger_input_polarity", "TRIGger:INPut:POLarity?"),
@@ -624,6 +672,7 @@ class T660Service:
         ]
         if self._supports_frames_engine():
             query_commands.append(("frames_engine", "TFRame:STATus?"))
+            query_commands.append(("train_count", "TRAin:ACTive:CouNT?"))
         for label, command in query_commands:
             settings["queries"][label] = self._safe_query(command)
 
@@ -726,7 +775,7 @@ class T660Service:
 
     def _supports_frames_engine(self) -> bool:
         role = str(self.device_config.get("role", "")).lower()
-        return "frame" in role
+        return "trains_frames" in role
 
     def _read_serial(self) -> str:
         lines: list[str] = []
@@ -793,6 +842,17 @@ def _integer_value(value: Any, *, field: str) -> int:
     if not math.isfinite(numeric) or numeric != converted:
         raise T660ConfigurationError(f"{field} must be an integer")
     return converted
+
+
+def _finite_recipe_channels(recipe: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Complete only disabled frame slots; enabled pulse settings stay explicit."""
+    requested = recipe.get("channels") or {}
+    if set(requested) != set("ABCD"):
+        raise T660ConfigurationError("finite frame recipes must explicitly configure A/B/C/D")
+    disabled = {"enabled": False, "delay": "0ns", "width": "150ns",
+                "polarity": "positive", "termination": "50OHM"}
+    return {channel: ({**disabled, **settings} if settings.get("enabled") is False
+                      else dict(settings)) for channel, settings in requested.items()}
 
 
 def _seconds_value(value: Any) -> float:

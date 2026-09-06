@@ -44,7 +44,7 @@ def format_q_switch_delay_us(delay_us: float) -> str:
 
 
 def validate_shot_count(value: Any, *, continuous: bool) -> int:
-    """Return a validated T660-2 shot count for the Nd:YAG 10 Hz drive."""
+    """Return the requested number of finite Nd:YAG pump frames."""
 
     if continuous:
         return 0
@@ -70,7 +70,10 @@ def recipe_with_q_switch_delay_us(recipe: dict[str, Any], delay_us: Any) -> dict
     timing["target_fire_to_q_switch_delay_ns"] = validated_delay_us * 1000.0
     timing["programmed_q_switch_delay_ns"] = validated_delay_us * 1000.0
     timing["q_switch_delay_source"] = "ui_parameter"
-    q_switch = updated["t660"]["t660_1"]["signals"]["ndyag_q_switch"]
+    pump = updated["t660"]["t660_2"]
+    q_switch = (pump.get("signals") or {}).get("ndyag_q_switch")
+    if q_switch is None:
+        q_switch = pump["channels"]["B"]
     q_switch["delay"] = format_q_switch_delay_us(validated_delay_us)
     return updated
 
@@ -81,15 +84,21 @@ def recipe_with_shot_count(
     *,
     continuous: bool,
 ) -> dict[str, Any]:
-    """Return a copy of the Nd:YAG recipe with the T660-2 shot count overridden."""
+    """Return an Nd:YAG recipe with continuous timing or bounded T660-2 frames."""
 
     validated_shot_count = validate_shot_count(shot_count, continuous=continuous)
     updated = deepcopy(recipe)
     duration = updated.setdefault("duration", {})
     duration["mode"] = "continuous" if continuous else "finite"
     duration["t660_shots"] = validated_shot_count
-    t6602_clock = updated["t660"]["t660_2"].setdefault("clock", {})
-    t6602_clock["shots"] = validated_shot_count
+    t6601_clock = updated["t660"]["t660_1"].setdefault("clock", {})
+    t6601_clock["shots"] = 0
+    if continuous:
+        updated["t660"]["t660_2"].pop("finite_frame_count", None)
+        updated["t660"]["t660_2"].pop("frame_input_frequency_hz", None)
+    else:
+        updated["t660"]["t660_2"]["finite_frame_count"] = validated_shot_count
+        updated["t660"]["t660_2"]["frame_input_frequency_hz"] = 10.0
     return updated
 
 

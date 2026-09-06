@@ -92,5 +92,8 @@ def test_inhibited_capture_never_enables_laser_outputs_and_preserves_partial_dat
     raw = load_native(next(tmp_path.rglob("scan_*.npz")))
     assert len(raw["native_chunks"]) == (1 if poll_fails else 2)
     assert raw["optical_valid"] is False
+    assert raw["diagnostic_dio_bit"] == 21
+    assert "observational input" in raw["diagnostic_dio_signal"]
+    assert "no Sweep Active transition is expected" in raw["diagnostic_dio_expectation"]
     result = json.loads(next(tmp_path.rglob("result.json")).read_text())
     assert result["status"] == ("FAILED" if poll_fails else "DIAGNOSTIC_COMPLETE")

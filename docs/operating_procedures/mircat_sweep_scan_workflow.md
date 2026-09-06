@@ -23,8 +23,8 @@ temporary timing/IRF wiring is a separate configuration restored afterward.
 
 1. Complete the approved phase gate. The application fails before opening
    hardware while the recipe status remains `CANDIDATE_NOT_APPROVED_FOR_EXECUTION`.
-2. Verify the accepted HF2LI bit numbers for DB9 pins 1, 2, and 3 through MD-01; labels in older wiring documents are not accepted as campaign evidence.
-3. Apply the T660 recipe: T660-2 A and B run at 2 MHz; C and D are disabled. T660-1 is stopped and all of its outputs are disabled.
+2. Verify the accepted HF2LI bit numbers for DB9 pins 1, 2, and 3 through MD-01; physical connector labels alone do not establish captured DIO bit indices.
+3. Apply the T660 recipe: T660-1 A/B supply the qualified probe/reference rate. Its C output clocks T660-2 only for an explicitly configured process-frame sequence. T660-2 A/B and both D outputs remain disabled for an unpumped sweep; C issues only the qualified process events.
 4. Configure the MIRcat for external 2 MHz laser triggering, 5 cm^-1 wavelength-trigger markers with 500 us pulse width, and the process-trigger mode approved by MC-01. Read back every setting. DB9 pin 5 remains physically disconnected.
    The standing default-wiring exclusions are defined once in
    `instrument/default_wiring_state.md` and are not recurring operator questions
@@ -39,7 +39,7 @@ Plotter exports are convenience products only. Native Sample, Reference, and
 complete-DIO streams plus the phase manifest and artifact indexes are required
 for campaign evidence.
 
-MIRcat BNC TRIG OUT is laser-pulse timing, not a sweep-valid gate, and is not used to construct the wavelength axis. T660-2 A remains the external lock-in reference.
+MIRcat BNC TRIG OUT is laser-pulse timing, not a sweep-valid gate, and is not used to construct the wavelength axis. T660-1 A remains the external lock-in reference.
 
 ## Required LabOne configuration
 
@@ -47,4 +47,4 @@ LabOne Demodulator 1 / API 0 records Sample, Demodulator 4 / API 3 records Refer
 
 ## External Process Trigger validation
 
-Test this first in the MIRcat GUI with T660-1 CHC idling high and producing an approximately 10 ms low pulse. Record whether the first pulse starts the first channel and how many subsequent pulses are required. Automated external-process-trigger mode remains blocked in this workflow until that observed channel/pulse sequence is implemented. Do not drive reserved DB9 pin 5 (Laser Output On/Off), unused pin 6, or unused pin 8. Their standing state is imported from `instrument/default_wiring_state.md`, not repeatedly re-asked.
+Import the accepted MC-01 GUI process-trigger state semantics for the applicable mode. Qualify uncovered installed T660-2 CHC receiver/frame behavior in MD-01/MSW-01 with CHC idling high and the prospectively selected active-low pulse. Reconcile the first channel and subsequent process commands with observed Sweep Active; do not repeat a completed phase merely to update documentation. Automated external-process-trigger mode remains blocked in this workflow until that observed channel/pulse sequence is implemented. Do not drive reserved DB9 pin 5 (Laser Output On/Off), unused pin 6, or unused pin 8. Their standing state is imported from `instrument/default_wiring_state.md`, not repeatedly re-asked.

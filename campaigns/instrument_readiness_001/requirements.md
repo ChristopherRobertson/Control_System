@@ -116,18 +116,16 @@ reproduction, acceptance, closeout, or promotion.
 
 - The default wiring state is defined by
   [`../../instrument/default_wiring_state.md`](../../instrument/default_wiring_state.md).
-  “Default wiring restored” includes both detector split paths: each signal
-  passes through its own female-to-female BNC adapter -> male-to-two-female
-  BNC tee, with sample feeding HF2LI Signal 1 In (+) and PicoScope CHA, and
-  reference feeding HF2LI Signal 2 In (+) and PicoScope CHB. Both receivers
-  remain connected even when the PicoScope is not recording; the Arduino MUX
-  remains bypassed. T660-1 CHD and MIRcat DB9 pin 5 are
-  disconnected; MIRcat DB9 pins 6 and 8 are unused and unwired unless the
-  operator records a changed installed state.
-- The detector wiring update was reported on 2026-08-31. Earlier inventories,
-  acquisitions, and restoration confirmations remain evidence of their recorded
-  topology. MS-02.1 qualifies the new adapter/tee/cable/receiver network; this
-  documentation update does not establish measured transfer or promote results.
+  Sample feeds HF2LI Signal 1 In (+)/PicoScope CHA and reference feeds HF2LI
+  Signal 2 In (+)/PicoScope CHB through separate adapter/tee networks. Both
+  receivers remain connected; the MUX remains bypassed. Both T660 channel-D
+  outputs and HF2LI DIO1 are unwired. MIRcat DB9 pins 5, 6, and 8 are unused
+  and unwired. MS-02.1 qualifies the installed transfer and receiver conditions.
+- T660-1 A supplies HF2LI DIO0, B supplies MIRcat TRIG IN, and C supplies
+  T660-2 TRIG IN. T660-2 A/B/C supply FIRE/Q-switch/MIRcat Process Trigger.
+  T660-2 CLOCK OUT distributes 10 MHz to T660-1 and HF2LI; it is separate
+  from the T660-1 probe pulse train.
+
 - Hardwired room and door interlocks remain external safety infrastructure. The
   repository does not substitute software for those interlocks.
 - The retained OPO-540 path uses the ATT-01-qualified electronic iris. Applicable
@@ -152,14 +150,11 @@ reproduction, acceptance, closeout, or promotion.
 - The HF2LI is the primary sample/reference spectral recorder. The PicoScope is an
   independently calibrated timing, pulse-shape, detector-response, branch-skew,
   saturation, overflow, and trigger diagnostic; it does not replace the HF2LI.
-- The normal Phase-Scan configuration retains both default detector split paths and
-  keeps MIRcat DB9 pin 2 `Tuned / Sweep Active` on HF2LI DIO21. T660-1 CHD is
-  connected directly to PicoScope EXT as a dedicated process-marker route and is
-  programmed with the same leading-edge timing and polarity as the active-low CHC
-  MIRcat process command. It is disabled outside an armed Phase-Scan capture. This
-  named configuration is distinct from the baseline state in which CHD is
-  disconnected; entry, exit, and restoration are recorded without redefining the
-  default wiring or teeing the Sweep Active signal away from the HF2LI.
+- Normal sweep acquisition retains both detector split paths and observes
+  MIRcat DB9 pin 2 Sweep Active concurrently on HF2LI DIO21 and PicoScope EXT.
+  Qualify the high-impedance branch and ground return; neither D output is a
+  process marker. DIO1 is not an acquisition gate in the default configuration.
+
 - In that Phase-Scan configuration PicoScope CHA is the sample-detector witness and
   CHB is the reference-detector primary optical-pulse witness. A pulse opportunity is
   classified as a MIRcat optical omission only when it is absent from both channels;
@@ -215,27 +210,52 @@ admission and reconciliation, and CL-01 performs covariance-aware closure across
 retained slow-scan and reconstruction configuration. Closure must retain every component identity and configuration
 foreign key and may not hide an incompatible time origin or failed loop.
 
-### 6.3 Phase-Scan sweep alignment and pulse opportunities
+### 6.3 Train/frame scheduling, sweep alignment, and pulse opportunities
 
-MS-02.1 qualifies the installed T660-1 CHD-to-PicoScope-EXT electrical route and
-PicoScope external-trigger behavior. MD-01 establishes the event semantics linking
-the CHC process command, its CHD marker, and the HF2LI-observed Sweep Active interval.
-MSW-01 then measures the CHD falling-edge to Sweep Active rising-edge offset,
-repeatability, and uncertainty for each retained Phase-Scan configuration. The CHD
-edge is a command marker, not a substitute for observed Sweep Active or an assumed
-zero-delay relation. Production Phase-Scan capture requires the accepted alignment
-quantity and its stable qualification ID.
+T660-1 supplies the probe/reference pulse train: channel A feeds HF2LI DIO0,
+channel B feeds MIRcat TRIG IN, and channel C feeds T660-2 TRIG IN. T660-2
+uses its train/frame engine for the event schedule: channel A drives Surelite
+FIRE, B drives Q-switch, and C drives MIRcat DB9 pin 4 Process Trigger. Both
+channel-D outputs are disabled and unwired; HF2LI DIO1 is unwired. MIRcat DB9
+pin 2 Sweep Active feeds HF2LI DIO21 and PicoScope EXT through the qualified
+high-impedance branch; pin 1 direction feeds DIO20 and pin 3 wavelength markers
+feed DIO22. Connector pin numbers and captured DIO bit indices are distinct.
+T660-2 CLOCK OUT supplies the 10 MHz clock distribution to T660-1 CLOCK IN and
+HF2LI CLOCK IN. This frequency-reference distribution is separate from the
+T660-1 probe pulse train.
 
-Expected optical opportunities are generated from the configured and instrument-
-read-back T660-2 repetition rate. Their phase is established locally from consecutive
-detected optical edges so that an absent pulse remains an expected opportunity; a
-single global phase fit is not acceptable. Partial opportunities at both record
-boundaries are excluded. PicoScope sampling must be no slower than 48 ns/sample for
-the current detector-pulse envelope, with approximately 10--20 ns/sample preferred
-when memory and transfer constraints permit. Each channel uses a locally derived
-baseline-to-pulse threshold with noise and saturation checks; a fixed voltage from
-another wavenumber, alignment, or electrical-trigger topology is not a detector-pulse
-threshold.
+A finite run preloads the complete bounded T660-2 frame table while outputs
+are disabled. Per-frame channel OFF states suppress unrequested outputs,
+including pump outputs in unpumped baselines; terminal padding has all outputs
+OFF. Train count zero disables additional pulses, not the first pulse of an
+enabled channel. Train count and spacing are shared by enabled channels within
+each frame. The frame predivider, frame repetition, train count/spacing,
+channel enables/delays/widths/polarities, terminal padding, and physical frame
+count are recorded and checked against readback before arming. Acquisition
+is ready before the event sequence starts; software polling does not schedule
+pump/probe/scan edges. Frames and train counts schedule electrical commands;
+independent optical observation establishes emitted pump counts and sample time
+zero. Each experiment freezes its own cadence, recovery interval, and data budget;
+the Phase Scan 0.3 s frame period is not a default for other experiment types.
+
+MS-02.1 qualifies the direct Sweep Active-to-PicoScope EXT branch, loading,
+threshold, edge, and latency. MD-01 reconciles each T660-2 C process command
+with MIRcat state transitions and complete HF2LI DIO records. MSW-01 measures
+process-command-to-observed-scan timing and actual wavenumber/time trajectory;
+HF-02 establishes the synchronized Sample/Reference/Sweep Active/pump-event
+recording envelope. Scope and HF2LI observe the same source signal, but their
+receiver and clock delays still require calibration.
+
+Finite Phase Scan uses bounded Sweep-Active-triggered LabOne histories and a
+separate synchronized pump-event record, retaining consolidated native records.
+PicoScope pulse diagnostics qualify the acquisition envelope; a dedicated scope
+record and automatic replacement scan are not required for every physical scan.
+Expected probe opportunities use the configured and read-back T660-1 rate.
+Where pulse diagnostics are acquired, local detector thresholds distinguish
+absence in both channels from a one-channel detector/path discrepancy. Retain
+partial, missing, clipped, or unclassifiable records and reject unsupported
+scientific regions. Ordinary reconstruction does not fill gaps by retry/merge
+or remove detector etalons algorithmically.
 
 ## 7. Required measurement coverage by phase
 
@@ -247,14 +267,14 @@ acceptance thresholds.
 | --- | --- |
 | P0, S0 | Establish inventory/provenance and safe-idle/interlock behavior; retain identities, topology, observations, and restoration evidence. |
 | MS-01, MS-02 | Quantify oscilloscope channel/path and splitter-branch timing corrections, sensitivity, covariance, and validity. |
-| MS-02.1 | Without changing or reacquiring MS-01/MS-02, calibrate the installed detector-output tee/adapter/cable networks to the HF2LI and PicoScope, including loading, attenuation, reflection/ringing, bandwidth, skew, PicoScope timebase/amplitude/bandwidth/trigger behavior, overflow, uncertainty, and topology-specific validity; separately qualify the T660-1 CHD-to-PicoScope-EXT electrical trigger route used by Phase Scan. |
+| MS-02.1 | Without changing or reacquiring MS-01/MS-02, calibrate the installed detector-output tee/adapter/cable networks to the HF2LI and PicoScope, including loading, attenuation, reflection/ringing, bandwidth, skew, PicoScope timebase/amplitude/bandwidth/trigger behavior, overflow, uncertainty, and topology-specific validity; separately qualify the MIRcat Sweep Active-to-PicoScope-EXT electrical trigger route used by Phase Scan. |
 | T2-01, T1-01, PT-01, MC-01 | Qualify the direct timer routes, MIRcat Process Trigger electrical route, and GUI/process-trigger state semantics with native traces and command/readback records. |
 | TR-01, OM-01 | Close identity/resource gaps and qualify only the metrology resources, adapters, references, limits, and transfer standards required by the campaign. |
 | CH-00 | Freeze the minimum claim grid and imported calibration dependencies for Mylar, HRP-C–CO, and MbCO work; exclude optional scope from core gates. |
 | CH-00.1 | Reconcile every `EXPERIMENTS.md` calibration, characterization, optimization, validation, initial-slow-scan, architecture, and claim prerequisite with the sequence; maintain the canonical traceability and unresolved-gap register without assigning new work to completed phases. |
 | HF-01, HF-01.1, HF-02 | Import immutable HF-01 evidence and qualify experiment-specific low/high-rate HF2LI reference topologies, demodulator/filter/order/time-constant/phase/range/output-rate tradeoffs, timestamps, settling/filter memory, cross-stream alignment, loss/relock, and endurance. Retain distinct IDs for every acquisition architecture even when numerical settings coincide. |
 | WM-01 | Resume the incomplete phase with a suitable replacement spectrometer and qualify its installed identity, communications, native status semantics, pulsed/CW applicability, 540 nm repeatability/stability, uncertainty, validity, and exclusions. Preserve the failed WaveMaster evidence; no center-wavelength instrument assigns residual spectral-power fractions. |
-| MD-01, MSW-01 | Qualify MIRcat/HF2LI DIO mapping, the installed process-trigger receiver interval, one-command/one-transition behavior, CHC-command/CHD-marker/Sweep-Active semantics, `Tuned` reliability, the configuration-specific CHD-to-Sweep-Active offset and uncertainty, discrete optical settling and history, failure response, and actual scan trajectory versus speed, direction, window, start, acceleration/turnaround, and module transition. |
+| MD-01, MSW-01 | Qualify MIRcat/HF2LI DIO mapping, the installed process-trigger receiver interval, one-command/one-transition behavior, T660-2 C/frame/Sweep-Active semantics, `Tuned` reliability, the configuration-specific cross-recorder Sweep Active offset and uncertainty, discrete optical settling and history, failure response, and actual scan trajectory versus speed, direction, window, start, acceleration/turnaround, and module transition. |
 | DET-01 | Measure dark detector/electronics offsets, noise, 1/f/drift/Allan behavior, cross-talk, range, saturation/recovery baselines, temperature sensitivity, and stability over the retained normal dual-recorder configurations. |
 | SP-01 | Freeze reference-material identities, feature authorities, uncertainties, and partition rules before spectral fitting. |
 | ATT-01 | Qualify the electronic iris control/readback and faults; lock the far-field mount; perform the preliminary bidirectional OPO-540 delay search; measure attenuation, splitter-port, and sample-plane transfer; preserve wavelength and clipping controls. |
@@ -265,7 +285,7 @@ acceptance thresholds.
 | PB-02 | Qualify the final post-iris OPO-540 output and final narrow FIRE-to-Q-SWITCH delay using bidirectional searches, a confirmation revisit, three return-to-540 visits, and low/high planned power conditions. |
 | SC-01 | Qualify room-temperature and nominal-77 K cell/stage/cryostat configurations: path, blank/matrix/window/fringe/placement, sensor calibration, sample gradient, equilibration, transmission, focus/beam shift, condensation/icing/purge, heating, thermal cycling, and mechanical stability without protein or CO. |
 | OG-01, OV-01 | Measure pump/probe sample-plane transfer, beam profiles, centroids, pointing, illuminated geometry, placement, and overlap at room-temperature and cryogenic sample-equivalent planes. Do not tune the iris to obtain a desired response. |
-| AR-01 | Jointly optimize and validate slow-scan, fixed-wavelength nanosecond/microsecond, repeated rapid-scan, single-scan phase-delay, and single-pump scan-burst acquisition candidates; retain settling, filter memory, scan distortion, native pulse coverage, coverage/retry candidate rules, covariance, and bounded-escalation results. |
+| AR-01 | Jointly optimize and validate slow-scan, fixed-wavelength nanosecond/microsecond, repeated rapid-scan, single-scan phase-delay, and single-pump scan-burst acquisition candidates; retain settling, filter memory, scan distortion, native pulse coverage, one-pass coverage and frame-capacity rules, covariance, and bounded-escalation results. |
 | PF-00 | Before reference-standard acquisition, establish normalized noise, common-mode rejection, drift, saturation margin, and SNR on blank or stable nonbiological inputs. |
 | SP-02, SV-01 | Calibrate the spectral axis over the Mylar/polystyrene carbonyl window and 1885–1980 cm⁻¹ region; acquire specimen-matched FTIR reference sets for polystyrene and Mylar. |
 | SV-02A, SV-02B | Fit/freeze corrections with a predeclared polystyrene partition and holdout, then perform blind Mylar validation with three accepted scans per direction and no post-unblinding refit. |
@@ -273,7 +293,7 @@ acceptance thresholds.
 | IR-01 | Measure complete sample-plane IRFs for every retained architecture/configuration, combining pump/probe optical envelopes, jitter, sample/reference detector responses, branch latency, PicoScope aperture/trigger uncertainty, HF2LI acquisition kernels, and scan history with synchronized native streams and uncertainty. |
 | PF-01 | Measure sensitivity, detector/pump/cell artifacts, pump-scatter recovery, drift, common-mode residual, SNR, NEA/MDA where supportable, averaging validity, probe/pump heating, and saturation margin for all retained room-temperature and cryogenic surrogate configurations. |
 | RP-01 | Repeat compact checkpoints across startups, placements/reinstallations, and independent days for each materially distinct retained configuration, retaining configuration, wavelength, iris, cryostat/cell, environment, restoration, variance, and recharacterization evidence. |
-| E2E-01, E2E-CH | Demonstrate bounded normal-wiring nonbiological workflows and validate nanosecond and microsecond stroboscopy, repeated rapid-scan phase-delay, single-scan phase-delay, and single-pump rapid-scan/logarithmic scan-burst reconstruction. Publish native `(wavenumber,time)` and optical-pulse coverage, attempt/bin provenance, coverage-weighted merge behavior, retry exhaustion, interpolation support, bias, filter memory, direction, deficient-output labeling, identifiable regions, uncertainty, mismatch stops, and restoration. |
+| E2E-01, E2E-CH | Demonstrate bounded normal-wiring nonbiological workflows and validate nanosecond and microsecond stroboscopy, repeated rapid-scan phase-delay, single-scan phase-delay, and single-pump rapid-scan/logarithmic scan-burst reconstruction. Publish native `(wavenumber,time)` and optical-pulse coverage, attempt/bin provenance, one-pass reconstruction behavior, finite-block interruption, interpolation support, bias, filter memory, direction, deficient-output labeling, identifiable regions, uncertainty, mismatch stops, and restoration. |
 | RPT-01, RPT-CH | Aggregate indexed evidence, thesis tables/figures, uncertainty budgets, claim-to-evidence links, configuration/validity envelopes, and experiment handoff records without altering source evidence. |
 | PROM-01, PROM-CH | Review an exact candidate bundle, unresolved limitations, validity/revalidation rules, and retention plan; promotion requires the plan's explicit authorization phrase. |
 | PB-01 | After core promotion, optionally characterize direct 355 nm drive for supplemental thesis evidence. It does not satisfy or block any core gate and cannot inherit the 540 nm meter/iris qualification. |
@@ -290,8 +310,8 @@ The campaign supplies separate configuration IDs and validity envelopes for:
 6. single-pump rapid-scan and logarithmic scan-burst reconstruction;
 7. normal dual-detector HF2LI-primary acquisition with PicoScope diagnostics; and
 8. sample-detector/pump-detector sample-plane timing and IRF acquisition; and
-9. normal dual-detector Phase-Scan acquisition with T660-1 CHD on PicoScope EXT
-   and MIRcat Sweep Active retained on HF2LI DIO21.
+9. normal dual-detector finite Phase-Scan acquisition with Sweep Active on PicoScope
+   EXT and HF2LI DIO21, plus a separately synchronized pump-event record.
 
 Room-temperature HRP–CO, room-temperature MbCO, 77 K HRP–CO, and 77 K MbCO each
 require an accepted condition-specific initial slow scan before time-resolved work.

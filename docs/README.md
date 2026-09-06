@@ -47,9 +47,10 @@ The desktop application reads `instrument/hardware_configuration.yaml`,
 phase records or imports that output using the phase-record contract.
 
 The [default wiring convention](../instrument/default_wiring_state.md) defines
-the current detector adapter/tee paths to HF2LI Signal 1/2 In and PicoScope
-CHA/CHB, as well as the standing disconnected routes. Earlier phase wiring
-records remain historical evidence for their recorded configurations.
+both detector adapter/tee paths, T660-1 probe/reference trains, T660-2 event
+trains/frames, and the separate T660-2 10 MHz clock distribution. MIRcat Sweep
+Active feeds HF2LI DIO21 and PicoScope EXT. Both D outputs and HF2LI DIO1 are
+unwired; no workflow automatically assigns a spare channel.
 
 The recipe-driven Workflows tab exposes only entries declared in
 `instrument/recipes/ui_workflows.yaml`. A workflow must validate and save an
@@ -65,9 +66,12 @@ gated until the engine has explicit device adapters and a valid immutable plan.
 Device communication stays in `software/control_app/devices/`; definitions and
 widgets do not duplicate SDK or serial behavior.
 
-The [Phase Scan tab](operating_procedures/phase_scan_tab.md) derives and exports
-single-scan phase-series plans from probe, sweep, cadence, and repetition controls.
-It currently provides planning and preview only; hardware acquisition is not connected.
+The [Phase Scan tab](operating_procedures/phase_scan_tab.md) plans and executes
+bounded single-scan phase-series acquisitions using preloaded T660-2 frames,
+Sweep-Active-triggered LabOne histories, and synchronized pump-event records.
+Live acquisition requires promoted timing qualification, verified frame and
+LabOne resident capacity, exclusive ownership, and successful preflight. Its
+operational output classification does not establish campaign readiness.
 
 Every executable workflow must define stop, abort-to-safe, and failure-recovery
 behavior. Reserved or disconnected routes cannot become selectable merely because

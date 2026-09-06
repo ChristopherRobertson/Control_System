@@ -41,9 +41,13 @@ def _root_name(name: str) -> str:
 
 
 def main() -> int:
-    ui_dir = REPO_ROOT / "control_app" / "ui"
+    ui_dir = REPO_ROOT / "software" / "control_app" / "ui"
     failures: list[str] = []
-    for path in sorted(ui_dir.rglob("*.py")):
+    paths = sorted(ui_dir.rglob("*.py"))
+    if not paths:
+        print(f"BLOCKED no UI sources found at {ui_dir}")
+        return 2
+    for path in paths:
         text = path.read_text(encoding="utf-8")
         for token in FORBIDDEN_TEXT:
             if token in text:
@@ -71,4 +75,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

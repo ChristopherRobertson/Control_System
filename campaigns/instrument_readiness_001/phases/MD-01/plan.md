@@ -22,19 +22,21 @@ semantics for each CH-00.1-retained acquisition method. Verify that one commande
 wavelength or scan transition produces one accounted transition, including Tuned,
 process/fault/invalid states, polarity, direction, pulse interval and width, receiver
 level and termination, signatures, counts, timestamp alignment, and repeatability.
-For the Phase-Scan configuration, reconcile each scheduled T660-1 CHC process
-command and its CHD process marker with exactly one observed Sweep Active interval
-on HF2LI DIO21. Verify leading/trailing-edge polarity, event order, start/stop
-semantics, count equality, invalid/fault behavior, and the disposition of a CHD edge
-that produces no Sweep Active interval or more than one interval. CHD is retained as
-a command marker only; it does not replace Sweep Active or establish their latency.
+For finite scan acquisition, reconcile each scheduled T660-2 C process command
+and frame identity with exactly one observed Sweep Active interval on HF2LI
+DIO21, using the same pin-2 signal on PicoScope EXT when acquiring diagnostics.
+Verify edge polarity, event order, first/last-frame behavior, count equality,
+invalid/fault behavior, and missing or duplicate scan transitions. Retain the
+complete T660 frame/train table, readbacks, and channel OFF baseline/padding
+semantics and zero-additional-pulse train setting. No T660 D marker or DIO1 acquisition gate is present.
+
 Acquire campaign-local records in both scan directions and repeated point/process or
 scan-burst sequences under each materially distinct retained configuration. Do not map
 unused DB9 modes or reserved pins.
 
 Mandatory closeout deliverables: complete DIO words rather than selected bits,
 MIRcat logs, HF2LI configuration ID, pin/bit/state truth table, direction and
-transition signatures, CHC/CHD/Sweep-Active event-reconciliation table, count
+transition signatures, T660-2 C/frame/Sweep-Active event-reconciliation table, count
 reconciliation, timestamp alignment, raw artifact
 index entries, configuration IDs, receiver electrical conditions, uncertainty, and an
 explicit qualification decision.
@@ -45,7 +47,7 @@ This phase supplies the installed digital-event mapping and transition integrity
 by `EXP-CAL-04`, `EXP-CAL-06`, `EXP-CAL-07`, and `EXP-CHAR-03`.
 Acceptance is configuration-specific and requires complete event accounting with no
 unexplained duplicates, omissions, invalid states, or unsupported receiver conditions.
-For Phase Scan, a missing, extra, or ambiguously paired CHD marker or Sweep Active
+For Phase Scan, a missing, extra, or ambiguously paired frame, process command, or Sweep Active
 interval rejects the affected event/configuration before optical-pulse coverage is
 interpreted.
 Native complete DIO words and MIRcat records are the evidence; selected-bit extracts

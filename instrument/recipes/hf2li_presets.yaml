@@ -107,11 +107,11 @@ presets:
       expected_output: "USER_INPUT_REQUIRED_APPROVED_PHASE_DIRECTORY"
 
   detector_alignment:
-    purpose: "Continuous MIRcat detector-alignment setup for LabOne Plotter visualization with DIO0 external reference. Demodulator streaming stays continuous; use DIO1 only as the LabOne Plotter UI trigger if needed."
+    purpose: "Continuous MIRcat detector-alignment setup for LabOne Plotter visualization with DIO0 external reference. Demodulator streaming stays continuous; DIO1 is unconnected in default wiring."
     operator_checks:
-      - "Confirm T660-2 CHA is connected to HF2LI DIO0 external reference."
-      - "Confirm T660-2 CHB is connected to MIRcat TRIG IN before opening MIRcat emission."
-      - "Confirm T660-2 CHC is connected to HF2LI DIO1 if using the LabOne Plotter trigger controls."
+      - "Confirm T660-1 CHA is connected to HF2LI DIO0 external reference."
+      - "Confirm T660-1 CHB is connected to MIRcat TRIG IN before opening MIRcat emission."
+      - "T660-1 CHC feeds the T660-2 frame input and is disabled during detector alignment; DIO1 is unconnected."
       - "Confirm detector response remains within approved dynamic range during alignment."
     signal_inputs:
       ch1:
@@ -157,7 +157,7 @@ presets:
         enable: true
     labone_plotter:
       mode: "Use LabOne Plotter directly; the UI does not replicate detector plotting."
-      plotter_run_mode: "roll mode with continuous demodulator samples; configure DIO1 as a LabOne Plotter UI trigger only when a triggered display is needed"
+      plotter_run_mode: "roll mode with continuous demodulator samples; DIO1 has no default source"
       api_control: false
       note: "LabOne Plotter trigger configuration is UI/session state. Open LabOne and add the listed signals manually. The workflow intentionally leaves demods/{0,3}/trigger at 0 to avoid gating the demodulator sample stream."
       signals:
@@ -168,11 +168,11 @@ presets:
           api_path: "demods/3/sample.r"
           role: "Detector channel 2 magnitude"
       trigger:
-        source: DIO1
-        ui_tree: "Plotter trigger source = DIO1, Trigger Mode = Rising"
+        source: null
+        ui_tree: "Continuous display; no DIO1 trigger connection"
         demodulator_trigger_node: "demods/{0,3}/trigger"
         demodulator_trigger_value: 0
-        trigger_name: "continuous demodulator stream; DIO1 reserved for Plotter UI trigger"
+        trigger_name: "continuous demodulator stream"
     acquisition:
       duration_s: 5.0
       demodulators: [0, 3]
@@ -229,7 +229,7 @@ presets:
       mode: "Use LabOne Plotter directly; the UI does not replicate detector plotting."
       plotter_run_mode: "roll mode with continuous demodulator samples using HF2LI oscillator 0 at 2 MHz"
       api_control: false
-      note: "This mode does not require T660-2. It uses the HF2LI internal oscillator at the nominal MIRcat pulse rate for live alignment display."
+      note: "This mode does not require T660-1. It uses the HF2LI internal oscillator at the nominal MIRcat pulse rate for live alignment display."
       signals:
         - ui_tree: "Demodulators/1/Sample/R"
           api_path: "demods/0/sample.r"

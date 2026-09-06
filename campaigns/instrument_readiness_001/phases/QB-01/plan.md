@@ -29,9 +29,9 @@ modules/ranges.
 
 For every retained externally triggered Phase-Scan condition, capture the sample
 detector on PicoScope CHA and the reference detector on CHB under the accepted
-CHD-to-EXT and CHD-to-Sweep-Active configuration. Treat CHB as the primary optical
+direct Sweep Active-to-EXT branch and cross-recorder timing configuration. Treat CHB as the primary optical
 witness and CHA as corroboration. Generate expected opportunities from the
-configured and read-back T660-2 repetition rate, determine phase locally from
+configured and read-back T660-1 repetition rate, determine phase locally from
 consecutive optical edges, retain missing positions, and exclude partial boundary
 opportunities. Derive channel thresholds locally from baseline and pulse populations
 with noise and saturation checks; no absolute voltage threshold is transferable
@@ -72,7 +72,7 @@ fraction appears small. Module/source service, firmware, operating mode, scan pr
 wavenumber window, repetition/pulse setting, alignment, detector path, trigger routing,
 or metrology changes trigger
 revalidation. This phase does not establish sample absorbance, timing zero, or detector
-normalization, and it does not by itself freeze the reconstruction retry policy.
+normalization, and it does not by itself freeze the single-pass reconstruction coverage policy.
 
 ## Closeout
 

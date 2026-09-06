@@ -1,5 +1,5 @@
 name: safe_idle
-description: "Stop triggers, disable every output, and restore deterministic trigger and channel state."
+description: Stop triggers, disable every output, and restore deterministic trigger and channel state.
 approved_laser_safety_condition: false
 t660:
   t660_2:
@@ -7,41 +7,41 @@ t660:
     predivider: 1
     gate_mode: 0
     burst_enabled: false
-    frames_engine: "OFF"
+    frames_engine: 'OFF'
     external_trigger:
-      polarity: "positive"
-      termination: "50OHM"
+      polarity: positive
+      termination: 50OHM
       threshold_v: 2.0
-    trigger_source: "OFF"
+    trigger_source: 'OFF'
     force_eod: true
     channels:
       A:
-        timing_mode: "delay_width"
+        timing_mode: delay_width
         delay: 0ns
         width: 150ns
-        polarity: "positive"
-        termination: "50OHM"
+        polarity: negative
+        termination: 50OHM
         enabled: false
       B:
-        timing_mode: "delay_width"
+        timing_mode: delay_width
         delay: 0ns
         width: 150ns
-        polarity: "positive"
-        termination: "50OHM"
+        polarity: negative
+        termination: 50OHM
         enabled: false
       C:
-        timing_mode: "delay_width"
+        timing_mode: delay_width
         delay: 0ns
-        width: 150ns
-        polarity: "positive"
-        termination: "50OHM"
+        width: 10ms
+        polarity: negative
+        termination: 50OHM
         enabled: false
       D:
-        timing_mode: "delay_width"
+        timing_mode: delay_width
         delay: 0ns
         width: 150ns
-        polarity: "positive"
-        termination: "50OHM"
+        polarity: positive
+        termination: 50OHM
         enabled: false
   t660_1:
     stop_first: true
@@ -49,38 +49,37 @@ t660:
     gate_mode: 0
     burst_enabled: false
     external_trigger:
-      polarity: "positive"
-      termination: "50OHM"
+      polarity: positive
+      termination: 50OHM
       threshold_v: 2.0
-    trigger_source: "OFF"
+    trigger_source: 'OFF'
     force_eod: true
     channels:
       A:
-        timing_mode: "delay_width"
+        timing_mode: delay_width
         delay: 0ns
         width: 150ns
-        polarity: "positive"
-        termination: "50OHM"
+        polarity: positive
+        termination: 50OHM
         enabled: false
       B:
-        timing_mode: "delay_width"
+        timing_mode: delay_width
         delay: 0ns
         width: 150ns
-        polarity: "positive"
-        termination: "50OHM"
+        polarity: positive
+        termination: 50OHM
         enabled: false
       C:
-        timing_mode: "delay_width"
-        delay: 0ns
-        width: 10ms
-        # Preserve the Process Trigger's inactive (high) polarity while disabled.
-        polarity: "negative"
-        termination: "50OHM"
-        enabled: false
-      D:
-        timing_mode: "delay_width"
+        timing_mode: delay_width
         delay: 0ns
         width: 150ns
-        polarity: "positive"
-        termination: "50OHM"
+        polarity: positive
+        termination: 50OHM
+        enabled: false
+      D:
+        timing_mode: delay_width
+        delay: 0ns
+        width: 150ns
+        polarity: positive
+        termination: 50OHM
         enabled: false

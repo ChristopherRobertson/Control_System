@@ -67,7 +67,7 @@ class ControlSystemMainWindow(QMainWindow):
         self.mircat_widget = MircatWidget(handler, before_scan=self._mircat_scan_start_blocker)
         tabs.addTab(self.mircat_widget, "MIRcat")
         self.t660_widget = T660Widget(handler)
-        tabs.addTab(self.t660_widget, "T660-2")
+        tabs.addTab(self.t660_widget, "T660-1")
         self.ndyag_widget = NdYagWidget(handler)
         tabs.addTab(self.ndyag_widget, "Nd:YAG")
         self.iris_widget = IrisWidget(handler, before_start=self._iris_start_blocker)
@@ -260,7 +260,7 @@ class ControlSystemMainWindow(QMainWindow):
             ("Workflow", getattr(self, "workflow_selector_widget", None)),
             ("Phase Scan", getattr(self, "phase_scan_widget", None)),
             ("MIRcat", self.mircat_widget),
-            ("T660-2", self.t660_widget),
+            ("T660-1", self.t660_widget),
             ("Nd:YAG", self.ndyag_widget),
             ("OPO Iris", self.iris_widget),
         )

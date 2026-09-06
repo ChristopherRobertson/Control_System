@@ -1,86 +1,85 @@
 # Phase Scan tab
 
-The **Phase Scan** tab plans the room-temperature MbCO single-scan phase-delay
-measurement. Opening the tab, editing controls, and saving a plan never access
-hardware. **Start Scan** and **Abort Scan** are visibly disabled until the
-acquisition workflow is connected. They do not run a simulation or stop other
-tabs' instruments. Existing device Safe Idle and application shutdown controls
-remain unchanged.
+The **Phase Scan** tab develops and runs finite room-temperature MbCO single-scan
+phase-delay acquisitions. Planning controls and **Save Plan** do not access
+hardware. **Capture Background**, **Capture Test Scan (pump OFF)**,
+**Capture Inhibited Diagnostic**, **Start Scan**, and **Abort Scan** use the
+connected acquisition workflow and its readiness checks. Output remains labeled
+`EXPLORATORY_PROOF_OF_CONCEPT` and not for publication; software readiness does
+not promote scientific evidence.
 
-The intended detector connections follow the
-[default wiring](../../instrument/default_wiring_state.md): each signal uses a
-female-to-female BNC adapter -> male-to-two-female BNC tee, with sample feeding
-HF2LI Signal 1 In (+)/PicoScope CHA and reference feeding HF2LI Signal 2 In (+)/
-PicoScope CHB. Both receivers remain connected in normal operation. Planning a
-scan does not verify or qualify this physical configuration.
+## Wiring and scheduling
+
+Use the [default wiring](../../instrument/default_wiring_state.md). T660-1 A
+supplies HF2LI DIO0, B supplies MIRcat TRIG IN, and C supplies T660-2 TRIG IN.
+T660-2 runs the preloaded event frames: A FIRE, B Q-switch, C MIRcat Process
+Trigger. Both D outputs and HF2LI DIO1 are unwired. T660-2 CLOCK OUT distributes
+the separate 10 MHz reference to T660-1 and HF2LI.
+
+Sample feeds HF2LI Signal 1 In (+)/PicoScope CHA and reference feeds Signal 2
+In (+)/PicoScope CHB through separate adapter/tee branches. Both receivers stay
+connected. MIRcat DB9 pin 2 Sweep Active feeds HF2LI DIO21 and PicoScope EXT;
+DIO17 records the synchronized electrical pump event. Chemical time zero still
+requires the measured electrical-to-optical correction and uncertainty.
+
+The complete timing table is prepared before execution. One unpumped baseline
+precedes the nominal phase series; repetitions repeat that phase series, not
+the baseline. Per-frame channel OFF states suppress pump outputs in baseline
+and inactive padding frames. Train count zero selects no additional pulses
+and does not disable an enabled channel. Physical padding frames and logical scan counts
+are recorded separately. Host polling does not set the frame or pulse times.
 
 ## Controls and derived values
 
-- **Probe Repetition Rate** and **Probe Pulse Width** describe the MIRcat probe,
-  not the pump. Their product gives the nominal probe duty cycle. The planner
-  checks the existing 30% ceiling; a valid plan does not establish that a
-  particular module supports every requested rate, width, speed, or wavenumber.
-- **Start Wavenumber**, **Stop Wavenumber**, and **Scan Speed** determine the
-  nominal scan duration `T = abs(stop - start) / speed` and scan direction.
-- **Phase Delay** is the increment `Δ` in scan-start delay relative to each
-  event's pump. The current convention is `0, Δ, 2Δ, ... < T`, giving
-  `ceil(T / Δ)` pumped phases. The preview displays this convention explicitly.
-- **Rest Period** is the minimum pump-to-pump interval, not an additional sleep
-  after a scan. It must accommodate the latest phase delay plus the complete
-  scan, and respect the installed 10 Hz pump limit. It does not prove sample
-  reset. The duration preview budgets one such slot per record, including
-  baselines, without a trailing rest; preparation, return, settling, and
-  additional sample recovery can extend the actual duration.
-- **Repetitions** repeats the entire set. Each set begins with one unpumped
-  baseline, followed by exactly one scan per pumped phase. Matching phases
-  across sets are intended to be averaged while preserving all native records;
-  the planner itself does not acquire or average data.
+- **T660-1 Trigger Rate** is fixed at 2 MHz for this implementation. MIRcat
+  internal acceptance settings and the external trigger train are separate;
+  the former does not establish the optical opportunity rate.
+- **Start/Stop Wavenumber** and **Scan Speed** define nominal duration. Live
+  acquisition needs calibrated trajectory bounds and observed timing.
+- **Phase Delay** sets the nominal phase increment. **Before Pump** and
+  **After Pump** define the reconstruction window. The calibrated trajectory
+  determines the signed hardware phase range; it is not limited to `0..T`.
+- **Frame Period** is fixed at 0.3 s, from a 600000 predivider of the 2 MHz
+  event-input stream. This is a workflow-specific bound, not a general
+  experiment cadence or proof of sample recovery.
+- **Repetitions** repeats the complete phase series while retaining native
+  identities. The preview budgets frame timing; initialization, returning,
+  tuning, settling, and final-output completion can extend elapsed time.
 
-For 2000 → 1900 cm⁻¹ at 10,000 cm⁻¹/s, `T = 10 ms`. A 5 µs increment gives
-2,000 pumped scans at 0 through 9,995 µs plus one unpumped baseline: **2,001
-records per repetition**. Two repetitions therefore plan 4,002 records,
-including two baselines and 4,000 pump events. At a 1 s rest interval the
-one-repetition cadence budget is about 33 min 20 s before additional overhead.
+A phase increment is not temporal resolution. Numeric pulse/duty limits and a
+valid preview do not establish installed source, detector, or sample suitability.
+**Save Plan** exports the versioned settings, counts, sequence, and planning
+status. Changing settings invalidates the configured background when the
+acquisition contract requires it.
 
-The baseline has no pump time; it is not the pumped zero-delay record. Phase
-counts use exact decimal-input arithmetic, and the preview/export remain
-bounded in size for very fine phase increments.
+## Acquisition and records
 
-**Save Plan** exports a versioned JSON description with settings, derived
-counts, sequence rules, UTC save time, and explicit planning-only status.
-Changing a control clears the saved-plan message; it does not change an already
-exported plan or enable execution.
+Live acquisition requires promoted timing qualification, verified T660 frame
+capacity and LabOne resident-history capacity, exclusive device ownership,
+MIRcat readiness, matching background/settings, and successful readbacks.
+A missing prerequisite fails preflight before a finite sequence starts.
 
-## Latest scan plot
+Detector records use bounded Sweep-Active-triggered LabOne histories plus a
+separate small synchronized pump-event record. A consolidated native acquisition
+retains the full records, frame table, requested/read-back settings, and partial
+results on failure. PicoScope pulse diagnostics establish signal fidelity and
+trigger/receiver behavior; they are not a mandatory missing-pulse retry recorder.
 
-The plot displays **Absorption** on the Y-axis and **Wavenumber (cm⁻¹)** on
-the X-axis, decreasing from left to right. Each received scan replaces the
-previous trace; this display does not average repetitions. Axes scale to the
-received data, and invalid samples appear as gaps. Editing planning controls
-does not relabel or erase the latest received spectrum.
+Ordinary one-pass reconstruction uses the calibrated trajectory, observed scan
+and pump timestamps, and detector/reference/background normalization. It does
+not perform automatic missing-pulse retries, coverage merging, or etalon removal.
+Unsupported regions stay empty. Rejected and diagnostic records remain available.
 
-Before data arrives, the plot shows the requested wavenumber interval and
-“Waiting for latest scan,” with no synthetic spectrum. The phase sequence is
-available through **Show phase sequence** so the spectrum has more room.
-Acquisition integration can supply paired wavenumber/absorption arrays through
-`PhaseScanWidget.set_latest_scan(...)`, or emit `latest_scan_received` from a
-worker. Absorption must already be computed by the processing layer; the plot
-does not interpret detector voltages as absorption or invent a normalization.
+**Latest Scan**, **Show Background**, and **Completed 3D Map** display the
+corresponding retained products. Diagnostic coordinates and electrical pump sync
+remain explicitly provisional where their physical calibration is unavailable.
+The plot does not turn requested wavenumbers or small phase steps into calibrated
+axes or resolution.
 
-## Inputs still needed for acquisition
+**Abort Scan** requests interruptible shutdown, closes emission, stops the frame
+and probe timing, preserves partial native data, and reports restoration. Other
+device controls respect exclusive ownership. Completion waits for final scheduled
+outputs as well as frame-engine status and reconciles scan/pump/frame counts.
 
-The timing controls cannot determine QCL coverage and drive current, detector
-and acquisition settings, filter response, timing corrections, or safe optical
-pump/probe exposure. These belong in an explicitly selected instrument preset
-using promoted runtime bundles where applicable. A live workflow also needs
-exclusive device ownership, interruptible acquisition, verified finite pump
-events, raw-data retention, readiness/reset checks, and safe abort and shutdown.
-
-A signed initial phase offset would extend the current zero-based grid to
-scan-before-pump and pump-crossing controls. The plan uses nominal scan timing
-only; reconstruction must use measured scan and pump timing.
-The phase increment alone does not establish temporal resolution.
-
-The scientific method and control requirements remain in
-[EXPERIMENTS.md §10.4](../../EXPERIMENTS.md#104-rt-mb-r-s-supporting-single-scan-phase-delay-reconstruction).
-This UI addition does not change qualification, campaign, or promotion status.
+Scientific methods and claims remain in [EXPERIMENTS.md](../../EXPERIMENTS.md)
+and the applicable campaign plans.

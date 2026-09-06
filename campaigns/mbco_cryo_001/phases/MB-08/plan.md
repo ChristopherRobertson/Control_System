@@ -23,13 +23,16 @@ temperature/geometry envelopes, and identifiability simulations. A new wavelengt
 pump path requires its own qualification; a model is not expanded beyond what remains
 identifiable after measured acquisition-kernel convolution.
 
-Any denser room-temperature single-scan phase-delay extension retains the promoted
-Phase-Scan marker-alignment, dual-detector pulse-coverage, retry, aligned-bin merge,
-and provenance rules without relaxation. Extension scans remain separate attempts at
-their acquired delays; deficient regions are not filled across different phase delays
-or biological states. A retry-exhausted result remains
-`INCOMPLETE_MISSING_PULSE_COVERAGE`, diagnostic only, visibly incomplete in every
-table and plot, and ineligible for mechanistic or publication claims.
+The single-scan phase-delay block imports the promoted finite T660-2 train/frame
+configuration, direct Sweep Active branch/clock qualification, calibrated scan
+trajectory, synchronized pump-event record, and E2E-CH-validated one-pass
+reconstruction. T660-1 supplies the probe/reference/event-clock train. Both D
+outputs and DIO1 remain unwired. Choose cadence, phase grid, and recovery from
+the experiment's measured envelope rather than copying the Phase Scan UI bound.
+Preserve every nominal scan and independent repetition with native identities.
+Missing/duplicate events, timing mismatch, or invalid signal quality stop the block;
+deficient regions remain absent and outputs retain incomplete/diagnostic disposition.
+No automatic retry or coverage merge fills gaps or supports a biological claim.
 
 ## Closeout
 

@@ -75,8 +75,8 @@ MIRCAT_WIDGET_SPEC = DeviceWidgetSpec(
             step=0.1,
         ),
         ParameterField("scan_repetitions", "Repetitions", "int", 1, minimum=1, maximum=1, step=1),
-        ParameterField("scan_trigger_rate_hz", "T660-2 Reference / Trigger Rate", "float", 2000000., units="Hz", minimum=1),
-        ParameterField("scan_trigger_width_ns", "T660-2 Trigger Width", "float", 150., units="ns", minimum=1),
+        ParameterField("scan_trigger_rate_hz", "T660-1 Reference / Trigger Rate", "float", 2000000., units="Hz", minimum=1),
+        ParameterField("scan_trigger_width_ns", "T660-1 Trigger Width", "float", 150., units="ns", minimum=1),
         ParameterField("scan_internal_rate_hz", "MIRcat Internal Rate", "float", 2100000., units="Hz", minimum=1),
         ParameterField("scan_internal_width_ns", "MIRcat Internal Width", "float", 142., units="ns", minimum=1),
         ParameterField(
@@ -439,8 +439,8 @@ class MircatWidget(QWidget):
         self._add_parameter_fields(form, keys)
         layout.addWidget(form_container)
         if keys == SCAN_PARAMETER_KEYS:
-            note = QLabel('Start Scan arms MIRcat and runs one unpumped sweep. T660-2 supplies the reference and optical train; '
-                          'T660-1 CHC starts the sweep after Pico EXT is armed. Pump A/B and CHD stay disabled.\n'
+            note = QLabel('Start Scan arms MIRcat and runs one unpumped sweep. T660-1 supplies the reference and optical train; '
+                          'T660-2 CHC starts the sweep after Pico EXT is armed. T660-2 pump A/B and both spare D outputs stay disabled.\n'
                           'HF2LI inputs use the 2 V range. Clipping is recorded without stopping the scan.\n'
                           'Confirm the pump is physically blocked under Safety Approval. Close PicoScope 7 before Start. '
                           'Settings remain after completion; IR turns off. Exploratory — NOT FOR PUBLICATION.')

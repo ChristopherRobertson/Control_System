@@ -28,12 +28,14 @@ all completed evidence exactly as recorded.
 3. Link each item to an existing incomplete phase, `MS-02.1`, or an explicit
    unresolved gap. A completed phase may be cited only as an immutable imported
    source; no row may assign it new work.
-4. Allocate the Phase-Scan synchronization and optical-pulse-coverage chain without
-   collapsing its distinct questions: MS-02.1 owns the T660-1 CHD-to-PicoScope-EXT
-   electrical route, MD-01 owns CHC-command/CHD-marker/Sweep-Active semantics,
-   MSW-01 owns their measured timing relation, HF-02 owns sustained cross-stream
-   alignment, QB-01 owns optical-omission characterization, AR-01 owns acquisition-
-   policy selection, and E2E-CH owns retry/merge/reconstruction validation.
+4. Allocate the synchronization and finite acquisition chain: MS-02.1 owns the
+   Sweep Active branch and receiver transfer; MD-01 owns T660-2 C/frame/scan
+   event semantics; MSW-01 owns measured scan timing/trajectory; HF-02 owns
+   bounded histories, synchronized pump records, and capacity/loss behavior;
+   QB-01 owns optical pulse fidelity; FE-01 owns finite train/frame and emitted
+   event reconciliation; AR-01 selects architecture-specific acquisition settings;
+   E2E-CH validates single-pass reconstruction and incomplete-record behavior.
+
 5. For every mapping record the required output, reference plane/configuration,
    native evidence class, uncertainty, acceptance boundary, downstream
    architecture or thesis claim, validity envelope, and revalidation trigger.

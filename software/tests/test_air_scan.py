@@ -59,7 +59,7 @@ class Rig:
 class AirTimer(Timer):
     def fire_remote_trigger(self):
         assert self.world.pico.armed, 'process trigger preceded Pico EXT arm'
-        assert self.name == 't660_1' and self.source == 'REM'
+        assert self.name == 't660_2' and self.source == 'REM'
         assert self.channels['C']['enabled']
         assert all(not self.channels[c]['enabled'] for c in 'ABD')
         self.shots += 1
@@ -84,7 +84,7 @@ class FakeLaser:
     def get_system_error_word(self): return 0
     def cancel_manual_tune(self):
         if self.manual_tune:
-            assert not self.rig.units['t660_2'].channels['B']['enabled']
+            assert not self.rig.units['t660_1'].channels['B']['enabled']
             self.rig.events.append('cancel manual tune')
             if self.rig.cancel_mode_failure:
                 raise RuntimeError('manual tune cancellation failed')
@@ -93,7 +93,7 @@ class FakeLaser:
         self.manual_tune = False
     def tune_to_wavenumber(self, wavenumber, *, qcl):
         assert wavenumber == 2050 and qcl == 1 and self.armed
-        assert not self.rig.units['t660_2'].channels['B']['enabled']
+        assert not self.rig.units['t660_1'].channels['B']['enabled']
         self.rig.events.append('tune to start')
         self.tuned = self.manual_tune = True
         if self.rig.cancel_during_tune:
@@ -105,7 +105,7 @@ class FakeLaser:
     def turn_emission_on(self, *, approved_laser_safety_condition):
         assert approved_laser_safety_condition and self.armed and self.tuned
         if not self.started:
-            assert not self.rig.units['t660_2'].channels['B']['enabled']
+            assert not self.rig.units['t660_1'].channels['B']['enabled']
         self.rig.gate_call_stages.append('after_start' if self.started else 'before_start')
         self.rig.events.append('explicit gate enable')
         self.emission = not (self.rig.gate_fails or (self.started and self.rig.gate_fails_after_start))

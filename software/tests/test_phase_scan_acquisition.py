@@ -86,6 +86,7 @@ class Timer:
         def query(value): return {"ok": True, "response": str(value)}
         return {"queries": {"trigger_source": query(self.source), "gate_mode": query(0),
                 "burst": query("OFF"), "frames_engine": query("OFF"),
+                "train_count": query(0), "predivider": query(self.recipe.get("predivider", 1)),
                 "synth_frequency": query(self.recipe.get("clock", {}).get("frequency", "2000000Hz"))},
             "channels": {ch: {"enabled": query("ON" if val["enabled"] else "OFF"),
                 "delay_edge": query(val.get("delay", "0ns")), "width_edge": query(val.get("width", "10us")),

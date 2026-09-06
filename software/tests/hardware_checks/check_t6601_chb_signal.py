@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Hold T660-2 CHB at 2 MHz / 150 ns for physical signal verification.
+"""Hold T660-1 CHB at 2 MHz / 150 ns for physical signal verification.
 
 Usage:
-    python software/tests/hardware_checks/check_t6602_chb_signal.py --operator "Name" --confirm-real-hardware --confirm-safe-electrical-routing
+    python software/tests/hardware_checks/check_t6601_chb_signal.py --operator "Name" --confirm-real-hardware --confirm-safe-electrical-routing
 
-Connect T660-2 CHB to an oscilloscope, frequency counter, or a properly
+Connect T660-1 CHB to an oscilloscope, frequency counter, or a properly
 terminated BNC T before running. The script applies safe idle first, starts
-only T660-2 CHB, waits until Enter or --duration-s, then applies safe idle.
+only T660-1 CHB, waits until Enter or --duration-s, then applies safe idle.
 """
 
 from __future__ import annotations
@@ -22,13 +22,16 @@ from control_app.workflows.timing_recipe_manager import TimingRecipeManager
 
 
 SIGNAL_RECIPE = {
-    "name": "t6602_chb_signal_verification_2mhz",
-    "description": "Physical verification of T660-2 CHB only: 2 MHz, 150 ns, positive, 50 ohm.",
+    "name": "t6601_chb_signal_verification_2mhz",
+    "description": "Physical verification of T660-1 CHB only: 2 MHz, 150 ns, positive, 50 ohm.",
     "approved_laser_safety_condition": True,
     "electrical_signal_verification_only": True,
     "t660": {
-        "t660_2": {
+        "t660_1": {
             "stop_first": True,
+            "predivider": 1,
+            "gate_mode": 0,
+            "burst_enabled": False,
             "clock": {
                 "frequency": "2MHz",
                 "shots": 0,
@@ -36,6 +39,7 @@ SIGNAL_RECIPE = {
             "trigger_source": "SYN",
             "force_eod": True,
             "start": True,
+            "channels": {"D": {"enabled": False}},
             "signals": {
                 "hf2li_extref": {"enabled": False},
                 "mircat_trig_in": {
@@ -45,12 +49,15 @@ SIGNAL_RECIPE = {
                     "termination": "50OHM",
                     "enabled": True,
                 },
-                "hf2li_daq_trigger": {"enabled": False},
-                "t660_1_trig_in": {"enabled": False},
+                "t660_2_trig_in": {"enabled": False},
             },
         },
-        "t660_1": {
+        "t660_2": {
             "stop_first": True,
+            "frames_engine": "OFF",
+            "predivider": 1,
+            "gate_mode": 0,
+            "burst_enabled": False,
             "trigger_source": "OFF",
             "force_eod": True,
             "channels": {
@@ -88,7 +95,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "evidence" / "experiments" / "runs" / f"{today_stamp()}_t6602_chb_signal_verification"
+    run_dir = REPO_ROOT / "evidence" / "experiments" / "runs" / f"{today_stamp()}_t6601_chb_signal_verification"
     run_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = run_dir / "command_log.txt"
     manifest_path = run_dir / "run_manifest.json"
@@ -99,7 +106,7 @@ def main() -> int:
 
     with command_log_path.open("a", encoding="utf-8") as command_log:
         command_log.write(
-            f"{utc_now()} check_t6602_chb_signal start operator={args.operator}\n"
+            f"{utc_now()} check_t6601_chb_signal start operator={args.operator}\n"
         )
         manager = TimingRecipeManager(inventory, command_log=command_log)
         try:
@@ -112,14 +119,14 @@ def main() -> int:
             readback_paths.append(str(safe_before_path))
             print(f"Safe idle readback written to {safe_before_path}", flush=True)
 
-            start_path = run_dir / "t6602_chb_2mhz_150ns_readback.json"
-            print("Starting T660-2 CHB only at 2 MHz / 150 ns...", flush=True)
+            start_path = run_dir / "t6601_chb_2mhz_150ns_readback.json"
+            print("Starting T660-1 CHB only at 2 MHz / 150 ns...", flush=True)
             readback = manager.apply_recipe(SIGNAL_RECIPE, output_path=start_path)
             readback_paths.append(str(start_path))
             write_json(run_dir / "signal_verification_request.json", SIGNAL_RECIPE)
 
             print(
-                "T660-2 CHB_RUNNING: expect 2 MHz period, 150 ns high time, positive polarity, 50 ohm output.",
+                "T660-1 CHB_RUNNING: expect 2 MHz period, 150 ns high time, positive polarity, 50 ohm output.",
                 flush=True,
             )
             print(f"Readback written to {start_path}", flush=True)
@@ -153,8 +160,8 @@ def main() -> int:
             "blocked": blocked,
             "blockers": errors,
             "next_actions": [
-                "Verify T660-2 COM7 is connected and not held by another process.",
-                "Measure directly at T660-2 CHB with a 50 ohm terminated scope input.",
+                "Verify T660-1 COM3 is connected and not held by another process.",
+                "Measure directly at T660-1 CHB with a 50 ohm terminated scope input.",
                 "If CHB is correct at the T660 but not at MIRcat TRIG IN, inspect the BNC cable or input adapter.",
             ]
             if blocked
@@ -166,7 +173,7 @@ def main() -> int:
     if blocked:
         write_blocked(
             run_dir / "BLOCKED.md",
-            title="T660-2 CHB Signal Verification BLOCKED",
+            title="T660-1 CHB Signal Verification BLOCKED",
             blockers=errors,
             next_actions=manifest["blocker_status"]["next_actions"],
             context={"run_dir": str(run_dir)},
@@ -192,9 +199,9 @@ def wait_for_stop(args: argparse.Namespace) -> str:
 
 
 def summarize_chb_readback(readback: dict) -> None:
-    t660_2 = (readback.get("devices") or {}).get("t660_2", {})
-    queries = t660_2.get("queries") or {}
-    chb = ((t660_2.get("channels") or {}).get("B")) or {}
+    t660_1 = (readback.get("devices") or {}).get("t660_1", {})
+    queries = t660_1.get("queries") or {}
+    chb = ((t660_1.get("channels") or {}).get("B")) or {}
     print("Controller readback:", flush=True)
     print(f"  trigger_source={queries.get('trigger_source')}", flush=True)
     print(f"  synth_frequency={queries.get('synth_frequency')}", flush=True)

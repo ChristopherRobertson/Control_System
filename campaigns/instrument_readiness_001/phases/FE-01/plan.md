@@ -16,13 +16,23 @@ retention, restoration, and procedural-writeup requirements are in
 
 ### 23. FE-01 — finite emitted-pump-event control and reconciliation
 
-Qualify the finite-exposure mechanism shared by the biological experiments
-without a biological sample. Preserve the manufacturer-qualified Nd:YAG/OPO
-cadence while admitting only CH-00-approved rare post-iris OPO-540 pump events
-to the sample-equivalent plane. The accepted implementation may be a
-validated laser pulse-division mode, an interlocked optical pulse picker/
-shutter, or another separately approved topology. A T660 shot-counter reset is
-never an exposure limiter.
+Qualify finite emitted-event control without a biological sample. T660-1 C
+supplies the event clock to T660-2 TRIG IN; T660-2 executes a preloaded frame
+schedule with per-frame enables/delays for FIRE, Q-switch, and Process Trigger
+on A/B/C and a shared train count/spacing.
+Test channel OFF entries, train count zero for no additional pulses, terminal
+padding, exact logical/physical counts,
+start/stop ordering, maximum delay bounds, and output completion after the frame
+engine reports done. The predivider and cadence are selected for each experiment.
+Both D outputs and DIO1 remain unwired.
+
+Frame and shot counts establish electrical commands, not emitted sample events.
+Independently verify that the selected FIRE/Q-switch schedule preserves the
+qualified source cadence and optical stability while admitting only planned
+post-iris OPO-540 events. If a particular experiment needs additional approved
+optical gating to preserve lamp cadence, qualify it explicitly; the default
+frame program does not imply an installed pulse picker. A T660 shot-counter
+reset never limits exposure.
 
 For the OPO-540 path, retain the ATT-01 iris configuration and verify its
 command/readback before the independent event-count tests. Changing iris

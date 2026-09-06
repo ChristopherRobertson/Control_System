@@ -57,7 +57,7 @@ def default_capability_registry() -> CapabilityRegistry:
         Capability("arm", "arm"), Capability("emission", "arm"), Capability("normal_sweep_start", "run"),
         Capability("stop", "stop"), Capability("disarm", "cleanup"), Capability("deinitialize", "cleanup"),
         Capability("tuning_readback", "verify"), Capability("pulse_limits_readback", "verify"),
-        Capability("external_process_trigger", "configure", available=False, reason="GUI test and pulse sequence are not experimentally confirmed"),
+        Capability("external_process_trigger", "configure", available=False, reason="The generic builder has no qualified frame/process execution adapter"),
     )
     registry.register(
         "hf2li",
@@ -70,26 +70,26 @@ def default_capability_registry() -> CapabilityRegistry:
             ("continuous_acquisition", "acquire"), ("readback_verification", "verify"),
             ("stop", "stop"), ("disconnect", "cleanup"),
         )),
-        Capability("mircat_db9_dio_mapping", "configure", available=False, reason="DB9 pins 1-3 to HF2LI DIO indices are unconfirmed"),
+        Capability("mircat_db9_dio_mapping", "configure"),
     )
-    registry.register("t660_2", *(
+    registry.register("t660_1", *(
         Capability(name, phase) for name, phase in (
             ("channel_a_hf2li_extref", "configure"), ("channel_b_mircat_trigger", "configure"),
-            ("channel_c_hf2li_daq_trigger", "configure"), ("channel_d_t660_1_trigger", "configure"),
+            ("channel_c_t660_2_trigger", "configure"),
             ("program_timing", "configure"), ("start", "run"), ("stop", "stop"), ("safe_idle", "cleanup"),
         )
     ))
-    registry.register("t660_1", *(
+    registry.register("t660_2", *(
         Capability(name, phase) for name, phase in (
             ("channel_a_ndyag_fire", "configure"), ("channel_b_ndyag_q_switch", "configure"),
             ("program_timing", "configure"), ("start", "run"), ("stop", "stop"), ("safe_idle", "cleanup"),
         )
-    ), Capability("channel_c_mircat_process_trigger", "configure", available=False, reason="external process trigger is not experimentally confirmed"))
+    ), Capability("channel_c_mircat_process_trigger", "configure", available=False, reason="The generic builder has no qualified frame/process execution adapter"))
     registry.register("ndyag", Capability("timing", "configure"), Capability("fire", "run"), Capability("stop", "stop"), Capability("safe_idle", "cleanup"))
     registry.register("picoscope", Capability("capture_settings", "configure"), Capability("arm", "arm"), Capability("capture", "acquire"), Capability("stop", "stop"), Capability("close", "cleanup"))
     return registry
 
 
 PROHIBITED_ROUTES = {
-    "mircat.db9_pin_5", "mircat.db9_pin_6", "mircat.db9_pin_8", "t660_1.channel_d"
+    "mircat.db9_pin_5", "mircat.db9_pin_6", "mircat.db9_pin_8", "t660_1.channel_d", "t660_2.channel_d"
 }

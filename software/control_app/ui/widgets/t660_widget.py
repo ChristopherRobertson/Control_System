@@ -1,4 +1,4 @@
-"""Reusable Qt T660-2 timing widget."""
+"""Reusable Qt T660-1 timing widget."""
 
 from __future__ import annotations
 
@@ -17,10 +17,13 @@ from control_app.ui.contracts import (
 
 
 T660_WIDGET_SPEC = DeviceWidgetSpec(
-    device_key="t660_2",
-    title="T660-2 Timing",
+    device_key="t660_1",
+    title="T660-1 Probe / Reference",
     status_fields=(
         StatusField("identity", "Identity"),
+        StatusField("clock_connector_mode", "10 MHz Clock Mode"),
+        StatusField("clock_lock_status", "10 MHz Lock Status"),
+        StatusField("clock_external_frequency_hz", "External Clock", units="Hz"),
         StatusField("trigger_source", "Trigger Source", critical=True),
         StatusField("synth_frequency", "Synth Frequency", units="Hz"),
         StatusField("shots", "Shots"),
@@ -45,23 +48,23 @@ T660_WIDGET_SPEC = DeviceWidgetSpec(
         ),
     ),
     controls=(
-        WidgetControl("refresh_status", "Refresh", "t660_2.refresh_status"),
-        WidgetControl("start_cha", "Start CHA", "t660_2.start_cha", kind="guarded"),
+        WidgetControl("refresh_status", "Refresh", "t660_1.refresh_status"),
+        WidgetControl("start_cha", "Start CHA", "t660_1.start_cha", kind="guarded"),
         WidgetControl(
             "start_chb",
             "Start CHB",
-            "t660_2.start_chb",
+            "t660_1.start_chb",
             kind="guarded",
             safety_approval_required=True,
         ),
         WidgetControl(
             "start_cha_chb",
             "Start CHA + CHB",
-            "t660_2.start_cha_chb",
+            "t660_1.start_cha_chb",
             kind="guarded",
             safety_approval_required=True,
         ),
-        WidgetControl("safe_idle", "Safe Idle", "t660_2.safe_idle", kind="danger"),
+        WidgetControl("safe_idle", "Safe Idle", "t660_1.safe_idle", kind="danger"),
     ),
 )
 
@@ -132,7 +135,7 @@ if PYSIDE6_AVAILABLE:
 
 
 class T660Widget(QWidget):
-    """Fixed-purpose T660-2 panel for alignment timing."""
+    """Fixed-purpose T660-1 panel for alignment timing."""
 
     def __init__(
         self,
@@ -289,7 +292,7 @@ class T660Widget(QWidget):
         thread.start()
 
     def _dispatch_manual_cha(self) -> None:
-        """Start only CHA; CHB/CHC/CHD and all T660-1 channels remain off."""
+        """Start only CHA; CHB/CHC/CHD and all T660-2 channels remain off."""
 
         parameters = {
             "approved_laser_safety_condition": False,
@@ -300,7 +303,7 @@ class T660Widget(QWidget):
         }
         command = WorkflowCommand(
             device_key=T660_WIDGET_SPEC.device_key,
-            command="t660_2.apply_manual_cha",
+            command="t660_1.apply_manual_cha",
             parameters=parameters,
             safety_approval=False,
         )

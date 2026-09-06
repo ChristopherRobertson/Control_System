@@ -3,11 +3,11 @@ experiment_id: mircat_hf2li_sweep_example
 name: MIRcat HF2LI constrained-sweep test fixture
 description: Software-validation fixture only; not an approved campaign or experimental recipe.
 experiment_type: spectral_sweep
-required_devices: [mircat, hf2li, t660_2]
+required_devices: [mircat, hf2li, t660_1]
 resource_ownership:
   mircat: experiment_engine
   hf2li: experiment_engine
-  t660_2: experiment_engine
+  t660_1: experiment_engine
 fields:
   - key: sample_name
     label: Sample name
@@ -52,7 +52,7 @@ values:
   repetitions: 1
   export_format: json
 devices:
-  - device: t660_2
+  - device: t660_1
     capabilities:
       channel_a_hf2li_extref: true
       channel_b_mircat_trigger: true
@@ -94,11 +94,11 @@ safety_prerequisites:
   - mircat_area_clear
   - mircat_interlock_closed
 stop:
-  actions: [mircat.stop, hf2li.stop, t660_2.stop]
+  actions: [mircat.stop, hf2li.stop, t660_1.stop]
 abort_to_safe:
-  actions: [mircat.stop, mircat.disarm, t660_2.safe_idle, hf2li.stop]
+  actions: [mircat.stop, mircat.disarm, t660_1.safe_idle, hf2li.stop]
 failure_cleanup:
-  actions: [mircat.stop, mircat.disarm, mircat.deinitialize, t660_2.safe_idle, hf2li.disconnect]
+  actions: [mircat.stop, mircat.disarm, mircat.deinitialize, t660_1.safe_idle, hf2li.disconnect]
 metadata:
   routes: []
   authority: test_fixture_only

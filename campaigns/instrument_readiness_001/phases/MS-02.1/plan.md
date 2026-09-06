@@ -28,7 +28,7 @@ evidence required by `EXP-VAL-07`.
 ## Measurement and reference planes
 
 Use the [current default detector wiring](../../../../instrument/default_wiring_state.md)
-reported on 2026-08-31 as the normal configuration under test:
+as the normal configuration under test:
 
 | Signal | Split assembly, in signal order | Simultaneously connected receivers |
 | --- | --- | --- |
@@ -44,15 +44,12 @@ only one instrument records. Explicitly identify the removed branch and changed
 load for single-destination controls and temporary timing/IRF configurations.
 Restoration returns both detector signals to both default receivers.
 
-The Phase-Scan external-trigger configuration is a separate named configuration
-within this phase. It retains both detector split paths, keeps MIRcat DB9 pin 2
-`Tuned / Sweep Active` on HF2LI DIO21, and connects T660-1 CHD directly to
-PicoScope EXT. T660-1 CHC remains the active-low MIRcat process command; CHD is
-programmed with the same leading-edge timing and polarity and remains disabled
-outside an armed capture. Record the T660-1 output connector, CHD cable,
-PicoScope EXT connector, source/load setting, grounding, and receiver configuration.
-No equality between CHC, CHD, or Sweep Active is inferred from the programmed
-settings or cable lengths.
+The sweep diagnostic trigger retains both detector split paths and observes
+MIRcat DB9 pin 2 Sweep Active concurrently on HF2LI DIO21 and PicoScope EXT.
+Record the pin-2 branch, DB9 pin-7 ground return, cable/adapter identities, and
+both receiver configurations. The EXT branch uses high impedance; a cable's
+characteristic impedance is not its receiver termination. T660-2 C supplies
+the process command, and both T660 D outputs remain disabled and unwired.
 
 For each retained normal dual-detector and sample-detector/pump-detector timing
 configuration, freeze a human-readable `configuration_id` containing detector,
@@ -68,15 +65,13 @@ qualified electrical source plane to the HF2LI and PicoScope receiver planes:
 - change in detector output when the HF2LI and PicoScope are connected
   simultaneously versus the qualified single-destination controls.
 
-For the CHD-to-EXT route, stage all outputs disabled and use a non-emitting
-electrical verification to measure the delivered high/low levels, falling-edge
-polarity, rise/fall behavior, overshoot/ringing, loading, threshold margin,
-false/missed-trigger behavior, trigger latency, and repeatability. Confirm returned
-sample interval and complete-record behavior at capture settings capable of no more
-than 48 ns/sample, including the preferred approximately 10--20 ns/sample region
-when memory and transfer constraints permit. This phase qualifies the electrical
-source-to-EXT path only; MSW-01 measures the CHD-edge to observed-Sweep-Active
-relation under the retained MIRcat configurations.
+For the Sweep Active-to-EXT branch, use a non-emitting electrical verification
+to measure delivered levels, rising-edge polarity, rise/fall behavior, loading,
+overshoot/ringing, threshold margin, false/missed triggers, latency, and
+repeatability with HF2LI still connected. Confirm the returned sample interval
+and complete-record behavior across the intended diagnostic envelope. This
+phase qualifies branch/receiver transfer; MD-01 and MSW-01 qualify process/state
+semantics, command-to-scan timing, and scan trajectory.
 
 Import the accepted `MS-01` channel/path and `MS-02` splitter correction terms by
 stable evidence ID. Do not repeat their acquisition grids. Physical cable-length
@@ -99,7 +94,7 @@ qualified input envelopes, the measured transfer and latency model closes within
 the predeclared uncertainty criterion, trigger/pretrigger behavior is repeatable,
 overflow/loss is reconciled, and reconnect/revisit results remain inside the
 declared tolerance. The Phase-Scan trigger configuration additionally requires a
-delivered CHD waveform and PicoScope EXT threshold/hysteresis setting with bounded
+delivered Sweep Active waveform and PicoScope EXT threshold/hysteresis setting with bounded
 margin, no unexplained false or missed triggers, and a retained uncertainty term for
 MSW-01. Retain and cause-code every clipped, unstable, reflected, mis-triggered,
 lossy, or out-of-envelope attempt. Failure rejects that configuration or opens

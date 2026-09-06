@@ -47,7 +47,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             [item["step"] for item in plan["operator_sequence"]],
             ["0a", "0b", "0c", "1", "2", "3", "4", "5", "6", "7", "8"],
         )
-        self.assertIn("first programmed T660-2", plan["time_origins"]["t_master"])
+        self.assertIn("first programmed T660-1", plan["time_origins"]["t_master"])
         self.assertIn("sample", plan["time_origins"]["t_chem"])
         self.assertEqual(plan["recipes"]["optical"]["effective_trigger_source"], "REM")
         self.assertEqual(plan["capture_policy"]["maximum_samples_per_trace"], MAX_SAMPLES_PER_TRACE)
@@ -55,7 +55,8 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             self.assertTrue(item["pico_ch_a"])
             self.assertTrue(item["pico_ch_b"])
             self.assertTrue(item["remains_connected"])
-            self.assertTrue(item["disconnect"])
+            if item["default_wiring_available"]:
+                self.assertTrue(item["disconnect"])
             expected_rate = 10 if item["step"] in {"4", "5", "6", "7", "8"} else 100
             self.assertEqual(item["trigger_rate_hz"], expected_rate)
         optical = next(item for item in plan["operator_sequence"] if item["step"] == "7")
@@ -154,10 +155,10 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
         self.assertIn("directly to that BNC bulkhead", step_zero_text)
         self.assertIn("park it for restoration", step_zero_text)
         self.assertNotIn("installed EXT REF downstream BNC cable -> CLOCK-SPLITTER-01", step_zero_text)
-        self.assertNotIn("dedicated T660-2 CHA test lead", step_zero_text)
-        self.assertNotIn("at the T660-2 CHA source", step_zero_text)
+        self.assertNotIn("dedicated T660-1 CHA test lead", step_zero_text)
+        self.assertNotIn("at the T660-1 CHA source", step_zero_text)
 
-        step_1_transition = " ".join(step_1.disconnect)
+        step_1_transition = " ".join(next(step for step in MEASUREMENT_STEPS if step.step == "2").disconnect)
         self.assertIn("Restore CLOCK-SPLITTER-01 to T660-2 CLOCK", step_1_transition)
         self.assertIn("T660-1 CLOCK and HF2LI CLOCK", step_1_transition)
         self.assertIn("before any clock-dependent recipe", step_1_transition)
@@ -175,20 +176,17 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
         self.assertNotIn("measurement assembly", step_0a.pico_ch_a)
         self.assertNotIn("measurement assembly", step_0a.pico_ch_b)
 
-    def test_t6601_channel_d_is_unmapped_and_absent_from_calibration_recipes(self) -> None:
-        self.assertIsNone(
-            self.inventory.devices["t660_1"]["channel_map"]["D"]
-        )
-        self.assertNotIn(
-            "mircat_db9_pin_5_laser_output_on_off",
-            self.inventory.signal_map,
-        )
-        for recipe_name in ("timing_calibration.yaml",):
-            recipe = yaml.safe_load(
-                (REPO_ROOT / "instrument" / "recipes" / recipe_name).read_text(encoding="utf-8")
-            )
-            signals = recipe["t660"]["t660_1"]["signals"]
-            self.assertNotIn("mircat_db9_pin_5_laser_output_on_off", signals)
+    def test_spare_channels_are_unmapped_and_disabled_in_calibration_recipes(self) -> None:
+        for unit in ("t660_1", "t660_2"):
+            self.assertIsNone(self.inventory.devices[unit]["channel_map"]["D"])
+        self.assertNotIn("mircat_db9_pin_5_laser_output_on_off", self.inventory.signal_map)
+        recipe = yaml.safe_load((REPO_ROOT / "instrument" / "recipes" / "timing_calibration.yaml").read_text(encoding="utf-8"))
+        resolved = TimingRecipeManager(self.inventory).validate_recipe(recipe)["resolved_settings"]
+        self.assertEqual(set(resolved), {"t660_1", "t660_2"})
+        for settings in resolved.values():
+            self.assertIs(settings["channels"]["D"]["enabled"], False)
+            self.assertNotIn("mircat_db9_pin_5_laser_output_on_off",
+                             {channel.get("signal") for channel in settings["channels"].values()})
         self.assertNotIn("9", {step.step for step in MEASUREMENT_STEPS})
 
     def test_unique_run_directory_never_reuses_existing_path(self) -> None:
@@ -313,6 +311,10 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
         for step in MEASUREMENT_STEPS:
             if step.target_signal == "mircat_db9_pin_4_process_trigger":
                 self.assertEqual(step.target_edge, "falling")
+            if not step.default_wiring_available:
+                with self.assertRaisesRegex(Exception, "unavailable in the default wiring"):
+                    workflow.build_step_recipe(step, programmed_delay_ns=0)
+                continue
             if step.optical:
                 continue
             recipe = workflow.build_step_recipe(step, programmed_delay_ns=1_000_000)
@@ -322,9 +324,9 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             for unit in units.values():
                 self.assertEqual(set(unit["channels"]), {"A", "B", "C", "D"})
             if step.step in {"4", "5", "6", "8"}:
-                self.assertEqual(list(units), ["t660_1", "t660_2"])
-                self.assertEqual(units["t660_2"]["clock"]["frequency"], "10Hz")
-                for settings in units["t660_1"]["channels"].values():
+                self.assertEqual(list(units), ["t660_2", "t660_1"])
+                self.assertEqual(units["t660_1"]["clock"]["frequency"], "10Hz")
+                for settings in units["t660_2"]["channels"].values():
                     if settings.get("signal") in {"ndyag_fire", "ndyag_q_switch"} and settings.get("enabled"):
                         self.assertEqual(settings["polarity"], "negative")
                         self.assertEqual(settings["width"], "10us")
@@ -332,7 +334,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                         self.assertEqual(settings["polarity"], "negative")
                         self.assertEqual(settings["width"], "10ms")
             else:
-                self.assertEqual(units["t660_2"]["clock"]["frequency"], "100Hz")
+                self.assertEqual(units["t660_1"]["clock"]["frequency"], "100Hz")
         optical = next(step for step in MEASUREMENT_STEPS if step.optical)
         with self.assertRaisesRegex(Exception, "approved optical recipe"):
             workflow.build_step_recipe(optical, programmed_delay_ns=0)
@@ -433,7 +435,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
 
     def test_t660_readback_checks_state_frequency_delay_width_and_termination(self) -> None:
         resolved = {
-            "t660_2": {
+            "t660_1": {
                 "clock": {"frequency": "10Hz"},
                 "channels": {
                     "A": {
@@ -447,7 +449,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             }
         }
         readback = {
-            "t660_2": {
+            "t660_1": {
                 "queries": {"synth_frequency": {"ok": True, "response": "+000000010.000000"}},
                 "channels": {
                     "A": {
@@ -462,7 +464,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             }
         }
         self.assertEqual(TimingRecipeManager._compare_readback(resolved, readback), [])
-        readback["t660_2"]["channels"]["B"]["enabled"]["response"] = "ON"
+        readback["t660_1"]["channels"]["B"]["enabled"]["response"] = "ON"
         mismatches = TimingRecipeManager._compare_readback(resolved, readback)
         self.assertEqual(mismatches[0]["field"], "enabled")
         self.assertEqual(mismatches[0]["expected"], "OFF")
@@ -537,17 +539,15 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        source["t660"]["t660_1"]["trigger_source"] = "SYN"
-        source["t660"]["t660_1"]["signals"][
-            "mircat_db9_pin_4_process_trigger"
-        ] = {
+        source["t660"]["t660_2"]["trigger_source"] = "SYN"
+        source["t660"]["t660_2"]["channels"]["C"] = {
             "delay": "0ns",
             "width": "10us",
             "polarity": "positive",
             "termination": "50OHM",
             "enabled": True,
         }
-        source["t660"]["t660_2"]["channels"]["A"] = {
+        source["t660"]["t660_1"]["channels"]["A"] = {
             "delay": "0ns",
             "width": "10us",
             "polarity": "positive",
@@ -558,14 +558,14 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
             path = Path(temp) / "malicious_optical.yaml"
             path.write_text(yaml.safe_dump(source), encoding="utf-8")
             effective = _load_and_validate_optical_recipe(path, expected_rate_hz=10)
-        self.assertEqual(effective["t660"]["t660_1"]["trigger_source"], "EXT")
-        self.assertEqual(effective["t660"]["t660_2"]["trigger_source"], "REM")
+        self.assertEqual(effective["t660"]["t660_2"]["trigger_source"], "EXT")
+        self.assertEqual(effective["t660"]["t660_1"]["trigger_source"], "REM")
         self.assertFalse(
-            effective["t660"]["t660_1"]["signals"][
+            effective["t660"]["t660_2"]["signals"][
                 "mircat_db9_pin_4_process_trigger"
             ]["enabled"]
         )
-        self.assertFalse(effective["t660"]["t660_2"]["channels"]["A"]["enabled"])
+        self.assertFalse(effective["t660"]["t660_1"]["channels"]["A"]["enabled"])
         self.assertEqual(
             effective["timing_calibration_selected_program_ns"][
                 "q_switch_delay_ns"
@@ -762,7 +762,7 @@ class TimingCalibrationProcedureTests(unittest.TestCase):
                 self.count += 1
 
             def read_counts(self):
-                return {"t660_1": self.count, "t660_2": self.count}
+                return {"t660_2": self.count, "t660_1": self.count}
 
             def close(self):
                 pass

@@ -220,13 +220,15 @@ The repository’s current wiring authority is `instrument/hardware_configuratio
 `instrument/wiring_map.yaml`, and the
 [default wiring convention](../../instrument/default_wiring_state.md). The required signal topology is:
 
-- T660-2 channel A → HF2LI external reference;
-- T660-2 channel B → MIRcat trigger input;
-- T660-2 channel C → HF2LI DIO acquisition marker;
-- T660-2 channel D → T660-1 external trigger;
-- T660-1 channel A → Surelite FIRE, external connector pin 7;
-- T660-1 channel B → Surelite Q-SWITCH, external connector pin 6;
-- T660-1 channel C → MIRcat process input, DB9 pin 4, active low;
+- T660-1 channel A → HF2LI DIO0 external reference;
+- T660-1 channel B → MIRcat TRIG IN;
+- T660-1 channel C → T660-2 TRIG IN;
+- T660-2 channel A → Surelite FIRE, external connector pin 7;
+- T660-2 channel B → Surelite Q-switch, external connector pin 6;
+- T660-2 channel C → MIRcat Process Trigger, DB9 pin 4, active low;
+- both channel-D outputs and HF2LI DIO1 → unwired;
+- T660-2 CLOCK OUT → 10 MHz distribution to T660-1 and HF2LI CLOCK IN;
+- MIRcat DB9 pin 2 Sweep Active → HF2LI DIO21 and PicoScope EXT;
 - VIGO sample signal → female-to-female BNC adapter → male-to-two-female BNC tee → HF2LI Signal 1 In (+) and PicoScope CHA;
 - VIGO reference signal → female-to-female BNC adapter → male-to-two-female BNC tee → HF2LI Signal 2 In (+) and PicoScope CHB;
 - MIRcat direction/sweep/wavelength outputs → HF2LI DIO20/DIO21/DIO22 when those mappings are promoted.
@@ -268,7 +270,7 @@ The biological run requires a single promoted calibration bundle containing, at 
 | FE-01 | Finite emitted-pump-event control with independent optical-event reconciliation and safe stop |
 | E2E-01/RPT-01/PROM-01 | Non-biological end-to-end demonstration, reusable report, and explicit promotion |
 
-Completed electrical measurements MS-01, MS-02, T2-01, and T1-01 are informative but not yet promoted. Their current campaign-local results—approximately 0.11 ns Pico channel skew, route-specific T660 delays, about 50.9 ns T660-1 trigger-to-Q-switch-command path, and the measured adapter delays—must not be copied into an experimental definition until the enclosing bundle is promoted. The current nominal 179.830 µs FIRE-to-Q-SWITCH value is explicitly uncalibrated, and the control UI’s 250 µs default is not experimental evidence.
+Completed electrical measurements MS-01, MS-02, T2-01, and T1-01 are informative but not yet promoted. Their current campaign-local results—approximately 0.11 ns Pico channel skew, route-specific T660 delays, about 50.9 ns T660-1 trigger-to-Q-switch-command path, and the measured adapter delays—must not be copied into an experimental definition until the enclosing bundle is promoted. The 179.830 µs FIRE-to-Q-SWITCH candidate is explicitly uncalibrated, and the control UI’s 250 µs default is not experimental evidence.
 
 ### 8.2 Minimum promoted characterization bundle
 
@@ -299,8 +301,9 @@ Completed electrical measurements MS-01, MS-02, T2-01, and T1-01 are informative
 
 ### 9.1 Time definitions
 
-- `t_master`: accepted T660-2 trigger initiating the platform timing sequence.
-- `t_probe_elec`: T660-2 MIRcat trigger edge at the calibrated observation point.
+- `t_master`: T660-1 pulse-clock event at the declared reference plane.
+- `t_frame`: accepted T660-2 frame trigger after its configured predivider.
+- `t_probe_elec`: T660-1 MIRcat trigger edge at the calibrated observation point.
 - `t_probe_sample`: center or other promoted fiducial of the measured MIRcat optical pulse at the sample plane.
 - `t_fire_cmd`: Surelite FIRE command at the PCU connector.
 - `t_q_cmd`: Surelite external Q-SWITCH command at the PCU connector, when DAT Mode 2 is used.
@@ -310,27 +313,55 @@ Completed electrical measurements MS-01, MS-02, T2-01, and T1-01 are informative
 
 All reported chemical time is derived from optical fiducials and the promoted OP-01/CL-01 model. The Surelite manual states that DAT Mode 1 accepts one negative 5 V→0 V, 10 µs FIRE pulse, has approximately 180 µs lead time, and ±10 ns optical jitter. DAT Mode 2 uses separate negative 10 µs FIRE and Q-SWITCH commands, with Q-SWITCH approximately 170 ns before lasing and specified ±1 ns jitter. These are manufacturer anchors, not installed-system calibration ([local Surelite manual](../../references/manuals/YAG/Surelite%20NdYAG%20Laser%20Manual.pdf), pp. 44–46).
 
-### 9.2 Candidate master architecture and selection test
+### 9.2 Probe train and event-frame architecture
 
-The preferred MVP candidate uses T660-2 as a 10 Hz master. On each accepted master trigger, T660-2 A produces the HF2 external-reference edge, B triggers one MIRcat probe pulse, C produces the acquisition marker, and D triggers T660-1. The 10 Hz candidate is inherited from the qualified Surelite cadence and gives 100 ms probe sampling, which is appropriate for the literature-scale ~1 s⁻¹ late recovery. It becomes operational only if QB01/PF01 show that a 10 Hz externally triggered MIRcat probe has adequate stability and sensitivity.
+T660-1 produces the common probe/reference train on A/B and the frame-clock
+pulse stream on C to T660-2 TRIG IN. T660-2 predivides that pulse stream and
+executes a preloaded table of per-frame channel settings: A FIRE, B Q-switch, C MIRcat
+Process Trigger. Frame intervals and train counts are selected for the intended
+HRP method, source stability, acquisition window, and sample recovery. Channel OFF states
+suppress unrequested events in baseline and recovery frames; terminal frames
+have all channels OFF. Shared train count
+and spacing apply to each enabled channel; zero disables additional pulses.
+Neither the pump's 10 Hz ceiling nor Phase Scan's 0.3 s frame period fixes the
+HRP probe rate or recovery schedule.
 
-If 10 Hz probe SNR is inadequate, the allowed fallback is a high-rate MIRcat carrier—2 MHz is only the current alignment candidate—combined with independently time-stamped rare pump events. The fallback requires a promoted clock-bridge/timestamp test proving the relative HF2, Pico, T660, and pump-observation timelines over the full recovery record. It may not assume that independently started computer streams share time zero.
-
-The architecture-selection E2E test must compare both candidates, where physically available, on a non-biological stable absorber. Select the lowest probe duty/rate that meets the CH00 precision and temporal-resolution targets without detector saturation or source instability. Record master source, synthesizer/readback rate, predivider/burst state, missed/rate-error flags, and verified optical probe rate. The selected architecture becomes a distinct `configuration_id`; data from the two architectures are not pooled without a bridge study.
+The E2E selection test chooses the lowest qualified probe duty/rate meeting the
+frozen precision and temporal-response requirements on a nonbiological input.
+Record pulse source, readback rate, predivider, frame table, train counts and
+delays, expected physical frames and emitted commands, trigger/rate errors, and
+optically observed probe/pump events. Arm acquisition before the bounded event
+sequence; do not use host sleeps to define relative pump, probe, or scan timing.
+Sweep records use observed Sweep Active on DIO21/PicoScope EXT. Fixed-wavelength
+records declare their synchronized pump-event and continuous-stream windows;
+DIO1 is unwired and is not assumed as a hardware acquisition gate.
 
 ### 9.3 Laser thermal cadence versus sample pump cadence
 
-The Surelite flashlamps and OPO drive must run at their installed qualified cadence; the laser manual warns that changing lamp frequency changes thermal lensing, and the OPO output must not be assumed stable under an unqualified drive cadence. The proposed MVP keeps the qualified source cadence and reduces *post-iris 540 nm events transmitted to the sample* to a recovery-compatible cadence. The permitted implementation must be selected and proven in ATT-01/PB-02/OP-01/FE-01 from one of the following:
+The Surelite flashlamps and OPO drive must remain within their installed
+qualified cadence and stability envelope. The laser manual warns that changing
+lamp frequency changes thermal lensing. T660-2 per-frame channel enables and
+delays schedule FIRE on A and selected Q-switch commands on B across the
+preloaded frame sequence. Recovery and baseline frames use the appropriate
+channel OFF entries. The train count and spacing are shared by enabled
+channels within each frame. The complete schedule must preserve the selected source
+operating condition while limiting independently observed post-iris OPO-540
+sample events.
 
-1. a validated Surelite pulse-division mode that maintains 10 Hz lamp operation while emitting the optically verified selected fraction of Q-switched pulses;
-2. a validated, interlocked external pulse picker/shutter downstream of the OPO that blocks unwanted 540 nm pulses while the Surelite/OPO operates at its qualified cadence; or
-3. another EHS- and manufacturer-approved topology that independently preserves lamp cadence and limits sample exposure.
+ATT-01/PB-02/OP-01/FE-01 must qualify the selected schedule electrically and
+optically before biological use. Frame counts and `TRIGger:SHOTs` readbacks are
+command-accounting evidence, not emitted-event counts or source-stability proof.
+Do not assume a laser's internal divider suppresses externally commanded
+Q-switch events. If the required optical cadence cannot be obtained within the
+qualified source envelope, that experiment needs an explicitly qualified optical
+gate or manufacturer-supported division mechanism before execution. Neither is
+assumed installed by the default wiring. The iris remains static throughout a
+block and is not the pulse picker, exposure limiter, or safety shutter.
 
-The present two-T660 wiring and global predivider/burst behavior do not by themselves prove independent 10 Hz FIRE and rare Q-SWITCH control. `TRIGger:SHOTs` is only a counter reset. This is a blocking exposure-control dependency.
-
-The candidate implementations are mutually exclusive and must have separate configuration IDs. If Surelite pulse division is used, ATT-01/PB-02/OP-01 must establish that the resulting 540 nm OPO output remains inside its promoted stability envelope; T660-1 B remains disabled unless the manufacturer-approved topology explicitly requires it. If an external optical pulse picker is used, DAT Mode 2 may run FIRE and Q-SWITCH at the qualified cadence while the interlocked picker admits only selected, independently observed post-iris 540 nm pulses to the sample. Sending external Q-SWITCH commands every cycle while assuming the PCU divider suppresses them is prohibited unless directly validated. The iris remains static and is never used as the pulse picker, event limiter, or safety shutter.
-
-For commissioning only, use a proposed starting sample pump cadence of 10/99 Hz ≈ 0.101 Hz if—and only if—the installed Surelite pulse-division behavior is verified optically at the sample plane. This value is a campaign-resolved candidate tied to the manual’s 10 Hz laser cadence and P01–P99 divider range. Every actual pump event must be detected by an independent optical pickoff or validated pump monitor; command counts are not emitted-shot counts.
+Choose commissioning cadence from the qualified source output, sample recovery,
+and event budget; no PCU divider value or Phase Scan frame period becomes an HRP
+default. Every actual pump event requires independent optical observation or a
+validated pump monitor.
 
 After measuring the late recovery rate `k_rec`, require
 
@@ -348,14 +379,13 @@ All final delays and receiver levels come from promoted calibration/readback. Th
 
 | Channel | Required edge/width | Termination and level | Delay/interaction rule |
 |---|---|---|---|
-| T660-2 A → HF2 DIO0 | Positive reference edge; width long enough for reliable DIO capture and shorter than the master period | Start from documented 50 Ω source only after HF01 verifies delivered logic at the receiver | Defines probe reference phase; relative delay to B comes from HF01/QB01/CL01 |
-| T660-2 B → MIRcat TRIG IN | Positive rising edge meeting the installed MIRcat trigger input; optical width is MIRcat-set in External Trigger mode | Verify delivered high/low and absence of double termination in MD01 | One accepted edge must map to one optical pulse; a missed/double pulse aborts the block |
-| T660-2 C → HF2 DIO1 | Positive acquisition marker | Verify in HF01/MD01 | Must mark the accepted analysis window without coupling into detector channels |
-| T660-2 D → T660-1 TRIG IN | Positive edge; documented alignment candidate used 10 µs | Verify T660-1 threshold, polarity, 50 Ω/HIZ choice, and delivered amplitude in T2/CL | Must not retrigger T660-1 while busy; any rate-error flag aborts |
-| T660-1 A → Surelite FIRE | Negative 5 V→0 V command, 10 µs manufacturer value | Documented candidate is 50 Ω; verify delivered receiver voltage with laser inhibited | FIRE precedes optical pump by the OP01 result; preserve qualified lamp cadence |
-| T660-1 B → Surelite Q-SWITCH | Negative 5 V→0 V command, 10 µs manufacturer value when DAT Mode 2 is used | Same installed-receiver verification | FIRE-to-Q command is the promoted optical optimum; nominal 179.830 µs and UI 250 µs default are not authority |
-| T660-1 C → MIRcat DB9 pin 4 | Active-low process command; manufacturer correspondence permits 1–100 ms, with 10 ms candidate | Verify DB9 voltage/ground in MD01 | Used only for an approved discrete process step; never as a substitute for B external trigger |
-| T660-1 D | Disabled and disconnected | Safe-idle state | Any activity is a fault |
+| T660-1 A → HF2LI DIO0 | Qualified positive reference pulse | Delivered logic and loading qualified in HF-01.1 | Phase coherent with B; probe rate selected independently of pump rate |
+| T660-1 B → MIRcat TRIG IN | Qualified positive pulse; optical width is MIRcat-set | Verify receiver high/low and source/load pairing | Reconcile expected and observed optical opportunities |
+| T660-1 C → T660-2 TRIG IN | Qualified pulse clock for event frames | Verify trigger level, polarity, slew, and termination | Record predivider and accepted trigger/frame counts; rate errors abort |
+| T660-2 A → Surelite FIRE | Negative 5-to-0 V command; 10 us manufacturer candidate | Qualify with laser inhibited | Per-channel train preserves accepted source cadence |
+| T660-2 B → Surelite Q-switch | Negative command; 10 us manufacturer candidate | Qualify installed receiver | Promoted FIRE-to-Q delay; channel OFF suppresses unrequested pump commands |
+| T660-2 C → MIRcat DB9 pin 4 | Active-low process command; width qualified in MD-01/MSW-01 | Qualify DB9 ground and delivered level | Program one transition for each scheduled scan; reconcile with Sweep Active |
+| T660-1 D and T660-2 D | Disabled and unwired | Safe idle | No automatic assignment to HF2LI DIO1 |
 
 The safe-idle baseline has both trigger sources OFF, predivider 1, burst disabled, gate mode 0, frames off, all outputs disabled, and force-EOD applied. Disabled-channel widths/polarities in `instrument/recipes/safe_idle.yaml` define a deterministic inactive state, not active experimental pulse settings. Stage any active configuration while triggers are OFF, read it back, verify receiver waveforms with sources inhibited, then arm in the ordered workflow below.
 
@@ -367,7 +397,7 @@ The safe-idle baseline has both trigger sources OFF, predivider 1, burst disable
 
 **PicoScope.** Use serial 10261. Enable only needed channels; select the highest vertical resolution whose returned sampling interval and analog bandwidth resolve the fastest IR01/DET03 feature used in the claim. Range each channel below clipping with the CH00 headroom rule. The trigger source is the promoted DAQ/probe/pump marker appropriate to the mode, with source, threshold, hysteresis, polarity, coupling, impedance, and delay recorded. Choose pretrigger length to contain an artifact-free baseline outside the time-zero uncertainty/IRF support. Choose posttrigger length to include every latency/normalization window used. Save the API-returned interval, sample counts, overflow, segment, trigger, and rejected-capture records. Raw segments are retained; waveform averaging is derived. The MS campaign’s 8-bit, 10 V, 2 ns, 100000-sample, 1000-pretrigger setup is evidence for that electrical calibration only and is not a biological default.
 
-**HF2LI.** Device `dev18500` uses sample input 1/demodulator 0 and reference input 2/demodulator 3, DIO0 external reference, and DIO1 acquisition marker, subject to HF01. Record input range, AC/DC coupling, differential/single-ended mode, 50 Ω state, oscillator/reference selection, harmonic, phase, filter order `n`, time constant `τ`, actual sample rate, enabled nodes, and lock state. The current order 4, τ = 1 ms, and 2 kSa/s preset is provisional. For an `n`-stage first-order low-pass, calculate the required fraction-settle time from
+**HF2LI.** Device `dev18500` uses sample input 1/demodulator 0 and reference input 2/demodulator 3, DIO0 external reference and observed Sweep Active on DIO21 for scan records. DIO1 is unwired. Pump-event and continuous-stream timing must be qualified for fixed-wavelength records. Record input range, AC/DC coupling, differential/single-ended mode, 50 Ω state, oscillator/reference selection, harmonic, phase, filter order `n`, time constant `τ`, actual sample rate, enabled nodes, and lock state. The current order 4, τ = 1 ms, and 2 kSa/s preset is provisional. For an `n`-stage first-order low-pass, calculate the required fraction-settle time from
 
 `1 − exp(−x) Σ[k=0…n−1] x^k/k! = F_settle`, with `t_settle = xτ`.
 

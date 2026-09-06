@@ -1,12 +1,12 @@
 name: ndyag_alignment_10hz
-description: "Nd:YAG DAT Mode 2 alignment timing: continuous 10 Hz Fire and Q-switch from T660-1, driven by T660-2."
+description: 'Nd:YAG DAT Mode 2 alignment: T660-1 C supplies 10 Hz triggers; T660-2 A/B supply Fire and Q-switch.'
 approved_laser_safety_condition: true
-workflow_entrypoint: "control_app.ui.widgets.ndyag_widget.NdYagWidget"
+workflow_entrypoint: control_app.ui.widgets.ndyag_widget.NdYagWidget
 standalone_t660_only: true
 duration:
   mode: continuous
   t660_shots: 0
-  stop_condition: "Press Safe Idle in the Nd:YAG UI tab when beam alignment is complete."
+  stop_condition: Press Safe Idle in the Nd:YAG UI tab when beam alignment is complete.
 timing:
   repetition_rate_hz: 10
   period_ms: 100
@@ -17,48 +17,77 @@ timing:
   target_fire_to_q_switch_delay_ns: 179830
   programmed_fire_delay_ns: 0
   programmed_q_switch_delay_ns: 179830
-  timing_calibration_status: "UNCALIBRATED_NOMINAL_TARGET"
+  timing_calibration_status: UNCALIBRATED_NOMINAL_TARGET
   timing_correction_source: null
 routes:
-  t660_2_drive: "T660-2 CHD -> T660-1 TRIG IN"
-  ndyag_fire: "T660-1 CHA -> Nd:YAG Fire command"
-  ndyag_q_switch: "T660-1 CHB -> Nd:YAG Q-switch command"
+  t660_1_drive: T660-1 CHC -> T660-2 TRIG IN
+  ndyag_fire: T660-2 CHA -> Nd:YAG Fire command
+  ndyag_q_switch: T660-2 CHB -> Nd:YAG Q-switch command
 operator_prerequisites:
-  - "Surelite DAT Mode 2 enabled with external Q-switch selected."
-  - "Surelite START/STOP and SHUTTER are on before loading the continuous 10 Hz timing workflow."
-  - "Nd:YAG beam path is enclosed or otherwise approved for alignment operation."
-  - "Press Safe Idle before leaving the alignment setup unattended."
+- Surelite DAT Mode 2 enabled with external Q-switch selected.
+- Surelite START/STOP and SHUTTER are on before loading the continuous 10 Hz timing workflow.
+- Nd:YAG beam path is enclosed or otherwise approved for alignment operation.
+- Press Safe Idle before leaving the alignment setup unattended.
 t660:
-  t660_1:
+  t660_2:
     stop_first: true
-    trigger_source: "EXT"
+    predivider: 1
+    gate_mode: 0
+    burst_enabled: false
+    trigger_source: EXT
     force_eod: true
-    start: true
-    signals:
-      ndyag_fire:
-        delay: 0
+    channels:
+      A:
+        delay: 0ns
         width: 10us
         polarity: negative
         termination: 50OHM
         enabled: true
-      ndyag_q_switch:
+      B:
         delay: 179830ns
         width: 10us
         polarity: negative
         termination: 50OHM
         enabled: true
-  t660_2:
-    stop_first: true
-    clock:
-      frequency: 10Hz
-      shots: 0
-    trigger_source: "SYN"
-    force_eod: true
-    start: true
-    channels:
+      C:
+        delay: 0ns
+        width: 10ms
+        polarity: negative
+        termination: 50OHM
+        enabled: false
       D:
-        delay: 0
+        delay: 0ns
+        width: 150ns
+        polarity: positive
+        termination: 50OHM
+        enabled: false
+    frames_engine: 'OFF'
+    start: true
+    external_trigger:
+      polarity: positive
+      termination: 50OHM
+      threshold_v: 2.0
+  t660_1:
+    stop_first: true
+    predivider: 1
+    gate_mode: 0
+    burst_enabled: false
+    trigger_source: SYN
+    force_eod: true
+    channels:
+      A:
+        enabled: false
+      B:
+        enabled: false
+      C:
+        delay: 0ns
         width: 10us
         polarity: positive
         termination: 50OHM
         enabled: true
+      D:
+        enabled: false
+    clock:
+      frequency: 10Hz
+      shots: 0
+    start: true

@@ -1,18 +1,22 @@
 # FE-01 planning context
 
-This prospective summary supplements the canonical `plan.md`. All numeric
-settings and validity decisions require the phase evidence and review.
+This file preserves the phase-specific row or rows from the pre-migration
+cross-phase planning matrices. The canonical phase plan is `plan.md`; this
+context is retained so no planning detail is lost during the phase-primary
+restructure.
 
-| Field | Planned value |
+## Source: calibration measurement matrix
+
+| Field | Preserved value |
 | --- | --- |
 | `calibration_id` | FE01 |
 | `measured_quantity` | finite emitted-pump-event control and reconciliation |
 | `physical_reference_plane` | approved pump command and optical gate |
 | `target_reference_plane` | independently observed admitted event at sample-equivalent plane |
 | `measurement_method` | blocked one-event finite-block and no-emission fault tests |
-| `required_equipment` | T660-1 event-clock train, T660-2 finite train/frame scheduler, pump sources, independent optical event monitor, and static qualified electronic iris for OPO-540 |
+| `required_equipment` | T660s pump sources optical gate or divider event monitor and static qualified electronic iris for OPO-540 |
 | `wiring_setup` | permanent-iris OPO-540 path shared by HRP then MbCO |
-| `programmed_values` | qualified source cadence, per-frame channel enables/delays and shared train count/spacing, frame predivider/table and padding, plus CH-00 event limits; iris aperture remains static |
+| `programmed_values` | qualified NdYAG/OPO cadence plus CH-00 rare-event limits; iris aperture remains static |
 | `repetitions` | zero plus 1 event plus 1 finite block; no-emission fault cases |
 | `raw_data_product` | command and observed-event ledgers traces iris configuration/readbacks and restoration |
 | `correction_terms` | OP01 event latency and monitor response |

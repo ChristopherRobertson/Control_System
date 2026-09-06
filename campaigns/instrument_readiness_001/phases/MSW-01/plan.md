@@ -21,10 +21,10 @@ Normal detector acquisition uses the
 sample to HF2LI Signal 1 In (+)/PicoScope CHA and reference to HF2LI Signal 2
 In (+)/PicoScope CHB. Leave both receivers connected for the normal-state
 records and distinguish any temporary diagnostic rewiring in its configuration.
-The normal Phase-Scan configuration additionally connects T660-1 CHD directly to
-PicoScope EXT while MIRcat Sweep Active remains on HF2LI DIO21. Import the accepted
-MS-02.1 electrical trigger-route result and MD-01 event semantics before using CHD
-as the PicoScope record reference.
+The normal sweep trigger observes MIRcat DB9 pin 2 Sweep Active simultaneously
+on HF2LI DIO21 and PicoScope EXT. Import the MS-02.1 branch/receiver calibration
+and MD-01 state semantics; record the actual triggered signal and reference
+planes. Both T660 D outputs are disabled and unwired.
 
 Measure actual wavenumber-versus-time and event timing for every CH-00.1-retained
 slow-scan, repeated rapid-scan, single-scan phase-delay, fixed-wavelength transition,
@@ -34,35 +34,31 @@ retune, settling, and gap behavior. Requested speeds, marker intervals, pulse wi
 windows, and delays are planning candidates until frozen and observed; no numeric
 candidate is a final setting merely because it appears in a planning document.
 
-For every retained Phase-Scan QCL, direction, window, speed, and start-condition
-configuration, measure the falling-edge delay from T660-1 CHD to the rising edge of
-MIRcat Sweep Active. In a safe, separately recorded temporary diagnostic topology,
-keep CHD on PicoScope EXT and move Sweep Active from HF2LI DIO21 to PicoScope CHA;
-the detector branch normally using CHA is disconnected only for this measurement.
-Acquire at least 100 valid repeated captures per configuration with the returned
-sample interval, trigger settings, both edge definitions, complete records, and all
-rejected or anomalous captures retained. Restore Sweep Active to HF2LI DIO21 and the
-sample detector to CHA before normal optical acquisition.
+For each retained QCL, direction, window, speed, and start condition, measure
+T660-2 C process-command-to-Sweep-Active latency and actual scan trajectory.
+Use a separately recorded non-emitting diagnostic connection to observe the
+process command and pin-2 response with calibrated channels. Preserve the normal
+pin-2 branch and account for any diagnostic loading; restore detector inputs
+before normal acquisition. Acquire at least 100 valid repeated captures per
+configuration, retaining rejected/anomalous captures, returned sampling interval,
+edge definitions, thresholds, and complete records.
 
-Report the median CHD-to-Sweep-Active delay, distribution, extrema, drift, direction/
-history dependence, and a conservative uncertainty including repeatability,
-PicoScope sampling, trigger and threshold sensitivity, imported MS-02.1 terms, and
-any configuration effects. Reject or split a configuration when the relation is
-multimodal, state-dependent without a usable model, or exceeds its predeclared
-alignment budget. The Phase-Scan software exposes a configurable 0.25 us
-maximum-uncertainty candidate; that value is not promoted by this plan and may be
-tightened when the retained pulse period or reconstruction interval requires it.
-Publish a stable human-readable qualification ID and machine-readable
-`process_trigger_to_sweep_active_delay_us` and
-`process_trigger_to_sweep_active_uncertainty_us` quantities for each accepted
-configuration.
+Report latency distributions, extrema, drift, direction/history dependence, and
+uncertainty from repeatability, imported timing terms, thresholds, sampling, and
+configuration effects. Separately qualify direct Sweep Active alignment between
+the PicoScope and HF2LI; a shared source does not imply zero receiver delay.
+Freeze calibrated trajectory/time bounds and observed scan-duration limits for
+the frame schedule and LabOne detector window. Publish stable configuration and
+qualification IDs with reference-plane-specific delay and uncertainty quantities.
+Process-command latency is diagnostic; recorded scan time is observed Sweep
+Active, and chemical time zero requires optical pump arrival.
 
 Mandatory closeout deliverables: repeated complete records per direction and retained
 mode plus repeated point/process or scan-burst sequences per biological configuration;
 raw MIRcat and HF2LI/DIO streams; actual wavenumber-versus-time traces; trigger/segment event
 table, expected-versus-observed counts, measured spacing check, transition/gap
 analysis; requested-versus-read-back settings; clock/reference conventions;
-configuration-specific uncertainty; CHD-to-Sweep-Active capture set and qualification
+configuration-specific uncertainty; process-command/Sweep-Active capture set and qualification
 record; restoration evidence; accepted/rejected index; and acceptance decision.
 
 ## `EXPERIMENTS.md` allocation and decision contract
@@ -73,7 +69,7 @@ Acceptance requires bounded wavenumber/time residuals and complete marker
 and transition accounting for each retained architecture; a mode is rejected or remains
 provisional when its requested profile is not observed, turnaround/gaps are unsupported,
 or timing uncertainty exceeds its frozen requirement. Changes to MIRcat mode or
-firmware, scan profile/window/direction/start condition, CHC/CHD settings or cable,
+firmware, scan profile/window/direction/start condition, T660-2 C settings, frame/train schedule, or cable,
 PicoScope EXT settings, event output, clock mapping, DIO receiver, or analysis version
 trigger revalidation. AR-01, SP-02, IR-01, E2E-01, and both biological
 campaigns consume these records. This phase does not establish absolute wavenumber

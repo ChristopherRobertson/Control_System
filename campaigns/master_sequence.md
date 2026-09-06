@@ -15,13 +15,38 @@ documentation state. Use
 for cross-phase methods and measurement coverage. The linked phase `plan.md` is
 the detailed procedure and acceptance authority for that phase.
 
-Current default wiring is defined in
-[`instrument/default_wiring_state.md`](../instrument/default_wiring_state.md):
-each detector signal passes through its own female-to-female BNC adapter and
-male-to-two-female BNC tee; sample feeds HF2LI Signal 1 In (+) and PicoScope
-CHA, and reference feeds HF2LI Signal 2 In (+) and PicoScope CHB. Temporary
-timing/IRF configurations and earlier restoration records retain their own
-topology identities; this update does not change any phase status or qualification.
+Default wiring is defined in
+[`instrument/default_wiring_state.md`](../instrument/default_wiring_state.md).
+Each detector signal uses its own adapter/tee: sample feeds HF2LI Signal 1 In (+)
+and PicoScope CHA; reference feeds HF2LI Signal 2 In (+) and PicoScope CHB.
+Both receivers remain connected. Temporary timing/IRF configurations have their
+own topology identities and calibrated bridges.
+
+T660-1 supplies the probe/reference pulse train: channel A feeds HF2LI DIO0,
+channel B feeds MIRcat TRIG IN, and channel C feeds T660-2 TRIG IN. T660-2
+uses its train/frame engine for the event schedule: channel A drives Surelite
+FIRE, B drives Q-switch, and C drives MIRcat DB9 pin 4 Process Trigger. Both
+channel-D outputs are disabled and unwired; HF2LI DIO1 is unwired. MIRcat DB9
+pin 2 Sweep Active feeds HF2LI DIO21 and PicoScope EXT through the qualified
+high-impedance branch; pin 1 direction feeds DIO20 and pin 3 wavelength markers
+feed DIO22. Connector pin numbers and captured DIO bit indices are distinct.
+T660-2 CLOCK OUT supplies the 10 MHz clock distribution to T660-1 CLOCK IN and
+HF2LI CLOCK IN. This frequency-reference distribution is separate from the
+T660-1 probe pulse train.
+
+A finite run preloads the complete bounded T660-2 frame table while outputs
+are disabled. Per-frame channel OFF states suppress unrequested outputs,
+including pump outputs in unpumped baselines; terminal padding has all outputs
+OFF. Train count zero disables additional pulses, not the first pulse of an
+enabled channel. Train count and spacing are shared by enabled channels within
+each frame. The frame predivider, frame repetition, train count/spacing,
+channel enables/delays/widths/polarities, terminal padding, and physical frame
+count are recorded and checked against readback before arming. Acquisition
+is ready before the event sequence starts; software polling does not schedule
+pump/probe/scan edges. Frames and train counts schedule electrical commands;
+independent optical observation establishes emitted pump counts and sample time
+zero. Each experiment freezes its own cadence, recovery interval, and data budget;
+the Phase Scan 0.3 s frame period is not a default for other experiment types.
 
 ## How to use this sequence
 
@@ -154,10 +179,10 @@ parallel only under separate authorization.
   and branch cable/receiver network plus PicoScope timebase,
   amplitude, bandwidth, trigger, overflow, loading, reflection, and branch-skew
   behavior under normal simultaneous HF2LI/PicoScope recording; separately qualify
-  the T660-1 CHD-to-PicoScope-EXT electrical trigger route used by Phase Scan.
+  the MIRcat Sweep Active-to-PicoScope-EXT electrical trigger route used by Phase Scan.
 - **Primary products:** Installed topology/configuration manifests, native branch
   captures, amplitude/timebase/trigger/bandwidth results, transfer and ringing model,
-  CHD-to-EXT trigger result, uncertainty, validity envelope, and normal-versus-timing
+  Sweep Active-to-EXT trigger result, uncertainty, validity envelope, and normal-versus-timing
   topology bridge limits.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
@@ -300,10 +325,10 @@ parallel only under separate authorization.
 - **Status:** planned. **Prerequisites:** HF-01, CH-00.1, and MS-02.1.
 - **Purpose:** Establish the semantic and electrical mapping between MIRcat
   states/events and HF2LI DIO observations used for synchronization and loss
-  accounting, including CHC process commands, their CHD Phase-Scan markers, and
+  accounting, including T660-2 C process commands, their frame identities, and
   observed Sweep Active intervals.
 - **Primary products:** DIO bit/event map, timing/state evidence, ambiguity and
-  failure handling, CHC/CHD/Sweep-Active reconciliation, configuration record, and
+  failure handling, T660-2 C/frame/Sweep-Active reconciliation, configuration record, and
   accepted mapping rules.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
@@ -314,10 +339,10 @@ parallel only under separate authorization.
 - **Status:** planned. **Prerequisites:** MC-01 and MD-01.
 - **Purpose:** Measure MIRcat sweep timing, direction behavior, event alignment,
   start/stop semantics, and wavenumber-versus-time behavior needed for sampled
-  spectral reconstruction, including the Phase-Scan CHD falling-edge to Sweep Active
-  rising-edge relation for each retained configuration.
+  spectral reconstruction, including T660-2 C process-command-to-Sweep-Active timing and calibrated
+  cross-recorder alignment for each retained configuration.
 - **Primary products:** Native sweep/readback/DIO records, timing model, direction
-  comparison, CHD-to-Sweep-Active qualification IDs/offsets, repeatability, loss
+  comparison, cross-recorder Sweep Active qualification IDs/offsets, repeatability, loss
   accounting, restoration, and uncertainty.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
@@ -328,8 +353,8 @@ parallel only under separate authorization.
 - **Status:** planned. **Prerequisites:** HF-01.1, MD-01, MSW-01, and MS-02.1.
 - **Purpose:** Verify sustained alignment among MIRcat, DIO, HF2LI, and recorded
   streams; quantify missing, duplicated, misordered, or delayed records over
-  experiment-relevant durations, including CHD-triggered PicoScope blocks aligned to
-  HF2LI-observed Sweep Active intervals under normal dual-detector Phase-Scan wiring.
+  experiment-relevant durations, including bounded LabOne scan histories, synchronized pump-event records, and
+  qualified Sweep-Active-triggered PicoScope diagnostics.
 - **Primary products:** Endurance streams, alignment/loss metrics, fault evidence,
   recorder-loss versus optical-omission classification, throughput envelope, recovery
   behavior, and acceptance limits.
@@ -473,10 +498,10 @@ parallel only under separate authorization.
 - **Purpose:** Jointly select experiment-specific scan speed, direction, HF2LI
   filtering/rate/range, record length, settling, throughput, and loss margins
   using measured source, detector, geometry, and timing behavior, including the
-  Phase-Scan optical-pulse coverage and bounded-retry policy.
+  Phase-Scan optical-pulse coverage and bounded frame scheduling and one-pass coverage policy.
 - **Primary products:** Validated slow-scan and five-method architecture
   configurations across applicable room-temperature/77 K envelopes, response
-  residuals, native coverage, Phase-Scan coverage/retry settings, speed/dwell envelope,
+  residuals, native coverage, Phase-Scan coverage/frame settings, speed/dwell envelope,
   robustness, and uncertainty.
 - **Final Report:** Incomplete.
 - **Procedural Writeup:** Incomplete.
@@ -656,7 +681,7 @@ parallel only under separate authorization.
   filter-memory, interpolation, and topology tests before biological development;
   validate Phase-Scan affected-delay retries and aligned-bin coverage-weighted merging.
 - **Primary products:** Native full-system data and coverage, reconstruction truth/
-  residuals, attempt/bin provenance, retry-exhaustion and deficient-output evidence,
+  residuals, attempt/bin provenance, incomplete-record and deficient-output evidence,
   fault/noise robustness, configuration/calibration links,
   startup/safe-stop/restoration records, uncertainty, and method-specific decisions.
 - **Final Report:** Incomplete.

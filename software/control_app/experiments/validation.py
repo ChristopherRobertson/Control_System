@@ -111,11 +111,17 @@ def _cross_device_constraints(definition: ExperimentDefinition, configured: dict
             if duty_cycle <= 0 or duty_cycle > 1:
                 errors.append(_error("devices.mircat", f"Invalid duty cycle {duty_cycle:.6g}", "duty_cycle"))
         if settings.get("pulse_trigger_mode") == "external":
-            master = configured.get("t660_2")
+            master = configured.get("t660_1")
             if not master or not _is_enabled(master.capabilities.get("channel_b_mircat_trigger")):
-                errors.append(_error("devices.mircat.pulse_trigger_mode", "External laser triggering requires T660-2 CHB to MIRcat TRIG IN", "trigger_route"))
+                errors.append(_error("devices.mircat.pulse_trigger_mode", "External laser triggering requires T660-1 CHB to MIRcat TRIG IN", "trigger_route"))
         if settings.get("process_trigger_mode") == "external":
-            errors.append(_error("devices.mircat.process_trigger_mode", "External Process Trigger is unavailable pending experimental confirmation", "unconfirmed_process_trigger"))
+            errors.append(_error("devices.mircat.process_trigger_mode", "External Process Trigger requires a qualified frame/process execution adapter in the generic builder", "unconfirmed_process_trigger"))
+    pump = configured.get("t660_2")
+    if pump and any(_is_enabled(pump.capabilities.get(name)) for name in
+                    ("channel_a_ndyag_fire", "channel_b_ndyag_q_switch", "channel_c_mircat_process_trigger")):
+        source = configured.get("t660_1")
+        if not source or not _is_enabled(source.capabilities.get("channel_c_t660_2_trigger")):
+            errors.append(_error("devices.t660_2", "Default pump/process timing requires T660-1 CHC to T660-2 TRIG IN", "trigger_route"))
     duration = definition.acquisition.get("duration_s")
     if duration is not None and (isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration <= 0):
         errors.append(_error("acquisition.duration_s", "Acquisition duration must be positive", "positive"))

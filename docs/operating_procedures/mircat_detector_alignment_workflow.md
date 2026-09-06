@@ -10,7 +10,7 @@ imports them.
 Use the MIRcat tab to initialize the MIRcat, configure the probe laser for a
 continuous internal alignment pulse train, and configure the HF2LI for detector
 monitoring in LabOne Plotter. The default alignment mode does not require
-T660-2. The run continues until the operator presses `Emission Off` in the UI.
+T660-1. The run continues until the operator presses `Emission Off` in the UI.
 
 ## Detector wiring
 
@@ -62,16 +62,17 @@ adopts that initialized session instead of closing it.
 9. Open MIRcat emission after explicit UI safety approval. In internal mode,
    MIRcat should fire immediately after the gate opens.
 10. If `Use T660 Timing` is checked, apply
-   `instrument/recipes/mircat_detector_alignment_2mhz.yaml` to start continuous T660-2
+   `instrument/recipes/mircat_detector_alignment_2mhz.yaml` to start continuous T660-1
    timing:
    - CHA -> HF2LI DIO0 external reference
    - CHB -> MIRcat TRIG IN
-   - CHC -> HF2LI DIO1 optional Plotter UI trigger route
+   - CHC remains disabled; its installed destination is T660-2 TRIG IN
+   - T660-2 event outputs remain disabled for this probe-only alignment
 
 ## HF2LI And LabOne Plotter
 
 The default preset `detector_alignment_internal` configures detector input
-monitoring for the LabOne Plotter without T660-2. It does not create a LabOne
+monitoring for the LabOne Plotter without T660-1. It does not create a LabOne
 DAQ module and the UI does not replicate the LabOne plotter.
 
 - PLL disabled for default internal alignment mode
@@ -87,24 +88,23 @@ Open LabOne at `http://127.0.0.1:8006`, select the HF2LI, open Plotter, and add:
 - `Demodulators/1/Sample/R`
 - `Demodulators/4/Sample/R`
 
-The detector traces are then rendered by LabOne using the shared LabOne Data
-Server session. For flat live alignment traces, leave demodulator triggering
-continuous. If a triggered display is needed, configure the Plotter trigger in
-the LabOne UI to use DIO1 rising; do not set the demodulator trigger nodes to
-DIO1, because that gates the sample stream and can produce shared dips in both
-channels.
+The detector traces are rendered by LabOne using the shared LabOne Data Server
+session. Leave demodulator transfer continuous for live alignment. HF2LI DIO1
+is unwired, so it cannot provide a Plotter or demodulator gate. Sweep diagnostics
+use the qualified Sweep Active signal on DIO21/PicoScope EXT; static alignment
+does not require a scan trigger.
 
 ## Emission On But No MIRcat Firing
 
 If `Emission Gate` reads ON but the MIRcat is not firing:
 
 1. Press `Emission Off` in the UI before touching cables.
-2. Confirm T660-2 CHB is physically connected to MIRcat `TRIG IN`.
-3. Confirm the T660 alignment readback shows T660-2 channel `B` enabled.
+2. Confirm T660-1 CHB is physically connected to MIRcat `TRIG IN`.
+3. Confirm the T660 alignment readback shows T660-1 channel `B` enabled.
 4. Confirm `alignment_start_summary.json` includes external-trigger readback
    both before and after tune, plus `mircat_alignment_arm_readback.json` with
    `confirmed_armed: true` before tuning.
-5. Scope or visually check T660-2 CHB at the MIRcat end if readbacks are correct
+5. Scope or visually check T660-1 CHB at the MIRcat end if readbacks are correct
    but firing is still absent.
 
 The gate being ON is not sufficient in external-trigger mode. The MIRcat only

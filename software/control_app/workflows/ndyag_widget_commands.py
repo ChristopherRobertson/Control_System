@@ -24,18 +24,22 @@ NDYAG_SAFE_IDLE_RECIPE: dict[str, Any] = {
     "description": "Stop Nd:YAG alignment timing and disable both T660 units by channel.",
     "approved_laser_safety_condition": False,
     "t660": {
-        "t660_1": {
+        "t660_2": {
             "stop_first": True,
+            "frames_engine": "OFF",
+            "predivider": 1,
+            "gate_mode": 0,
+            "burst_enabled": False,
             "trigger_source": "OFF",
             "force_eod": True,
             "channels": {
-                "A": {"enabled": False},
-                "B": {"enabled": False},
-                "C": {"enabled": False},
+                "A": {"enabled": False, "polarity": "negative"},
+                "B": {"enabled": False, "polarity": "negative"},
+                "C": {"enabled": False, "polarity": "negative"},
                 "D": {"enabled": False},
             },
         },
-        "t660_2": {
+        "t660_1": {
             "stop_first": True,
             "trigger_source": "OFF",
             "force_eod": True,
@@ -190,7 +194,7 @@ class NdYagWidgetCommandHandler:
 
     def _read_t660_units(self, command_log: TextIO) -> dict[str, Any]:
         devices: dict[str, Any] = {}
-        for unit in ("t660_1", "t660_2"):
+        for unit in ("t660_2", "t660_1"):
             service = T660Service.from_config(
                 unit,
                 config_path=self.config_path,
@@ -229,25 +233,25 @@ class NdYagWidgetCommandHandler:
 
     def _state_from_readback(self, readback: dict[str, Any]) -> dict[str, Any]:
         devices = readback.get("devices") or {}
-        t660_1 = devices.get("t660_1") or {}
         t660_2 = devices.get("t660_2") or {}
-        t660_1_queries = t660_1.get("queries") or {}
+        t660_1 = devices.get("t660_1") or {}
         t660_2_queries = t660_2.get("queries") or {}
-        t660_1_channels = t660_1.get("channels") or {}
+        t660_1_queries = t660_1.get("queries") or {}
         t660_2_channels = t660_2.get("channels") or {}
-        fire = t660_1_channels.get("A") or {}
-        q_switch = t660_1_channels.get("B") or {}
-        drive = t660_2_channels.get("D") or {}
+        t660_1_channels = t660_1.get("channels") or {}
+        fire = t660_2_channels.get("A") or {}
+        q_switch = t660_2_channels.get("B") or {}
+        drive = t660_1_channels.get("C") or {}
         state: dict[str, Any] = {
             "recipe_name": readback.get("recipe_name"),
             "repetition_rate_hz": 10,
             "shot_count": _response(t660_2_queries.get("shots")),
-            "t6602_trigger_source": _response(t660_2_queries.get("trigger_source")),
-            "t6602_synth_frequency": _response(t660_2_queries.get("synth_frequency")),
-            "t6602_drive_enabled": _response(drive.get("enabled")),
-            "t6602_drive_delay": _response(drive.get("delay_edge")),
-            "t6602_drive_width": _response(drive.get("width_edge")),
             "t6601_trigger_source": _response(t660_1_queries.get("trigger_source")),
+            "t6601_synth_frequency": _response(t660_1_queries.get("synth_frequency")),
+            "t6601_drive_enabled": _response(drive.get("enabled")),
+            "t6601_drive_delay": _response(drive.get("delay_edge")),
+            "t6601_drive_width": _response(drive.get("width_edge")),
+            "t6602_trigger_source": _response(t660_2_queries.get("trigger_source")),
             "fire_enabled": _response(fire.get("enabled")),
             "fire_delay": _response(fire.get("delay_edge")),
             "fire_width": _response(fire.get("width_edge")),

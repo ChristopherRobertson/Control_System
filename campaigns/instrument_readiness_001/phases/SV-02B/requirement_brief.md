@@ -478,7 +478,7 @@ gain, range, cable, optic, or branch alignment invalidates the relevant
 
 The primary detector record is continuous HF2LI Sample/Reference/full-DIO
 streaming, not a triggered PicoScope block. Its pretrigger equivalent is the
-measured prepad acquired before enabling the accepted T660-2 pulse outputs; its
+measured prepad acquired before enabling the accepted T660-1 pulse outputs; its
 record length is the measured prepad plus the complete scan and transition plus
 the measured postpad. There is no scope-style detector pretrigger, fixed record
 length, or waveform averaging in the primary spectrum. Preserve the individual
@@ -565,8 +565,8 @@ The production values are imported values, not choices made in `SV-02`:
 | Scan speed | Fastest `MSW-01`/`AR-01` accepted speed whose measured lock-in shift, broadening, and direction hysteresis remain within their `CH-00` allocations. |
 | Marker interval/width | Promoted `MSW-01` values whose marker count, jitter, DIO pulse sampling, and interpolation uncertainty meet the axis allocation throughout each active segment. |
 | QCL pulse rate/width/duty | Promoted `QB-01` operating point for the installed module, cooling state, power envelope, and detector linearity. It must not be inferred from generic maximum ratings. |
-| MIRcat trigger latency | Import the `QB-01` measured distribution from T660-2 CHB electrical edge to optical pulse and the `MSW-01` distribution from start command/process trigger to pin-2 active. Compensate a fixed latency only if the promoted model requires it; propagate residual jitter and segment spectra from DIO markers rather than host-command time. |
-| T660 synchronization | T660-2 CHA and CHB use the same promoted repetition source. Import each enabled channel's period/rate, delay, width, polarity, and termination plus the measured CHB-minus-CHA relationship from `HF-01`/`QB-01`; require HF2 external-reference lock and the accepted phase relationship before emission. T660-2 CHC/CHD and every T660-1 channel remain disabled unless a separately promoted design explicitly changes that state. |
+| MIRcat trigger latency | Import the `QB-01` measured distribution from T660-1 CHB electrical edge to optical pulse and the `MSW-01` distribution from start command/process trigger to pin-2 active. Compensate a fixed latency only if the promoted model requires it; propagate residual jitter and segment spectra from DIO markers rather than host-command time. |
+| T660 synchronization | T660-1 CHA and CHB use the same promoted repetition source. Import each enabled channel's period/rate, delay, width, polarity, and termination plus the measured CHB-minus-CHA relationship from `HF-01`/`QB-01`; require HF2 external-reference lock and the accepted phase relationship before emission. T660-1 C and T660-2 C are active only for a qualified process-frame schedule; pump channels and both D outputs remain disabled. |
 | HF2LI time constant/order | Promoted `AR-01` pair meeting noise and dynamic-distortion allocations at the selected scan speed. |
 | Dwell/integration | A continuous sweep has no per-wavenumber dwell. Effective integration and memory are set by the promoted HF2 filter response; exclude transitions for the promoted order-specific 99 % settling interval [M5] and validate shift/broadening in `AR-01`. Do not convert correlated HF2 samples into independent dwell replicates. |
 | HF2LI output rate | Promoted `HF-01`/`HF-02` rate that samples the accepted filter bandwidth and preserves simultaneous streams without sample loss. The HF2 manual notes a common rate near eight times filter bandwidth [M5]. |
@@ -620,18 +620,25 @@ Reference.
 
 ### 11.4 Detailed routing and relationships
 
-The installed timing topology to preserve is:
+The installed timing topology is:
 
-- `T660-2 CHA → HF2LI DIO0 external reference`;
-- `T660-2 CHB → MIRcat TRIG IN`;
-- `T660-2 CHC → HF2LI DIO1 DAQ trigger` physically, but leave it disabled
-  unless the promoted HF configuration explicitly requires it;
-- `T660-2 CHD → T660-1 TRIG IN` physically, but leave it disabled for this
-  pump-off validation;
-- `T660-1 CHC → MIRcat DB9 pin 4 process trigger` physically, but leave it
-  disabled when the promoted sweep uses internal process triggering; and
-- MIRcat DB9 pin 1 direction, pin 2 sweep-active/tuned, and pin 3 wavelength
-  marker mapped by `MD-01` to the full DIO word.
+- `T660-1 CHA -> HF2LI DIO0 external reference`;
+- `T660-1 CHB -> MIRcat TRIG IN`;
+- `T660-1 CHC -> T660-2 TRIG IN`, disabled for internally sequenced unpumped scans;
+- `T660-2 CHA/CHB -> Surelite FIRE/Q-switch`, disabled for Mylar;
+- `T660-2 CHC -> MIRcat DB9 pin 4 Process Trigger`, disabled when the
+  promoted sweep uses internal process triggering;
+- both T660 channel-D outputs and HF2LI DIO1 unwired;
+- T660-2 CLOCK OUT distributes the separate 10 MHz reference to T660-1 and HF2LI;
+- MIRcat DB9 pin 1 direction -> HF2LI DIO20, pin 2 Sweep Active -> DIO21 and
+  PicoScope EXT, and pin 3 wavelength markers -> DIO22, with the MD-01
+  complete-DIO mapping and MS-02.1 branch/receiver qualification.
+
+For a finite externally sequenced unpumped scan, enable T660-1 C and use the
+qualified T660-2 frame table with only Process Trigger entries active. FIRE,
+Q-switch, and both D outputs remain disabled; channel OFF states represent
+inactive channels and padding; train count zero prevents additional pulses. Read back the frame/train counts and reconcile
+commands with observed Sweep Active; DIO1 is never assumed as a gate.
 
 Installed-unit correspondence states pin 1 maps scan direction, pin 2 is high
 during a channel's active sweep and low in transitions, pin 3 is the wavelength
@@ -648,11 +655,12 @@ including disabled channels, with trigger source, enable state, destination,
 rate/period, delay relative to that source, width, polarity, source termination,
 expected load termination, and promoted evidence ID. Readback agreement is
 required before the stream starts. For the pump-off Mylar topology, only the
-reviewed T660-2 HF2-reference and MIRcat-trigger channels may be enabled.
+reviewed T660-1 reference/probe channels and, only for external process sequencing,
+T660-1 C and T660-2 C may be enabled. Pump channels remain disabled.
 
 All T660 outputs use the accepted polarity and termination readbacks. The
 candidate configuration uses positive 150 ns, 50 Ω-source pulses on the
-active T660-2 channels [R11]. The T660 manual specifies selectable 50 Ω source
+active T660-1 channels [R11]. The T660 manual specifies selectable 50 Ω source
 termination, +2.5 V into a 50 Ω load, 10 ps programming resolution, and a
 16 MHz maximum output repetition envelope [M7]; these are capability limits,
 not proof that the downstream load or chosen recipe is correct.
@@ -717,7 +725,7 @@ The generated workflow shall implement and log this order:
 
 1. Establish the laboratory laser-controlled area, PPE, enclosure/beam dumps,
    approved shutter/block state, and operator authorization. Keep pump,
-   Nd:YAG, OPO, and every T660-1 output disabled and optically blocked for the
+   Nd:YAG, OPO, and every T660-2 output disabled and optically blocked for the
    entire Mylar experiment.
 2. Apply `safe_idle.yaml`; verify both T660 trigger sources off, every channel
    disabled, MIRcat emission off, no scan active, and MIRcat disarmed. Stop if
@@ -731,12 +739,12 @@ The generated workflow shall implement and log this order:
    Sample/Reference assignments, external reference, demodulators, rates,
    time constants/orders, phases, ranges, full-DIO subscription, and loss
    flags.
-6. With T660 triggering still off, program and read back the accepted T660-2
-   pulse channels, polarity, termination, delays and widths. T660-1 remains
+6. With T660 triggering still off, program and read back the accepted T660-1
+   pulse channels, polarity, termination, delays and widths. T660-2 remains
    entirely off. Configure the MIRcat sweep, pulse mode, marker settings, and
    process-trigger mode with emission off.
 7. Start native HF2LI Sample/Reference/full-DIO streaming and record the
-   measured prepad. Enable only the accepted T660-2 reference/laser-trigger
+   measured prepad. Enable only the accepted T660-1 reference/laser-trigger
    channels. Before scan start the MIRcat is not emitting, so the external
    laser triggers shall produce no optical output.
 8. Verify stable HF2LI external-reference lock, legal input ranges, no clipping
@@ -748,7 +756,7 @@ The generated workflow shall implement and log this order:
 10. Acquire through the complete active segment and transition. Reconcile
     marker count/order and retain low active-gate intervals raw while excluding
     them from spectral estimation as defined by `MSW-01`.
-11. At normal scan end or any anomaly, first stop T660-2 triggering so no new
+11. At normal scan end or any anomaly, first stop T660-1 triggering so no new
     laser pulses can be requested, then command MIRcat stop-scan and emission
     off, verify both, and retain the required HF2 postpad before stopping the
     stream.
@@ -1214,7 +1222,7 @@ requirements.
    schedule that includes at least the campaign-required three scans per
    direction.
 6. Acquire bracketed empty-mount controls and both QCL directions with pump,
-   OPO, and T660-1 disabled.
+   OPO, and T660-2 disabled.
 7. Run the locked transmission-space forward model, uncertainty propagation,
    and decision; report the result as local to the tested carbonyl envelope and
    configuration.

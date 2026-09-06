@@ -131,3 +131,40 @@ def test_train_parameters_cannot_silently_round_or_overflow(changes):
     with pytest.raises(T660ConfigurationError):
         device.configure_train(**changes)
     assert not device.commands
+
+
+@pytest.mark.parametrize("count", [1, 3, 100])
+def test_finite_alignment_uses_bounded_frames_at_ten_hz(count):
+    device = FrameDevice()
+    channels = frame(pump_enabled=True)["channels"]
+    channels["C"]["enabled"] = False
+    result = device.apply_recipe({
+        "trigger_source": "EXT", "predivider": 1, "frames_engine": "OFF",
+        "finite_frame_count": count, "frame_input_frequency_hz": 10.0,
+        "start": True, "channels": channels,
+    })
+    timing = result["timing_table"]
+    assert timing["frame_period_s"] == .1
+    assert timing["acquisition_frame_count"] == count
+    assert len(device.frames) == max(2, count)
+    assert sum(stored["CHANnel:QUEue:MODeA"] == "A, ON" for stored in device.frames) == count
+    assert sum(stored["CHANnel:QUEue:MODeB"] == "B, ON" for stored in device.frames) == count
+    assert all(stored["CHANnel:QUEue:MODeD"] == "D, OFF" for stored in device.frames)
+    assert "TRIG:SHOTS 0" in device.commands
+    assert not any(command == f"TRIG:SHOTS {count}" for command in device.commands)
+    assert device.commands[-3:] == ["TRIG:SOUR EXT", "TFRame:STArt", "START"]
+
+
+@pytest.mark.parametrize("change", [
+    {"finite_frame_count": 0}, {"finite_frame_count": True},
+    {"frame_input_frequency_hz": float("nan")}, {"trigger_source": "SYN"},
+    {"frame_input_frequency_hz": 100_000.0},
+])
+def test_invalid_finite_alignment_fails_before_commands(change):
+    device = FrameDevice()
+    recipe = {"finite_frame_count": 1, "frame_input_frequency_hz": 10.0,
+              "trigger_source": "EXT", "predivider": 1,
+              "channels": frame(pump_enabled=True)["channels"], **change}
+    with pytest.raises(T660ConfigurationError):
+        device.apply_recipe(recipe)
+    assert not device.commands

@@ -48,15 +48,16 @@ def main() -> int:
     assert recipe["timing"]["timing_correction_source"] is None
 
     t660 = recipe["t660"]
-    assert set(t660["t660_2"].get("channels", {})) == {"D"}
-    assert "signals" not in t660["t660_2"]
-    assert t660["t660_2"]["clock"]["frequency"] == "10Hz"
-    assert t660["t660_2"]["clock"]["shots"] == 0
-    assert t660["t660_2"]["channels"]["D"]["enabled"] is True
-
-    assert set(t660["t660_1"]["signals"]) == {"ndyag_fire", "ndyag_q_switch"}
-    fire = t660["t660_1"]["signals"]["ndyag_fire"]
-    q_switch = t660["t660_1"]["signals"]["ndyag_q_switch"]
+    assert set(t660["t660_1"]["channels"]) == set("ABCD")
+    assert t660["t660_1"]["clock"]["frequency"] == "10Hz"
+    assert t660["t660_1"]["clock"]["shots"] == 0
+    assert t660["t660_1"]["channels"]["C"]["enabled"] is True
+    assert all(not t660["t660_1"]["channels"][ch]["enabled"] for ch in "ABD")
+    assert t660["t660_2"]["frames_engine"] == "OFF"
+    assert t660["t660_2"]["trigger_source"] == "EXT"
+    assert all(not t660["t660_2"]["channels"][ch]["enabled"] for ch in "CD")
+    fire = t660["t660_2"]["channels"]["A"]
+    q_switch = t660["t660_2"]["channels"]["B"]
     assert fire["width"] == "10us"
     assert q_switch["width"] == "10us"
     assert fire["polarity"] == "negative"
@@ -72,9 +73,10 @@ def main() -> int:
         settings.get("signal")
         for unit in resolved.values()
         for settings in (unit.get("channels") or {}).values()
+        if settings.get("enabled")
     }
     assert forbidden_signal_names.isdisjoint(resolved_signals)
-    assert {"ndyag_fire", "ndyag_q_switch", "t660_1_trig_in"}.issubset(resolved_signals)
+    assert {"ndyag_fire", "ndyag_q_switch", "t660_2_trig_in"}.issubset(resolved_signals)
 
     controls = {control.key: control for control in NDYAG_WIDGET_SPEC.controls}
     fields = {field.key: field for field in NDYAG_WIDGET_SPEC.parameter_fields}
@@ -91,7 +93,7 @@ def main() -> int:
     assert NDYAG_WIDGET_SPEC.device_key == "ndyag"
 
     delay_override = recipe_with_q_switch_delay_us(recipe, 250.0)
-    override_q_switch = delay_override["t660"]["t660_1"]["signals"]["ndyag_q_switch"]
+    override_q_switch = delay_override["t660"]["t660_2"]["channels"]["B"]
     assert override_q_switch["delay"] == "250us"
     assert delay_override["timing"]["programmed_q_switch_delay_ns"] == 250000.0
     try:
@@ -108,7 +110,9 @@ def main() -> int:
     )
     assert finite_shots["duration"]["mode"] == "finite"
     assert finite_shots["duration"]["t660_shots"] == 25
-    assert finite_shots["t660"]["t660_2"]["clock"]["shots"] == 25
+    assert finite_shots["t660"]["t660_2"]["finite_frame_count"] == 25
+    assert finite_shots["t660"]["t660_1"]["clock"]["shots"] == 0
+    TimingRecipeManager().validate_recipe(finite_shots)
     continuous = recipe_with_ui_parameters(
         recipe,
         q_switch_delay_us=250.0,
@@ -117,7 +121,7 @@ def main() -> int:
     )
     assert continuous["duration"]["mode"] == "continuous"
     assert continuous["duration"]["t660_shots"] == 0
-    assert continuous["t660"]["t660_2"]["clock"]["shots"] == 0
+    assert continuous["t660"]["t660_1"]["clock"]["shots"] == 0
     try:
         recipe_with_ui_parameters(recipe, shot_count=0, continuous=False)
     except ValueError as exc:
