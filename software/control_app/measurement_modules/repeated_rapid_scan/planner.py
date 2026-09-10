@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .settings import (EXPERIMENT_ID, MIRCAT_QCL, AcquisitionIntent, RepeatedRapidScanSettings,
-                       validate_mircat_pulse_pair)
+                       validate_mircat_pulse_pair, validate_probe_optical_pulse_pair)
 from .timing import CompiledMovie, T660_FRAME_CAPACITY, compile_movie
 
 
@@ -174,7 +174,7 @@ def resolve_intent_settings(intent: AcquisitionIntent | Mapping[str, Any], *, mo
         if manual.get(name) is None:
             manual.pop(name, None)
     protected = {"mode", "execution", "condition", "experiment_id", "schema_version", "acquisition_intent",
-                 "manual_overrides", "scan_start_cm1", "scan_stop_cm1", "repeats", "phase_offsets_s", "post_scans"}
+                 "manual_overrides", "historical_ui_settings", "scan_start_cm1", "scan_stop_cm1", "repeats", "phase_offsets_s", "post_scans"}
     known = set(base.__dataclass_fields__)
     if set(manual) - (known - protected):
         raise ValueError("Unsupported manual overrides: " + ", ".join(sorted(set(manual) - (known - protected))))
@@ -363,6 +363,7 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
                  "mircat_pulse_rate_hz": settings.mircat_pulse_rate_hz,
                  "mircat_pulse_width_ns": settings.mircat_pulse_width_ns,
                  "mircat_current_ma": settings.mircat_current_ma,
+                 "probe_frequency_hz": settings.probe_frequency_hz,
                  "probe_pulse_width_s": settings.probe_pulse_width_s}
     requested.update(settings.manual_overrides)
     if settings.acquisition_intent:
@@ -375,7 +376,11 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
                 "mircat_pulse_width_ns": settings.mircat_pulse_width_ns,
                 "mircat_current_ma": settings.mircat_current_ma,
                 "mircat_duty_fraction": validate_mircat_pulse_pair(settings.mircat_pulse_rate_hz,
-                                                                  settings.mircat_pulse_width_ns)}
+                                                                  settings.mircat_pulse_width_ns),
+                "probe_optical_duty_fraction": validate_probe_optical_pulse_pair(first.input_frequency_hz,
+                                                                                  settings.mircat_pulse_width_ns),
+                "probe_repetition_rate_basis": "T660 external trigger cadence in MIRcat external-pulse mode 2",
+                "optical_pulse_width_basis": "MIRcat SDK optical width in ns; external TTL width is separate"}
     actual = {"sample_rate_hz": caps.actual_sample_rate_hz, "reference_rate_hz": caps.actual_reference_rate_hz,
               "scan_period_s": caps.actual_scan_period_s, "readback_id": caps.connected_readback_id,
               "timing_rate_hz": caps.acquisition_timing_rate_hz, "live_settings": dict(caps.live_settings),

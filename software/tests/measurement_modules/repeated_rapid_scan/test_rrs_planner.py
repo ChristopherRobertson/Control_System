@@ -6,7 +6,7 @@ import pytest
 
 from control_app.measurement_modules.repeated_rapid_scan.settings import (
     AcquisitionIntent, ConditionProfile, RepeatedRapidScanSettings, example_settings,
-    validate_mircat_pulse_pair,
+    validate_mircat_pulse_pair, validate_probe_optical_pulse_pair,
 )
 from control_app.measurement_modules.repeated_rapid_scan.timing import compile_movie
 from control_app.measurement_modules.repeated_rapid_scan.planner import (
@@ -476,3 +476,70 @@ def test_rrs_plans_have_only_qcl1_and_do_not_route_historical_qcl_metadata(tmp_p
         build_plan(replace(compact(), manual_overrides={"qcl":2}))
     with pytest.raises(ValueError, match="Unsupported manual"):
         resolve_intent_settings(AcquisitionIntent(), overrides={"qcl":2})
+
+
+@pytest.mark.parametrize("rate,width,duty", [(1_000_000., 300., .3), (3_000_000., 100., .3),
+                                           (2_000_000., 120., .24), (1_000_000., None, None)])
+def test_rrs_emitted_probe_duty_uses_external_cadence_and_sdk_width(rate, width, duty):
+    assert validate_probe_optical_pulse_pair(rate, width) == duty
+    settings = compact(probe_frequency_hz=rate, mircat_pulse_width_ns=width)
+    plan = build_plan(settings)
+    assert plan.selected["probe_optical_duty_fraction"] == duty
+    assert plan.selected["mircat_duty_fraction"] is None
+    assert plan.selected["probe_frequency_hz"] == rate
+    assert plan.selected["mircat_pulse_width_ns"] == width
+    assert "external-pulse mode 2" in plan.selected["probe_repetition_rate_basis"]
+
+
+@pytest.mark.parametrize("rate,width", [(1_000_000., 300.000001), (3_000_001., 100.)])
+def test_rrs_emitted_probe_over_duty_rejects_even_with_unknown_internal_rate(rate, width):
+    with pytest.raises(ValueError, match="Emitted probe repetition rate.*at most 30% duty"):
+        build_plan(compact(probe_frequency_hz=rate, mircat_pulse_width_ns=width))
+
+
+@pytest.mark.parametrize("changes", [
+    {"probe_frequency_hz":3_000_001., "mircat_pulse_width_ns":100.},
+    {"probe_frequency_hz":1_000_000., "mircat_pulse_width_ns":100.,
+     "manual_overrides":{"probe_frequency_hz":3_000_001.}},
+    {"probe_frequency_hz":1_000_000., "mircat_pulse_width_ns":100.,
+     "manual_overrides":{"mircat_pulse_width_ns":301.}},
+    {"manual_overrides":{"probe_frequency_hz":3_000_001., "mircat_pulse_width_ns":100.}},
+])
+def test_rrs_saved_selected_and_manual_external_sdk_width_pairs_cannot_bypass_duty(changes):
+    payload = compact().to_dict()
+    payload.update(changes)
+    with pytest.raises(ValueError, match="Emitted probe repetition rate.*at most 30% duty"):
+        RepeatedRapidScanSettings.from_dict(json.loads(json.dumps(payload)))
+
+
+def test_rrs_visible_external_rate_and_sdk_width_resolve_independently_from_live():
+    intent = AcquisitionIntent(observation_duration_s=.2)
+    caps = HardwareCapabilities(live_settings={"probe_frequency_hz":1_000_000., "mircat_pulse_width_ns":100.})
+    rate = resolve_intent_settings(intent, capabilities=caps, overrides={"probe_frequency_hz":3_000_000.})
+    width = resolve_intent_settings(intent, capabilities=caps, overrides={"mircat_pulse_width_ns":300.})
+    assert (rate.probe_frequency_hz, rate.mircat_pulse_width_ns) == (3_000_000., 100.)
+    assert (width.probe_frequency_hz, width.mircat_pulse_width_ns) == (1_000_000., 300.)
+    assert rate.mircat_pulse_rate_hz is width.mircat_pulse_rate_hz is None
+    with pytest.raises(ValueError, match="Emitted probe repetition rate.*at most 30% duty"):
+        resolve_intent_settings(intent, base_settings=rate,
+            capabilities=HardwareCapabilities(live_settings={"mircat_pulse_width_ns":101.}))
+
+
+def test_rrs_safe_emitted_optical_duty_does_not_replace_the_internal_duty_limit():
+    assert validate_probe_optical_pulse_pair(1_000_000., 200.) == .2
+    with pytest.raises(ValueError, match="MIRcat internal repetition rate.*at most 30% duty"):
+        build_plan(compact(probe_frequency_hz=1_000_000., mircat_pulse_rate_hz=2_000_000.,
+                           mircat_pulse_width_ns=200., probe_pulse_width_s=10e-9))
+
+
+def test_rrs_removed_historical_ui_settings_are_preserved_without_becoming_commands():
+    history = {"qcl":2, "probe_frequency_hz":8_000_000., "mircat_pulse_width_ns":1000.,
+               "mircat_pulse_rate_hz":1_000_000., "temperature_K":77.}
+    base = RepeatedRapidScanSettings(historical_ui_settings=history)
+    selected = resolve_intent_settings(AcquisitionIntent(observation_duration_s=.2), base_settings=base,
+        capabilities=HardwareCapabilities(live_settings={"probe_frequency_hz":1_000_000.,
+                                                        "historical_ui_settings":{"discarded":True}}))
+    assert selected.historical_ui_settings == history
+    assert selected.mircat_pulse_width_ns is None
+    assert selected.probe_frequency_hz == 1_000_000.
+    assert build_plan(selected).selected["qcl"] == 1

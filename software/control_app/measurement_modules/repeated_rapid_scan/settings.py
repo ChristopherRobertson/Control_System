@@ -66,7 +66,8 @@ class RepeatedRapidScanSettings:
     reference_filter_order: int = 4
     sample_filter_timeconstant_s: float = 0.001
     reference_filter_timeconstant_s: float = 0.001
-    # T660 external trigger carrier and TTL width, not optical pulse settings.
+    # In MIRcat external-pulse mode 2 this trigger frequency sets the emitted
+    # optical repetition rate. The electrical TTL width is separate.
     probe_frequency_hz: float = 1000000.0
     probe_pulse_width_s: float = 150e-9
     # QCL1 internal optical pulse settings; None preserves the connected member.
@@ -95,6 +96,7 @@ class RepeatedRapidScanSettings:
     instrument_state_id: str = "unverified"
     acquisition_intent: dict[str, Any] = field(default_factory=dict)
     manual_overrides: dict[str, Any] = field(default_factory=dict)
+    historical_ui_settings: dict[str, Any] = field(default_factory=dict)
     schema_version: int = SCHEMA_VERSION
     experiment_id: str = EXPERIMENT_ID
 
@@ -151,6 +153,7 @@ class RepeatedRapidScanSettings:
         for name in positive:
             _finite(getattr(self, name), name, positive=True)
         validate_mircat_pulse_pair(self.mircat_pulse_rate_hz, self.mircat_pulse_width_ns)
+        validate_probe_optical_pulse_pair(self.probe_frequency_hz, self.mircat_pulse_width_ns)
         if self.mircat_current_ma is not None:
             _finite(self.mircat_current_ma, "mircat_current_ma", positive=True)
         if not isinstance(self.manual_overrides, Mapping):
@@ -163,6 +166,8 @@ class RepeatedRapidScanSettings:
         pulse_override = {name: value for name, value in self.manual_overrides.items() if value is not None}
         validate_mircat_pulse_pair(pulse_override.get("mircat_pulse_rate_hz", self.mircat_pulse_rate_hz),
                                   pulse_override.get("mircat_pulse_width_ns", self.mircat_pulse_width_ns))
+        validate_probe_optical_pulse_pair(pulse_override.get("probe_frequency_hz", self.probe_frequency_hz),
+                                         pulse_override.get("mircat_pulse_width_ns", self.mircat_pulse_width_ns))
         for name in ("process_delay_s", "tuning_settling_s", "preparation_s", "restoration_s", "analysis_s", "upload_acknowledgment_s"):
             _finite(getattr(self, name), name, nonnegative=True)
         _finite(self.scan_start_cm1, "scan_start_cm1")
@@ -218,14 +223,28 @@ def validate_mircat_pulse_pair(rate_hz: float | None, width_ns: float | None) ->
     rejecting an exact 30% boundary due to binary floating-point multiplication.
     The external T660 carrier and TTL width do not enter this optical product.
     """
-    for name, value in (("mircat_pulse_rate_hz", rate_hz), ("mircat_pulse_width_ns", width_ns)):
+    return _validate_optical_duty_pair(rate_hz, width_ns, "mircat_pulse_rate_hz", "MIRcat internal repetition rate")
+
+
+def validate_probe_optical_pulse_pair(rate_hz: float | None, width_ns: float | None) -> float | None:
+    """Validate emitted mode-2 cadence times the MIRcat SDK optical width.
+
+    The emitted cadence is the external T660 trigger frequency. The independent
+    internal MIRcat rate is validated separately; the TTL trigger width enters
+    neither optical duty calculation. Lower connected vendor limits still apply.
+    """
+    return _validate_optical_duty_pair(rate_hz, width_ns, "probe_frequency_hz", "Emitted probe repetition rate")
+
+
+def _validate_optical_duty_pair(rate_hz, width_ns, rate_name, label) -> float | None:
+    for name, value in ((rate_name, rate_hz), ("mircat_pulse_width_ns", width_ns)):
         if value is not None:
             _finite(value, name, positive=True)
     if rate_hz is None or width_ns is None:
         return None
     duty = Decimal(str(rate_hz)) * Decimal(str(width_ns)) * Decimal("1e-9")
     if duty > MIRCAT_MAX_DUTY_FRACTION:
-        raise ValueError("MIRcat internal repetition rate times optical pulse width must be at most 30% duty (0.30)")
+        raise ValueError(f"{label} times optical pulse width must be at most 30% duty (0.30)")
     return float(duty)
 
 
