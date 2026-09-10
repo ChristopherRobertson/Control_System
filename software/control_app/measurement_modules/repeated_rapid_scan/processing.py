@@ -143,7 +143,7 @@ def _spectral_coordinates(scan: NativeScan, times: np.ndarray,
     nu = _array(trajectory.wavenumbers_cm1, len(marker_times))
     output = np.full(len(times), np.nan)
     valid = np.zeros(len(times), dtype=bool)
-    if not trajectory.calibration_id or len(marker_times) < 2:
+    if len(marker_times) < 2:
         return output, valid
     if not np.all(np.isfinite(marker_times)) or not np.all(np.isfinite(nu)) or np.any(np.diff(marker_times) <= 0):
         return output, valid
@@ -161,21 +161,19 @@ def baseline_mismatches(baseline: SpectralBaseline, movie: NativeMovie,
                         *, background: bool = False) -> tuple[str, ...]:
     errors = list(compatibility_mismatches(
         {"experiment_id": movie.experiment_id, "schema_version": movie.schema_version,
-         "mode": movie.mode, "condition_id": movie.condition_id},
-        {name: getattr(baseline, name) for name in ("experiment_id", "schema_version", "mode", "condition_id")}))
+         "mode": movie.mode},
+        {name: getattr(baseline, name) for name in ("experiment_id", "schema_version", "mode")}))
     if not baseline.complete:
         errors.append("Reference record is incomplete")
-    if not baseline.accepted:
-        errors.append("Reference record has not been accepted")
     expected_kind = "background" if background else ("q0" if movie.mode == "dual" else "single_baseline")
     if baseline.kind != expected_kind:
         errors.append(f"Reference kind mismatch: expected {expected_kind}, found {baseline.kind}")
-    errors.extend(compatibility_mismatches(movie.metadata.get("compatibility", {}), baseline.compatibility))
-    recorded_axes = baseline.metadata.get("trajectory_calibration_ids_by_direction", {})
-    for scan in movie.scans:
-        identities = recorded_axes.get(scan.trajectory.direction)
-        if identities is not None and scan.trajectory.calibration_id not in identities:
-            errors.append(f"Trajectory calibration mismatch for {scan.trajectory.direction}: {scan.trajectory.calibration_id}")
+    actual_contract = movie.metadata.get("compatibility_contract",movie.metadata.get("compatibility", {}))
+    if "acquisition" in actual_contract and "acquisition" in baseline.compatibility:
+        from .session import compatibility_conflicts
+        errors.extend(compatibility_conflicts(baseline.compatibility,actual_contract))
+    # Calibration identities remain provenance. Actual selected acquisition
+    # settings and matched native support determine baseline reuse.
     return tuple(errors)
 
 
@@ -224,6 +222,8 @@ def reconstruct_movie(movie: NativeMovie, baseline: SpectralBaseline | None = No
         raise ValueError("A repeated recovery movie authorizes exactly one pump, or zero for an explicit control")
     observed = tuple(p for p in movie.pump_observations if p.independently_observed)
     warnings: list[str] = []
+    if any(not scan.trajectory.calibration_id for scan in movie.scans):
+        warnings.append("Spectral axis uses observed markers and selected coordinates; wavelength calibration is unavailable")
     pump_valid = len(observed) == expected_count and len(movie.pump_observations) == expected_count
     if not pump_valid:
         warnings.append(f"Pump observation count mismatch: expected {expected_count}, independently observed {len(observed)}")
@@ -296,6 +296,8 @@ def reconstruct_movie(movie: NativeMovie, baseline: SpectralBaseline | None = No
                                "background_id": getattr(background, "record_id", None),
                                "clock_corrections": movie.clock_corrections,
                                "analysis_version": ANALYSIS_VERSION,
+                               "axis_basis_by_scan":{scan.scan_index:("calibrated_trajectory" if scan.trajectory.calibration_id else "observed_uncalibrated_trajectory")
+                                                     for scan in movie.scans},
                                "uncertainty_assumptions": "Independent baseline acquisition; temporal filter correlation is not included in pointwise variances",
                                "direction_pooling": "not_performed", "fitted_support": "native_points_only"})
 
@@ -395,17 +397,17 @@ def combine_baselines(baselines: Sequence[SpectralBaseline], *, record_id: str,
         raise ValueError("At least one complete directional baseline is required")
     first = baselines[0]
     calibration_ids: dict[str, tuple[str, ...]] = {}
-    identities = {name:getattr(first,name) for name in ("experiment_id","schema_version","mode","condition_id","kind")}
+    identities = {name:getattr(first,name) for name in ("experiment_id","schema_version","mode","kind")}
     for candidate in baselines[1:]:
         errors = compatibility_mismatches(identities,{name:getattr(candidate,name) for name in identities})
-        errors += compatibility_mismatches(first.compatibility,candidate.compatibility)
+        if "acquisition" in first.compatibility and "acquisition" in candidate.compatibility:
+            from .session import compatibility_conflicts
+            errors += tuple(compatibility_conflicts(first.compatibility,candidate.compatibility))
         if errors:
             raise ValueError("Cannot combine incompatible baseline records: "+"; ".join(errors))
     for candidate in baselines:
         for direction, ids in candidate.metadata.get("trajectory_calibration_ids_by_direction",{}).items():
-            if direction in calibration_ids and set(ids)!=set(calibration_ids[direction]):
-                raise ValueError(f"Cannot combine changed {direction} trajectory calibrations without new review")
-            calibration_ids[direction]=tuple(ids)
+            calibration_ids[direction]=tuple(dict.fromkeys((*calibration_ids.get(direction,()),*ids)))
     return replace(first,record_id=record_id,spectra=_merge_spectra(tuple(s for b in baselines for s in b.spectra)),
                    complete=all(b.complete for b in baselines),
                    accepted=all(b.accepted for b in baselines) if accepted is None else accepted,
@@ -648,7 +650,7 @@ def native_kernel_for_movie(movie: NativeMovie, calibration: Mapping[str, Any], 
     histories = []
     for scan in movie.scans:
         marker_t, marker_nu = _time(scan.trajectory, clocks),np.asarray(scan.trajectory.wavenumbers_cm1,float)
-        if scan.trajectory.calibration_id and len(marker_t)>1 and np.all(np.isfinite(marker_t)) and np.all(np.diff(marker_t)>0):
+        if len(marker_t)>1 and np.all(np.isfinite(marker_t)) and np.all(np.diff(marker_t)>0):
             histories.append((scan.trajectory,marker_t,marker_nu))
     offsets = []
     for scan in movie.scans:

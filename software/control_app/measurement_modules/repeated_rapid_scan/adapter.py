@@ -1,66 +1,66 @@
-"""Experiment-owned scientific adapter for the frozen guided host interface."""
+"""Experiment-owned acquisition/data adapter for the compact host panel."""
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
+from decimal import Decimal
 import csv
 import json
 from pathlib import Path
-from threading import Event
 
 import numpy as np
 
 from control_app.measurement_host.context import thaw_data
-from control_app.measurement_host.interchange import load_sample_selection
 from control_app.measurement_host.presentation import ScientificSelections
-from .session import ReviewSession, scientific_contract, compatibility_conflicts
-from .settings import RepeatedRapidScanSettings
+from .session import MeasurementSession, operational_contract
+from .settings import AcquisitionIntent, ConditionProfile, RepeatedRapidScanSettings
 from .planner import build_plan
 
 
-class _WorkerBridge:
-    def __init__(self, worker, adapter, simulated):
-        self.worker, self.adapter, self.simulated = worker, adapter, simulated
-
-    def __getattr__(self, name):
-        return getattr(self.worker, name)
-
-    def check_cancelled(self):
-        self.worker.check_cancelled()
-
-    def confirm_physical_action(self, description, *, cleanup=False):
-        if not cleanup:
-            self.check_cancelled()
-        if self.simulated:
-            self.worker.message.emit("SIMULATION physical condition: " + description)
-            return True
-        if self.adapter.manual_action_handler is None:
-            raise ValueError("A manual physical action is required: " + description)
-        return self.adapter.manual_action_handler(description, self.worker, cleanup=cleanup)
-
-
 class RepeatedRapidScanAdapter:
-    def __init__(self, context, settings_widget):
+    def __init__(self, context, settings_widget, *, acquirer_factory=None, runner_factory=None):
         self.context, self.settings_widget = context, settings_widget
-        self.session = ReviewSession(context.mode)
+        self.session = MeasurementSession(context.mode)
         self.capabilities = None
         self.calibration = None
         self.runner = None
-        self.manual_action_handler = None
+        self.acquirer_factory, self.runner_factory = acquirer_factory, runner_factory
         self._pending_selection = None
         self._pending_bundle = None
         self.fit_model = None
         saved = context.preferences.value("settings", None)
         if saved:
             try:
-                settings_widget.apply(json.loads(saved) if isinstance(saved, str) else saved)
+                value = json.loads(saved) if isinstance(saved, str) else saved
+                settings_widget.apply(self._preference_settings(value))
             except (ValueError, TypeError, KeyError):
                 # An incompatible preference cannot disable construction; loaded
                 # native plans still surface their explicit validation error.
                 pass
 
+    def _preference_settings(self, value):
+        settings = RepeatedRapidScanSettings.from_dict(value)
+        legacy_example = settings.execution == "simulation" or "EXAMPLE ONLY" in settings.value_source.upper()
+        if not legacy_example:
+            return settings.to_dict()
+        intent = AcquisitionIntent.from_settings(settings)
+        sample = intent.sample_name if intent.sample_name not in ("", "unassigned", "unknown") else "Sample"
+        condition = ConditionProfile(sample_id=sample)
+        return replace(settings,execution="hardware",condition=condition,controls=("probe_only",),
+                       acquisition_intent=replace(intent,sample_name=sample).to_dict(),manual_overrides={},
+                       calibration_ids=(),instrument_state_id="unverified",
+                       value_source="Stored acquisition intent; installed readbacks will resolve operating settings").to_dict()
+
     def read_settings(self):
         return self.settings_widget.read()
+
+    def read_operation_settings(self, kind):
+        if kind == "capabilities":
+            reader = getattr(self.settings_widget,"raw_intent",None)
+            raw = reader() if reader is not None else {}
+            return {"mode":self.context.mode,"experiment_id":"repeated_rapid_scan",
+                    "acquisition_intent":deepcopy(raw)}
+        return self.read_settings()
 
     def apply_settings(self, settings):
         self.settings_widget.apply(settings)
@@ -75,20 +75,17 @@ class RepeatedRapidScanAdapter:
 
     def summarize_plan(self, plan):
         s, e = plan.settings, plan.estimates
-        items = "\n".join(f"• {item.message}" for item in plan.readiness_items)
         actual = plan.actual
-        return (f"{plan.movie_count} finite movies · {plan.pump_count} authorized electrical pump events\n"
-                f"{e['scans_per_movie']} scans/movie: {s.pre_scans} before, one crossing, {s.post_scans} after\n"
-                f"{e['movie_duration_s']:.6g} s/movie · {s.mode} detector mode · {s.execution}\n"
-                f"Requested period {s.measured_scan_period_s:.9g} s; selected {plan.selected['scan_period_s']:.9g} s; "
-                f"measured readback {actual.get('scan_period_s')!r} s\n"
-                f"Full-movie memory {e['movie_memory_bytes']/1024**2:.1f} MiB; retained storage {e['storage_bytes']/1024**2:.1f} MiB\n"
-                f"Retained-run memory estimate {e.get('retained_run_memory_bytes', e['movie_memory_bytes'])/1024**2:.1f} MiB\n"
-                f"Timing upload estimate {e['upload_s']:.1f} s; full workflow estimate {e['wall_time_s']:.1f} s\n"
-                f"Reset: every population band ≤ {s.recovery.band_relative_tolerance:g} relative change; "
-                f"off-band ≤ {s.recovery.offband_absolute_tolerance:g}; {s.recovery.consecutive_scans} consecutive scans. "
-                f"Wait allowance {s.recovery.max_reset_wait_s:g} s. An incomplete recovery stops further equivalent pumps.\n"
-                f"{s.value_source}\nReadiness: {'applicable evidence resolved' if not items else chr(10)+items}")
+        sample_source = ("readback" if actual.get("sample_rate_hz") == s.sample_rate_hz and
+                         (s.mode == "single" or actual.get("reference_rate_hz") == s.reference_rate_hz) else "requested")
+        hf = f"S {s.sample_rate_hz:g} Sa/s · τ {s.sample_filter_timeconstant_s:g}s/{s.sample_filter_order}"
+        if s.mode == "dual":
+            hf += f"; R {s.reference_rate_hz:g} Sa/s · τ {s.reference_filter_timeconstant_s:g}s/{s.reference_filter_order}"
+        return (("Sequence", f"{plan.movie_count} movies · {plan.pump_count} pump events"),
+                ("Movie", f"{e['scans_per_movie']} scans @ {plan.selected['scan_period_s']*1000:.6g} ms · {e['movie_duration_s']:.6g} s"),
+                ("HF2LI", f"{hf} ({sample_source} rates)"),
+                ("Memory / storage", f"{e.get('retained_run_memory_bytes',e['movie_memory_bytes'])/1024**2:.1f} / {e['storage_bytes']/1024**2:.1f} MiB"),
+                ("Duration", f"{e['wall_time_s']:.1f} s estimated total"))
 
     def wall_estimate(self, plan):
         return float(plan.estimates.get("wall_time_s", 0)) if plan else 0.
@@ -97,63 +94,101 @@ class RepeatedRapidScanAdapter:
         return ScientificSelections(tuple(deepcopy(self.session.calibration_records)), tuple(deepcopy(self.session.sample_records)))
 
     def hardware_required(self, kind, settings):
-        return settings.get("execution") == "hardware"
+        return kind in ("measurement", "preliminary", "blank", "capabilities")
 
     def _contract(self, settings, configuration=None, calibration=None, samples=None):
         configuration = self.context.configuration() if configuration is None else thaw_data(configuration)
-        contract = scientific_contract(thaw_data(settings), self.session.configuration_contract(configuration),
+        contract = operational_contract(thaw_data(settings), self.session.configuration_contract(configuration),
             self.session.calibration_records if calibration is None else thaw_data(calibration),
             self.session.sample_records if samples is None else thaw_data(samples))
-        contract["background_record_id"] = getattr(self.session.background, "record_id", None)
         return contract
 
     def validate_blank(self, plan):
         if self.context.mode == "dual":
             return ()
         if self.session.blank is None:
-            return ("no sequential blank is selected",)
+            return ()
         record = self.session.blank
         errors = list(self.session.check(record, self._contract(plan.settings.to_dict())))
         if record.get("kind") != "blank":
             errors.append("selected record is not a sequential blank")
         if record.get("status") not in ("complete", "completed"):
             errors.append("sequential blank is partial, rejected or interrupted")
+        baseline = record.get("baseline")
+        if baseline is None or not baseline.complete or baseline.mode != self.context.mode or baseline.kind != "background":
+            errors.append("sequential blank lacks complete compatible background support")
         return tuple(errors)
 
-    def validate_review(self, preliminary, plan):
+    def validate_preliminary(self, preliminary, plan):
+        if preliminary is None:
+            self.session.errors.clear()
+            return ()
         errors = list(self.session.check(preliminary, self._contract(plan.settings.to_dict())))
         if preliminary.get("kind") != "preliminary":
             errors.append("record is not an unpumped sample preliminary")
         if preliminary.get("status") not in ("complete", "completed"):
             errors.append("preliminary is partial, rejected or interrupted")
-        if self.context.mode == "single":
-            errors.extend(self.validate_blank(plan))
-            selected_id = (self.session.blank or {}).get("run_id")
-            recorded_id = preliminary.get("blank_run_id")
-            if selected_id != recorded_id:
-                errors.append(f"blank selection changed: preliminary used {recorded_id!r}; selected {selected_id!r}")
+        baseline = preliminary.get("baseline")
+        if baseline is None or not baseline.complete:
+            errors.append("record lacks complete native baseline support")
+        elif baseline.mode != self.context.mode:
+            errors.append("native baseline belongs to another detector mode")
         self.session.errors = errors
         return tuple(errors)
 
+    def validate_operation(self, kind, plan, preliminary=None):
+        if kind in ("load_blank","load_preliminary","load_selection","load_fit_model","fit_movie","preserve_retained"):
+            return ()
+        if kind == "capabilities":
+            return ()
+        if kind not in ("measurement", "preliminary", "blank"):
+            return (f"Unknown acquisition operation {kind!r}",)
+        if plan is None:
+            return ("An acquisition plan is required",)
+        if plan.settings.mode != self.context.mode:
+            return ("Plan belongs to another detector mode",)
+        if kind == "blank" and self.context.mode == "dual":
+            return ("The dual mode records sample/reference simultaneously",)
+        return ()
+
+    def compatible_preliminary(self, plan, candidate=None):
+        candidate = candidate if candidate is not None else self.session.preliminary
+        return candidate if candidate is not None and not self.validate_preliminary(candidate,plan) else None
+
+    def compatible_blank(self, plan):
+        return self.session.blank if self.session.blank is not None and not self.validate_blank(plan) else None
+
     def summarize_preliminary(self, result):
         count = sum(len(movie.scans) for movie in result.get("native_movies", ()))
-        label = "simultaneous Q₀ = sample/reference" if self.context.mode == "dual" else "sample with compatible sequential blank"
-        return (f"{count} unpumped scans retained; {label}. Inspect native signals, support and spectrum before approving. "
-                "Review is specific to these settings, condition, calibrations and instrument state.")
+        label = "simultaneous sample/reference baseline" if self.context.mode == "dual" else "unpumped sample baseline"
+        return f"{count} unpumped scans retained; {label}. Compatible native support is reused automatically."
 
     def _run(self, snapshot, worker, kind):
         from .runner import RepeatedRapidScanRunner
-        self.runner = RepeatedRapidScanRunner(self.context)
-        contract = self._contract(snapshot.operation.settings, snapshot.operation.configuration,
-                                  snapshot.operation.calibration_records, snapshot.operation.sample_records)
-        bridge = _WorkerBridge(worker, self, not snapshot.operation.hardware)
-        result = self.runner.run(snapshot, bridge, kind=kind, review_contract=contract,
-                                 blank=deepcopy(self.session.blank), background=deepcopy(self.session.background))
-        result.setdefault("review_contract", contract)
+        if snapshot.plan is None and kind == "capabilities":
+            snapshot = replace(snapshot,plan=build_plan(RepeatedRapidScanSettings(mode=self.context.mode)))
+        factory = self.runner_factory or RepeatedRapidScanRunner
+        self.runner = factory(self.context, acquirer_factory=self.acquirer_factory)
+        contract = ({} if kind == "capabilities" else
+                    self._contract(snapshot.operation.settings, snapshot.operation.configuration,
+                                   snapshot.operation.calibration_records, snapshot.operation.sample_records))
+        preliminary = self.compatible_preliminary(snapshot.plan,snapshot.preliminary) if kind == "measurement" else snapshot.preliminary
+        snapshot = replace(snapshot,preliminary=deepcopy(preliminary))
+        blank = None if kind == "capabilities" else self.compatible_blank(snapshot.plan)
+        result = self.runner.run(snapshot, worker, kind=kind, compatibility_contract=contract,
+                                 blank=deepcopy(blank), background=None if kind == "capabilities" else deepcopy(self.session.background))
+        result.setdefault("compatibility_contract", contract)
         result.setdefault("kind", kind)
         result.setdefault("run_id", snapshot.operation.run_id)
-        if kind == "preliminary" and self.context.mode == "single":
-            result.setdefault("blank_run_id", (self.session.blank or {}).get("run_id"))
+        if kind == "preliminary":
+            self.session.preliminary = result
+        elif kind == "blank":
+            self.session.blank = result
+        elif kind == "measurement":
+            self.session.result = result
+            generated = result.get("auto_preliminary",result.get("preliminary"))
+            if generated is not None:
+                self.session.preliminary = generated
         return result
 
     def run_preliminary(self, snapshot, worker):
@@ -187,14 +222,26 @@ class RepeatedRapidScanAdapter:
         settings = RepeatedRapidScanSettings.from_dict(value["settings"])
         if settings.mode != self.context.mode:
             raise ValueError("Plan settings belong to another detector mode")
-        # Saved evidence is provenance; promotion and installed readbacks must be
-        # resolved again through their authoritative providers before real use.
+        if not settings.acquisition_intent:
+            from .planner import resolve_intent_settings
+            intent = replace(AcquisitionIntent.from_settings(settings),
+                observation_duration_s=float(Decimal(str(settings.measured_scan_period_s))*settings.post_scans))
+            excluded = {"mode","execution","condition","experiment_id","schema_version","acquisition_intent",
+                        "manual_overrides","scan_start_cm1","scan_stop_cm1","repeats","phase_offsets_s","post_scans",
+                        "value_source","calibration_ids","instrument_state_id"}
+            overrides = {key:deepcopy(item) for key,item in value["settings"].items() if key not in excluded and item is not None}
+            resolved = resolve_intent_settings(intent,mode=self.context.mode,base_settings=settings,overrides=overrides)
+            if len(resolved.phase_offsets_s)!=len(settings.phase_offsets_s) or not np.allclose(
+                    resolved.phase_offsets_s,settings.phase_offsets_s,rtol=0,atol=5e-12):
+                raise ValueError("Legacy plan has nonuniform phase offsets that cannot be represented by the phase-count input; its saved schedule was not changed")
+            if resolved.post_scans != settings.post_scans:
+                raise ValueError("Legacy post-scan schedule cannot be represented exactly by the duration input; its saved schedule was not changed")
+            settings = replace(settings,execution="hardware",acquisition_intent=intent.to_dict(),manual_overrides=overrides)
         return settings.to_dict()
 
     def load_run(self, path):
         from .persistence import load_run
-        settings = RepeatedRapidScanSettings.from_dict(self.read_settings())
-        saved = load_run(path, expected_mode=self.context.mode, expected_condition_id=settings.condition_id)
+        saved = load_run(path, expected_mode=self.context.mode)
         record = dict(saved.record)
         metadata = dict(record.get("metadata", {}))
         return {**metadata, **record, "native_movies": record.get("movies", record.get("native_movies", ())),
@@ -205,11 +252,14 @@ class RepeatedRapidScanAdapter:
         result = self.load_run(path)
         if result.get("kind") != kind:
             raise ValueError(f"Expected a {kind} record; saved record is {result.get('kind')!r}")
-        errors = compatibility_conflicts(result.get("review_contract", {}), self._contract(self.read_settings()))
+        errors = self.session.check(result, self._contract(self.read_settings()))
         if errors:
             raise ValueError("Incompatible record: " + "; ".join(errors))
         if result.get("status") not in ("complete", "completed"):
-            raise ValueError("A partial, interrupted or rejected record cannot supply a blank/review baseline")
+            raise ValueError("A partial, interrupted or rejected record cannot supply complete normalization support")
+        baseline = result.get("baseline")
+        if baseline is None or not baseline.complete or baseline.mode != self.context.mode:
+            raise ValueError("Record lacks complete compatible native normalization support")
         return result
 
     def export_run(self, path, result):
@@ -226,19 +276,31 @@ class RepeatedRapidScanAdapter:
                             point.absolute_absorbance[i], point.variance_delta_absorbance[i], point.valid[i], ";".join(reasons)])
 
     def read_selection(self, path):
-        return load_sample_selection(path).to_dict()
+        record = json.loads(Path(path).read_text(encoding="utf-8"))
+        windows = record.get("windows")
+        if not isinstance(windows,list) or not windows:
+            raise ValueError("Spectral selection requires measured or chosen windows")
+        for window in windows:
+            lower,upper = float(window["lower_cm1"]),float(window["upper_cm1"])
+            if not np.isfinite(lower) or not np.isfinite(upper) or lower>=upper:
+                raise ValueError("Spectral windows must have finite increasing endpoints")
+        record.setdefault("selection_id",Path(path).stem)
+        record["source_path"] = str(Path(path).resolve())
+        return record
 
     def apply_selection(self, selection):
         settings = self.read_settings()
-        if selection["condition_id"] != settings["condition"]["condition_id"]:
-            raise ValueError("Sample selection condition does not match the selected condition")
-        if selection["sample_id"] != settings["condition"]["sample_id"]:
-            raise ValueError("Sample selection sample_id does not match the selected sample")
         settings["condition"]["sample_selection_id"] = selection["selection_id"]
         settings["band_windows_cm1"] = [[w["lower_cm1"], w["upper_cm1"]] for w in selection["windows"]]
         lower = min(w[0] for w in settings["band_windows_cm1"] + list(settings["offband_windows_cm1"]))
         upper = max(w[1] for w in settings["band_windows_cm1"] + list(settings["offband_windows_cm1"]))
         settings["scan_start_cm1"], settings["scan_stop_cm1"] = lower, upper
+        intent = AcquisitionIntent.from_settings(settings)
+        settings["acquisition_intent"] = replace(intent,spectral_min_cm1=lower,spectral_max_cm1=upper).to_dict()
+        overrides = dict(settings.get("manual_overrides",{}))
+        overrides.update(band_windows_cm1=deepcopy(settings["band_windows_cm1"]),
+                         offband_windows_cm1=deepcopy(settings["offband_windows_cm1"]))
+        settings["manual_overrides"] = overrides
         self.session.sample_records = [deepcopy(selection)]
         self.apply_settings(settings)
 
@@ -253,8 +315,8 @@ class RepeatedRapidScanAdapter:
             if not path.is_relative_to(root):
                 raise ValueError("Promoted background path must remain within its bundle")
             background = load_baseline(path, expected_mode="dual")
-            if background.kind != "background" or not background.complete or not background.accepted:
-                raise ValueError("Promoted path balance must be an accepted complete measured background B")
+            if background.kind != "background" or not background.complete:
+                raise ValueError("Path balance requires a complete measured background B record")
             record["background"] = background
         return record
 
@@ -263,8 +325,6 @@ class RepeatedRapidScanAdapter:
         evidence = resolve_calibration_from_bundle(record["manifest"])
         settings = RepeatedRapidScanSettings.from_dict(self.read_settings())
         background = record.get("background")
-        if background is not None and background.condition_id != settings.condition_id:
-            raise ValueError("Promoted path-balance background condition does not match the selected condition")
         selected = resolve_operating_settings(settings, promoted_bundle=asdict(evidence),
                                                installed_readbacks=asdict(self.capabilities) if self.capabilities else {})
         self.calibration = evidence
@@ -281,6 +341,9 @@ class RepeatedRapidScanAdapter:
         value = result.get("capabilities")
         if value is not None:
             self.capabilities = value if isinstance(value, HardwareCapabilities) else HardwareCapabilities(**value)
+            setter = getattr(self.settings_widget,"set_capabilities",None)
+            if setter is not None:
+                setter(self.capabilities)
 
     def new_run(self):
         retained = getattr(self.runner, "last_result", None)

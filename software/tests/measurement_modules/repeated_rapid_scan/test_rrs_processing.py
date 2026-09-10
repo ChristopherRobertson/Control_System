@@ -100,14 +100,24 @@ def test_rrs_cross_clock_alignment_and_observed_pump_count_are_required():
         assert result.status=="rejected" and not result.points[0].valid.any()
 
 
-def test_rrs_baseline_kind_mode_condition_and_review_compatibility():
-    for invalid in (replace(baseline(),accepted=False),replace(baseline(),condition_id="wrong"),
-                    replace(baseline(),mode="dual"),replace(baseline(),kind="background"),
+def test_rrs_baseline_actual_mode_kind_support_compatibility():
+    for invalid in (replace(baseline(),mode="dual"),replace(baseline(),kind="background"),
                     replace(baseline(),complete=False)):
         with pytest.raises(ValueError): reconstruct_movie(movie([scan()]),invalid)
     result=reconstruct_movie(movie([scan(direction="reverse")]),baseline())
     assert not result.points[0].valid.any()
     assert result.points[0].direction=="reverse"
+
+
+def test_rrs_optional_condition_approval_and_axis_metadata_do_not_block_relative_data():
+    item=scan(values=np.full(10,.8))
+    item=replace(item,trajectory=replace(item.trajectory,calibration_id=""))
+    reference=replace(baseline(),accepted=False,condition_id="different descriptive label")
+    result=reconstruct_movie(movie([item]),reference)
+    np.testing.assert_allclose(result.points[0].delta_absorbance,-np.log10(.8))
+    assert result.points[0].valid.all()
+    assert "unavailable" in " ".join(result.warnings)
+    assert result.provenance["axis_basis_by_scan"][0]=="observed_uncalibrated_trajectory"
 
 
 def test_rrs_pre_pump_baseline_excludes_pumped_data():
