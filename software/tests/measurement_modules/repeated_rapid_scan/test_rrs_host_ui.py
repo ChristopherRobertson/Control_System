@@ -1,4 +1,4 @@
-"""Production two-tab discovery, guided workflow and independent review sessions."""
+"""Compact production tabs, direct acquisition and independent native sessions."""
 import json
 import os
 from dataclasses import replace
@@ -57,6 +57,8 @@ def wait(app, panel, timeout=30):
 def small_plan(panel):
     settings = replace(example_settings(panel.context.mode), phase_offsets_s=(0.,), directions=("forward",),
                        controls=("probe_only",), pre_scans=3, post_scans=24)
+    from control_app.measurement_modules.repeated_rapid_scan.simulation import SimulationAcquirer
+    panel.adapter.acquirer_factory = SimulationAcquirer
     panel.adapter.apply_settings(settings.to_dict())
     panel.refresh_plan()
     assert panel.plan is not None, panel.validation.text()
@@ -85,16 +87,13 @@ def test_rrs_actual_pair_discovery_and_construction_are_hardware_free(app, tmp_p
 def test_rrs_single_guided_blank_preliminary_measurement_and_saved_loading(app, tabs, tmp_path):
     panel, sibling = [h.widget for h in tabs]
     small_plan(panel)
-    with pytest.raises(ValueError, match="blank"):
-        panel.begin("preliminary")
+    assert panel.start_button.isEnabled()
     panel.begin_auxiliary("blank")
     wait(app, panel)
     assert panel.adapter.session.blank, panel.status.text()
     panel.begin("preliminary")
     wait(app, panel)
     assert panel.preliminary is not None, panel.status.text()
-    assert not panel.review.isChecked()
-    panel.review.setChecked(True)
     panel.begin("measurement")
     wait(app, panel)
     assert panel.result is not None, panel.status.text()
@@ -127,7 +126,6 @@ def test_rrs_dual_simultaneous_workflow_no_routine_blank(app, tabs):
     wait(app, panel)
     assert panel.preliminary is not None, panel.status.text()
     assert all(scan.reference is not None for m in panel.preliminary["native_movies"] for scan in m.scans)
-    panel.review.setChecked(True)
     panel.begin("measurement")
     wait(app, panel)
     assert panel.result is not None, panel.status.text()
@@ -136,31 +134,60 @@ def test_rrs_dual_simultaneous_workflow_no_routine_blank(app, tabs):
     assert single.adapter.session.preliminary is None
 
 
-def test_rrs_review_invalidates_precise_changes_restores_without_granting(app, tabs):
+def test_rrs_compatible_sample_auto_reuse_and_metadata_never_gate(app, tabs):
     panel = tabs[1].widget
     small_plan(panel)
     panel.begin("preliminary")
     wait(app, panel)
-    assert panel.preliminary, panel.status.text()
-    panel.review.setChecked(True)
+    candidate = panel.preliminary
+    assert candidate, panel.status.text()
     original = panel.adapter.read_settings()
     changed = json.loads(json.dumps(original))
-    changed["condition"]["sample_id"] = "other sample"
+    changed["condition"]["temperature_K"] = 77.
+    changed["condition"]["state_verification_ids"] = ["annotation-only"]
     panel.adapter.apply_settings(changed)
     panel.refresh_plan()
-    assert panel.preliminary is None and not panel.review.isChecked()
-    assert "sample_id" in panel.validation.text()
+    assert panel.preliminary is candidate
+    assert panel.start_button.isEnabled()
+    panel.settings_widget.sample.setText("Other sample")
+    panel.refresh_plan()
+    assert panel.preliminary is None
+    assert panel.start_button.isEnabled()  # Start acquires its own compatible baseline.
     panel.adapter.apply_settings(original)
     panel.refresh_plan()
-    assert panel.preliminary is not None
-    assert panel.validation.text() == "" and not panel.review.isChecked()
+    assert panel.preliminary is candidate
     event = InstrumentStateChange("manual:mircat", (panel.context.instance_id,),
         (DeviceConfigurationChange("mircat", "scan_speed", 10., 11.),), "manual adjustment")
     panel.instrument_state_changed(event)
     assert panel.preliminary is None
     panel.instrument_state_changed(InstrumentStateChange("manual:mircat", (panel.context.instance_id,),
         (DeviceConfigurationChange("mircat", "scan_speed", 11., 10.),), "restored"))
-    assert panel.preliminary is not None and not panel.review.isChecked()
+    assert panel.preliminary is candidate
+
+
+@pytest.mark.parametrize("index", [0, 1])
+def test_rrs_start_without_review_or_blank_acquires_relative_movie(app, tabs, index):
+    from PySide6.QtWidgets import QCheckBox
+    panel = tabs[index].widget
+    small_plan(panel)
+    assert not panel.findChildren(QCheckBox)
+    assert not hasattr(panel, "review") and not hasattr(panel, "physical_ready")
+    assert panel.adapter.read_settings()["execution"] == "hardware"
+    panel.begin("measurement")
+    wait(app, panel)
+    assert panel.result is not None, panel.status.text()
+    assert panel.result["status"] == "complete"
+    assert panel.result["processed"]
+    assert panel.adapter.session.blank is None
+    assert all(np.isfinite(p.delta_absorbance).any() for movie in panel.result["processed"] for p in movie.points)
+    assert all(not np.isfinite(p.absolute_absorbance).any() for movie in panel.result["processed"] for p in movie.points)
+    raw_only = dict(panel.result)
+    raw_only["processed"] = [replace(movie, points=[replace(point,
+        delta_absorbance=np.full_like(point.delta_absorbance, np.nan)) for point in movie.points])
+        for movie in panel.result["processed"]]
+    panel.plots.set_result(raw_only)
+    assert panel.plots.quantity.currentData() == "normalized_signal"
+    assert not panel.plots.quantity.model().item(0).isEnabled()
 
 
 def test_rrs_plan_mode_rejection_and_preserving_preferences(app, tabs, tmp_path):
@@ -180,7 +207,6 @@ def test_rrs_native_fit_action_persists_separate_analysis_and_residuals(app, tab
     small_plan(panel)
     panel.begin("preliminary")
     wait(app, panel)
-    panel.review.setChecked(True)
     panel.begin("measurement")
     wait(app, panel)
     assert panel.result is not None, panel.status.text()
@@ -207,19 +233,90 @@ def test_rrs_native_fit_action_persists_separate_analysis_and_residuals(app, tab
     assert panel.plots.view.currentText() == "Fit residuals"
 
 
-def test_rrs_visible_layout_keeps_summary_alive_and_settings_scrollable(app, tabs):
-    from PySide6.QtWidgets import QScrollArea, QSplitter
+def test_rrs_compact_layout_keeps_plot_and_independent_auto_overrides(app, tabs):
+    from control_app.measurement_host.presentation import CompactMeasurementPanel
+    from control_app.measurement_modules.repeated_rapid_scan.planner import HardwareCapabilities
     panel = tabs[1].widget
-    panel.resize(1400, 1050)
+    assert isinstance(panel, CompactMeasurementPanel)
+    panel.resize(1100, 780)
     panel.show()
     app.processEvents()
-    assert panel.findChild(QSplitter).count() == 2
-    assert panel.summary.isVisible()
-    assert panel._summary_scroll.verticalScrollBar().maximum() > 0
-    assert panel.size().height() <= 1100
-    panel.refresh_plan()
-    assert panel.plan is not None
+    assert panel.splitter.count() == 2
+    assert panel.summary_group.isVisible()
+    assert not panel.advanced_content.isVisible()
+    assert panel.size().height() == 780
+    assert panel.plots.height() >= 350
+    settings = panel.settings_widget
+    settings.override_inputs["sample_filter_order"].setEditText("2")
+    settings.set_capabilities(HardwareCapabilities(live_settings={"sample_rate_hz": 8000., "sample_filter_order": 6}))
+    selected = settings.read()
+    assert selected["sample_filter_order"] == 2 and selected["sample_rate_hz"] == 8000.
+    assert selected["manual_overrides"] == {"sample_filter_order": 2}
+    settings.restore_automatic()
+    assert settings.read()["sample_filter_order"] == 6
     panel.hide()
+
+
+def test_rrs_user_edits_refresh_plan_and_precise_overrides_roundtrip(app, tabs):
+    from control_app.measurement_modules.repeated_rapid_scan.planner import HardwareCapabilities
+    panel = tabs[1].widget
+    widget = panel.settings_widget
+    widget.inputs["observation_duration_s"].setValue(2.)
+    assert panel.plan.settings.post_scans == 20
+    widget.override_inputs["sample_filter_order"].setCurrentIndex(1)
+    assert panel.plan.settings.manual_overrides["sample_filter_order"] == 4
+    settings = widget.read()
+    settings["manual_overrides"]["measured_scan_period_s"] = .10000000001
+    widget.apply(settings)
+    assert widget.read()["measured_scan_period_s"] == .10000000001
+    widget.set_capabilities(HardwareCapabilities(live_settings={"memory_limit_bytes": 2**30}))
+    memory = widget.override_inputs["memory_limit_bytes"]
+    memory.setCurrentIndex(memory.findText("1024"))
+    assert widget.read()["memory_limit_bytes"] == 2**30
+    precise = widget.read()
+    precise["acquisition_intent"]["observation_duration_s"] = .1004
+    precise["acquisition_intent"]["spectral_min_cm1"] = 1898.0004
+    widget.apply(precise)
+    assert widget.read()["acquisition_intent"]["observation_duration_s"] == .1004
+    assert widget.read()["scan_start_cm1"] == 1898.0004
+
+
+def test_rrs_native_plot_retains_detector_offset_and_unsigned_backstep():
+    from control_app.measurement_modules.repeated_rapid_scan.data import NativeStream, NativeScan, NativeMovie, ScanTrajectory
+    from control_app.measurement_modules.repeated_rapid_scan.widgets import native_detector_coordinates
+    origin = 2**53 + 100
+    sample = NativeStream(np.array([origin+2, origin+1], dtype=np.uint64), [1., 2.],
+                          timestamp_origin=origin, timestamp_unit_s=.001)
+    reference = NativeStream(np.array([origin+4, origin+5], dtype=np.uint64), [1., 1.],
+                             timestamp_origin=origin, timestamp_unit_s=.001)
+    trajectory = ScanTrajectory(np.array([origin, origin+10], dtype=np.uint64), [1900., 1901.], "",
+                                timestamp_origin=origin, timestamp_unit_s=.001)
+    scan = NativeScan(0, sample, trajectory, reference)
+    movie = NativeMovie("native", 0., [scan], [], "dual", "sample")
+    traces = native_detector_coordinates(scan, movie)
+    assert traces[0][1] == pytest.approx([.002, .001])
+    assert traces[1][1] == pytest.approx([.004, .005])
+
+
+def test_rrs_check_device_with_invalid_spectral_inputs_is_owned_read_only(app, tabs):
+    from control_app.measurement_modules.repeated_rapid_scan.simulation import SimulationAcquirer
+    calls = []
+    class QueryAcquirer(SimulationAcquirer):
+        def discover(self, worker):
+            calls.append(self.context.ownership.snapshot()["state"])
+            self.readbacks = {"capabilities": {}}
+        def prepare(self, worker):
+            raise AssertionError("A device check must not prepare emission")
+    panel = tabs[0].widget
+    panel.adapter.acquirer_factory = QueryAcquirer
+    panel.settings_widget.inputs["spectral_min_cm1"].setValue(2000.)
+    assert panel.plan is None
+    assert panel.capability_button.isEnabled()
+    panel.begin_auxiliary("capabilities")
+    wait(app, panel)
+    assert calls == ["owned"], panel.status.text()
+    assert panel.context.ownership.snapshot()["state"] == "free"
+    assert panel.adapter.runner.last_result["status"] == "complete"
 
 
 def test_rrs_production_pair_installs_in_main_window_without_sibling_packages(app):
@@ -282,7 +379,7 @@ def test_rrs_storage_failure_keeps_native_until_explicit_preservation(app, tabs,
     original = runner_module.RepeatedRapidScanRunner
     def fail_save(*args, **kwargs):
         raise OSError("injected disk full")
-    monkeypatch.setattr(runner_module, "RepeatedRapidScanRunner", lambda context: original(context, saver=fail_save))
+    monkeypatch.setattr(runner_module, "RepeatedRapidScanRunner", lambda context, **kwargs: original(context, saver=fail_save, **kwargs))
     panel.begin("preliminary")
     wait(app, panel)
     retained = panel.adapter.runner.last_result
@@ -296,6 +393,7 @@ def test_rrs_storage_failure_keeps_native_until_explicit_preservation(app, tabs,
     wait(app, panel)
     assert retained["recovered_to"]
     assert (Path(retained["recovered_to"])/"run.json").exists()
-    assert not panel.close_blockers()
+    assert panel.context.ownership.snapshot()["state"] == "fault"
+    assert "host instrument recovery" in panel.close_blockers()[0]
     panel.new_run()
     assert panel.adapter.runner is None
