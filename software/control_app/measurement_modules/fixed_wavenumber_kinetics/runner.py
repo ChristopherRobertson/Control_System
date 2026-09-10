@@ -126,6 +126,8 @@ class Runner:
                 record["error"] = str(exc)
             finally:
                 if device is not None:
+                    record["initial_states"] = getattr(device, "before", {})
+                    record["readbacks"] = getattr(device, "readbacks", {})
                     try:
                         cleanup = device.cleanup()
                     except Exception as exc:
@@ -480,6 +482,10 @@ class Runner:
             finally:
                 emit({"stage": "restoration", "message": "Disabling emission and timing; verifying restoration"})
                 if device is not None:
+                    # Connection/configuration may fail after only part of the
+                    # initial state was captured. Preserve that evidence too.
+                    record["initial_states"] = getattr(device, "before", {})
+                    record["readbacks"] = getattr(device, "readbacks", {})
                     try:
                         def retain_tail(chunk):
                             if writer is None:

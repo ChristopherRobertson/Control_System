@@ -48,6 +48,11 @@ wiring supplies channel identities. Durations, event counts, storage estimates
 and timing frames are derived from the entered experiment inputs. The probe
 carrier and finite pump interval are distinct.
 
+The MIRcat internal pulse rate is also independent of the external T660 probe
+trigger. Its connected setting must exceed the external rate and remain within
+the active QCL's pulse-rate, width and duty limits. External-rate overrides do
+not overwrite the internal rate. Both are recorded and checked before emission.
+
 **Advanced** contains independent detector, probe and pump overrides, optional
 analysis windows, repetition/interval settings, retention limits, and additional
 ordered wavenumbers. A blank override means Automatic. Changing one override
@@ -97,6 +102,10 @@ arrival. All real access uses the host's ownership scope through safe cleanup
 and required preservation. Cleanup faults remain host faults even after a worker
 finishes. Interrupted, rejected and restoration records are retained.
 
+T660 cleanup restores and verifies the original edge-reference relationships,
+timing modes, values, polarities and terminations, while keeping sources and
+outputs OFF. MIRcat cleanup verifies the original internal pulse settings.
+
 Runs are stored under `measurements/fixed_wavenumber_kinetics/<mode>/` with unique
 run IDs. The Save Location is frozen at operation start. Plan/run loading checks
 experiment, schema, detector mode and actual data compatibility. Optional
@@ -113,7 +122,9 @@ normalization, missing/invalid streams, cancellation, cleanup-failure precedence
 tab isolation and the common compact panel. UI inspection uses retained test
 data and loaded fonts; no physical measurement is performed for screenshots.
 
-The final module suite passed all **127 tests**. Shared host, service and existing
+The module suite passed all **162 tests**, including independent MIRcat rates,
+T660 reference-topology restoration, failed-readback preservation and offline
+activation without hardware-access attempts. Shared host, service and existing
 Phase Scan regression coverage passed **277 tests**, with **6 skipped**. Both
 tabs were rendered in the actual application shell at 1100 by 780 pixels, with
 no outer vertical scrolling and no clipped plot labels.

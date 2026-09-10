@@ -27,19 +27,52 @@ class Timing(Owned):
         self.channel_settings = {c: {"delay": "200us" if name == "t660_2" and c == "B" else "0s",
             "width": "10us" if name == "t660_2" else "150ns",
             "polarity": "positive", "termination": "50OHM"} for c in "ABCD"}
+        self.references = {e: e-1 if e % 2 == 0 else 0 for e in range(1, 9)}
+        self.modes = {c: "DW" for c in "ABCD"}
+        self.absolute = {0: 0.}
+        for i, c in enumerate("ABCD"):
+            self.absolute[2*i+1] = 200e-6 if name == "t660_2" and c == "B" else 0.
+            self.absolute[2*i+2] = self.absolute[2*i+1]+(10e-6 if name == "t660_2" else 150e-9)
         self.recipe = {}
     def connect(self): self.touch("connect")
     def close(self): self.touch("close")
     def set_trigger_source(self, value): self.touch("source"); self.source = value
     def force_eod(self): self.touch("force_eod")
     def disable_channel(self, channel): self.touch("channel_off"); self.channels[channel] = False
-    def command(self, value, **kwargs): self.touch(value); return "OK"
+    def command(self, value, **kwargs):
+        self.touch(value)
+        if value.startswith("TIME:RELTo"):
+            if value.endswith("?"):
+                return str(self.references[int(value.removeprefix("TIME:RELTo")[:-1])])
+            assert self.source == "OFF" and not any(self.channels.values())
+            edge, reference = map(int, value.removeprefix("TIME:RELTo").split())
+            channel = "ABCD"[(edge-1)//2]
+            if self.state.get("ignore_reference_restore") != (edge, reference):
+                if edge % 2 or self.modes[channel] == "RF":
+                    self.references[edge] = reference
+        if value.startswith("TIME:DEL") and value.endswith("?"):
+            edge = int(value.removeprefix("TIME:DEL")[:-1])
+            return f"{self.absolute[edge]-self.absolute[self.references[edge]]:.12g}s"
+        return "OK"
+    def set_channel_timing_mode(self, channel, mode):
+        self.touch("timing_mode")
+        assert self.source == "OFF" and not any(self.channels.values())
+        self.modes[channel] = "DW" if mode in {"DW", "delay_width"} else "RF"
+        if self.modes[channel] == "DW":
+            rising = 2*"ABCD".index(channel)+1
+            self.references[rising+1] = rising
     def apply_recipe(self, recipe):
         self.touch("apply_recipe")
         self.recipe = recipe
         self.channels = {c: v["enabled"] for c, v in recipe["channels"].items()}
         for c, row in recipe["channels"].items():
             self.channel_settings[c].update({k: row[k] for k in ("delay", "width", "polarity", "termination")})
+            from control_app.measurement_modules.fixed_wavenumber_kinetics.adapters import _physical_number
+            rising = 2*"ABCD".index(c)+1
+            self.modes[c] = "DW"
+            self.references[rising+1] = rising
+            self.absolute[rising] = self.absolute[self.references[rising]]+_physical_number(row["delay"])
+            self.absolute[rising+1] = self.absolute[rising]+_physical_number(row["width"])
     def start_continuous_clock(self): self.touch("start_clock"); self.source = "SYN"
     def read_active_settings(self):
         self.touch("readback")
@@ -49,14 +82,18 @@ class Timing(Owned):
             "clock_connector_mode": {"ok": True, "response": "OUT" if self.name == "t660_2" else "IN"},
             "clock_lock_status": {"ok": True, "response": "LOCKED"}},
             "channels": {c: {"enabled": {"ok": True, "response": "ON" if on else "OFF"},
-                "delay_edge": {"ok": True, "response": self.channel_settings[c]["delay"]},
-                "width_edge": {"ok": True, "response": self.channel_settings[c]["width"]},
+                "timing_mode": {"ok": True, "response": self.modes[c]},
+                "delay_edge": {"ok": True, "response": self.command(f"TIME:DEL{2*'ABCD'.index(c)+1}?")},
+                "width_edge": {"ok": True, "response": self.command(f"TIME:DEL{2*'ABCD'.index(c)+2}?")},
                 "polarity": {"ok": True, "response": "POS" if self.channel_settings[c]["polarity"] == "positive" else "NEG"},
                 "termination": {"ok": True, "response": "ON" if self.channel_settings[c]["termination"] == "50OHM" else "OFF"}}
                 for c,on in self.channels.items()}}
     def preload_frame_table(self, frames, *, predivider, input_frequency_hz, progress, cancel_check):
         self.touch("pending_upload")
         assert self.source == "OFF"
+        for i, c in enumerate("ABCD"):
+            self.set_channel_timing_mode(c, "DW")
+            self.command(f"TIME:RELTo{2*i+1} 0")
         self.frames = frames
         self.period = predivider/input_frequency_hz
         for n in range(len(frames)+1): cancel_check(); progress(n, len(frames))
@@ -70,27 +107,155 @@ class Timing(Owned):
         self.touch("frames_status")
         self.channel_settings = deepcopy(self.frames[-1]["channels"])
         self.channels = {c: row["enabled"] for c, row in self.channel_settings.items()}
+        for i, c in enumerate("ABCD"):
+            self.absolute[2*i+1] = float(self.channel_settings[c]["delay"][:-1])
+            self.absolute[2*i+2] = self.absolute[2*i+1]+float(self.channel_settings[c]["width"][:-1])
         self.terminal_b_delay = self.channel_settings["B"]["delay"]
         return "DONE"
     def get_shot_count(self): self.touch("shot_count"); return len(self.frames)
 
 
+def _inject_relative_timing(monkeypatch, *, cyclic=False):
+    original = Timing.__init__
+    def initialize(self, state, name):
+        original(self, state, name)
+        if name == "t660_2":
+            self.references[3] = 1
+            self.modes["B"] = "RF"
+            self.references[4] = 2
+            if cyclic:
+                self.references[1] = 3
+            self.original_references = deepcopy(self.references)
+            self.original_modes = deepcopy(self.modes)
+            self.original_absolute = deepcopy(self.absolute)
+    monkeypatch.setattr(Timing, "__init__", initialize)
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+@pytest.mark.parametrize("cyclic", [False, True])
+def test_fixed_point_restores_full_relative_timing_topology(tmp_path, monkeypatch, mode, cyclic):
+    _inject_relative_timing(monkeypatch, cyclic=cyclic)
+    fixture = build_connected_fixture(tmp_path, mode)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan)
+    pump = fixture.state["services"]["t660_2"]
+    assert result["status"] == "complete", result.get("error", result.get("cleanup_error"))
+    assert pump.references == pump.original_references
+    assert pump.modes == pump.original_modes
+    assert pump.absolute == pytest.approx(pump.original_absolute)
+    before = result["initial_states"]["t660_2"]
+    assert int(before["edge_references"]["3"]["response"]) == 1
+    assert before["channels"]["B"]["timing_mode"]["response"] == "RF"
+    assert before["absolute_channel_timing"]["B"]["width_s"] == pytest.approx(10e-6)
+    assert result["plan"]["resolved"]["timing"]["q_switch_delay_s"] == pytest.approx(200e-6)
+    assert pump.source == "OFF" and not any(pump.channels.values())
+
+
+def test_fixed_point_reference_restoration_mismatch_prevents_safe_claim(tmp_path, monkeypatch):
+    _inject_relative_timing(monkeypatch)
+    status = Timing.get_frames_status
+    def ignore_restoration(self):
+        value = status(self)
+        self.state["ignore_reference_restore"] = (3, 1)
+        return value
+    monkeypatch.setattr(Timing, "get_frames_status", ignore_restoration)
+    fixture = build_connected_fixture(tmp_path)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan)
+    assert result["status"] == "cleanup_failed"
+    assert "reference restoration mismatch" in result["cleanup_error"]
+    assert not result["restoration"]["safe_verified"] and result["preservation_verified"]
+    assert (operation.output_path/"run.json").exists()
+
+
+def test_fixed_point_cyclic_reference_common_offset_is_not_false_restoration(tmp_path, monkeypatch):
+    _inject_relative_timing(monkeypatch, cyclic=True)
+    command = Timing.command
+    def corrupt_absolute_restoration(self, value, **kwargs):
+        response = command(self, value, **kwargs)
+        if self.name == "t660_2" and value == "TIME:RELTo8 7" and "frames_status" in self.calls:
+            # This changes neither references nor any raw relative readback in
+            # the A/B cycle. Only an absolute inhibited check detects it.
+            for edge in (1, 2, 3, 4):
+                self.absolute[edge] += 100e-9
+        return response
+    monkeypatch.setattr(Timing, "command", corrupt_absolute_restoration)
+    fixture = build_connected_fixture(tmp_path)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan)
+    assert result["status"] == "cleanup_failed"
+    assert "absolute delay_s restoration mismatch" in result["cleanup_error"]
+    assert not result["restoration"]["safe_verified"] and result["preservation_verified"]
+
+
+def test_fixed_point_read_only_reference_snapshot_does_not_modify_live_basis(tmp_path, monkeypatch):
+    _inject_relative_timing(monkeypatch)
+    connect = Timing.connect
+    def connected_with_existing_output(self):
+        connect(self)
+        if self.name == "t660_2":
+            self.source = "SYN"
+            self.channels["A"] = True
+    monkeypatch.setattr(Timing, "connect", connected_with_existing_output)
+    fixture = build_connected_fixture(tmp_path)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    profile = Runner(fixture.context).discover(operation, fixture.settings)
+    pump = fixture.state["services"]["t660_2"]
+    assert pump.references == pump.original_references and pump.modes == pump.original_modes
+    assert not any(call.startswith("TIME:RELTo") and not call.endswith("?") for call in pump.calls)
+    assert "timing_mode" not in pump.calls
+    assert pump.source == "SYN" and pump.channels["A"]
+    assert profile["timing"]["q_switch_width_s"] == pytest.approx(10e-6)
+
+
+def test_fixed_point_reference_query_failure_inhibits_without_inventing_restoration(tmp_path, monkeypatch):
+    command = Timing.command
+    def failed_reference(self, value, **kwargs):
+        if value == "TIME:RELTo3?":
+            self.touch(value)
+            raise RuntimeError("Injected missing edge-reference readback")
+        return command(self, value, **kwargs)
+    monkeypatch.setattr(Timing, "command", failed_reference)
+    fixture = build_connected_fixture(tmp_path)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan)
+    pump = fixture.state["services"]["t660_2"]
+    assert result["status"] == "cleanup_failed"
+    assert "missing edge-reference readback" in result["error"]
+    assert fixture.state["core"].dispatched == 0
+    assert pump.source == "OFF" and not any(pump.channels.values())
+    assert not result["restoration"]["safe_verified"]
+    assert result["preservation_verified"] and (operation.output_path/"run.json").exists()
+    import json
+    saved = json.loads((operation.output_path/"run.json").read_text(encoding="utf-8"))
+    before = saved["initial_states"]["t660_2"]
+    assert before["channels"]["B"]["delay_edge"]["response"] == "0.0002s"
+    assert set(before["edge_references"]) == {"1", "2"}
+
+
 class Mircat(Owned):
-    def __init__(self): self.calls=[]; self.armed=False; self.emission=False; self.wavenumber=1930.
+    def __init__(self):
+        self.calls=[]; self.armed=False; self.emission=False; self.wavenumber=1930.
+        self.pulses = {}
+    def pulse(self, qcl):
+        return self.pulses.setdefault(qcl, {"pulse_rate_hz":110000., "pulse_width_ns":150.})
     def initialize(self): self.touch("initialize")
     def deinitialize(self): self.touch("deinitialize")
     def read_state(self): self.touch("state"); return SimpleNamespace(to_dict=lambda: {"emission_on": self.emission})
     def turn_emission_off(self): self.touch("off"); self.emission=False
     def start_emission(self): self.touch("on"); self.emission=True
-    def get_qcl_pulse_rate(self, qcl): self.touch("rate"); return 100000.
-    def get_qcl_pulse_width(self, qcl): self.touch("width"); return 150.
+    def get_qcl_pulse_rate(self, qcl): self.touch("rate"); return self.pulse(qcl)["pulse_rate_hz"]
+    def get_qcl_pulse_width(self, qcl): self.touch("width"); return self.pulse(qcl)["pulse_width_ns"]
     def get_active_qcl(self): self.touch("active_qcl"); return 1
     def get_num_installed_qcls(self): self.touch("qcl_count"); return 1
     def get_qcl_tuning_range(self, qcl): self.touch("qcl_range"); return {"qcl": qcl, "min_cm1": 1800., "max_cm1": 2100.}
-    def get_qcl_pulse_limits(self, qcl): self.touch("pulse_limits"); return {"min_pulse_width_ns": 40., "max_pulse_width_ns": 500., "max_duty_cycle_percent": 30.}
+    def get_qcl_pulse_limits(self, qcl): self.touch("pulse_limits"); return {"max_pulse_rate_hz": 3000000., "max_pulse_width_ns": 500., "max_duty_cycle": 30.}
     def get_wavelength_trigger_params(self): self.touch("trigger_read"); return dict(pulse_mode=1,process_trigger_mode=1,start=1930.,stop=1930.,interval=0.,units=1,dwell_us=0,after_off_us=0)
     def set_wavelength_trigger_params(self, **kwargs): self.touch("trigger_set"); return kwargs
-    def set_qcl_pulse_params(self, **kwargs): self.touch("pulse"); return kwargs
+    def set_qcl_pulse_params(self, **kwargs):
+        self.touch("pulse")
+        self.pulse(kwargs["qcl"]).update({k:kwargs[k] for k in ("pulse_rate_hz", "pulse_width_ns")})
+        return kwargs
     def set_external_trigger_params(self, **kwargs): self.touch("external")
     def is_interlock_set(self): self.touch("interlock"); return True
     def is_key_switch_set(self): self.touch("key"); return True
@@ -288,3 +453,101 @@ def test_fixed_point_terminal_frame_does_not_replace_next_run_pump_readbacks(tmp
     assert pump.recipe["frames_engine"] is False
     restored = [r for r in result["restoration"]["actions"] if r["action"] == "t660_2 inactive timing restoration"]
     assert restored and restored[0]["ok"]
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+@pytest.mark.parametrize("divider", [0, 1, 2])
+def test_fixed_point_distinct_mircat_internal_and_external_rates_persist_across_operations(tmp_path, monkeypatch, mode, divider):
+    persistent_pulses = {1: {"pulse_rate_hz": 2300000., "pulse_width_ns": 100.}}
+    original_init = Mircat.__init__
+    def persistent_init(service):
+        original_init(service)
+        service.pulses = persistent_pulses
+    monkeypatch.setattr(Mircat, "__init__", persistent_init)
+    original_read = Timing.read_active_settings
+    def two_mhz_read(service):
+        state = original_read(service)
+        state["queries"]["synth_frequency"]["response"] = "2000000Hz"
+        state["queries"]["predivider"]["response"] = str(divider)
+        return state
+    monkeypatch.setattr(Timing, "read_active_settings", two_mhz_read)
+    fixture = build_connected_fixture(tmp_path, mode)
+    for _ in range(2):
+        operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+        result = Runner(fixture.context).run(operation, fixture.plan)
+        assert result["status"] == "complete", result.get("error", result.get("cleanup_error"))
+        assert result["live_readbacks"]["mircat"]["pulse_rate_hz"] == 2300000.
+        assert result["plan"]["resolved"]["mircat"]["pulse_rate_hz"] == 2300000.
+        assert result["plan"]["resolved"]["probe_recipe"]["clock"]["frequency"] == "2000000Hz"
+        pulse = result["events"][0]["tuning"]["mircat_internal_pulse"]
+        assert result["plan"]["resolved"]["probe_recipe"]["predivider"] == divider
+        assert pulse["pulse_rate_hz"] == 2300000. and pulse["external_probe_rate_hz"] == 2000000./max(1, divider)
+        assert persistent_pulses[1] == {"pulse_rate_hz": 2300000., "pulse_width_ns": 100.}
+        assert result["restoration"]["safe_verified"] and result["preservation_verified"]
+
+
+@pytest.mark.parametrize("rate,width,expected_error", [
+    (100000., 150., "greater"), (3100000., 50., "rate"), (2300000., 200., "duty")])
+def test_fixed_point_invalid_internal_pulse_configuration_fails_before_emission(tmp_path, monkeypatch, rate, width, expected_error):
+    original_init = Mircat.__init__
+    def configured_init(service):
+        original_init(service)
+        service.pulses = {1: {"pulse_rate_hz": rate, "pulse_width_ns": width}}
+    monkeypatch.setattr(Mircat, "__init__", configured_init)
+    fixture = build_connected_fixture(tmp_path, "dual")
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan)
+    assert result["status"] == "failed", result
+    assert expected_error in result["error"].lower()
+    assert "on" not in fixture.state["services"]["mircat"].calls
+    assert fixture.state["core"].dispatched == 0
+    assert result["restoration"]["safe_verified"] and result["preservation_verified"]
+
+
+def test_fixed_point_external_mode_must_preserve_selected_internal_rate(tmp_path, monkeypatch):
+    def resetting_external_mode(service, **kwargs):
+        service.touch("external")
+        service.pulse(1)["pulse_rate_hz"] = 100000.
+    monkeypatch.setattr(Mircat, "set_external_trigger_params", resetting_external_mode)
+    fixture = build_connected_fixture(tmp_path, "dual")
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan)
+    assert result["status"] == "failed"
+    assert "greater" in result["error"].lower()
+    assert "on" not in fixture.state["services"]["mircat"].calls
+    assert fixture.state["services"]["mircat"].pulse(1)["pulse_rate_hz"] == 110000.
+    assert result["restoration"]["safe_verified"] and result["preservation_verified"]
+
+
+@pytest.mark.parametrize("ignored_reference,expected_status,error", [
+    (0, "failed", "reference 0 not verified"),
+    (3, "cleanup_failed", "original reference 3 not restored")])
+def test_fixed_point_absolute_readback_requires_verified_reference_writes(tmp_path, monkeypatch, ignored_reference, expected_status, error):
+    import json
+    _inject_relative_timing(monkeypatch, cyclic=True)
+    initialize = Timing.__init__
+    def ignored_write(self, state, name):
+        initialize(self, state, name)
+        if name == "t660_2":
+            state["ignore_reference_restore"] = (1, ignored_reference)
+    monkeypatch.setattr(Timing, "__init__", ignored_write)
+    fixture = build_connected_fixture(tmp_path)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan)
+    assert result["status"] == expected_status
+    assert error in result["error"]
+    assert fixture.state["core"].dispatched == 0
+    assert result["preservation_verified"]
+    saved = json.loads((operation.output_path/"run.json").read_text(encoding="utf-8"))
+    before = saved["initial_states"]["t660_2"]
+    assert "absolute_channel_timing" not in before
+    checks = before["absolute_reference_checks"]["1"]
+    pump = fixture.state["services"]["t660_2"]
+    assert pump.source == "OFF" and not any(pump.channels.values())
+    if ignored_reference == 0:
+        assert checks["absolute_delay_s"] is None and "delay_readback" not in checks
+        assert int(checks["reference_for_absolute"]) == 3
+        assert pump.references == pump.original_references
+    else:
+        assert int(checks["restored_reference"]) == 0
+        assert not result["restoration"]["safe_verified"]

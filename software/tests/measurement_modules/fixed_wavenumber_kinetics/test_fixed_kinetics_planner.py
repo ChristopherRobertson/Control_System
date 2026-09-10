@@ -6,7 +6,7 @@ import json
 import pytest
 
 from control_app.measurement_modules.fixed_wavenumber_kinetics.settings import Position, Settings
-from control_app.measurement_modules.fixed_wavenumber_kinetics.planner import Plan, build_plan
+from control_app.measurement_modules.fixed_wavenumber_kinetics.planner import Plan, build_plan, mircat_pulse_errors
 from control_app.measurement_modules.fixed_wavenumber_kinetics.timing import TimingError, compile_timing, quantize_seconds
 
 
@@ -28,7 +28,7 @@ def profile_case(mode="single"):
         "probe_recipe": {"clock": {"frequency": "1000Hz"}, "predivider": 1,
             "channels": {ch: {"enabled": ch != "D", "delay": "0s", "width": "100ns", "polarity": "positive", "termination": "50OHM"} for ch in "ABCD"}},
         "hf2li": {"signal_inputs": {"0": {"range": 1.}}, "pll": {"enabled": True}},
-        "mircat": {"qcl": 1, "pulse_width_ns": 20, "pulse_rate_hz": 1000},
+        "mircat": {"qcl": 1, "pulse_width_ns": 20, "pulse_rate_hz": 3000},
         "timing": {"input_frequency_hz": 1000., "fire_delay_s": .001, "q_switch_delay_s": .002,
                    "fire_width_s": .0001, "q_switch_width_s": .0001,
                    "fire_polarity": "positive", "q_switch_polarity": "positive", "termination": "50OHM"},
@@ -302,7 +302,7 @@ def test_probe_and_pump_overrides_change_only_explicit_fields_and_required_carri
     p = build_plan(s, live_readbacks=live)
     assert p.operational_ready, p.readiness_items
     assert p.resolved["mircat"]["pulse_width_ns"] == 50.
-    assert p.resolved["mircat"]["pulse_rate_hz"] == 2000.
+    assert p.resolved["mircat"]["pulse_rate_hz"] == live["mircat"]["pulse_rate_hz"]
     assert p.resolved["probe_recipe"]["clock"]["frequency"] == "2000Hz"
     assert p.resolved["probe_recipe"]["channels"] == live["probe_recipe"]["channels"]
     assert p.resolved["timing"]["q_switch_width_s"] == .0002
@@ -320,6 +320,55 @@ def test_no_pump_ignores_unrelated_pump_input_clock_and_runtime_stream_qualifica
     p = build_plan(replace(s, pump_enabled=False), live_readbacks=live)
     assert p.operational_ready and p.timing is None
     assert p.total_pump_events == 0
+
+
+def test_external_probe_override_preserves_independent_internal_rate_and_provenance():
+    s, evidence = profile_case()
+    live = deepcopy(evidence["operating_profile"])
+    live["mircat"]["pulse_rate_hz"] = 2_300_000.
+    live["mircat_readback"] = {"pulse_limits": {"max_pulse_rate_hz": 3_000_000.,
+        "max_pulse_width_ns": 100., "max_duty_cycle": 10.}}
+    p = build_plan(replace(s, probe_rate_hz=2_000_000.), live_readbacks=live)
+    assert p.operational_ready, p.validation_errors
+    assert p.resolved["mircat"]["pulse_rate_hz"] == 2_300_000.
+    assert p.resolved["timing"]["input_frequency_hz"] == 2_000_000.
+    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "installed_readback"
+    assert p.resolved["value_sources"]["probe_rate_hz"] == "user_override"
+
+
+@pytest.mark.parametrize("params,external,match", [
+    ({"pulse_rate_hz": 1000., "pulse_width_ns": 20.}, 1000., "strictly greater"),
+    ({"pulse_rate_hz": 1000., "pulse_width_ns": 20.}, 1001., "strictly greater"),
+    ({"pulse_rate_hz": 0., "pulse_width_ns": 20.}, 1000., "internal pulse rate"),
+    ({"pulse_rate_hz": float("inf"), "pulse_width_ns": 20.}, 1000., "internal pulse rate"),
+    ({"pulse_rate_hz": True, "pulse_width_ns": 20.}, 1000., "internal pulse rate"),
+    ({"pulse_rate_hz": 2000., "pulse_width_ns": 0.}, 1000., "pulse width"),
+    ({"pulse_rate_hz": 2000., "pulse_width_ns": float("nan")}, 1000., "pulse width"),
+    ({"pulse_rate_hz": 2000., "pulse_width_ns": 20.}, float("nan"), "external trigger rate"),
+])
+def test_mircat_pulse_helper_rejects_invalid_actual_settings(params, external, match):
+    assert any(match in error for error in mircat_pulse_errors(params, external))
+
+
+def test_mircat_sdk_limits_use_internal_duty_percentage_and_no_invented_margin():
+    params = {"pulse_rate_hz": 2_000_000., "pulse_width_ns": 50.}
+    assert mircat_pulse_errors(params, 1_999_999., {"max_duty_cycle": 10.}) == ()
+    assert any("10%" in issue for issue in mircat_pulse_errors(params, 1_900_000., {"max_duty_cycle": 9.9}))
+    assert any("max_pulse_rate_hz" in issue for issue in mircat_pulse_errors(params, 1_900_000., {"max_pulse_rate_hz": 1_950_000.}))
+    assert any("max_pulse_width_ns" in issue for issue in mircat_pulse_errors(params, 1_900_000., {"max_pulse_width_ns": 49.}))
+    assert mircat_pulse_errors(params, 1_900_000.) == ()
+
+
+def test_planner_reports_equal_internal_rate_and_sdk_limit_as_invalid_operating_values():
+    s, evidence = profile_case()
+    live = deepcopy(evidence["operating_profile"])
+    live["mircat"]["pulse_rate_hz"] = 1000.
+    equal = build_plan(s, live_readbacks=live)
+    assert not equal.ready and any("strictly greater" in error for error in equal.validation_errors)
+    live["mircat"]["pulse_rate_hz"] = 3000.
+    live["mircat_readback"] = {"pulse_limits": {"max_pulse_width_ns": 19.}}
+    limited = build_plan(s, live_readbacks=live)
+    assert not limited.ready and any("max_pulse_width_ns" in error for error in limited.validation_errors)
 
 
 @pytest.mark.parametrize("updates", [{"pre_observation_s": float("nan")}, {"event_budget": True},

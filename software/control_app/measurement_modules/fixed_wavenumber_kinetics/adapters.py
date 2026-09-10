@@ -71,6 +71,97 @@ def _channel_settings(row, *, enabled):
         "termination": "50OHM" if termination in {"ON", "1", "50", "50OHM"} else "LOWZ"}
 
 
+def _timing_mode(row):
+    value = str(_query_value(row, "timing_mode")).upper().replace("_", "").replace("-", "")
+    if value in {"DW", "DELAYWIDTH"}:
+        return "DW"
+    if value in {"RF", "RISEFALL"}:
+        return "RF"
+    raise RuntimeError(f"Unrecognized T660 timing mode {value!r}")
+
+
+def _snapshot_timing_topology(service, snapshot):
+    """Read references without changing them, including during a live check."""
+    references = snapshot["edge_references"] = {}
+    for edge in range(1, 9):
+        command = f"TIME:RELTo{edge}?"
+        response = service.command(command)
+        reference = int(response)
+        if not 0 <= reference <= 8 or reference == edge:
+            raise RuntimeError(f"Invalid T660 reference for edge {edge}: {response!r}")
+        references[str(edge)] = {"ok": True, "response": response, "source": command}
+    remaining = {}
+    for index, channel in enumerate("ABCD"):
+        row = snapshot["channels"][channel]
+        if _timing_mode(row) == "DW" and int(references[str(2*index+2)]["response"]) != 2*index+1:
+            raise RuntimeError(f"T660 {channel} delay-width falling reference is not its rising edge")
+        remaining[2*index+1] = _physical_number(_query_value(row, "delay_edge"))
+        remaining[2*index+2] = _physical_number(_query_value(row, "width_edge"))
+    absolute = {0: 0.}
+    while remaining:
+        resolved = [edge for edge in remaining if int(references[str(edge)]["response"]) in absolute]
+        if not resolved:
+            snapshot["absolute_timing_basis"] = "Cyclic reference graph requires an inhibited readback"
+            return
+        for edge in resolved:
+            absolute[edge] = remaining.pop(edge)+absolute[int(references[str(edge)]["response"])]
+    snapshot["absolute_channel_timing"] = {c: {"delay_s": absolute[2*i+1],
+        "width_s": absolute[2*i+2]-absolute[2*i+1]} for i, c in enumerate("ABCD")}
+    snapshot["absolute_timing_basis"] = "Read-only composition of native edge delays and references to shot start"
+
+
+def _capture_absolute_timing_inhibited(service, snapshot):
+    if "absolute_channel_timing" in snapshot:
+        return
+    # T660 Programming Guide pp53,77: RELTo changes the expression basis,
+    # not the absolute physical edge delay. Never perform this during a live
+    # read-only check; the caller has disabled the source and all outputs.
+    absolute = {}
+    for index, channel in enumerate("ABCD"):
+        rising, falling = 2*index+1, 2*index+2
+        for edge in (rising, falling) if _timing_mode(snapshot["channels"][channel]) == "RF" else (rising,):
+            old_reference = int(snapshot["edge_references"][str(edge)]["response"])
+            checks = snapshot.setdefault("absolute_reference_checks", {})[str(edge)] = {
+                "original_reference": old_reference, "reference_for_absolute": None,
+                "absolute_delay_s": None, "restored_reference": None}
+            try:
+                service.command(f"TIME:RELTo{edge} 0", expect_response=False)
+                checks["reference_for_absolute"] = service.command(f"TIME:RELTo{edge}?")
+                if int(checks["reference_for_absolute"]) != 0:
+                    raise RuntimeError(f"Edge {edge} reference 0 not verified before absolute delay readback")
+                checks["delay_readback"] = service.command(f"TIME:DEL{edge}?")
+                absolute[edge] = _physical_number(checks["delay_readback"])
+                checks["absolute_delay_s"] = absolute[edge]
+            finally:
+                service.command(f"TIME:RELTo{edge} {old_reference}", expect_response=False)
+                checks["restored_reference"] = service.command(f"TIME:RELTo{edge}?")
+                if int(checks["restored_reference"]) != old_reference:
+                    raise RuntimeError(f"Edge {edge} original reference {old_reference} not restored after absolute delay readback")
+        if falling not in absolute:
+            absolute[falling] = absolute[rising]+_physical_number(_query_value(snapshot["channels"][channel], "width_edge"))
+    snapshot["absolute_channel_timing"] = {c: {"delay_s": absolute[2*i+1],
+        "width_s": absolute[2*i+2]-absolute[2*i+1]} for i, c in enumerate("ABCD")}
+    snapshot["absolute_timing_basis"] = "Inhibited absolute readback with original edge reference expression restored immediately"
+
+
+def _absolute_channel_settings(snapshot, channel, *, enabled):
+    selected = _channel_settings(snapshot["channels"][channel], enabled=enabled)
+    if "absolute_channel_timing" not in snapshot:
+        raise RuntimeError("Absolute T660 timing unresolved in read-only check; cyclic references require an inhibited acquisition readback")
+    absolute = snapshot["absolute_channel_timing"][channel]
+    selected.update(delay=f"{absolute['delay_s']:.12g}s", width=f"{absolute['width_s']:.12g}s")
+    return selected
+
+
+def _verify_timing_inhibited(service):
+    state = service.read_active_settings()
+    if str(_query_value(state["queries"], "trigger_source")).upper() != "OFF":
+        raise RuntimeError("T660 source OFF not verified before timing configuration")
+    if any(str(_query_value(row, "enabled")).upper() not in {"0", "OFF"} for row in state["channels"].values()):
+        raise RuntimeError("T660 channel OFF not verified before timing configuration")
+    return state
+
+
 class InstalledDevices:
     """One operation's fresh services; caller holds host scope through close."""
 
@@ -91,6 +182,7 @@ class InstalledDevices:
             getattr(service, "initialize" if name == "mircat" else "connect")()
             if name.startswith("t660"):
                 self.before[name] = service.read_active_settings()
+                _snapshot_timing_topology(service, self.before[name])
                 queries = self.before[name]["queries"]
                 clock_mode = _query_value(queries, "clock_connector_mode").upper()
                 expected_modes = {"OUT"} if name == "t660_2" else {"INP", "IN"}
@@ -103,6 +195,11 @@ class InstalledDevices:
                     service.force_eod()
                     for channel in "ABCD":
                         service.disable_channel(channel)
+                    _verify_timing_inhibited(service)
+                    _capture_absolute_timing_inhibited(service, self.before[name])
+                    for index, channel in enumerate("ABCD"):
+                        service.set_channel_timing_mode(channel, "delay_width")
+                        service.command(f"TIME:RELTo{2*index+1} 0", expect_response=False)
             elif name == "mircat":
                 self.before[name] = service.read_state().to_dict()
                 if prepare:
@@ -165,14 +262,18 @@ class InstalledDevices:
         profile["timing_rate_sps"] = float(node("demods/2/rate"))
         profile["clockbase_hz"] = hf.get_clockbase()
         probe_before = self.before["t660_1"]
-        probe_frequency = _physical_number(_query_value(probe_before["queries"], "synth_frequency"))
-        profile["probe_recipe"] = {"stop_first": True, "trigger_source": "OFF", "predivider": 1,
-            "gate_mode": 0, "burst_enabled": False, "clock": {"frequency": f"{probe_frequency:.12g}Hz", "shots": 0},
-            "channels": {c: _channel_settings(probe_before["channels"][c], enabled=c != "D") for c in "ABCD"}}
+        probe_clock = _physical_number(_query_value(probe_before["queries"], "synth_frequency"))
+        probe_divider = int(_query_value(probe_before["queries"], "predivider"))
+        if probe_divider < 0:
+            raise RuntimeError("T660-1 predivider must be nonnegative")
+        probe_frequency = probe_clock / max(1, probe_divider)
+        profile["probe_recipe"] = {"stop_first": True, "trigger_source": "OFF", "predivider": probe_divider,
+            "gate_mode": 0, "burst_enabled": False, "clock": {"frequency": f"{probe_clock:.12g}Hz", "shots": 0},
+            "channels": {c: _absolute_channel_settings(probe_before, c, enabled=c != "D") for c in "ABCD"}}
         profile["timing"] = {"input_frequency_hz": probe_frequency}
         try:
-            pump = self.before["t660_2"]["channels"]
-            fire, qswitch = _channel_settings(pump["A"], enabled=False), _channel_settings(pump["B"], enabled=False)
+            pump = self.before["t660_2"]
+            fire, qswitch = _absolute_channel_settings(pump, "A", enabled=False), _absolute_channel_settings(pump, "B", enabled=False)
             profile["timing"].update(fire_delay_s=_physical_number(fire["delay"]),
                 q_switch_delay_s=_physical_number(qswitch["delay"]), fire_width_s=_physical_number(fire["width"]),
                 q_switch_width_s=_physical_number(qswitch["width"]), fire_polarity=fire["polarity"],
@@ -198,10 +299,9 @@ class InstalledDevices:
             if not covering:
                 raise RuntimeError("Selected wavenumber lies outside all installed MIRcat QCL ranges")
             qcl = qcl if qcl in covering else covering[0]
-        profile["mircat"] = {"qcl": qcl, "pulse_rate_hz": probe_frequency,
+        profile["mircat"] = {"qcl": qcl, "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
             "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
-        profile["mircat_readback"] = {"qcl": qcl, "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
-            "pulse_width_ns": mircat.get_qcl_pulse_width(qcl), "pulse_limits": mircat.get_qcl_pulse_limits(qcl)}
+        profile["mircat_readback"] = {**profile["mircat"], "pulse_limits": mircat.get_qcl_pulse_limits(qcl)}
         profile["settling_s"] = max(10*p["timeconstant_s"]*p["order"] for p in (profile[r] for r in ("sample", "reference") if r in profile))
         profile["settling_basis"] = "Conservative 10 × filter order × live time constant; estimated filter settling, not measured acquisition response"
         # The SDK returns single precision cm^-1; report an operational check
@@ -216,9 +316,35 @@ class InstalledDevices:
 
     read_operating_settings = discover_operating_profile
 
+    def _external_probe_rate(self):
+        recipe = self.resolved["probe_recipe"]
+        return _physical_number(recipe["clock"]["frequency"]) / max(1, int(recipe.get("predivider", 1)))
+
+    def _verify_mircat_pulse(self, expected):
+        from .planner import mircat_pulse_errors
+        mircat = self.services["mircat"]
+        qcl = int(expected["qcl"])
+        actual = {"qcl": qcl, "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
+                  "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
+        errors = mircat_pulse_errors(actual, self._external_probe_rate(), mircat.get_qcl_pulse_limits(qcl))
+        if errors:
+            raise RuntimeError("; ".join(errors))
+        for key in ("pulse_rate_hz", "pulse_width_ns"):
+            if not math.isclose(float(actual[key]), float(expected[key]), rel_tol=1e-6):
+                raise RuntimeError(f"MIRcat QCL {qcl} {key} differs from selected internal setting")
+        actual["external_probe_rate_hz"] = self._external_probe_rate()
+        self.readbacks.setdefault("mircat_pulses_by_qcl", {})[str(qcl)] = actual
+        return actual
+
     def configure(self, resolved, check):
         self.resolved = deepcopy(dict(resolved))
         check()
+        from .planner import mircat_pulse_errors
+        params = self.resolved["mircat"]
+        errors = mircat_pulse_errors(params, self._external_probe_rate(),
+            self.services["mircat"].get_qcl_pulse_limits(int(params["qcl"])))
+        if errors:
+            raise RuntimeError("; ".join(errors))
         hf = self.services["hf2li"]
         hf_profile = self.resolved.get("hf2li", {})
         if not hf_profile.get("signal_inputs") or not hf_profile.get("pll"):
@@ -277,10 +403,8 @@ class InstalledDevices:
             "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
             "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
         self.before["mircat_trigger"] = mircat.get_wavelength_trigger_params()
-        self.readbacks["mircat_pulse"] = mircat.set_qcl_pulse_params(**params)
-        for key in ("pulse_rate_hz", "pulse_width_ns"):
-            if not math.isclose(float(self.readbacks["mircat_pulse"][key]), float(params[key]), rel_tol=1e-6):
-                raise RuntimeError(f"MIRcat selected {key} differs from actual pulse readback")
+        self.readbacks["mircat_pulse_command"] = mircat.set_qcl_pulse_params(**params)
+        self.readbacks["mircat_pulse"] = self._verify_mircat_pulse(params)
         self.readbacks["hf2li"] = actual
         self.readbacks["probe"] = self.services["t660_1"].read_active_settings()
         probe_state = self.readbacks["probe"]
@@ -324,12 +448,18 @@ class InstalledDevices:
             if str(qcl) not in saved:
                 saved[str(qcl)] = {"qcl": qcl, "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
                     "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
-            selected_pulse = {**self.resolved["mircat"], "qcl": qcl}
-            actual_pulse = mircat.set_qcl_pulse_params(**selected_pulse)
-            for field in ("pulse_rate_hz", "pulse_width_ns"):
-                if not math.isclose(actual_pulse[field], selected_pulse[field], rel_tol=1e-6):
-                    raise RuntimeError(f"QCL {qcl} actual pulse settings differ")
+            selected_pulse = deepcopy(saved[str(qcl)])
+            if self.resolved.get("value_sources", {}).get("mircat.pulse_width_ns") == "user_override":
+                selected_pulse["pulse_width_ns"] = self.resolved["mircat"]["pulse_width_ns"]
+            from .planner import mircat_pulse_errors
+            errors = mircat_pulse_errors(selected_pulse, self._external_probe_rate(), mircat.get_qcl_pulse_limits(qcl))
+            if errors:
+                raise RuntimeError("; ".join(errors))
+            mircat.set_qcl_pulse_params(**selected_pulse)
+        else:
+            selected_pulse = self.resolved["mircat"]
         mircat.set_external_trigger_params(wavenumber_cm1=wavenumber_cm1)
+        self._verify_mircat_pulse(selected_pulse)
         if not mircat.is_interlock_set() or not mircat.is_key_switch_set():
             raise RuntimeError("MIRcat interlock or key switch is not ready")
         mircat.arm()
@@ -345,6 +475,7 @@ class InstalledDevices:
             if time.monotonic() >= deadline:
                 raise RuntimeError("MIRcat actual Tuned timeout")
             time.sleep(.05)
+        actual_pulse = self._verify_mircat_pulse(selected_pulse)
         mircat.start_emission()
         actual = mircat.get_actual_wavelength()
         if (actual.get("units") != "cm^-1" or not actual.get("light_valid") or
@@ -356,7 +487,7 @@ class InstalledDevices:
             progress({"stage": "tuning/settling", "message": "Waiting selected detector/HF2LI settling interval"})
             time.sleep(min(.05, max(0, settling_end-time.monotonic())))
         return {"requested_cm1": wavenumber_cm1, "actual": actual, "qcl": qcl, "tuned": mircat.is_tuned(),
-                "settling_s": self.resolved["settling_s"]}
+                "settling_s": self.resolved["settling_s"], "mircat_internal_pulse": actual_pulse}
 
     def upload(self, program, check, progress):
         return self.services["t660_2"].preload_frame_table(
@@ -429,12 +560,20 @@ class InstalledDevices:
                 attempt(f"{name} force EOD", service.force_eod)
                 for channel in "ABCD":
                     attempt(f"{name} {channel} OFF", lambda s=service, c=channel: s.disable_channel(c))
+                inhibited = attempt(f"{name} verify OFF before timing restoration", lambda s=service: _verify_timing_inhibited(s))
                 def restore_timing(s=service, key=name):
+                    if inhibited is None:
+                        raise RuntimeError("Timing restoration skipped because source/channel OFF could not be verified")
                     before = self.before[key]
+                    if "absolute_channel_timing" not in before:
+                        return {"skipped": "No absolute snapshot; acquisition timing was not configured"}
+                    for index, channel in enumerate("ABCD"):
+                        s.set_channel_timing_mode(channel, "delay_width")
+                        s.command(f"TIME:RELTo{2*index+1} 0", expect_response=False)
                     recipe = {"stop_first": True, "trigger_source": "OFF", "force_eod": True,
                         "predivider": int(_physical_number(_query_value(before["queries"], "predivider"))),
                         "clock": {"frequency": f"{_physical_number(_query_value(before['queries'], 'synth_frequency')):.12g}Hz"},
-                        "channels": {c: _channel_settings(before["channels"][c], enabled=False) for c in "ABCD"}}
+                        "channels": {c: _absolute_channel_settings(before, c, enabled=False) for c in "ABCD"}}
                     if key == "t660_2":
                         recipe["frames_engine"] = False
                     # A finite table's terminal frame changes ACTIVE delays.
@@ -442,8 +581,16 @@ class InstalledDevices:
                     # so the next automatic run cannot inherit terminal zeros.
                     return s.apply_recipe(recipe)
                 attempt(f"{name} inactive timing restoration", restore_timing)
+                if inhibited is not None:
+                    for channel in "ABCD":
+                        attempt(f"{name} {channel} timing mode restoration", lambda s=service, key=name, c=channel:
+                            s.set_channel_timing_mode(c, _timing_mode(self.before[key]["channels"][c])))
+                    for edge in range(1, 9):
+                        attempt(f"{name} edge {edge} reference restoration", lambda s=service, key=name, e=edge:
+                            s.command(f"TIME:RELTo{e} {int(self.before[key]['edge_references'][str(e)]['response'])}", expect_response=False))
                 def verify(s=service, key=name):
                     state = s.read_active_settings()
+                    _snapshot_timing_topology(s, state)
                     q = state["queries"]["trigger_source"]
                     if not q.get("ok") or q.get("response", "").upper() != "OFF":
                         raise RuntimeError("Trigger source OFF not verified")
@@ -451,12 +598,22 @@ class InstalledDevices:
                         enabled = channel["enabled"]
                         if not enabled.get("ok") or str(enabled.get("response")).upper() not in {"0", "OFF"}:
                             raise RuntimeError("Channel OFF not verified")
+                    if "absolute_channel_timing" in self.before[key]:
+                        _capture_absolute_timing_inhibited(s, state)
+                        for channel in "ABCD":
+                            for field in ("delay_s", "width_s"):
+                                expected = self.before[key]["absolute_channel_timing"][channel][field]
+                                observed = state["absolute_channel_timing"][channel][field]
+                                if not math.isclose(expected, observed, rel_tol=1e-6, abs_tol=1e-11):
+                                    raise RuntimeError(f"{channel} absolute {field} restoration mismatch")
                     for field in ("synth_frequency", "predivider"):
                         expected = _physical_number(_query_value(self.before[key]["queries"], field))
                         observed = _physical_number(_query_value(state["queries"], field))
                         if not math.isclose(expected, observed, rel_tol=1e-7):
                             raise RuntimeError(f"{field} restoration mismatch")
                     for channel in "ABCD":
+                        if _timing_mode(state["channels"][channel]) != _timing_mode(self.before[key]["channels"][channel]):
+                            raise RuntimeError(f"{channel} timing mode restoration mismatch")
                         expected = _channel_settings(self.before[key]["channels"][channel], enabled=False)
                         observed = _channel_settings(state["channels"][channel], enabled=False)
                         for field in ("delay", "width"):
@@ -464,6 +621,9 @@ class InstalledDevices:
                                 raise RuntimeError(f"{channel} {field} restoration mismatch")
                         if any(expected[field] != observed[field] for field in ("polarity", "termination")):
                             raise RuntimeError(f"{channel} polarity/termination restoration mismatch")
+                    for edge in range(1, 9):
+                        if int(state["edge_references"][str(edge)]["response"]) != int(self.before[key]["edge_references"][str(edge)]["response"]):
+                            raise RuntimeError(f"Edge {edge} reference restoration mismatch")
                     return state
                 attempt(f"{name} safe readback", verify)
         mircat = self.services.get("mircat")
@@ -484,7 +644,18 @@ class InstalledDevices:
             def verify_mircat():
                 if mircat.is_emission_on() or mircat.is_laser_armed():
                     raise RuntimeError("MIRcat emission OFF/disarmed not verified")
-                return {"emission_on": False, "armed": False}
+                pulses = {}
+                expected_pulses = [self.before["mircat_pulse"]] if self.before.get("mircat_pulse") else []
+                expected_pulses.extend(self.before.get("mircat_extra_pulses", {}).values())
+                for expected in expected_pulses:
+                    qcl = int(expected["qcl"])
+                    actual = {"pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
+                              "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
+                    if any(not math.isclose(float(actual[key]), float(expected[key]), rel_tol=1e-6)
+                           for key in actual):
+                        raise RuntimeError(f"MIRcat QCL {qcl} internal pulse restoration mismatch")
+                    pulses[str(qcl)] = actual
+                return {"emission_on": False, "armed": False, "pulse_settings": pulses}
             attempt("MIRcat safe readback", verify_mircat)
         hf = self.services.get("hf2li")
         if hf:

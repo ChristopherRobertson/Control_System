@@ -372,7 +372,15 @@ class FixedPointPanel(CompactMeasurementPanel):
 
     def check_device(self):
         self._capability_check_attempted = True
+        if not self._connected_devices_available():
+            self.set_status("Connected instruments unavailable")
+            self._update_extra_controls()
+            return
         self.begin_operation("capabilities", self.adapter.run_capabilities, requires_valid_plan=False)
+
+    def _connected_devices_available(self):
+        return {"t660_1", "t660_2", "mircat", "hf2li"}.issubset(
+            self.context.devices.available(hardware=True))
 
     def refresh_plan(self, *_):
         super().refresh_plan()
@@ -387,7 +395,7 @@ class FixedPointPanel(CompactMeasurementPanel):
         if not hasattr(self, "blank_status"):
             return
         idle = not self.command_running()
-        self.check_device_button.setEnabled(idle)
+        self.check_device_button.setEnabled(idle and self._connected_devices_available())
         self.handoff_button.setEnabled(idle and self.result is not None)
         if hasattr(self, "blank_button"):
             self.blank_button.setEnabled(idle and self.plan is not None)

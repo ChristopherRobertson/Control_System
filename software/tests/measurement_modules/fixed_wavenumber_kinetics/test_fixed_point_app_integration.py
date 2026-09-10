@@ -74,6 +74,30 @@ def test_fixed_point_package_is_discovered_and_activated_by_unmodified_host(app,
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
+@pytest.mark.parametrize("partial_factories", [False, True])
+def test_fixed_point_offline_activation_never_acquires_hardware(app, tmp_path, monkeypatch, mode, partial_factories):
+    attempts = []
+    def forbidden(*args, **kwargs):
+        attempts.append("hardware access")
+        raise AssertionError("Offline activation must not acquire or construct hardware")
+    monkeypatch.setattr(HardwareCoordinator, "acquire", forbidden)
+    factories = {name: forbidden for name in ("t660_1", "t660_2", "mircat")} if partial_factories else {}
+    pair, _ = tabs(tmp_path, real_device_factories=factories)
+    panel = pair[0 if mode == "single" else 1].widget
+    panel.show()
+    for _ in range(3):
+        app.processEvents()
+    assert not panel.command_running()
+    assert not panel.check_device_button.isEnabled()
+    assert panel.status.text() == "Connected instruments unavailable"
+    panel.check_device()
+    assert not attempts and not (tmp_path/"host.lock").exists()
+    for handle in pair:
+        handle.widget.close()
+        handle.widget.deleteLater()
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
 def test_fixed_point_complete_developer_workflow_save_reload_and_new_run(app, tmp_path, mode):
     pair, _ = tabs(tmp_path)
     panel = pair[0 if mode == "single" else 1].widget

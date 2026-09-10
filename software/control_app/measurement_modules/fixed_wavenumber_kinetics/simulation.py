@@ -19,7 +19,7 @@ def simulation_profile(mode="single", *, condition_id="synthetic-condition", con
             "gate_mode": 0, "burst_enabled": False, "clock": {"frequency": "100000Hz", "shots": 0},
             "channels": {c: {"enabled": c != "D", "delay": "0ns", "width": "150ns",
                 "polarity": "positive", "termination": "50OHM"} for c in "ABCD"}},
-        "mircat": {"qcl": 1, "pulse_rate_hz": 100000., "pulse_width_ns": 150.},
+        "mircat": {"qcl": 1, "pulse_rate_hz": 110000., "pulse_width_ns": 150.},
         "settling_s": .02, "tune_tolerance_cm1": .05, "timing_rate_sps": 10000.,
         "timing_demodulator_index": 2, "pump_marker_bit": 16, "pump_marker_min_width_s": .002,
         "hf2li": {"signal_inputs": {"sample": {"index": 0, "range_v": 1., "ac": False,

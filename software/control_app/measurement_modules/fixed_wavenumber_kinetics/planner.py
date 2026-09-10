@@ -136,6 +136,44 @@ def _integer(value: Any, minimum: int = 1) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= minimum
 
 
+def mircat_pulse_errors(params: Mapping[str, Any], external_rate_hz: float,
+                        limits: Mapping[str, Any] | None = None) -> tuple[str, ...]:
+    """Validate independent MIRcat internal pulses against external triggers.
+
+    SDK ``max_duty_cycle`` is a percentage. Rates are Hz and width is ns,
+    therefore internal duty percent = rate * width * 1e-7. Missing optional
+    SDK limits impose no invented bounds, margin, or rate selection.
+    """
+    errors = []
+    rate, width = params.get("pulse_rate_hz"), params.get("pulse_width_ns")
+    if not _positive(rate):
+        errors.append("MIRcat internal pulse rate must be finite and positive in Hz")
+    if not _positive(width):
+        errors.append("MIRcat pulse width must be finite and positive in ns")
+    if not _positive(external_rate_hz):
+        errors.append("MIRcat external trigger rate must be finite and positive in Hz")
+    elif _positive(rate) and rate <= external_rate_hz:
+        errors.append("MIRcat internal pulse rate must be strictly greater than the external trigger rate")
+    for key, value, label in (("max_pulse_rate_hz", rate, "internal pulse rate"),
+                              ("max_pulse_width_ns", width, "pulse width")):
+        limit = (limits or {}).get(key)
+        if limit is None:
+            continue
+        if not _positive(limit):
+            errors.append(f"MIRcat SDK {key} limit must be finite and positive")
+        elif _positive(value) and value > limit:
+            errors.append(f"MIRcat {label} {value:g} exceeds SDK {key} limit {limit:g}")
+    duty_limit = (limits or {}).get("max_duty_cycle")
+    if duty_limit is not None:
+        if not _positive(duty_limit, zero=True):
+            errors.append("MIRcat SDK max_duty_cycle limit must be a finite nonnegative percentage")
+        elif _positive(rate) and _positive(width):
+            duty_percent = rate * width * 1e-7
+            if duty_percent > duty_limit:
+                errors.append(f"MIRcat internal duty cycle {duty_percent:g}% exceeds SDK max_duty_cycle limit {duty_limit:g}%")
+    return tuple(errors)
+
+
 def _merge(left: Mapping, right: Mapping) -> dict:
     result = deepcopy(dict(left))
     for key, value in right.items():
@@ -323,15 +361,16 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
     mircat = deepcopy(dict(resolved.get("mircat", {})))
     timing_values = deepcopy(dict(resolved.get("timing", {})))
     if s.probe_rate_hz is not None:
-        # This single carrier choice coherently updates connected recipients.
+        # External trigger carrier updates its timing/reference recipients. The
+        # MIRcat internal pulse setting remains an independent device value.
         probe.setdefault("clock", {})["frequency"] = f"{s.probe_rate_hz:.12g}Hz"
         probe["predivider"] = 1
-        mircat["pulse_rate_hz"] = s.probe_rate_hz
         timing_values["input_frequency_hz"] = s.probe_rate_hz
         resolved.setdefault("hf2li", {}).setdefault("pll", {})["freqcenter_hz"] = s.probe_rate_hz
         sources["probe_rate_hz"] = "user_override"
     else:
         sources["probe_rate_hz"] = source_for("probe_recipe.clock.frequency")
+    sources["mircat.pulse_rate_hz"] = source_for("mircat.pulse_rate_hz")
     if s.probe_width_ns is not None:
         mircat["pulse_width_ns"] = s.probe_width_ns
         sources["mircat.pulse_width_ns"] = "user_override"
@@ -367,6 +406,12 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
     for key in ("qcl", "pulse_width_ns", "pulse_rate_hz"):
         if not _positive(mircat.get(key)):
             pending.append(f"Read the current MIRcat {key} when connecting")
+    external_frequency = _frequency_hz(probe.get("clock", {}).get("frequency"))
+    external_divider = probe.get("predivider", 1)
+    if external_frequency is not None and _integer(external_divider, 0) and all(
+            key in mircat for key in ("pulse_rate_hz", "pulse_width_ns")):
+        errors.extend(mircat_pulse_errors(mircat, external_frequency / max(1, external_divider),
+                                         resolved.get("mircat_readback", {}).get("pulse_limits")))
     if not resolved.get("hf2li", {}).get("signal_inputs") or not resolved.get("hf2li", {}).get("pll"):
         pending.append("Read the installed HF2LI signal-input and reference-lock settings when connecting")
 
