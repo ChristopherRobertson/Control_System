@@ -361,3 +361,34 @@ def test_rrs_current_auto_choices_and_analysis_inputs_survive_repeated_normaliza
     assert normalized["condition"]["temperature_K"]==77.
     assert normalized["mircat_current_ma"] is None
     assert normalize_ui_settings(normalized,"dual")==normalized
+
+
+def test_rrs_legacy_ui_roundtrip_canonicalizes_sequences_without_casting_provenance(tmp_path):
+    item=adapter()
+    legacy=replace(example_settings(),phase_offsets_s=(0.,),directions=("forward",)).to_dict()
+    legacy["condition"]["sample_id"]="unassigned"
+    legacy["manual_overrides"]={"band_windows_cm1":((1903.,1907.),)}
+    native_origin=2**63+17
+    legacy["historical_ui_settings"]={"native_origin":native_origin,"prior_choices":("qcl",2)}
+    original=deepcopy(legacy)
+    item.apply_settings(legacy)
+    current=item.read_settings()
+    assert current["acquisition_intent"]["sample_name"]=="Sample"
+    assert current["condition"]["sample_id"]=="Sample"
+    assert current["historical_ui_settings"]["legacy_sample_id"]=="unassigned"
+    assert current["historical_ui_settings"]["removed_settings"]["directions"]==["forward"]
+    assert current["historical_ui_settings"]["prior_choices"]==["qcl",2]
+    assert current["manual_overrides"]["band_windows_cm1"]==[[1903.,1907.]]
+    path=tmp_path/"roundtrip.json"
+    item.save_plan(path,current,item.make_plan(current))
+    loaded=item.load_plan(path)
+    assert loaded==current
+    assert loaded["historical_ui_settings"]["native_origin"]==native_origin
+    assert type(loaded["historical_ui_settings"]["native_origin"]) is int
+    item.apply_settings(loaded)
+    assert item.read_settings()==current and legacy==original
+    record=baseline_record(item)
+    changed=deepcopy(current)
+    changed["acquisition_intent"]["sample_name"]="Other sample"
+    item.apply_settings(changed)
+    assert "sample_id" in "; ".join(item.validate_preliminary(record,item.make_plan(item.read_settings())))

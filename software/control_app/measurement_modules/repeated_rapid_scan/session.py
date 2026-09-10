@@ -23,7 +23,13 @@ def normalize_ui_settings(value, mode=None):
     from .settings import AcquisitionIntent, RepeatedRapidScanSettings
     from .planner import resolve_intent_settings
 
-    source = deepcopy(value.to_dict() if hasattr(value,"to_dict") else dict(value))
+    def plain(item):
+        if isinstance(item,Mapping): return {key:plain(part) for key,part in item.items()}
+        if isinstance(item,(tuple,list)): return [plain(part) for part in item]
+        return deepcopy(item)
+    # Free-form override/provenance mappings have no tuple schema to restore on
+    # JSON load. Canonicalize their sequences now, without casting native values.
+    source = plain(value.to_dict() if hasattr(value,"to_dict") else dict(value))
     source_mode = source.get("mode",mode or "single")
     if mode is not None and source_mode != mode:
         raise ValueError("Settings belong to another detector mode")
@@ -44,10 +50,6 @@ def normalize_ui_settings(value, mode=None):
     removed = deepcopy(history.get("removed_settings",{}))
     excluded = set(metadata + allowed + ("mode","acquisition_intent","manual_overrides","historical_ui_settings"))
     derived = {"measured_scan_period_s","phase_offsets_s","post_scans","scan_start_cm1","scan_stop_cm1","repeats"}
-    def plain(item):
-        if isinstance(item,Mapping): return {key:plain(part) for key,part in item.items()}
-        if isinstance(item,(tuple,list)): return [plain(part) for part in item]
-        return item
     for key, item in source.items():
         if key in excluded or (previous_migration and key in derived):
             continue
@@ -66,7 +68,11 @@ def normalize_ui_settings(value, mode=None):
         condition = source.get("condition",defaults["condition"])
         period = source.get("measured_scan_period_s",defaults["measured_scan_period_s"])
         scans = source.get("post_scans",defaults["post_scans"])
-        intent = AcquisitionIntent(sample_name=condition.get("sample_id","Sample"),
+        sample_name = condition.get("sample_id","Sample")
+        if sample_name in _UNASSIGNED:
+            history.setdefault("legacy_sample_id",sample_name)
+            sample_name = "Sample"
+        intent = AcquisitionIntent(sample_name=sample_name,
             spectral_min_cm1=source.get("scan_start_cm1",defaults["scan_start_cm1"]),
             spectral_max_cm1=source.get("scan_stop_cm1",defaults["scan_stop_cm1"]),
             observation_duration_s=float(Decimal(str(period))*Decimal(str(scans))),
