@@ -219,18 +219,30 @@ def test_rrs_installed_capture_upload_acknowledgements_and_native_continuity(tmp
         def start_frame_table(self): self.started += 1
         def get_frames_status(self): return "DONE"
         def get_shot_count(self): return len(self.frames)
+        def read_active_settings(self): return {"queries": {"synth_frequency": {"ok": True, "response": "1000000"}}}
     class QCL:
+        def get_qcl_pulse_rate(self, qcl): assert qcl == 1; return 2500000.
+        def get_qcl_pulse_width(self, qcl): assert qcl == 1; return 100.
+        def get_qcl_current(self, qcl): assert qcl == 1; return 600.
+        def get_qcl_pulse_limits(self, qcl):
+            assert qcl == 1
+            return {"max_pulse_rate_hz": 3e6, "max_pulse_width_ns": 500., "max_duty_cycle": 50.}
+        def get_qcl_current_limits(self, qcl): assert qcl == 1; return (1., 1000.)
         def stop_scan_if_needed(self): pass
         def turn_emission_off(self): pass
-        def tune_to_wavenumber(self, *args, **kwargs): pass
+        def tune_to_wavenumber(self, *args, **kwargs): assert kwargs["qcl"] == 1
         def is_tuned(self): return True
         def set_external_sweep_trigger_params(self, **kwargs): pass
         def set_wavelength_trigger_pulse_width_us(self, value): pass
         def start_emission(self): pass
         def cancel_manual_tune(self): pass
-        def start_sweep_scan(self, **kwargs): self.sweep = kwargs
+        def start_sweep_scan(self, **kwargs):
+            assert kwargs["qcl"] == 1
+            self.sweep = kwargs
         def get_sweep_parameters(self): return self.sweep
-        def get_wavelength_trigger_channel_params(self, qcl): return {"units": 2, "start": 1898., "stop": 1951., "interval": 53/6, "num_triggers": 7}
+        def get_wavelength_trigger_channel_params(self, qcl):
+            assert qcl == 1
+            return {"units": 2, "start": 1898., "stop": 1951., "interval": 53/6, "num_triggers": 7}
         def get_scan_waiting_process_trigger(self): return True
         def is_interlock_set(self): return True
         def get_system_error_word(self): return 0
@@ -238,7 +250,8 @@ def test_rrs_installed_capture_upload_acknowledgements_and_native_continuity(tmp
     acquirer = InstalledDevicesAcquirer(ctx, snapshot(ctx, plan, "measurement").operation, plan)
     hf, clock, timing = HF(), Timing(), Timing()
     acquirer.devices = {"hf2li": hf, "t660_1": clock, "t660_2": timing, "mircat": QCL()}
-    acquirer.config = {"marker_interval_cm1": 53/6, "marker_width_us": 1}
+    acquirer.config = {"marker_interval_cm1": 53/6, "marker_width_us": 1, "qcl": 2}
+    acquirer.settings = SimpleNamespace(**vars(plan.settings), qcl=2)
     acquirer.readbacks = {**readbacks, "required_demodulators": (0, 2)}
     acquirer._quality = lambda: {"locked": True, "overload": False}
     movie = acquirer.capture(plan.movies[0], Worker())
@@ -440,6 +453,8 @@ class InstalledTransport:
         self.mode, self.coordinator, self.worker, self.fault = mode, coordinator, worker, fault
         self.calls, self.subscribed, self.nodes = [], set(), {}
         self.train_starts = 0
+        self.qcl_calls, self.pulse_writes = [], []
+        self.vendor_duty_percent = 50.
         self.emission, self.armed = False, False
         self.sweep = [1898., 1951., 530., 2, 1]
         self.trigger = [0, 0, 1898., 1951., 53./11, 2, 0, 0]
@@ -534,10 +549,18 @@ class InstalledTransport:
         def call(*args):
             self.own(name)
             key = name.removeprefix('MIRcatSDK_')
+            qcl_argument = {'GetQclTuningRange': 0, 'GetQCLPulseRate': 0, 'GetQCLPulseWidth': 0,
+                'GetQCLCurrent': 0, 'GetQCLPulseLimits': 0, 'GetQCLMinPulsedCurrent': 0,
+                'GetQCLMaxPulsedCurrent': 0, 'SetQCLParams': 0, 'TuneToWW': 2,
+                'StartSweepScan': 6, 'GetWlTrigChanParams': 0}.get(key)
+            if qcl_argument is not None:
+                self.qcl_calls.append((key, args[qcl_argument].value))
             def val(arg): return arg.value
             def put(values, pointers=args):
                 for pointer, value in zip(pointers, values): pointer._obj.value = value
-            if key in ('Initialize', 'DeInitialize', 'TuneToWW', 'CancelManualTuneMode'): pass
+            if key == 'TuneToWW' and self.fault == 'changed_external_rate':
+                self.units['COM3']['TRIG:FREQ:SYN'] = '4000000'
+            elif key in ('Initialize', 'DeInitialize', 'TuneToWW', 'CancelManualTuneMode'): pass
             elif key == 'ArmLaser': self.armed = True
             elif key == 'DisarmLaser': self.armed = self.fault == 'disarm'
             elif key == 'IsLaserArmed': put([self.armed])
@@ -551,10 +574,14 @@ class InstalledTransport:
             elif key == 'GetQclTuningRange': put([1800., 2100., 2], args[1:])
             elif key in ('GetQCLPulseRate','GetQCLPulseWidth','GetQCLCurrent'):
                 put([self.pulse[('GetQCLPulseRate','GetQCLPulseWidth','GetQCLCurrent').index(key)]], args[1:])
-            elif key == 'GetQCLPulseLimits': put([3e6, 500., 50.], args[1:])
+            elif key == 'GetQCLPulseLimits': put([3e6, 500., self.vendor_duty_percent], args[1:])
             elif key == 'GetQCLMinPulsedCurrent': put([1], args[1:])
             elif key == 'GetQCLMaxPulsedCurrent': put([1000], args[1:])
-            elif key == 'SetQCLParams': self.pulse = [val(arg) for arg in args[1:]]
+            elif key == 'SetQCLParams':
+                self.pulse = [val(arg) for arg in args[1:]]
+                self.pulse_writes.append(tuple(self.pulse))
+                if self.fault == 'rounded_pulse_above_limit' and len(self.pulse_writes) == 1:
+                    self.pulse[1] = 121.
             elif key == 'GetWlTrigParams': put(self.trigger)
             elif key == 'SetWlTrigParams': self.trigger = [val(arg) for arg in args]
             elif key == 'GetWlTrigPulseWidth': put([self.marker_width])
@@ -651,7 +678,7 @@ class InstalledTransport:
         return 'OK'
 
 
-def installed_context(tmp_path, monkeypatch, mode, worker, fault=None):
+def installed_context(tmp_path, monkeypatch, mode, worker, fault=None, configuration_changes=None):
     import serial
     import yaml
     from control_app.devices.hf2li_service import HF2LIService
@@ -660,6 +687,7 @@ def installed_context(tmp_path, monkeypatch, mode, worker, fault=None):
     from control_app.measurement_host.device_factories import installed_device_factories
     configuration = yaml.safe_load(Path('instrument/hardware_configuration.yaml').read_text())
     configuration['devices']['hf2li']['device_id'] = 'dev2468'
+    if configuration_changes: configuration.update(configuration_changes)
     if fault == 'unlocked': configuration['repeated_rapid_scan'] = {'lock_timeout_s': .001}
     coordinator = HardwareCoordinator(tmp_path/'installed.lock')
     transport = InstalledTransport(mode, coordinator, worker, fault)
@@ -854,3 +882,106 @@ def test_rrs_installed_failed_disarm_retains_fault_ownership_and_native_record(t
     assert load_run(runner.last_result['output_path']).record['native_movies']
     recovery = coordinator.acquire('test-explicit-recovery', recovery=True)
     coordinator.release(recovery, safe_verified=True, preservation_verified=True)
+
+
+@pytest.mark.parametrize('mode', ['single', 'dual'])
+def test_rrs_installed_qcl1_ignores_legacy_selector_and_accepts_exact_internal_duty_boundary(tmp_path, monkeypatch, mode):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, mode, worker,
+        configuration_changes={'repeated_rapid_scan': {'qcl': 2, 'mircat_pulse': {'qcl': 2}}})
+    initial = installed_plan(mode).settings
+    value = replace(initial, manual_overrides={**initial.manual_overrides, 'mircat_pulse_rate_hz': 2500000., 'mircat_pulse_width_ns': 120., 'probe_pulse_width_s': 700e-9})
+    plan = build_plan(value)
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    with ctx.hardware_scope(operation):
+        result = RepeatedRapidScanRunner(ctx).run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert result['status'] == 'complete'
+    assert result['readbacks']['historical_qcl_selectors']['device_configuration'] == 2
+    assert result['readbacks']['historical_qcl_selectors']['pulse_configuration'] == 2
+    assert result['readbacks']['installed_qcl'] == 1
+    assert transport.qcl_calls and all(index == 1 for _, index in transport.qcl_calls)
+    assert {'TuneToWW','StartSweepScan','GetWlTrigChanParams','SetQCLParams'} <= {call for call,_ in transport.qcl_calls}
+    assert transport.pulse_writes[0] == (2500000., 120., 600.)
+    assert transport.pulse_writes[-1] == (2500000., 100., 600.)
+    assert result['readbacks']['actual_mircat_internal_pulse_validation']['internal_duty_fraction'] == .30
+    assert result['readbacks']['actual_mircat_internal_pulse_validation']['emitted_optical_duty_fraction'] == .12
+    assert result['raw_movies'][0]['readbacks']['pre_emission_optical_pulse_validation']['emitted_optical_duty_fraction'] == .12
+    assert result['raw_movies'][0]['readbacks']['pre_emission_clock']['channels']['B']['width_edge']['response'] == '7e-07s'
+    assert result['readbacks']['capabilities']['live_settings']['mircat_pulse_width_ns'] == 120.
+    assert result['restoration']['safe_verified'] and coordinator.snapshot()['state'] == 'free'
+
+
+@pytest.mark.parametrize('width, vendor_limit', [(120.001, 50.), (100., 20.)])
+def test_rrs_installed_effective_config_pulse_pair_respects_global_and_lower_vendor_duty(tmp_path, monkeypatch, width, vendor_limit):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker,
+        configuration_changes={'repeated_rapid_scan': {'qcl': 2, 'mircat_pulse': {'qcl': 2, 'pulse_rate_hz': 2500000., 'pulse_width_ns': width}}})
+    transport.vendor_duty_percent = vendor_limit
+    transport.pulse[1] = 60. if vendor_limit == 20. else 100.
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    with ctx.hardware_scope(operation):
+        acquirer = InstalledDevicesAcquirer(ctx, operation, plan)
+        try:
+            with pytest.raises(ValueError, match='duty'):
+                acquirer.prepare(worker)
+            assert not transport.pulse_writes
+            assert 'MIRcatSDK_TurnEmissionOn' not in transport.calls
+        finally:
+            restored = acquirer.restore(worker)
+            ctx.ownership.release(operation.ownership, safe_verified=restored['safe_verified'], preservation_verified=True)
+    assert restored['safe_verified']
+    assert all(index == 1 for _, index in transport.qcl_calls)
+    assert coordinator.snapshot()['state'] == 'free'
+
+
+def test_rrs_installed_actual_pulse_readback_over_limit_stops_before_arm_or_emission(tmp_path, monkeypatch):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker, 'rounded_pulse_above_limit')
+    initial = installed_plan('single').settings
+    value = replace(initial, manual_overrides={**initial.manual_overrides, 'mircat_pulse_rate_hz': 2500000., 'mircat_pulse_width_ns': 120.})
+    plan = build_plan(value)
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(ValueError, match='duty'):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert runner.last_result['readbacks']['mircat_pulse']['pulse_width_ns'] == 121.
+    assert transport.pulse_writes == [(2500000., 120., 600.), (2500000., 100., 600.)]
+    assert not any(call in transport.calls for call in ('MIRcatSDK_ArmLaser', 'MIRcatSDK_TurnEmissionOn', 'MIRcatSDK_StartSweepScan'))
+    assert runner.last_result['restoration']['safe_verified']
+    assert coordinator.snapshot()['state'] == 'free'
+
+
+def test_rrs_actual_emitted_cadence_and_sdk_width_rechecked_before_emission(tmp_path, monkeypatch):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker, 'changed_external_rate')
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(ValueError, match='30%'):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert runner.last_result['raw_movies'][0]['readbacks']['pre_emission_mircat_pulse']['pulse_width_ns'] == 100.
+    clock = runner.last_result['raw_movies'][0]['readbacks']['pre_emission_clock']
+    assert clock['queries']['synth_frequency']['response'] == '4000000'
+    assert 'MIRcatSDK_TurnEmissionOn' not in transport.calls
+    assert transport.train_starts == 0
+    assert runner.last_result['restoration']['safe_verified']
+    assert coordinator.snapshot()['state'] == 'free'
+
+
+def test_rrs_valid_optical_duty_keeps_separate_internal_external_rate_constraint(tmp_path, monkeypatch):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker,
+        configuration_changes={'repeated_rapid_scan': {'mircat_pulse': {'pulse_rate_hz': 1000000., 'pulse_width_ns': 100.}}})
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    with ctx.hardware_scope(operation):
+        acquirer = InstalledDevicesAcquirer(ctx, operation, plan)
+        try:
+            with pytest.raises(ValueError, match='internal repetition rate.*separate external'):
+                acquirer.prepare(worker)
+            assert not transport.pulse_writes
+        finally:
+            restored = acquirer.restore(worker)
+            ctx.ownership.release(operation.ownership, safe_verified=restored['safe_verified'], preservation_verified=True)
+    assert restored['safe_verified'] and coordinator.snapshot()['state'] == 'free'

@@ -211,6 +211,29 @@ def decode_native_movie(chunks, movie_plan, settings, readbacks, *, status="comp
                                  "observed_period_basis": "Differences of native observed sweep-start ticks; jitter and gaps retained"})
 
 
+def _validate_mircat_internal_pulse(pulse, limits, current_limits, *, external_rate_hz=None):
+    """Validate optical pulse duty independently of the external TTL timing."""
+    from .settings import validate_mircat_pulse_pair, validate_probe_optical_pulse_pair
+    rate, width, current = (float(pulse[key]) for key in ("pulse_rate_hz", "pulse_width_ns", "current_ma"))
+    maximum = min(.30, float(limits["max_duty_cycle"])/100.)
+    if not all(math.isfinite(value) and value > 0 for value in (rate, width, current, maximum)):
+        raise ValueError("MIRcat internal pulse settings/limits must be finite positive values")
+    external_duty = validate_probe_optical_pulse_pair(external_rate_hz, width) if external_rate_hz is not None else None
+    if external_duty is not None and external_duty > maximum:
+        raise ValueError(f"MIRcat emitted optical duty cycle {external_duty:.9g} exceeds the connected device limit {maximum:.9g}")
+    duty = validate_mircat_pulse_pair(rate, width)
+    if duty > maximum:
+        raise ValueError(f"MIRcat internal optical duty cycle {duty:.9g} exceeds {maximum:.9g}; repetition rate times pulse width must be at most 30% and any lower device limit")
+    if rate > limits["max_pulse_rate_hz"] or width > limits["max_pulse_width_ns"] or not current_limits[0] <= current <= current_limits[1]:
+        raise ValueError("Selected MIRcat internal pulse settings exceed its connected readback limits")
+    if external_rate_hz is not None and rate <= external_rate_hz:
+        raise ValueError("MIRcat internal repetition rate must exceed the separate external T660 probe trigger rate")
+    return {"internal_duty_fraction": duty, "maximum_internal_duty_fraction": maximum,
+            "emitted_optical_duty_fraction": external_duty, "maximum_emitted_optical_duty_fraction": maximum,
+            "emitted_repetition_rate_hz": external_rate_hz,
+            "basis": "Emitted cadence is the external T660 repetition rate times SDK optical pulse width; internal repetition duty is checked separately; electrical TTL width is not optical pulse width"}
+
+
 class InstalledDevicesAcquirer:
     """Per-operation real services created only through the frozen host context."""
 
@@ -227,6 +250,12 @@ class InstalledDevicesAcquirer:
             candidate = get(calibration, "device_configuration")
             if candidate:
                 self.config.update(plain(candidate))
+        self.readbacks["historical_qcl_selectors"] = {
+            "settings": get(self.settings, "qcl"), "device_configuration": self.config.get("qcl"),
+            "pulse_configuration": self.config.get("mircat_pulse", {}).get("qcl"),
+            "installed_device_configuration": operation.configuration.get("devices", {}).get("mircat", {}).get("qcl")}
+        self.config["qcl"] = 1
+        self.readbacks["installed_qcl"] = 1
 
     def _device(self, name):
         device = self.context.devices.create(name, self.operation)
@@ -273,11 +302,11 @@ class InstalledDevicesAcquirer:
             unit = self._device(name); unit.connect()
             self.original[name] = self._snapshot_timing(unit)
         qcl = self._device("mircat"); qcl.initialize()
-        ranges = [qcl.get_qcl_tuning_range(index) for index in range(1, qcl.get_num_installed_qcls()+1)]
-        coverage = next((value for value in ranges if value["min_cm1"] <= self.settings.scan_start_cm1 < self.settings.scan_stop_cm1 <= value["max_cm1"]), None)
-        self.readbacks["qcl_ranges"] = ranges
-        qcl_id = int(coverage["qcl"] if coverage else qcl.get_active_qcl())
-        self.config["qcl"] = qcl_id
+        # This installation has exactly one QCL. Historical selectors remain
+        # provenance and never route a current SDK call to another channel.
+        qcl_id = 1
+        self.readbacks["reported_qcl_count"] = qcl.get_num_installed_qcls()
+        self.readbacks["qcl_ranges"] = [qcl.get_qcl_tuning_range(1)]
         self.original["mircat"] = {"trigger": qcl.get_wavelength_trigger_params(),
             "marker_width_us": qcl.get_wavelength_trigger_pulse_width_us(),
             "pulse": {"qcl": qcl_id, "pulse_rate_hz": qcl.get_qcl_pulse_rate(qcl_id),
@@ -333,7 +362,7 @@ class InstalledDevicesAcquirer:
         coverage = next((value for value in self.readbacks["qcl_ranges"] if value["min_cm1"] <= self.settings.scan_start_cm1 < self.settings.scan_stop_cm1 <= value["max_cm1"]), None)
         if coverage is None:
             raise ValueError("Selected uninterrupted spectral window is outside the connected QCL coverage")
-        qcl_id = self.config["qcl"]
+        qcl_id = 1
         self._mutated = True
         for name in ("t660_2", "t660_1"):
             unit = self.devices[name]
@@ -399,21 +428,24 @@ class InstalledDevicesAcquirer:
         clock.start_continuous_clock()
         pulse = deepcopy(self.original["mircat"]["pulse"])
         pulse.update(self.config.get("mircat_pulse", {}))
+        pulse["qcl"] = 1
         for field, setting in (("pulse_rate_hz", "mircat_pulse_rate_hz"), ("pulse_width_ns", "mircat_pulse_width_ns"), ("current_ma", "mircat_current_ma")):
             override = get(self.settings, setting)
             if override is not None:
                 pulse[field] = override
         limits, current_limits = qcl.get_qcl_pulse_limits(qcl_id), qcl.get_qcl_current_limits(qcl_id)
         if pulse["pulse_rate_hz"] <= self.settings.probe_frequency_hz:
-            raise ValueError("MIRcat internal rate must exceed the selected external probe trigger rate")
-        if pulse["pulse_rate_hz"] > limits["max_pulse_rate_hz"] or pulse["pulse_width_ns"] > limits["max_pulse_width_ns"] or pulse["pulse_rate_hz"]*pulse["pulse_width_ns"]*1e-7 > limits["max_duty_cycle"] or not current_limits[0] <= pulse["current_ma"] <= current_limits[1]:
-            raise ValueError("Selected MIRcat pulse settings exceed its connected readback limits")
+            raise ValueError("MIRcat internal repetition rate must exceed the separate external T660 probe trigger rate")
+        self.readbacks["requested_mircat_internal_pulse_validation"] = _validate_mircat_internal_pulse(pulse, limits, current_limits, external_rate_hz=self.settings.probe_frequency_hz)
         qcl.set_qcl_pulse_params(**pulse)
         self.readbacks["requested_mircat_pulse"] = pulse
         pulse = {"qcl": qcl_id, "pulse_rate_hz": qcl.get_qcl_pulse_rate(qcl_id),
                  "pulse_width_ns": qcl.get_qcl_pulse_width(qcl_id), "current_ma": qcl.get_qcl_current(qcl_id)}
         self.config["mircat_pulse"] = pulse
         self.readbacks["mircat_pulse"] = pulse
+        self.readbacks["actual_mircat_internal_pulse_validation"] = _validate_mircat_internal_pulse(pulse, limits, current_limits, external_rate_hz=self.settings.probe_frequency_hz)
+        if pulse["pulse_rate_hz"] <= self.settings.probe_frequency_hz:
+            raise ValueError("Readback MIRcat internal repetition rate does not exceed the separate external T660 probe trigger rate")
         for field, setting in (("pulse_rate_hz", "mircat_pulse_rate_hz"), ("pulse_width_ns", "mircat_pulse_width_ns"), ("current_ma", "mircat_current_ma")):
             self.readbacks["capabilities"]["live_settings"][setting] = pulse[field]
         span = self.settings.scan_stop_cm1-self.settings.scan_start_cm1
@@ -506,7 +538,7 @@ class InstalledDevicesAcquirer:
         lower = get(self.settings, "scan_start_cm1")
         upper = get(self.settings, "scan_stop_cm1")
         start, stop = (lower, upper) if get(movie_plan, "direction") == "forward" else (upper, lower)
-        qcl_id = int(get(self.settings, "qcl", self.config.get("qcl", 1)))
+        qcl_id = 1
         qcl.stop_scan_if_needed()
         qcl.turn_emission_off()
         qcl.tune_to_wavenumber(start, qcl=qcl_id)
@@ -514,6 +546,20 @@ class InstalledDevicesAcquirer:
         qcl.set_external_sweep_trigger_params(start_cm1=start, stop_cm1=stop,
             wavelength_trigger_interval_cm1=self.config["marker_interval_cm1"], external_process_trigger=True)
         qcl.set_wavelength_trigger_pulse_width_us(self.config["marker_width_us"])
+        # Check the actual emitted-cadence/SDK-width pair immediately before
+        # opening emission, never substituting the electrical TTL high time.
+        clock_readback = clock.read_active_settings()
+        frequency = clock_readback["queries"]["synth_frequency"]
+        if not frequency.get("ok"):
+            raise RuntimeError("Actual T660 emitted repetition rate could not be read before emission")
+        external_rate = float(str(frequency["response"]).strip().upper().removesuffix("HZ"))
+        actual_pulse = {"qcl": 1, "pulse_rate_hz": qcl.get_qcl_pulse_rate(1),
+                        "pulse_width_ns": qcl.get_qcl_pulse_width(1), "current_ma": qcl.get_qcl_current(1)}
+        raw["readbacks"].update(pre_emission_mircat_pulse=actual_pulse, pre_emission_clock=clock_readback)
+        raw["readbacks"]["pre_emission_optical_pulse_validation"] = _validate_mircat_internal_pulse(
+            actual_pulse, qcl.get_qcl_pulse_limits(1), qcl.get_qcl_current_limits(1), external_rate_hz=external_rate)
+        if not math.isclose(external_rate, get(compiled, "input_frequency_hz"), rel_tol=1e-10):
+            raise RuntimeError("Actual T660 repetition rate changed from the compiled finite scan timing")
         qcl.start_emission()
         qcl.cancel_manual_tune()
         expected = {"start_cm1": start, "stop_cm1": stop,
@@ -650,18 +696,23 @@ class InstalledDevicesAcquirer:
             attempt("MIRcat stop scan", qcl.stop_scan_if_needed)
             if "mircat" in self.original:
                 saved = self.original["mircat"]
-                attempt("MIRcat pulse restore", lambda: qcl.set_qcl_pulse_params(**saved["pulse"]))
+                def restore_pulse():
+                    pulse = {**saved["pulse"], "qcl": 1}
+                    _validate_mircat_internal_pulse(pulse, qcl.get_qcl_pulse_limits(1), qcl.get_qcl_current_limits(1))
+                    qcl.set_qcl_pulse_params(**pulse)
+                attempt("MIRcat pulse restore", restore_pulse)
                 allowed = ("pulse_mode", "process_trigger_mode", "start", "stop", "interval", "units", "dwell_us", "after_off_us")
                 attempt("MIRcat trigger restore", lambda: qcl.set_wavelength_trigger_params(**{k: v for k, v in saved["trigger"].items() if k in allowed}))
                 attempt("MIRcat marker restore", lambda: qcl.set_wavelength_trigger_pulse_width_us(saved["marker_width_us"]))
                 def verify_mircat():
-                    pulse = saved["pulse"]
-                    actual_pulse = {"qcl": pulse["qcl"], "pulse_rate_hz": qcl.get_qcl_pulse_rate(pulse["qcl"]),
-                                    "pulse_width_ns": qcl.get_qcl_pulse_width(pulse["qcl"]), "current_ma": qcl.get_qcl_current(pulse["qcl"])}
+                    pulse = {**saved["pulse"], "qcl": 1}
+                    actual_pulse = {"qcl": 1, "pulse_rate_hz": qcl.get_qcl_pulse_rate(1),
+                                    "pulse_width_ns": qcl.get_qcl_pulse_width(1), "current_ma": qcl.get_qcl_current(1)}
                     actual_trigger = qcl.get_wavelength_trigger_params()
                     actual_width = qcl.get_wavelength_trigger_pulse_width_us()
                     after = {"pulse": actual_pulse, "trigger": actual_trigger, "marker_width_us": actual_width}
                     self.restoration["mircat"] = {"before": saved, "after": after}
+                    _validate_mircat_internal_pulse(actual_pulse, qcl.get_qcl_pulse_limits(1), qcl.get_qcl_current_limits(1))
                     expected_trigger = {k: v for k, v in saved["trigger"].items() if k in allowed}
                     if any(not math.isclose(float(actual_pulse[k]), float(v), rel_tol=1e-6, abs_tol=1e-6) for k, v in pulse.items()):
                         raise RuntimeError("MIRcat restored pulse settings readback mismatch")
