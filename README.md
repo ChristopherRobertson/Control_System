@@ -151,6 +151,13 @@ administrative-gate cases; the two warnings come from existing diagnostic plots
 with no labeled artists. The retained 322-scan replay still checks absolute and
 delta absorbance within `1e-14`, including the same 174 unsupported cells.
 
+The integrated compact-page overhaul on 2026-09-10 passed **1,642 tests** and
+**24 subtests**, with the same three obsolete administrative-gate skips and two
+existing plotting warnings. Guarded offscreen checks registered all nineteen
+tabs and rendered all twelve new pages at 1100 × 780 without outer scrolling,
+verification checkboxes, explanatory paragraphs or hardware access. Both
+established Phase Scan pages retained their prior geometry and acquisition code.
+
 The [default wiring diagram](instrument/default_wiring_state.md) shows the
 detector split connections: each signal passes through a female-to-female BNC
 adapter and a male-to-two-female BNC tee. Sample feeds HF2LI Signal 1 In (+)
