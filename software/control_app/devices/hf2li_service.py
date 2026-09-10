@@ -256,7 +256,11 @@ class HF2LIService:
                 self._set_node("setDouble", f"{base}/freq", frequency_hz)
 
     def configure_demodulators(self, demodulators: Iterable[dict[str, Any]]) -> None:
-        """Configure HF2LI demodulators used for detector CH1/CH2."""
+        """Configure detector demodulators, with optional sinc and phase settings.
+
+        ``sinc`` enables the additional filter; ``phaseshift`` is in degrees.
+        Omitting either optional field leaves that device setting untouched.
+        """
 
         for settings in demodulators:
             if not isinstance(settings, dict):
@@ -272,6 +276,8 @@ class HF2LIService:
                 ("timeconstant", "setDouble", settings.get("timeconstant_s")),
                 ("rate", "setDouble", settings.get("rate_sps")),
                 ("trigger", "setInt", settings.get("trigger")),
+                ("sinc", "setInt", _bool_int(settings["sinc"]) if settings.get("sinc") is not None else None),
+                ("phaseshift", "setDouble", settings.get("phaseshift")),
             ]
             for node, method, value in setters:
                 if value is not None:
@@ -984,6 +990,7 @@ class HF2LIService:
         demod_indices = {0, 3}
         pll_indices = {0}
         oscillator_indices = {0}
+        optional_demod_nodes: dict[int, set[str]] = {}
         if preset is not None:
             for settings in (preset.settings.get("signal_inputs") or {}).values():
                 if isinstance(settings, dict):
@@ -992,6 +999,9 @@ class HF2LIService:
                 if isinstance(settings, dict) and "index" in settings:
                     demod_indices.add(int(settings["index"]))
                     oscillator_indices.add(int(settings.get("oscselect", 0)))
+                    optional_demod_nodes.setdefault(int(settings["index"]), set()).update(
+                        node for node in ("sinc", "phaseshift") if node in settings
+                    )
             pll = preset.settings.get("pll") or {}
             if isinstance(pll, dict):
                 pll_indices.add(int(pll.get("index", 0)))
@@ -1025,6 +1035,11 @@ class HF2LIService:
             yield f"{base}/timeconstant", "double"
             yield f"{base}/rate", "double"
             yield f"{base}/trigger", "int"
+            # These newer settings are opt-in per demodulator so legacy
+            # snapshots retain exactly their established node footprint.
+            for node, value_type in (("sinc", "int"), ("phaseshift", "double")):
+                if node in optional_demod_nodes.get(index, ()):
+                    yield f"{base}/{node}", value_type
 
     def _set_node(self, method_name: str, path: str, value: Any) -> None:
         server = self._require_server()
