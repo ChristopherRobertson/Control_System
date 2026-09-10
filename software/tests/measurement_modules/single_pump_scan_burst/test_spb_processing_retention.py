@@ -3,8 +3,8 @@ import json
 import numpy as np
 import pytest
 
-from control_app.measurement_modules.single_pump_scan_burst.persistence import RunStore, load_run, iter_chunks, compatibility_conflicts, assert_unused_sample_state
-from control_app.measurement_modules.single_pump_scan_burst.processing import process_block, detector_ratio, band_summary, Quality, PlateauTracker
+from control_app.measurement_modules.single_pump_scan_burst.persistence import RunStore, load_run, iter_chunks, compatibility_conflicts
+from control_app.measurement_modules.single_pump_scan_burst.processing import process_block, detector_ratio, band_summary, Quality, PlateauTracker, analyze_run
 
 
 def native(times, signal, *, scans=None, wn=None):
@@ -49,18 +49,23 @@ def test_spb_dual_observed_alignment_covariance_and_invalid_support():
     assert np.isnan(detector_ratio(record, mode="dual")["ratio"]).all()
 
 
-def test_spb_single_uses_complete_sequence_blank_and_separate_baseline():
-    blank = native([1., 2., 3.], [2., 4., 8.])
-    record = native([10., 20., 30.], [1., 2., 4.])
-    baseline = native([0.], [1.])
+def test_spb_single_reuses_measured_blank_support_and_separate_baseline():
+    blank = native([1., 2., 3.], [2., 4., 8.], wn=[1945., 1946., 1947.])
+    record = native([10., 20., 30.], [1., 2., 4.], wn=[1945., 1946., 1947.])
+    baseline = native([0., .1, .2], [1., 2., 4.], wn=[1945., 1946., 1947.])
     result = process_block(record, baseline, mode="single", pump_time_s=9., blank=blank)
     np.testing.assert_allclose(result["delta_absorbance"], 0.)
     np.testing.assert_allclose(result["absorbance"], -np.log10(.5))
     blank["scan_index"] = np.array([0, 1, 9])
+    reused = process_block(record, baseline, mode="single", pump_time_s=9., blank=blank)
+    np.testing.assert_allclose(reused["absorbance"], -np.log10(.5))
+    blank["wavenumber_cm1"][-1] = 1948.
     missing = process_block(record, baseline, mode="single", pump_time_s=9., blank=blank)
     assert np.isnan(missing["delta_absorbance"][-1])
-    with pytest.raises(ValueError, match="complete compatible"):
-        process_block(record, baseline, mode="single", pump_time_s=9.)
+    relative = process_block(record, baseline, mode="single", pump_time_s=9.)
+    np.testing.assert_allclose(relative["delta_absorbance"], 0.)
+    assert relative["absorbance"] is None and relative["transmission"] is None
+    assert relative["normalization"] == "-log10(S/S0)"
 
 
 def test_spb_baseline_does_not_become_absolute_balance_and_no_direction_crossing():
@@ -159,12 +164,53 @@ def test_spb_storage_failure_and_paths_are_not_silent(tmp_path, monkeypatch):
     assert compatibility_conflicts({"condition": "old"}, {"condition": "new"}) == ["condition: saved 'old'; requested 'new'"]
 
 
-def test_spb_new_pump_reuses_neither_sibling_state_nor_ambiguous_intent(tmp_path):
-    identity = {key: key+"-1" for key in ("condition_id", "sample_id", "preparation_id", "accepted_state_id", "cell_id", "position_id")}
-    prior = RunStore(tmp_path/"experiment"/"single"/"first", {"mode": "single", "settings": identity})
-    next_path = tmp_path/"experiment"/"dual"/"next"
-    assert_unused_sample_state(next_path, identity)
-    prior.append_event("pump_intent", {"automatic_retry_allowed": False})
-    with pytest.raises(ValueError, match="already has a retained pump intent"):
-        assert_unused_sample_state(next_path, identity)
-    assert_unused_sample_state(next_path, {**identity, "accepted_state_id": "newly-qualified-state-2"})
+def test_spb_condition_metadata_does_not_gate_loading(tmp_path):
+    store = RunStore(tmp_path/"run", {"mode": "single", "condition_id": "legacy-material"})
+    loaded = load_run(store.path, expected_mode="single", expected_condition_id="another-material")
+    assert loaded["metadata"]["condition_id"] == "legacy-material"
+
+
+@pytest.mark.parametrize("optical", [False, True])
+def test_spb_reanalysis_accepts_observed_electrical_epoch_without_optical_claim(tmp_path, optical):
+    store = RunStore(tmp_path/"run", {"mode": "dual", "settings": {
+        "plateau_enabled": False, "plateau_required_bursts": -1, "plateau_band_windows_cm1": [[9., 1.]]}})
+    record = native([10.1, 10.2], [1.1, 1.2])
+    store.save_chunk("spectral-early", record)
+    store.append_event("pump_epoch_observed", {"pump_time_s": 10.,
+        "electrically_observed": True, "independently_observed": optical})
+    result = analyze_run(store.path, {"preliminary": {"native": native([9.], [1.])}})
+    assert result["summary"]["time_reference"] == ("optical_arrival" if optical else "electrical_trigger")
+    assert result["summary"]["optical_arrival_observed"] is optical
+    with np.load(store.path/result["processed_paths"][0]) as data:
+        np.testing.assert_allclose(data["time_s"], [.1, .2])
+        np.testing.assert_allclose(data["delta_absorbance"], -np.log10([1.1, 1.2]))
+
+
+def test_spb_reanalysis_rejects_command_only_epoch(tmp_path):
+    store = RunStore(tmp_path/"run", {"mode": "dual", "settings": {}})
+    store.append_event("pump_epoch_observed", {"pump_time_s": 10., "independently_observed": False})
+    with pytest.raises(ValueError, match="observed pump timing"):
+        analyze_run(store.path, {"preliminary": {"native": native([9.], [1.])}})
+
+
+def test_spb_raw_only_reanalysis_has_actionable_missing_baseline(tmp_path):
+    store = RunStore(tmp_path/"run", {"mode": "single", "settings": {}})
+    with pytest.raises(ValueError, match="No sample baseline"):
+        analyze_run(store.path, {})
+
+
+def test_spb_compact_blank_reanalysis_matches_observed_coordinates_in_later_burst(tmp_path):
+    blank = RunStore(tmp_path/"blank", {"mode": "single"})
+    blank.save_chunk("spectral-preliminary", native([0., .01], [2., 4.],
+        scans=[0, 0], wn=[1945., 1946.]))
+    store = RunStore(tmp_path/"run", {"mode": "single", "settings": {
+        "wavenumber_matching_tolerance_cm1": .02, "detector_matching_time_tolerance_s": .001}})
+    store.save_chunk("spectral-late-5", native([110., 110.01], [1.1, 2.2],
+        scans=[37, 37], wn=[1945.01, 1946.01]))
+    store.append_event("pump_epoch_observed", {"pump_time_s": 10., "electrically_observed": True})
+    result = analyze_run(store.path, {"blank": {"output_path": str(blank.path)},
+        "preliminary": {"native": native([9., 9.01], [1., 2.], scans=[0, 0], wn=[1945., 1946.])}})
+    with np.load(store.path/result["processed_paths"][0]) as data:
+        np.testing.assert_allclose(data["delta_absorbance"], -np.log10(1.1))
+        np.testing.assert_allclose(data["transmission"], .55)
+        np.testing.assert_array_equal(data["scan_index"], [37, 37])

@@ -38,6 +38,8 @@ class SimulatedBurstAdapter:
 
     def temperature(self):
         self.check("temperature")
+        if self.settings.measured_temperature_k is None and not self.thermal_excursion:
+            return None
         record = {"observation_id": f"synthetic-temperature-{len(self.events)}", "temperature_identity": self.settings.temperature_identity,
             "observed_utc": datetime.now(timezone.utc).isoformat(), "temperature_k": 85. if self.thermal_excursion else self.settings.measured_temperature_k,
             "uncertainty_k": self.settings.temperature_uncertainty_k, "valid_for_s": 60., "simulation": True}
@@ -100,9 +102,11 @@ class SimulatedBurstAdapter:
         epoch = None
         if pump_allowed and not self.ambiguous_epoch:
             epoch = {"pump_time_s": self.pump_time, "pump_timestamp_ticks": int(round(self.pump_time * self.clockbase)),
-                "optical_offset_s": 0., "clock_domain": "synthetic-HF2-clock-1", "clockbase_hz": self.clockbase,
-                "optical_event_count": 1, "independently_observed": True, "sample_state": self.state_evidence(),
-                "uncertainty_s": 1e-9, "simulation": True}
+                "clock_domain": "synthetic-HF2-clock-1", "clockbase_hz": self.clockbase,
+                "device_id": "synthetic-hf2", "electrically_observed": True, "independently_observed": False,
+                "optical_arrival_observed": False, "time_reference": "electrical_trigger", "optical_resolution": "unresolved",
+                "sample_state": self.state_evidence(), "simulation": True}
+        native["time_reference"] = np.asarray("electrical_trigger")
         self.now += float(field(block, "duration_s"))
         self.scan_offset += count
         self.events.append(("capture", field(block, "block_id"), self.pump_count))
@@ -115,7 +119,7 @@ class SimulatedBurstAdapter:
     def native_now(self):
         self.check("wait")
         # Advances the explicitly simulated native hardware clock, never wall time.
-        step = max(.1, min(30., self.settings.temperature_check_interval_s))
+        step = 1.
         target = getattr(self, "wait_target", None)
         self.now += min(step, max(0., target - self.now)) if target is not None else step
         return self.now
@@ -126,14 +130,12 @@ class SimulatedBurstAdapter:
 
     def verify_continuation(self, continuation):
         self.check("continuation")
-        if self.ambiguous_epoch or continuation.get("epoch", {}).get("sample_state") != self.state_evidence():
-            raise ReadinessError("Retained epoch or sample state is ambiguous; never replace pump")
+        if self.ambiguous_epoch or continuation.get("epoch", {}).get("clockbase_hz") != self.clockbase:
+            raise ReadinessError("Retained native clock is ambiguous; never replace pump")
         proof = continuation.get("state_evidence", {})
-        if not proof.get("accepted_by") or not proof.get("uninterrupted_native_clock"):
-            raise ReadinessError("Explicit continuation needs retained native clock and named state acceptance")
         self.pump_time = float(continuation["epoch"]["pump_time_s"])
         self.pump_count = 1
-        self.now = float(proof["native_now_s"])
+        self.now = float(proof.get("native_now_s", self.pump_time + .1))
 
     def restore(self):
         self.events.append(("restore", self.pump_count))

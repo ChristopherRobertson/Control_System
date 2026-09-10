@@ -9,7 +9,7 @@ from enum import IntFlag
 import math
 import numpy as np
 
-ANALYSIS_VERSION = "single-pump-pointwise/1"
+ANALYSIS_VERSION = "single-pump-pointwise/2"
 
 
 class Quality(IntFlag):
@@ -110,7 +110,7 @@ def detector_ratio(native, *, mode, time_tolerance_s=0., wavenumber_tolerance_cm
 
 
 def _spectral_match(source, target, values, *, tolerance_cm1=0., sequential=False):
-    """Use measured coordinates and direction; blanks also require scan index."""
+    """Use measured coordinates and direction without synthesizing support."""
     sw = _vector(source, "wavenumber_cm1")
     tw = _vector(target, "wavenumber_cm1")
     ss = _vector(source, "scan_index", len(sw), 0, int)
@@ -137,9 +137,7 @@ def process_block(native, baseline, *, mode, pump_time_s, blank=None, baseline_b
     if cancel:
         cancel()
     if not np.isfinite(pump_time_s):
-        raise ValueError("A retained observed pump epoch is required; commanded time is insufficient")
-    if mode == "single" and blank is None:
-        raise ValueError("Single-detector analysis requires its complete compatible sequential blank")
+        raise ValueError("A retained pump timing reference is required")
     current = detector_ratio(native, mode=mode, time_tolerance_s=time_tolerance_s,
                              wavenumber_tolerance_cm1=wavenumber_tolerance_cm1)
     base = detector_ratio(baseline, mode=mode, time_tolerance_s=time_tolerance_s,
@@ -148,15 +146,16 @@ def process_block(native, baseline, *, mode, pump_time_s, blank=None, baseline_b
     q0, q0var = base["ratio"].copy(), base["variance"].copy()
     flags = current["quality_flags"].copy()
     absolute, transmission = None, None
-    if mode == "single":
+    if mode == "single" and blank is not None:
         blank_data = detector_ratio(blank, mode="single")
-        b = _spectral_match(blank, native, blank_data["ratio"], tolerance_cm1=wavenumber_tolerance_cm1, sequential=True)
-        # The separate preliminary/control record carries its blank scan index.
+        b = _spectral_match(blank, native, blank_data["ratio"], tolerance_cm1=wavenumber_tolerance_cm1)
+        # A blank is reusable for matching measured trajectories. Its scan
+        # ordinal and the observation schedule are not spectral coordinates.
         base_blank = blank if baseline_blank is None else baseline_blank
         base_blank_data = blank_data if baseline_blank is None else detector_ratio(base_blank, mode="single")
-        b0 = _spectral_match(base_blank, baseline, base_blank_data["ratio"], tolerance_cm1=wavenumber_tolerance_cm1, sequential=True)
-        bv = _spectral_match(blank, native, blank_data["variance"], tolerance_cm1=wavenumber_tolerance_cm1, sequential=True)
-        b0v = _spectral_match(base_blank, baseline, base_blank_data["variance"], tolerance_cm1=wavenumber_tolerance_cm1, sequential=True)
+        b0 = _spectral_match(base_blank, baseline, base_blank_data["ratio"], tolerance_cm1=wavenumber_tolerance_cm1)
+        bv = _spectral_match(blank, native, blank_data["variance"], tolerance_cm1=wavenumber_tolerance_cm1)
+        b0v = _spectral_match(base_blank, baseline, base_blank_data["variance"], tolerance_cm1=wavenumber_tolerance_cm1)
         flags[~np.isfinite(b) | (b <= 0)] |= Quality.INVALID_BLANK
         with np.errstate(divide="ignore", invalid="ignore"):
             qvar = qvar/b**2 + q**2*bv/b**4
@@ -199,18 +198,23 @@ def process_block(native, baseline, *, mode, pump_time_s, blank=None, baseline_b
         point_times -= float(np.asarray(native.get("pump_optical_offset_s", 0.)).item())
         if bool(np.asarray(native.get("sample_response_correction_applied", native.get("detector_response_correction_applied", False))).item()):
             point_times -= float(np.asarray(native.get("sample_latency_s", 0.)).item())
+    time_reference = str(np.asarray(native.get("time_reference", "retained_epoch")).item())
     return {"analysis_version": ANALYSIS_VERSION,
             "time_s": point_times,
+            "time_reference": time_reference,
+            "optical_arrival_observed": time_reference == "optical_arrival",
             "sample_time_s": current["sample_time_s"], "wavenumber_cm1": current["wavenumber_cm1"],
             "ratio": q, "q0": matched_q0, "delta_absorbance": delta, "variance": delta_var,
             "ratio_variance": qvar, "sample_reference_covariance": current["covariance"],
             "absorbance": absolute, "transmission": transmission, "valid": valid, "quality_flags": flags,
             "scan_index": _vector(native, "scan_index", len(q), 0, int),
             "direction": _vector(native, "direction", len(q), 1, int),
-            "normalization": "-log10(Q/Q0)" if mode == "dual" else "-log10((S/blank)/(S0/blank0))",
-            "absolute_label": "Absorbance" if absolute is not None else "Reference-normalized signal Q=S/R",
+            "normalization": ("-log10(Q/Q0)" if mode == "dual" else
+                              "-log10((S/blank)/(S0/blank0))" if blank is not None else "-log10(S/S0)"),
+            "absolute_label": ("Absorbance" if absolute is not None else
+                               "Reference-normalized signal Q=S/R" if mode == "dual" else "Sample signal S"),
             "limitations": ["Pointwise measured scan trajectory; no interpolation across gaps.",
-                            "Slow cryogenic recovery does not establish ligand escape or solvent return.",
+                            "Apparent recovery alone does not establish a molecular mechanism.",
                             "Baseline covariance with pumped measurements is assumed zero; unknown uncertainty remains NaN."]}
 
 
@@ -253,7 +257,7 @@ def band_summary(processed, lower_cm1, upper_cm1, *, plateau_tolerance=None,
     return {"band_cm1": [lower_cm1, upper_cm1], "observations": rows,
             "unrecovered_fraction": fraction, "fraction_basis": "last/first observed negative band signal; not total photolysis",
             "plateau": plateau, "right_censored": fraction is not None and fraction > 0,
-            "mechanism": "apparent cryogenic recovery; escape unestablished"}
+            "mechanism": "apparent recovery; mechanism unestablished"}
 
 
 class PlateauTracker:
@@ -309,7 +313,7 @@ class PlateauTracker:
                 "fraction_basis": "last/first observed band mean; unresolved prompt loss is not measured"})
         return {"bands": bands, "reached": bool(bands) and all(b["plateau"] for b in bands),
                 "relative_tolerance": self.tolerance, "required_bursts": self.count,
-                "mechanism": "apparent cryogenic recovery; independent escape evidence not established"}
+                "mechanism": "apparent recovery; mechanism unestablished"}
 
 
 def load_spectral_record(path, block_id=None):
@@ -350,30 +354,34 @@ def analyze_run(run_path, baseline_bundle=None, cancel_check=None, progress=None
     root = Path(run_path)
     loaded = load_run(root)
     settings = loaded["metadata"].get("plan", {}).get("settings", loaded["metadata"].get("settings", {}))
+    actual_settings = root / "records" / "actual-settings.json"
+    if actual_settings.is_file():
+        settings = json.loads(actual_settings.read_text(encoding="utf-8")).get("settings", settings)
     mode = loaded["metadata"]["mode"]
     if baseline_bundle is None:
         baseline_bundle = json.loads((root / "records" / "selected-baselines.json").read_text(encoding="utf-8"))
-    preliminary = baseline_bundle.get("preliminary", baseline_bundle)
+    preliminary = baseline_bundle.get("preliminary") or baseline_bundle
+    if not preliminary or not (preliminary.get("output_path") or preliminary.get("native") is not None):
+        raise ValueError("No sample baseline supplied; raw acquisition remains available")
     base_native = load_spectral_record(preliminary["output_path"]) if preliminary.get("output_path") else preliminary["native"]
     blank_record = baseline_bundle.get("blank")
     epochs = [e["payload"] for e in loaded["events"] if e["kind"] == "pump_epoch_observed"]
     if not epochs:
         epochs = [e["payload"]["epoch"] for e in loaded["events"] if e["kind"] == "explicit_continuation"]
-    if not epochs or not epochs[-1].get("independently_observed"):
-        raise ValueError("Quantitative kinetics require retained independent optical pump arrival")
+    if not epochs or not (epochs[-1].get("independently_observed") or epochs[-1].get("electrically_observed")):
+        raise ValueError("No observed pump timing reference is retained")
     epoch = epochs[-1]
-    windows = settings.get("plateau_band_windows_cm1", ())
-    if not windows:
-        selections = loaded["metadata"].get("operation", {}).get("sample_records", ())
-        windows = tuple((w["lower_cm1"], w["upper_cm1"]) for selection in selections for w in selection.get("windows", ()))
-    tracker = PlateauTracker(windows, relative_tolerance=settings.get("plateau_relative_tolerance") if settings.get("plateau_enabled") else None,
-                             required_bursts=settings.get("plateau_required_bursts", 3))
+    time_reference = "optical_arrival" if epoch.get("independently_observed") else "electrical_trigger"
+    plateau_enabled = bool(settings.get("plateau_enabled"))
+    windows = settings.get("plateau_band_windows_cm1", ()) if plateau_enabled else ()
+    tracker = PlateauTracker(windows, relative_tolerance=settings.get("plateau_relative_tolerance") if plateau_enabled else None,
+                             required_bursts=settings.get("plateau_required_bursts", 3) if plateau_enabled else 3)
     parents = [e["payload"].get("source_output_path") for e in loaded["events"] if e["kind"] == "explicit_continuation"]
     prior_summary = prime_tracker(tracker, parents[-1], cancel=cancel_check) if parents and parents[-1] else None
     owned_store = store or RunStore(root, {}, create=False)
     native_entries = [e["payload"] for e in loaded["events"] if e["kind"] == "native_chunk"
                       and e["payload"].get("block_id", "").startswith("spectral-")]
-    processed_paths, summary = [], prior_summary or {"bands": [], "reached": False}
+    processed_paths, processed_versions, summary = [], set(), prior_summary or {"bands": [], "reached": False}
     for index, entry in enumerate(native_entries):
         if cancel_check:
             cancel_check()
@@ -387,30 +395,41 @@ def analyze_run(run_path, baseline_bundle=None, cancel_check=None, progress=None
         else:
             with np.load(_inside(root, entry["path"]), allow_pickle=False) as source:
                 native = {key: source[key] for key in source.files}
+            native.setdefault("time_reference", time_reference)
             blank_native, first_blank = None, None
-            if mode == "single":
-                if not blank_record:
-                    raise ValueError("Compatible sequential blank record is required")
-                blank_native = load_spectral_record(blank_record["output_path"], block_id)
+            if mode == "single" and blank_record:
+                try:
+                    blank_native = load_spectral_record(blank_record["output_path"], block_id)
+                except ValueError:
+                    # New blanks are compact spectra, while v1 runs may have
+                    # retained an entire unpumped schedule. Both remain usable.
+                    blank_native = load_spectral_record(blank_record["output_path"])
                 first_blank = load_spectral_record(blank_record["output_path"])
             evidence = settings.get("hardware_evidence", {}).get("operating_configuration", {})
             matching = evidence.get("detector_matching", {})
+            time_tolerance = settings.get("detector_matching_time_tolerance_s")
+            spectral_tolerance = settings.get("wavenumber_matching_tolerance_cm1")
             processed = process_block(native, base_native, mode=mode, pump_time_s=epoch["pump_time_s"],
-                blank=blank_native, baseline_blank=first_blank, time_tolerance_s=float(matching.get("time_tolerance_s", 0.)),
-                wavenumber_tolerance_cm1=float(matching.get("wavenumber_tolerance_cm1", 0.)), cancel=cancel_check)
-            arrays = {k: v for k, v in processed.items() if isinstance(v, np.ndarray)}
+                blank=blank_native, baseline_blank=first_blank,
+                time_tolerance_s=float(time_tolerance if time_tolerance is not None else matching.get("time_tolerance_s", 0.)),
+                wavenumber_tolerance_cm1=float(spectral_tolerance if spectral_tolerance is not None else matching.get("wavenumber_tolerance_cm1", 0.)), cancel=cancel_check)
+            arrays = {k: v for k, v in processed.items() if isinstance(v, np.ndarray) or np.isscalar(v)}
             relative = owned_store.save_chunk("processed-"+block_id, arrays)
+        processed_versions.add(str(np.asarray(processed.get("analysis_version", "legacy_unversioned")).item()))
         processed_paths.append(relative)
         summary = tracker.update(processed, block_id)
         if progress:
             progress({"stage": "analysis", "message": f"Processed {index+1}/{len(native_entries)} retained spectral blocks",
                       "fraction": (index+1)/max(1, len(native_entries))})
-    summary.update(analysis_version=ANALYSIS_VERSION, processed_block_count=len(processed_paths),
-        equations="Delta A=-log10(Q/Q0); single Q=S/blank, dual Q=S/R",
+    summary.update(analysis_version=ANALYSIS_VERSION, processed_analysis_versions=sorted(processed_versions),
+        processed_block_count=len(processed_paths),
+        equations=("Delta A=-log10(Q/Q0); Q=S/R" if mode == "dual" else
+                   "Delta A=-log10(Q/Q0); Q=S/blank" if blank_record else "Delta A=-log10(S/S0)"),
         prior_observation_path=parents[-1] if parents else None,
         parent_native_paths=[e["path"] for e in native_entries],
         baseline_source=preliminary.get("output_path"), blank_source=blank_record.get("output_path") if blank_record else None,
-        claim="Apparent cryogenic recovery on observed support; optical IRF identifiability/escape claims require independent evidence")
+        time_reference=time_reference, optical_arrival_observed=bool(epoch.get("independently_observed")),
+        claim="Apparent recovery on observed scan support; optical arrival and response resolution are reported only when measured")
     owned_store.save_record("analysis-"+uuid4().hex, summary)
     return {"output_path": str(root), "processed_paths": processed_paths, "summary": summary}
 

@@ -160,11 +160,16 @@ def _inside(root, relative):
 
 
 def load_run(path, expected_mode=None, expected_condition_id=None):
+    """Load a run; condition labels remain metadata, including in legacy files.
+
+    ``expected_condition_id`` is retained for callers of the original schema.
+    It does not select an acquisition procedure or restrict loading.
+    """
     path = Path(path)
     metadata = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
     if metadata.get("experiment_id") != EXPERIMENT_ID or metadata.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("Incompatible experiment or run schema")
-    for key, expected in (("mode", expected_mode), ("condition_id", expected_condition_id)):
+    for key, expected in (("mode", expected_mode),):
         if expected is not None and metadata.get(key) != expected:
             raise ValueError(f"Incompatible {key}: saved {metadata.get(key)!r}; requested {expected!r}")
     events, errors = [], []
@@ -233,43 +238,3 @@ def compatibility_conflicts(saved, requested, prefix=""):
     if saved == requested:
         return []
     return [f"{prefix}: saved {saved!r}; requested {requested!r}"]
-
-
-def assert_unused_sample_state(run_path, settings):
-    """Refuse another biological pump for an already-used accepted state.
-
-    Called while the coupled instrument is exclusively owned, before enabling
-    the first table. Both detector-mode histories under the frozen root count,
-    including ambiguous pump intent after a process failure. A continuation
-    uses its retained epoch and never calls this new-pump assertion.
-    """
-    run_path = Path(run_path).resolve()
-    experiment_root = run_path.parent.parent
-    keys = ("condition_id", "sample_id", "preparation_id", "accepted_state_id", "cell_id", "position_id")
-    selected = {key: json_value(settings).get(key) for key in keys}
-    if not all(selected.values()):
-        raise ValueError("A new pump requires a complete accepted sample-state identity")
-    for mode in ("single", "dual"):
-        parent = experiment_root / mode
-        if not parent.exists():
-            continue
-        for prior in parent.iterdir():
-            if prior.resolve() == run_path or not prior.is_dir() or not (prior / "metadata.json").exists():
-                continue
-            metadata = json.loads((prior / "metadata.json").read_text(encoding="utf-8"))
-            if metadata.get("operation", {}).get("hardware") is False:
-                continue  # An explicitly simulated record emitted no real pump.
-            previous_settings = metadata.get("settings", metadata.get("plan", {}).get("settings", {}))
-            if {key: previous_settings.get(key) for key in keys} != selected:
-                continue
-            journal = prior / "events.jsonl"
-            if not journal.exists():
-                continue
-            with journal.open(encoding="utf-8") as stream:
-                for line in stream:
-                    try:
-                        event = json.loads(line)
-                    except ValueError:
-                        raise ValueError(f"Ambiguous retained history for this accepted state at {prior}; establish an explicitly new state")
-                    if event.get("kind") == "pump_intent":
-                        raise ValueError(f"Accepted sample state already has a retained pump intent at {prior}; continue the retained epoch or establish an explicitly new accepted state with equivalent-state evidence")

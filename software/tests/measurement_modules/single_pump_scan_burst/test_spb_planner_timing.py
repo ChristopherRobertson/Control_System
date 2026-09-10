@@ -7,7 +7,7 @@ import pytest
 
 from control_app.devices.t660_service import T660Service
 from control_app.measurement_modules.single_pump_scan_burst.settings import (
-    Capabilities, Settings, example_settings, resolve_settings,
+    Capabilities, Settings, example_settings, resolve_settings, resolve_live_settings,
 )
 from control_app.measurement_modules.single_pump_scan_burst.planner import (
     Plan, compile_blank_blocks, compile_plan, compile_preliminary, logarithmic_times,
@@ -38,12 +38,16 @@ class RecordingT660(T660Service):
         return "OK"
 
 
-def test_missing_operating_settings_remain_unconfigured_and_hardware_free():
+def test_compact_defaults_resolve_without_hardware_or_metadata():
     settings = Settings()
     plan = compile_plan(settings)
-    assert settings.scan_speed_cm1_s is None and settings.probe_rate_hz is None
-    assert not plan.valid and not plan.ready and not plan.blocks
-    assert any("probe_rate_hz" in error for error in plan.errors)
+    assert settings.scan_speed_cm1_s == 5000.0 and settings.probe_rate_hz is None
+    assert plan.valid and plan.ready and plan.blocks and not plan.readiness
+    assert plan.requested_settings is settings
+    assert plan.blocks[0].planned_end_s >= settings.early_observation_s
+    assert settings.pump_polarity == settings.process_polarity == "negative"
+    assert plan.selected_values["probe_rate_hz"]["requested"] is None
+    assert plan.selected_values["probe_rate_hz"]["selected"] == 2000000
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
@@ -51,7 +55,7 @@ def test_deterministic_finite_schedule_contains_exactly_one_pump_and_final_state
     settings = example_settings(mode)
     plan = compile_plan(settings)
     assert plan.valid, plan.errors
-    assert not plan.ready
+    assert plan.ready and not plan.readiness
     assert plan.to_dict() == compile_plan(settings).to_dict()
     assert Plan.from_dict(json.loads(json.dumps(plan.to_dict()))).to_dict() == plan.to_dict()
     assert plan.blocks[0].kind == "early" and plan.blocks[-1].kind == "final"
@@ -64,11 +68,11 @@ def test_deterministic_finite_schedule_contains_exactly_one_pump_and_final_state
                for block in plan.blocks for frame in block.frames)
 
 
-def test_complete_sequential_blank_and_preliminary_never_pump():
+def test_reusable_brief_blank_and_preliminary_never_pump():
     plan = compile_plan(example_settings())
     blank = compile_blank_blocks(plan)
-    assert sum(b.scan_count for b in blank) == plan.total_scans
-    assert [b.planned_elapsed_s for b in blank] == [b.planned_elapsed_s for b in plan.blocks]
+    assert len(blank) == 1 and blank[0].scan_count == plan.settings.preliminary_scan_count
+    assert blank[0].planned_elapsed_s == 0 and blank[0].duration_s < 1
     for block in (*blank, compile_preliminary(plan)):
         assert not block.pump_enabled
         assert all(not frame["channels"][ch]["enabled"] for frame in block.frames for ch in "AB")
@@ -105,7 +109,6 @@ def test_timing_quantization_records_requested_selected_and_unknown_actual():
     ({"later_burst_times_s": (3.0, 2.0)}, "increasing"),
     ({"later_burst_times_s": (.1,)}, "overlap"),
     ({"observation_limit_s": .1}, "logarithmic"),
-    ({"temperature_uncertainty_k": 10}, "uncertainty envelope"),
     ({"max_probe_exposure_s": 1e-7}, "exposure budget"),
     ({"max_memory_bytes": 1}, "RAM budget"),
     ({"storage_budget_bytes": 1}, "storage budget"),
@@ -126,30 +129,30 @@ def test_malformed_capability_data_is_reported_before_arithmetic(changes):
     assert not plan.valid and plan.errors
 
 
-def test_longest_observation_full_blank_and_chunk_memory_are_budgeted():
+def test_longest_observation_brief_blank_and_chunk_memory_are_budgeted():
     plan = compile_plan(replace(example_settings(), observation_limit_s=86400))
     loaded = compile_plan(replace(plan.settings, blank_source="loaded"))
     dual = compile_plan(replace(plan.settings, mode="dual"))
     assert plan.valid
-    assert plan.estimates["blank_observation_s"] == 86400
+    assert plan.estimates["blank_observation_s"] == (plan.settings.preliminary_scan_count + 1) * plan.blocks[0].frame_period_s
     assert loaded.estimates["blank_observation_s"] == dual.estimates["blank_observation_s"] == 0
     assert plan.estimates["native_bytes"] > loaded.estimates["native_bytes"]
-    assert plan.estimates["wall_time_min_s"] >= 172800
+    assert 86400 <= plan.estimates["wall_time_min_s"] < 172800
     assert plan.estimates["peak_memory_bytes"] < plan.settings.max_memory_bytes
     assert plan.blocks[-1].planned_end_s == pytest.approx(86400)
 
 
-def test_each_condition_requires_its_own_identity_and_only_explicit_sources_fill_operating_values():
+def test_old_condition_metadata_cannot_change_numeric_planning():
     hrp = Settings()
     mb = replace(hrp, condition_id="77K-Mb-G-S")
-    assert hrp.architecture_id == "ARC-77-HRP-SPB" and mb.architecture_id == "ARC-77-MB-SPB"
+    assert hrp.architecture_id == mb.architecture_id == "single_pump_scan_burst"
+    assert compile_plan(hrp).blocks == compile_plan(mb).blocks
     resolved = resolve_settings(hrp, promoted_values={"record_id": "promoted-test-record", "values": {"probe_rate_hz": 123456}})
-    assert resolved.probe_rate_hz == 123456
-    assert resolved.settings_sources["probe_rate_hz"] == "promoted-test-record"
+    assert resolved.probe_rate_hz == 2000000.
+    assert "configuration" in resolved.settings_sources["probe_rate_hz"]
     assert hrp.probe_rate_hz is None
-    assert resolve_settings(resolved, installed_readbacks={"record_id": "readback", "values": {"probe_rate_hz": 42}}).probe_rate_hz == 123456
-    with pytest.raises(ValueError, match="record_id"):
-        resolve_settings(hrp, promoted_values={"values": {"probe_rate_hz": 123}})
+    assert resolve_settings(replace(hrp, probe_rate_hz=123456), installed_readbacks={"values": {"probe_rate_hz": 42}}).probe_rate_hz == 123456
+    assert resolve_settings(hrp, installed_readbacks={"values": {"probe_rate_hz": 123}}).probe_rate_hz == 123
 
 
 def test_host_pending_upload_preserves_every_compiled_frame_and_acknowledges_progress():
@@ -196,7 +199,7 @@ def test_t660_upload_cancel_retains_acknowledged_frames_with_outputs_inhibited()
 
 @pytest.mark.parametrize("changes", [
     {"probe_reference_delay_s": None}, {"plateau_enabled": True, "plateau_required_bursts": None},
-    {"plateau_band_windows_cm1": ((1,),)}, {"later_burst_times_s": ("bad",)},
+    {"plateau_enabled": True, "plateau_band_windows_cm1": ((1,),)}, {"later_burst_times_s": ("bad",)},
     {"early_scan_count": True}, {"probe_pulse_width_s": 1e-15},
 ])
 def test_invalid_loaded_parameter_values_remain_reviewable_errors(changes):
@@ -208,25 +211,22 @@ def test_information_based_schedule_records_selected_count_without_new_pump():
     plan = compile_plan(replace(example_settings(), schedule_kind="information_based",
                                 later_burst_times_s=(1.0, 9.0, 123.0)))
     assert plan.valid
-    assert plan.selected_values["later_burst_count"]["requested"] == 8
+    assert plan.selected_values["later_burst_count"]["requested"] is None
     assert plan.selected_values["later_burst_count"]["selected"] == 3
     assert plan.pump_count == 1
 
 
-def test_promoted_empty_evidence_fields_are_resolved_with_detached_provenance():
+def test_old_evidence_fields_are_optional_and_cannot_select_operating_values():
     source = {"record_id": "PROMOTED-SPB-INSTRUMENT-1", "values": {
         "hardware_evidence": {"operating_configuration": {"configuration_record_id": "OPERATING-1"}},
         "calibration_ids": ["SPECTRAL-1", "TIMING-1"], "controls_record_ids": ["DARK-1"],
+        "probe_rate_hz": 123., "scan_interval_s": 1000.,
     }}
     resolved = resolve_settings(Settings(), promoted_values=source)
-    assert resolved.hardware_evidence["operating_configuration"]["configuration_record_id"] == "OPERATING-1"
-    assert resolved.calibration_ids == ("SPECTRAL-1", "TIMING-1")
-    assert resolved.controls_record_ids == ("DARK-1",)
-    assert resolved.settings_sources["hardware_evidence"] == source["record_id"]
-    assert resolved.settings_sources["hardware_evidence:source_kind"] == "promoted"
-    source["values"]["hardware_evidence"]["operating_configuration"]["configuration_record_id"] = "CHANGED"
-    assert resolved.hardware_evidence["operating_configuration"]["configuration_record_id"] == "OPERATING-1"
-    assert resolve_settings(resolved, promoted_values=source).hardware_evidence == resolved.hardware_evidence
+    assert resolved.hardware_evidence == {} and resolved.calibration_ids == ()
+    assert resolved.controls_record_ids == () and compile_plan(resolved).ready
+    assert resolved.probe_rate_hz == resolve_settings(Settings()).probe_rate_hz
+    assert resolved.scan_interval_s == resolve_settings(Settings()).scan_interval_s
 
 
 def test_enormous_finite_burst_count_is_budgeted_before_any_schedule_allocation(monkeypatch):
@@ -265,3 +265,117 @@ def test_explicit_schedule_budgets_selected_count_instead_of_unused_logarithmic_
     assert plan.valid, plan.errors
     assert len(plan.blocks) == 4
     assert plan.selected_values["later_burst_count"]["selected"] == 2
+
+
+def test_automatic_values_recompute_independently_when_coverage_or_speed_changes():
+    requested = Settings(sample_rate_hz=10000.0)
+    initial = compile_plan(requested)
+    changed = compile_plan(replace(requested, scan_speed_cm1_s=1000.0, early_observation_s=2.0))
+    assert initial.valid and changed.valid
+    assert changed.settings.sample_rate_hz == initial.settings.sample_rate_hz == 10000.0
+    assert changed.settings.scan_interval_s > initial.settings.scan_interval_s
+    assert changed.settings.early_scan_count != initial.settings.early_scan_count
+    assert changed.requested_settings.scan_interval_s is None
+    assert changed.selected_values["scan_interval_s"]["requested"] is None
+
+
+@pytest.mark.parametrize("coverage", [.010001, .012, .1, 1.0, 1.00001])
+def test_automatic_early_count_covers_horizon_through_final_observed_scan(coverage):
+    plan = compile_plan(Settings(early_observation_s=coverage))
+    assert plan.valid, plan.errors
+    early = plan.blocks[0]
+    assert early.planned_end_s >= coverage
+    assert early.scan_count == 1 or early.planned_end_s - early.frame_period_s < coverage
+    assert plan.estimates["early_observed_until_s"] == early.planned_end_s
+
+
+def test_offline_fallback_provenance_does_not_claim_an_installed_readback():
+    plan = compile_plan(Settings())
+    assert "provisional" in plan.selected_values["qcl"]["source"]
+    assert "provisional" in plan.selected_values["hf2_filter_tc_s"]["source"]
+    assert "uncalibrated" in plan.selected_values["pump_fire_to_q_s"]["source"]
+
+
+def test_live_detector_capabilities_and_one_override_leave_other_values_automatic():
+    cap = Capabilities(sample_rates_hz=(10000., 20000.), reference_rates_hz=(5000., 40000.),
+        timing_rates_hz=(100000.,), hf2_aggregate_rate_max_hz=150000.,
+        sample_filter_orders=(1, 2), sample_timeconstants_by_order={1: (.8e-6, 2e-6), 2: (1e-6, 3e-6)},
+        reference_filter_orders=(1, 4), reference_timeconstants_by_order={1: (1e-6, 2e-6), 4: (4e-6,)})
+    requested = Settings(mode="dual", sample_rate_hz=10000., hf2_filter_order=2)
+    plan = compile_plan(requested, cap)
+    assert plan.valid, plan.errors
+    assert plan.settings.sample_rate_hz == 10000 and plan.settings.reference_rate_hz == 40000
+    assert plan.settings.hf2_filter_order == 2 and plan.settings.hf2_filter_tc_s == 1e-6
+    assert plan.settings.reference_filter_order == 1 and plan.settings.reference_filter_tc_s == 1e-6
+    assert plan.settings.detector_matching_time_tolerance_s == .5 / 10000
+    assert plan.settings.wavenumber_matching_tolerance_cm1 == 5000 / 10000
+    changed = compile_plan(requested, replace(cap, reference_rates_hz=(5000., 50000.), hf2_aggregate_rate_max_hz=160000.))
+    assert changed.settings.sample_rate_hz == 10000 and changed.settings.reference_rate_hz == 50000
+
+
+def test_automatic_qcl_selection_uses_the_installed_range_and_current():
+    cap = Capabilities(qcl_ranges=({"qcl": 1, "minimum_cm1": 1800., "maximum_cm1": 1890.},
+                                  {"qcl": 2, "minimum_cm1": 1890., "maximum_cm1": 1980.}),
+                       operating_values={"qcl": 2, "probe_current_ma": 783.0, "probe_rate_hz": 1000000.,
+                                         "probe_pulse_width_s": 100e-9})
+    plan = compile_plan(Settings(), cap)
+    assert plan.valid and plan.settings.qcl == 2 and plan.settings.probe_current_ma == 783.
+    assert plan.settings.probe_rate_hz == 1000000.
+    rejected = compile_plan(Settings(qcl=1), cap)
+    assert not rejected.valid and any("cover both" in error for error in rejected.errors)
+
+
+def test_cached_qcl_readbacks_follow_changed_range_and_preserve_independent_override():
+    cap = Capabilities(qcl_ranges=({"qcl": 1, "minimum_cm1": 1800., "maximum_cm1": 1890.},
+                                  {"qcl": 2, "minimum_cm1": 1890., "maximum_cm1": 1980.}),
+        operating_values={"qcl": 1, "probe_current_ma": 900., "probe_rate_hz": 2000000., "probe_pulse_width_s": 150e-9,
+            "qcl_parameters": [{"qcl": 1, "current_ma": 900., "pulse_rate_hz": 2000000., "pulse_width_ns": 150.},
+                               {"qcl": 2, "current_ma": 456., "pulse_rate_hz": 1000000., "pulse_width_ns": 100.}]})
+    request = Settings(probe_pulse_width_s=80e-9)
+    second = compile_plan(request, cap)
+    first = compile_plan(replace(request, scan_start_cm1=1820., scan_stop_cm1=1870.), cap)
+    assert second.valid and first.valid
+    assert (second.settings.qcl, second.settings.probe_current_ma, second.settings.probe_rate_hz) == (2, 456., 1000000.)
+    assert (first.settings.qcl, first.settings.probe_current_ma, first.settings.probe_rate_hz) == (1, 900., 2000000.)
+    assert second.settings.probe_pulse_width_s == first.settings.probe_pulse_width_s == 80e-9
+    assert second.requested_settings.probe_current_ma is None
+
+
+def test_missing_other_qcl_cache_does_not_borrow_previous_qcl_current():
+    cap = Capabilities(qcl_ranges=({"qcl": 2, "minimum_cm1": 1890., "maximum_cm1": 1980.},),
+                       operating_values={"qcl": 1, "probe_current_ma": 999., "probe_rate_hz": 1230000.})
+    selected = resolve_settings(Settings(), capabilities=cap)
+    assert selected.qcl == 2 and selected.probe_current_ma is None
+    assert selected.probe_rate_hz != 1230000.
+
+
+def test_live_resolution_accepts_connected_payload_without_approval_records():
+    request = Settings(probe_rate_hz=500000.)
+    resolved = resolve_live_settings(request, {"capabilities": Capabilities().to_dict(),
+        "values": {"probe_current_ma": 456., "probe_rate_hz": 1000000., "probe_pulse_width_s": 80e-9}})
+    assert resolved.probe_current_ma == 456. and resolved.probe_rate_hz == 500000.
+    assert resolved.probe_pulse_width_s == 80e-9
+    assert resolved.early_scan_count > 0 and resolved.later_burst_count > 0
+
+
+def test_plan_roundtrip_preserves_each_automatic_override_flag():
+    requested = Settings(early_scan_count=7, sample_rate_hz=10000.)
+    plan = Plan.from_dict(json.loads(json.dumps(compile_plan(requested).to_dict())))
+    assert plan.requested_settings == requested
+    assert plan.requested_settings.early_scan_count == 7
+    assert plan.requested_settings.later_burst_count is None
+    assert plan.requested_settings.scan_interval_s is None
+    assert plan.settings.early_scan_count == 7
+
+
+def test_optional_old_temperature_material_and_evidence_values_cannot_gate_or_change_frames():
+    ordinary = compile_plan(Settings())
+    metadata = compile_plan(replace(Settings(), condition_id="arbitrary-old-label", measured_temperature_k=-400.,
+        min_temperature_k=1000., max_temperature_k=-1., temperature_uncertainty_k=10000.,
+        sample_id="previously-used", accepted_state_id="", matrix_id="old", example_only=True,
+        calibration_ids=(), promoted_bundle_ids=(), controls_record_ids=(),
+        hardware_evidence={"operating_configuration": {"probe_rate_hz": 123, "accepted": False}}))
+    assert metadata.valid and metadata.ready and not metadata.readiness
+    assert metadata.blocks == ordinary.blocks
+    assert metadata.probe_clock_recipe == ordinary.probe_clock_recipe
+    assert metadata.estimates == ordinary.estimates

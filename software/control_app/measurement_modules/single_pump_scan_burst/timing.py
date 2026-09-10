@@ -34,8 +34,8 @@ class BurstBlock:
     first_process_delay_s: float
     scan_duration_s: float
     requested_elapsed_s: float
-    timing_basis: str = "observed HF2LI native timestamps relative to retained independent optical pump epoch"
-    temperature_checks: tuple[str, ...] = ("before", "during", "after")
+    timing_basis: str = "observed HF2LI native timestamps relative to retained pump observation; optical offset separate when available"
+    temperature_checks: tuple[str, ...] = ()
     idle_state_after: str = "probe output disabled; reference and epoch retained; pump outputs disabled"
 
     @property
@@ -53,7 +53,7 @@ class BurstBlock:
     def from_dict(cls, data: Mapping[str, Any]) -> "BurstBlock":
         values = dict(data)
         values["frames"] = tuple(dict(frame) for frame in values["frames"])
-        values["temperature_checks"] = tuple(values.get("temperature_checks", ("before", "during", "after")))
+        values["temperature_checks"] = tuple(values.get("temperature_checks", ()))
         return cls(**values)
 
 
@@ -99,7 +99,7 @@ def compile_block(settings: Settings, capabilities: Capabilities, *, block_id: s
         })
     if process_delay + scan_duration >= period - capabilities.frame_guard_s:
         raise ValueError(f"{block_id}: scan duration and process offset do not fit the scan interval; "
-                         "select a justified interval or faster useful scan")
+                         "increase the interval or scan speed")
     for frame in table:
         for value in frame["channels"].values():
             delay = float(value["delay"][:-1])

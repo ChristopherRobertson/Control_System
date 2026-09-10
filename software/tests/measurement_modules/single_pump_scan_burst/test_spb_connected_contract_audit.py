@@ -19,19 +19,20 @@ from control_app.measurement_modules.single_pump_scan_burst.planner import compi
 from control_app.measurement_modules.single_pump_scan_burst.settings import example_settings
 
 
-def _native_streams(*, descending=False, missing_end=False):
+def _native_streams(*, descending=False, missing_end=False, marker_count=3):
     # Keep integers beyond exact binary64 integer resolution to exercise native
     # preservation independently from floating point display coordinates.
     origin = np.uint64(2**54)
-    ticks = origin + np.arange(12, dtype=np.uint64) * 10
-    words = np.zeros(12, np.uint32)
-    words[2:(12 if missing_end else 9)] |= np.uint32(1 << 21)
-    words[[3, 5, 7]] |= np.uint32(1 << 22)
+    count = 2 * marker_count + 6
+    ticks = origin + np.arange(count, dtype=np.uint64) * 10
+    words = np.zeros(count, np.uint32)
+    words[2:(count if missing_end else 2 * marker_count + 3)] |= np.uint32(1 << 21)
+    words[np.arange(3, 2 * marker_count + 3, 2)] |= np.uint32(1 << 22)
     if not descending:
         words |= np.uint32(1 << 20)
-    detector_ticks = origin + np.arange(3, 8, dtype=np.uint64) * 10
+    detector_ticks = origin + np.arange(3, 2 * marker_count + 2, dtype=np.uint64) * 10
     return {2: {"timestamp": ticks, "dio": words},
-            0: {"timestamp": detector_ticks, "x": np.arange(1, 6, dtype=float), "y": np.zeros(5)}}
+            0: {"timestamp": detector_ticks, "x": np.arange(1, len(detector_ticks) + 1, dtype=float), "y": np.zeros(len(detector_ticks))}}
 
 
 @pytest.mark.parametrize("descending", [False, True])
@@ -53,17 +54,14 @@ def test_incomplete_sweep_activity_cannot_be_accepted_as_a_complete_scan():
 
 
 def _adapter(*, marker_interval=25., requested_rate=1000000.):
-    settings = replace(example_settings(), tuning_settling_time_s=0., probe_rate_hz=requested_rate,
-        hardware_evidence={"operating_configuration": {
-            "trajectory": {"marker_interval_cm1": marker_interval, "marker_width_us": 20},
-            "laser_safety_approved": True,
-        }})
+    settings = replace(example_settings(), tuning_settling_time_s=0., probe_rate_hz=requested_rate)
     plan = compile_plan(settings)
     assert plan.valid, plan.errors
     operation = SimpleNamespace(configuration={}, instance_id=settings.instance_id, hardware=False)
     store = SimpleNamespace(append_event=lambda *a, **kw: None, save_record=lambda *a, **kw: None)
     adapter = ConnectedBurstAdapter(SimpleNamespace(), operation, plan,
                                     cancel=Event(), progress=lambda **kw: None, store=store)
+    adapter.recipe["trajectory"].update(marker_interval_cm1=marker_interval, marker_width_us=20)
     adapter.clock = create_autospec(T660Service, instance=True)
     adapter.timing = create_autospec(T660Service, instance=True)
     adapter.hf = create_autospec(HF2LIService, instance=True)
@@ -72,6 +70,7 @@ def _adapter(*, marker_interval=25., requested_rate=1000000.):
     adapter.qcl.is_tuned.return_value = True
     adapter.qcl.get_scan_waiting_process_trigger.return_value = True
     adapter.hf.get_oscillator_frequency.return_value = plan.selected_values["probe_rate_hz"]["selected"]
+    adapter.hf.read_acquisition_health.return_value = {"reference_locked": True, "clock_locked": True, "overload": False}
     adapter.qcl.get_sweep_parameters.return_value = {
         "start_cm1": settings.scan_start_cm1, "stop_cm1": settings.scan_stop_cm1,
         "scan_rate_cm1_s": settings.scan_speed_cm1_s, "repetitions": plan.blocks[0].scan_count,
@@ -88,6 +87,7 @@ def test_burst_programming_uses_actual_host_service_signatures_and_selected_cloc
     adapter.program_block(plan.blocks[0], pump_allowed=True)
     adapter.qcl.start_sweep_scan.assert_called_once_with(start_cm1=1900., stop_cm1=1950.,
         scan_rate_cm1_s=5000., qcl=1, repetitions=10)
+    adapter.qcl.start_emission.assert_called_once_with()
     arguments = adapter.timing.preload_frame_table.call_args.kwargs
     assert arguments["input_frequency_hz"] == plan.selected_values["probe_rate_hz"]["selected"]
     assert arguments["predivider"] == plan.blocks[0].predivider
@@ -132,15 +132,9 @@ def test_connected_adapter_preflight_capture_and_restore_through_injected_host_s
     accidentally enumerate or connect to a physical instrument.
     """
     settings = replace(example_settings(mode), preliminary_scan_count=1, tuning_settling_time_s=0.,
-        hardware_evidence={"operating_configuration": {
-            "trajectory": {"marker_interval_cm1": 25., "marker_width_us": 20},
-            "laser_safety_approved": True, "hf2li": {"aggregate_limit_sps": 700000.},
-            "sample_temperature_observation": {"observation_id": "test-temp", "temperature_identity": "EXAMPLE-TEMP",
-                "observed_utc": datetime.now(timezone.utc).isoformat(), "temperature_k": 77., "uncertainty_k": .5,
-                "valid_for_s": 300.},
-            "qualifications": {key: {"accepted": True, "record_id": "injected-test-evidence"}
-                for key in ("tee_receiver_topology", "clock_transfer", "trajectory", "detector_roles")},
-        }})
+        hardware_evidence={}, calibration_ids=(), promoted_bundle_ids=(), controls_record_ids=(),
+        sample_id="", preparation_id="", accepted_state_id="", matrix_id="", cell_id="", position_id="",
+        temperature_identity="", measured_temperature_k=None, example_only=False)
     plan = compile_plan(settings)
     block = compile_preliminary(plan)
     hf = create_autospec(HF2LIService, instance=True)
@@ -160,6 +154,12 @@ def test_connected_adapter_preflight_capture_and_restore_through_injected_host_s
     hf.compare_settings_snapshots.return_value = {"match": True}
     hf.get_clockbase.return_value = 210_000_000
     hf.get_oscillator_frequency.return_value = settings.probe_rate_hz
+    hf.read_acquisition_health.return_value = {"reference_locked": True, "clock_locked": True, "overload": False}
+    detector_cap = {"rates_sps": (settings.sample_rate_hz,), "orders": (1,),
+                    "timeconstants_by_order": {1: (settings.hf2_filter_tc_s,)}}
+    hf.discover_phase_scan_capabilities.return_value = {**detector_cap, "timing_rate_sps": settings.timing_rate_hz, "verified": True}
+    hf.discover_dual_phase_scan_capabilities.return_value = {"sample": detector_cap, "reference": detector_cap,
+        "timing_rate_sps": settings.timing_rate_hz, "verified": True}
     def node(_kind, path):
         if "/sigins/" in path:
             return 1.0
@@ -170,18 +170,23 @@ def test_connected_adapter_preflight_capture_and_restore_through_injected_host_s
         return settings.hf2_filter_tc_s
     hf._get_node.side_effect = node
     qcl.get_num_installed_qcls.return_value = 1
+    qcl.get_qcl_tuning_range.return_value = {"min_cm1": 1850., "max_cm1": 2000.}
     qcl.get_qcl_pulse_rate.return_value = settings.probe_rate_hz
     qcl.get_qcl_pulse_width.return_value = settings.probe_pulse_width_s * 1e9
     qcl.get_qcl_current.return_value = settings.probe_current_ma
+    qcl.set_qcl_pulse_params.side_effect = lambda **values: {**values,
+        "preserved_current_ma": settings.probe_current_ma, "current_ma_used": values["current_ma"]}
     qcl.get_wavelength_trigger_params.return_value = {"pulse_mode": 1, "process_trigger_mode": 1,
         "start": 1900., "stop": 1950., "interval": 25., "units": 2, "dwell_us": 0, "after_off_us": 0}
     qcl.get_wavelength_trigger_pulse_width_us.return_value = 20
     qcl.get_wavelength_trigger_channel_params.return_value = {"channel": 1, "units": 2, "units_name": "cm-1",
-        "start": 1900., "stop": 1950., "interval": 25., "num_triggers": 3}
+        "start": 1900., "stop": 1950., "interval": 5., "num_triggers": 11}
     qcl.get_sweep_parameters.return_value = {"start_cm1": 1900., "stop_cm1": 1950.,
         "scan_rate_cm1_s": 5000., "repetitions": 1}
     qcl.is_tuned.return_value = qcl.get_scan_waiting_process_trigger.return_value = True
     qcl.is_emission_on.return_value = qcl.is_laser_armed.return_value = False
+    qcl.read_state.return_value = {key: False for key in ("emission_on", "armed", "scan_in_progress",
+        "scan_active", "scan_paused", "scan_waiting_process_trigger")}
     def reply(value):
         return {"ok": True, "response": str(value)}
     for unit in (clock, timing):
@@ -193,12 +198,14 @@ def test_connected_adapter_preflight_capture_and_restore_through_injected_host_s
         unit.command.side_effect = lambda command, **kwargs: "0" if "RELTo" in command else "1us" if command.endswith(("2?", "4?", "6?", "8?")) else "0s"
     timing.preload_frame_table.return_value = {"physical_frame_count": len(block.frames)}
     timing.get_frames_status.return_value = "DONE"
+    timing.verified_frame_capacity.return_value = 8192
+    timing.identify.return_value = "T660 installed-test-peer"
     readback = adapter.configure(pumped=False)
     assert readback["clockbase_hz"] == 210_000_000
-    hf.start_acquisition.assert_called_once_with(demodulators=[0, 2] if mode == "single" else [0, 2, 3], fields=("x", "y", "dio"))
+    hf.start_acquisition.assert_not_called()
     assert adapter.pico is None
     adapter.program_block(block, pump_allowed=False)
-    native = _native_streams()
+    native = _native_streams(marker_count=11)
     if mode == "dual":
         native[3] = {key: np.array(value, copy=True) for key, value in native[0].items()}
     # A real LabOne poll wraps per-demod native records inside data; snapshots
@@ -206,6 +213,7 @@ def test_connected_adapter_preflight_capture_and_restore_through_injected_host_s
     polls = [{"data": {}}, {"data": {f"/dev18500/demods/{i}/sample": record for i, record in native.items()}}, {"data": {}}]
     hf.read_acquisition.side_effect = polls
     captured = adapter.capture_block(block, pump_allowed=False)
+    hf.start_acquisition.assert_called_once_with(demodulators=[0, 2] if mode == "single" else [0, 2, 3], fields=("x", "y", "dio"))
     assert captured["observed_pump_count"] == 0 and captured["observed_scan_count"] == 1
     np.testing.assert_array_equal(captured["native"]["native_sample_ticks"], native[0]["timestamp"])
     assert ("reference" in captured["native"]) == (mode == "dual")

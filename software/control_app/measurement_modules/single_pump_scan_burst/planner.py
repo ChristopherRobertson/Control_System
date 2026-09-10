@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass, field
 from math import ceil, isfinite, log10
 from typing import Any, Mapping
 
-from .settings import Capabilities, CONDITION_PROFILES, EXPERIMENT_ID, Settings
+from .settings import Capabilities, EXPERIMENT_ID, Settings, resolve_settings
 from .timing import BurstBlock, compile_block, probe_clock_recipe, quantize
 
 PLAN_VERSION = 1
@@ -33,6 +33,7 @@ class Plan:
     probe_clock_recipe: dict[str, Any] = field(default_factory=dict)
     schema_version: int = PLAN_VERSION
     experiment_id: str = EXPERIMENT_ID
+    requested_settings: Settings | None = None
 
     @property
     def valid(self) -> bool:
@@ -40,7 +41,7 @@ class Plan:
 
     @property
     def ready(self) -> bool:
-        return self.valid and not self.readiness and not self.settings.example_only
+        return self.valid
 
     @property
     def total_scans(self) -> int:
@@ -56,12 +57,11 @@ class Plan:
         if self.errors:
             return "Plan incomplete: " + "; ".join(self.errors)
         e = self.estimates
-        return (f"{self.settings.architecture_id}: exactly {self.pump_count} pump command, "
+        return (f"Exactly {self.pump_count} pump command, "
                 f"{self.total_scans} scans in {len(self.blocks)} explicit blocks; "
                 f"{self.settings.observation_limit_s:g} s observation limit; "
                 f"{e.get('native_bytes', 0) / 1e6:.1f} MB native estimate; "
-                f"{e.get('wall_time_min_s', 0):g} s minimum wall time. "
-                f"{len(self.readiness)} commissioning/readiness items remain.")
+                f"{e.get('wall_time_min_s', 0):g} s estimated minimum wall time.")
 
     def require_valid(self) -> None:
         if not self.valid:
@@ -77,7 +77,7 @@ class Plan:
     def from_dict(cls, data: Mapping[str, Any]) -> "Plan":
         if data.get("experiment_id") != EXPERIMENT_ID or data.get("schema_version") != PLAN_VERSION:
             raise ValueError("Incompatible single-pump plan experiment/schema")
-        settings = Settings.from_dict(data["settings"])
+        settings = Settings.from_dict(data.get("requested_settings") or data["settings"])
         if data.get("instance_id", settings.instance_id) != settings.instance_id:
             raise ValueError("Plan detector-mode identity mismatch")
         # Recompile instead of trusting serialized executable timing. Explicit
@@ -110,13 +110,16 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         capabilities = Capabilities()
     elif not isinstance(capabilities, Capabilities):
         capabilities = Capabilities.from_dict(capabilities)
-    s, cap = settings, capabilities
+    requested, cap = settings, capabilities
+    try:
+        s = resolve_settings(requested, capabilities=cap)
+    except (TypeError, ValueError, OverflowError, ZeroDivisionError) as exc:
+        return Plan(requested, cap, errors=(f"Automatic settings could not be resolved: {exc}",), requested_settings=requested)
     errors: list[str] = []
     readiness: list[str] = []
     warnings: list[str] = [
         "Programmed commands, observed electrical triggers and independently observed optical arrival remain separate.",
         "Cross-block times are requests; actual native timestamps determine elapsed time and missing gaps.",
-        "Slow 77 K recovery alone does not establish escape, non-geminate recovery or solvent return.",
     ]
     selected_values: dict[str, Any] = {}
 
@@ -132,15 +135,13 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
     if s.blank_source not in {"acquire", "loaded"}:
         errors.append("blank_source must be acquire or loaded")
     if s.probe_during_wait:
-        errors.append("Installed single-pump adapter supports dark inter-burst waits only; continuous inter-burst probe requires a qualified stationary hold adapter")
+        errors.append("Installed adapter supports dark inter-burst waits only; continuous probing requires installed stationary hold support")
 
     if s.mode not in {"single", "dual"}:
         errors.append("mode must be single or dual")
-    if s.condition_id not in CONDITION_PROFILES:
-        errors.append("Select the distinct 77K-HRP-G-S or 77K-Mb-G-S condition profile")
     required_positive = ["scan_start_cm1", "scan_stop_cm1", "scan_speed_cm1_s", "scan_interval_s",
         "observation_limit_s", "sample_rate_hz", "timing_rate_hz", "hf2_filter_tc_s",
-        "sample_input_range_v", "probe_rate_hz", "probe_pulse_width_s", "probe_current_ma",
+        "sample_input_range_v", "probe_rate_hz", "probe_pulse_width_s", "early_observation_s",
         "pump_fire_to_q_s", "pump_fire_width_s", "pump_q_width_s", "process_width_s"]
     if s.mode == "dual":
         required_positive += ["reference_rate_hz", "reference_filter_tc_s", "reference_input_range_v"]
@@ -149,9 +150,14 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
     for name in required_positive:
         value = getattr(s, name)
         if not _finite_number(value) or value <= 0:
-            errors.append(f"{name} requires an explicit finite positive value")
+            errors.append(f"{name} must be finite and positive")
+    if s.probe_current_ma is not None and (not _finite_number(s.probe_current_ma) or s.probe_current_ma <= 0):
+        errors.append("probe_current_ma must be finite and positive when explicitly selected")
+    for name in ("detector_matching_time_tolerance_s", "wavenumber_matching_tolerance_cm1", "max_probe_exposure_s"):
+        if getattr(s, name) is not None and (not _finite_number(getattr(s, name)) or getattr(s, name) < 0):
+            errors.append(f"{name} must be finite and nonnegative when selected")
     if not _finite_number(s.first_scan_delay_s) or s.first_scan_delay_s < 0:
-        errors.append("first_scan_delay_s requires an explicit finite nonnegative value")
+        errors.append("first_scan_delay_s must be finite and nonnegative")
     if not _finite_number(s.probe_reference_delay_s) or s.probe_reference_delay_s < 0:
         errors.append("Probe relative delay must be finite and nonnegative")
     for name in ("early_scan_count", "scans_per_burst", "final_scan_count", "preliminary_scan_count"):
@@ -164,9 +170,14 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         errors.append("later_burst_count must be a nonnegative integer")
     for name in ("hf2_filter_order",) + (("reference_filter_order",) if s.mode == "dual" else ()):
         if type(getattr(s, name)) is not int or not 1 <= getattr(s, name) <= 8:
-            errors.append(f"{name} must be an explicitly selected supported order 1–8")
+            errors.append(f"{name} must be a supported integer order 1–8")
     if type(s.qcl) is not int or not 1 <= s.qcl <= 4:
         errors.append("qcl must identify an installed QCL (1–4)")
+    elif cap.qcl_ranges and all(_finite_number(v) for v in (s.scan_start_cm1, s.scan_stop_cm1)):
+        lower, upper = sorted((s.scan_start_cm1, s.scan_stop_cm1))
+        if not any(r.get("qcl") == s.qcl and r.get("minimum_cm1", float("inf")) <= lower and
+                   r.get("maximum_cm1", -float("inf")) >= upper for r in cap.qcl_ranges):
+            errors.append("Selected QCL does not cover both requested scan endpoints")
     if len(set((*s.demod_indices, s.timing_demod))) != len(s.demod_indices) + 1:
         errors.append("Sample/reference/timing demodulators must be distinct")
     if s.sample_demod != 0 or (s.mode == "dual" and s.reference_demod != 3) or s.timing_demod != 2:
@@ -182,6 +193,15 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
             errors.append(f"{name} must be positive or negative")
     if s.process_polarity != "negative":
         errors.append("Installed MIRcat Process Trigger requires negative pulse polarity (inactive high)")
+    for order_name, tc_name, orders, constants in (
+        ("hf2_filter_order", "hf2_filter_tc_s", cap.sample_filter_orders, cap.sample_timeconstants_by_order),
+        *(([("reference_filter_order", "reference_filter_tc_s", cap.reference_filter_orders, cap.reference_timeconstants_by_order)]) if s.mode == "dual" else [])):
+        order = getattr(s, order_name)
+        if orders and order not in orders:
+            errors.append(f"{order_name} is absent from the installed filter capabilities")
+        choices = constants.get(order, constants.get(str(order), ()))
+        if choices and not any(_finite_number(getattr(s, tc_name)) and abs(getattr(s, tc_name) - choice) <= 1e-9 * max(abs(choice), 1e-12) for choice in choices):
+            errors.append(f"{tc_name} is absent from installed readbacks for the selected filter order")
     if not _finite_number(s.native_chunk_duration_s) or s.native_chunk_duration_s <= 0:
         errors.append("native_chunk_duration_s must be finite and positive")
     if type(s.max_memory_bytes) is not int or s.max_memory_bytes <= 0:
@@ -198,7 +218,7 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
             errors.append("Plateau stopping requires a prospective relative tolerance between zero and one")
         if type(s.plateau_required_bursts) is not int or s.plateau_required_bursts < 3 or not s.plateau_band_windows_cm1:
             errors.append("Plateau stopping requires at least three bursts and explicit per-band windows")
-    for window in s.plateau_band_windows_cm1:
+    for window in s.plateau_band_windows_cm1 if s.plateau_enabled else ():
         if not isinstance(window, (tuple, list)) or len(window) != 2:
             errors.append("Plateau windows require pairs of cm-1 bounds")
             continue
@@ -206,44 +226,10 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         if not (_finite_number(lower) and _finite_number(upper) and lower < upper):
             errors.append("Plateau windows require finite increasing cm-1 bounds")
 
-    for name in ("sample_id", "preparation_id", "accepted_state_id", "matrix_id", "cell_id", "position_id",
-                 "temperature_identity", "thermal_history_id", "sample_selection_id", "pump_dose_record_id"):
-        if not getattr(s, name):
-            readiness.append(f"Provide the condition-specific {name}")
-    for name in ("measured_temperature_k", "temperature_uncertainty_k", "min_temperature_k", "max_temperature_k",
-                 "max_probe_exposure_s", "temperature_check_interval_s"):
-        value = getattr(s, name)
-        if value is None:
-            readiness.append(f"Establish {name} for the illuminated sample")
-        elif not _finite_number(value) or value < 0 or (name != "temperature_uncertainty_k" and value == 0):
-            errors.append(f"{name} must be finite and positive (uncertainty may be zero)")
-    if all(_finite_number(v) for v in (s.measured_temperature_k, s.min_temperature_k, s.max_temperature_k)):
-        if not s.min_temperature_k <= s.measured_temperature_k <= s.max_temperature_k:
-            errors.append("Measured sample temperature is outside the accepted condition interval")
-        elif _finite_number(s.temperature_uncertainty_k) and not (
-            s.min_temperature_k <= s.measured_temperature_k - s.temperature_uncertainty_k and
-            s.measured_temperature_k + s.temperature_uncertainty_k <= s.max_temperature_k):
-            errors.append("Sample temperature uncertainty envelope crosses the accepted condition interval")
-    if not cap.frame_feature_verified:
-        readiness.append("Verify installed T660-2 Trains and Frames support and capacity under host ownership")
-    if not cap.detector_rates_verified:
-        readiness.append("Verify selected HF2LI sample/reference/timing rates simultaneously and aggregate throughput")
-    if not cap.topology_verified:
-        readiness.append("Qualify installed detector tees, receiver loading and Sweep Active high-impedance branch")
-    if not cap.optical_pump_observation_available:
-        readiness.append("Provide independently observed single optical pump count/time zero in the qualified sample path")
-    if not cap.temperature_observation_available:
-        readiness.append("Provide qualified illuminated-sample temperature observations before/during/after bursts and waits")
     if not s.probe_during_wait and not cap.probe_idle_control_available:
         errors.append("Selected dark waits require installed probe output control")
-    if not s.promoted_bundle_ids or not s.calibration_ids:
-        readiness.append("Select applicable explicitly promoted timing, spectral trajectory, detector/filter and dose calibration records")
-    if not s.controls_record_ids:
-        readiness.append("Select applicable accepted dark, optical/electronic artifact and cryogenic matrix/cell controls")
-    if s.example_only:
-        readiness.append("EXAMPLE ONLY simulation inputs are not biological operating settings")
     if errors:
-        return Plan(s, cap, errors=tuple(errors), readiness=tuple(readiness), warnings=tuple(warnings))
+        return Plan(s, cap, errors=tuple(errors), warnings=tuple(warnings), requested_settings=requested)
 
     # Budget the entire finite schedule with integer arithmetic BEFORE generating
     # logarithmic times, frames, detached settings copies or per-block metadata.
@@ -264,7 +250,7 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         errors.append("Finite plan frame metadata exceeds the declared storage budget before schedule allocation")
     if errors:
         return Plan(s, cap, errors=tuple(errors), readiness=tuple(readiness), warnings=tuple(warnings),
-                    estimates=resource_estimates)
+                    estimates=resource_estimates, requested_settings=requested)
 
     selected: dict[str, float] = {}
     timing_fields = ("pump_fire_to_q_s", "pump_fire_width_s", "pump_q_width_s", "process_width_s",
@@ -278,7 +264,7 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         if name != "first_scan_delay_s" and selected[name] <= 0:
             errors.append(f"{name} quantizes to zero on the installed edge grid")
     if errors:
-        return Plan(s, cap, errors=tuple(errors), readiness=tuple(readiness), warnings=tuple(warnings))
+        return Plan(s, cap, errors=tuple(errors), warnings=tuple(warnings), requested_settings=requested)
     if selected["probe_pulse_width_s"] * selected["probe_rate_hz"] > cap.probe_duty_max:
         errors.append("Probe pulse width × rate exceeds the manufacturer's duty limit")
     if s.probe_reference_delay_s + selected["probe_pulse_width_s"] + 62.5e-9 >= 1 / selected["probe_rate_hz"]:
@@ -287,27 +273,27 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
     if not 1 <= divider <= cap.predivider_max:
         errors.append("Scan interval exceeds the installed frame predivider range")
     selected["scan_interval_s"] = divider / selected["probe_rate_hz"]
-    for role, requested, choices in (("sample", s.sample_rate_hz, cap.sample_rates_hz),
+    for role, requested_rate, choices in (("sample", s.sample_rate_hz, cap.sample_rates_hz),
             ("timing", s.timing_rate_hz, cap.timing_rates_hz),
             *(([("reference", s.reference_rate_hz, cap.reference_rates_hz)]) if s.mode == "dual" else [])):
-        if choices and not any(abs(requested - choice) <= 1e-8 * max(1, choice) for choice in choices):
-            errors.append(f"Selected {role} rate is absent from installed accepted readbacks")
+        if choices and not any(abs(requested_rate - choice) <= 1e-8 * max(1, choice) for choice in choices):
+            errors.append(f"Selected {role} rate is absent from installed supported readbacks")
     aggregate = s.sample_rate_hz + s.timing_rate_hz + (s.reference_rate_hz if s.mode == "dual" else 0.0)
     if aggregate > cap.hf2_aggregate_rate_max_hz:
         errors.append("Combined HF2LI detector and timing throughput exceeds installed aggregate limit")
     for value in (s.scan_start_cm1, s.scan_stop_cm1):
         if cap.wavenumber_min_cm1 is not None and value < cap.wavenumber_min_cm1 or cap.wavenumber_max_cm1 is not None and value > cap.wavenumber_max_cm1:
-            errors.append("Scan endpoint is outside the installed calibrated cm-1 range")
+            errors.append("Scan endpoint is outside the installed cm-1 range")
     if cap.scan_speed_min_cm1_s is not None and s.scan_speed_cm1_s < cap.scan_speed_min_cm1_s or cap.scan_speed_max_cm1_s is not None and s.scan_speed_cm1_s > cap.scan_speed_max_cm1_s:
-        errors.append("Scan speed is outside installed accepted capability limits")
+        errors.append("Scan speed is outside installed capability limits")
     for name, value in s.to_dict().items():
         if _finite_number(value):
             unit = "cm-1 s-1" if name.endswith("cm1_s") else "cm-1" if name.endswith("cm1") else "Hz" if name.endswith("hz") else "K" if name.endswith("_k") else "s" if name.endswith("_s") else "count / scalar"
-            selected_values[name] = {"requested": value, "selected": selected.get(name, value),
+            selected_values[name] = {"requested": getattr(requested, name), "selected": selected.get(name, value),
                 "actual": cap.actual_values.get(name), "unit": unit,
-                "source": s.settings_sources.get(name, "EXAMPLE ONLY" if s.example_only else "explicit operator request; qualification required")}
+                "source": s.settings_sources.get(name, "explicit operator setting")}
     if errors:
-        return Plan(s, cap, errors=tuple(errors), readiness=tuple(readiness), warnings=tuple(warnings), selected_values=selected_values)
+        return Plan(s, cap, errors=tuple(errors), warnings=tuple(warnings), selected_values=selected_values, requested_settings=requested)
 
     scan_duration = abs(s.scan_stop_cm1 - s.scan_start_cm1) / s.scan_speed_cm1_s
     interval = selected["scan_interval_s"]
@@ -338,14 +324,14 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         blocks.append(compile_block(s, cap, block_id="final-000", kind="final", elapsed_s=final_start,
                       scan_count=s.final_scan_count, pump=False, selected=selected))
     except (ValueError, OverflowError) as exc:
-        return Plan(s, cap, errors=(str(exc),), readiness=tuple(readiness), warnings=tuple(warnings), selected_values=selected_values)
+        return Plan(s, cap, errors=(str(exc),), warnings=tuple(warnings), selected_values=selected_values, requested_settings=requested)
 
     acquisition_s = sum(block.duration_s for block in blocks)
     preliminary_s = (s.preliminary_scan_count + 1) * interval
     acquire_blank = s.mode == "single" and s.blank_source == "acquire"
-    # A newly acquired single-detector blank follows the whole unpumped scan
-    # schedule. Loading a previously compatible complete record avoids that run.
-    blank_observation_s = s.observation_limit_s if acquire_blank else 0.0
+    # A reusable blank is a brief stationary spectral measurement. It does not
+    # repeat the chemical observation or its logarithmic waiting schedule.
+    blank_observation_s = preliminary_s if acquire_blank else 0.0
     control_spectral_s = preliminary_s
     byte_rate = (s.sample_rate_hz + (s.reference_rate_hz if s.mode == "dual" else 0)) * 48 + s.timing_rate_hz * 24
     # Conservative: timing and spectral streams may be retained during the full
@@ -355,8 +341,7 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
     largest_block_s = max(block.duration_s for block in blocks)
     peak_memory_bytes = plan_metadata_bytes + ceil(byte_rate * (s.native_chunk_duration_s * 3 + largest_block_s * 4))
     total_storage_bytes = native_bytes + plan_metadata_bytes
-    exposure_s = ((s.observation_limit_s if s.probe_during_wait else acquisition_s) *
-                  (2 if acquire_blank else 1)) + control_spectral_s
+    exposure_s = (s.observation_limit_s if s.probe_during_wait else acquisition_s) + control_spectral_s + blank_observation_s
     pulse_on_s = exposure_s * selected["probe_pulse_width_s"] * selected["probe_rate_hz"]
     if s.max_probe_exposure_s is not None and pulse_on_s > s.max_probe_exposure_s:
         errors.append("Declared pulse-on probe exposure budget is exceeded by preliminary/bursts/waits")
@@ -368,7 +353,7 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
     unknown_overheads = [name for name in overhead_names if getattr(s, name) is None]
     overhead = sum(getattr(s, name) or 0.0 for name in overhead_names)
     frames = sum(len(block.frames) for block in blocks)
-    upload = (frames * (2 if acquire_blank else 1) + s.preliminary_scan_count + 1) * (s.upload_seconds_per_frame or 0.0)
+    upload = (frames + (s.preliminary_scan_count + 1) * (2 if acquire_blank else 1)) * (s.upload_seconds_per_frame or 0.0)
     if s.upload_seconds_per_frame is None:
         unknown_overheads.append("upload_seconds_per_frame")
     if unknown_overheads:
@@ -377,6 +362,7 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         warnings.append("Dark idle disables installed T660-1 probe channel B; lock reference A stays on. Re-enable and settle are observed and add real gaps.")
     estimates = {**resource_estimates, "scan_duration_s": scan_duration, "scan_interval_s": interval, "total_scans": sum(b.scan_count for b in blocks),
         "physical_frame_count": frames, "pump_command_count": 1, "block_count": len(blocks),
+        "early_observed_until_s": blocks[0].planned_end_s,
         "longest_observation_s": s.observation_limit_s, "native_bytes": native_bytes, "total_storage_bytes": total_storage_bytes,
         "native_estimate_basis": "48 bytes/detector sample + 24 bytes/timing sample across entire observation, ×1.25 retention allowance",
         "peak_memory_bytes": peak_memory_bytes, "aggregate_rate_hz": aggregate,
@@ -390,25 +376,24 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         "unknown_overheads": unknown_overheads, "automatic_reset": False, "automatic_repeat": False}
     steps: list[dict[str, Any]] = [
         {"kind": "configure", "action": "freeze output root; own instruments; read and preserve initial state"},
-        {"kind": "controls", "action": "load/acquire compatible sequential matched blank" if s.mode == "single" else "simultaneous sample/matched-buffer reference; no routine separate blank"},
-        {"kind": "preliminary", "action": "acquire stationary unpumped spectra and temperature; explicit preliminary review and Start"},
+        {"kind": "controls", "action": "load/acquire brief reusable matched blank" if s.mode == "single" else "simultaneous sample/reference"},
+        {"kind": "preliminary", "action": "acquire stationary unpumped spectra"},
     ]
     previous = 0.0
     for block in blocks:
         if block.planned_elapsed_s > previous:
             steps.append({"kind": "idle", "start_elapsed_s": previous, "end_elapsed_s": block.planned_elapsed_s,
                           "probe_enabled": s.probe_during_wait, "pump_enabled": False,
-                          "temperature_check_interval_s": s.temperature_check_interval_s,
                           "action": "durable native chunks/checkpoints; abortable wait; retain original epoch"})
         steps.append({"kind": block.kind, "block_id": block.block_id, "scan_count": block.scan_count,
-            "planned_elapsed_s": block.planned_elapsed_s, "temperature_checks": ["before", "during", "after"],
+            "planned_elapsed_s": block.planned_elapsed_s,
             "pump_count": 1 if block.pump_enabled else 0})
         previous = block.planned_end_s
     steps.extend(({"kind": "restore", "action": "all pump/process outputs OFF; verify safe instrument restoration; retain failures"},
                   {"kind": "save_analyze", "action": "preserve all native/history/partial records; report band-specific right-censoring and unresolved claims"}))
     return Plan(s, cap, blocks=tuple(blocks), errors=tuple(errors), readiness=tuple(readiness), warnings=tuple(warnings),
                 selected_values=selected_values, estimates=estimates, steps=tuple(steps),
-                probe_clock_recipe=probe_clock_recipe(s, selected))
+                probe_clock_recipe=probe_clock_recipe(s, selected), requested_settings=requested)
 
 
 def compile_preliminary(plan: Plan, *, kind: str = "preliminary") -> BurstBlock:
@@ -420,9 +405,5 @@ def compile_preliminary(plan: Plan, *, kind: str = "preliminary") -> BurstBlock:
 
 
 def compile_blank_blocks(plan: Plan) -> tuple[BurstBlock, ...]:
-    """A complete single-detector sequential control uses every planned block."""
-    plan.require_valid()
-    selected = {name: row["selected"] for name, row in plan.selected_values.items()}
-    return tuple(compile_block(plan.settings, plan.capabilities, block_id=f"blank-{block.block_id}",
-                 kind=f"blank-{block.kind}", elapsed_s=block.planned_elapsed_s,
-                 scan_count=block.scan_count, pump=False, selected=selected) for block in plan.blocks)
+    """Brief reusable unpumped blank; no chemical elapsed-time schedule."""
+    return (compile_preliminary(plan, kind="baseline"),)

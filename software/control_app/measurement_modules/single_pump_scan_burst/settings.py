@@ -1,12 +1,14 @@
-"""Hardware-free, unit-bearing inputs for a single irreversible pump epoch.
+"""Compact user inputs and independent automatic installed-device settings.
 
-Unset operating values are intentional: EXPERIMENTS.md supplies scientific
-requirements, not qualified laser, timing or lock-in settings.
+The five main inputs describe spectral coverage and observation duration. None
+on an advanced setting means automatic, and is retained in the requested plan
+so changing one override never freezes unrelated automatic choices.
 """
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields, replace
 from copy import deepcopy
+from math import ceil, isfinite, log10
 from typing import Any, Mapping
 
 EXPERIMENT_ID = "single_pump_scan_burst"
@@ -22,7 +24,7 @@ CONDITION_PROFILES = {
 @dataclass(frozen=True)
 class Settings:
     mode: str = "single"
-    condition_id: str = "77K-HRP-G-S"
+    condition_id: str = ""
     sample_id: str = ""
     preparation_id: str = ""
     accepted_state_id: str = ""
@@ -35,24 +37,27 @@ class Settings:
     temperature_uncertainty_k: float | None = None
     min_temperature_k: float | None = None
     max_temperature_k: float | None = None
-    scan_start_cm1: float | None = None
-    scan_stop_cm1: float | None = None
-    scan_speed_cm1_s: float | None = None
+    scan_start_cm1: float | None = 1900.0
+    scan_stop_cm1: float | None = 1950.0
+    scan_speed_cm1_s: float | None = 5000.0
+    early_observation_s: float = 1.0
     scan_interval_s: float | None = None
     first_scan_delay_s: float | None = None
-    early_scan_count: int = 10
-    later_burst_count: int = 8
-    scans_per_burst: int = 3
-    final_scan_count: int = 3
+    early_scan_count: int | None = None
+    later_burst_count: int | None = None
+    scans_per_burst: int | None = None
+    final_scan_count: int | None = None
     first_later_burst_s: float | None = None
-    observation_limit_s: float | None = None
+    observation_limit_s: float | None = 1200.0
     later_burst_times_s: tuple[float, ...] = ()
     schedule_kind: str = "logarithmic"
-    preliminary_scan_count: int = 3
+    preliminary_scan_count: int | None = None
     blank_source: str = "acquire"
     sample_rate_hz: float | None = None
     reference_rate_hz: float | None = None
     timing_rate_hz: float | None = None
+    detector_matching_time_tolerance_s: float | None = None
+    wavenumber_matching_tolerance_cm1: float | None = None
     sample_demod: int = 0
     reference_demod: int = 3
     timing_demod: int = 2
@@ -71,7 +76,7 @@ class Settings:
     pump_fire_width_s: float | None = None
     pump_q_width_s: float | None = None
     process_width_s: float | None = None
-    pump_polarity: str = "positive"
+    pump_polarity: str = "negative"
     process_polarity: str = "negative"
     pump_dose_record_id: str = ""
     max_probe_exposure_s: float | None = None  # cumulative pulse-on seconds, not wall time
@@ -102,7 +107,7 @@ class Settings:
 
     @property
     def architecture_id(self) -> str:
-        return CONDITION_PROFILES.get(self.condition_id, {}).get("architecture_id", "")
+        return "single_pump_scan_burst"
 
     @property
     def instance_id(self) -> str:
@@ -171,6 +176,12 @@ class Capabilities:
         "instrument/wiring_map.yaml", "instrument/hardware_configuration.yaml",
     )
     actual_values: dict[str, Any] = field(default_factory=dict)
+    operating_values: dict[str, Any] = field(default_factory=dict)
+    qcl_ranges: tuple[dict[str, Any], ...] = ()
+    sample_filter_orders: tuple[int, ...] = ()
+    reference_filter_orders: tuple[int, ...] = ()
+    sample_timeconstants_by_order: dict[Any, tuple[float, ...]] = field(default_factory=dict)
+    reference_timeconstants_by_order: dict[Any, tuple[float, ...]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -178,38 +189,175 @@ class Capabilities:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Capabilities":
         values = dict(data)
-        for name in ("sample_rates_hz", "reference_rates_hz", "timing_rates_hz", "source_records"):
+        for name in ("sample_rates_hz", "reference_rates_hz", "timing_rates_hz", "source_records",
+                     "qcl_ranges", "sample_filter_orders", "reference_filter_orders"):
             if name in values:
                 values[name] = tuple(values[name])
         return cls(**values)
 
 
-def resolve_settings(settings: Settings, *, promoted_values: Mapping[str, Any] | None = None,
-                     installed_readbacks: Mapping[str, Any] | None = None) -> Settings:
-    """Fill only unset fields from caller-validated promoted bundles/readbacks.
+ESSENTIAL_FIELDS = ("scan_start_cm1", "scan_stop_cm1", "scan_speed_cm1_s", "early_observation_s", "observation_limit_s")
+AUTOMATIC_FIELDS = ("scan_interval_s", "first_scan_delay_s", "early_scan_count", "later_burst_count",
+    "scans_per_burst", "final_scan_count", "first_later_burst_s", "preliminary_scan_count",
+    "sample_rate_hz", "reference_rate_hz", "timing_rate_hz", "detector_matching_time_tolerance_s",
+    "wavenumber_matching_tolerance_cm1", "hf2_filter_tc_s", "hf2_filter_order",
+    "reference_filter_tc_s", "reference_filter_order", "sample_input_range_v", "reference_input_range_v",
+    "qcl", "probe_rate_hz", "probe_pulse_width_s", "probe_current_ma", "pump_fire_to_q_s",
+    "pump_fire_width_s", "pump_q_width_s", "process_width_s", "configuration_time_s", "tuning_settling_time_s",
+    "controls_time_s", "restoration_time_s", "processing_time_s", "upload_seconds_per_frame")
 
-    Each source mapping carries ``record_id`` and ``values``. The host promotion
-    loader must validate promotion before passing bundle values here; sample
-    selections are a different data type and never serve as instrument bundles.
-    User overrides are preserved, including their named evidence sources.
+
+def _positive(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value) and value > 0
+
+
+def resolve_settings(settings: Settings, *, capabilities: Capabilities | None = None,
+                     configuration: Mapping[str, Any] | None = None,
+                     promoted_values: Mapping[str, Any] | None = None,
+                     installed_readbacks: Mapping[str, Any] | None = None) -> Settings:
+    """Resolve each automatic field independently, without qualification gates.
+
+    Live operating readbacks take precedence over module configuration defaults.
+    Explicit non-None user values remain overrides. Legacy evidence and sample
+    metadata are preserved but never consulted to choose numerical settings.
+    The deprecated promoted_values argument is accepted for compatibility only.
     """
+    cap = capabilities or Capabilities()
     values = settings.to_dict()
-    empty_resolvable = {"hardware_evidence", "calibration_ids", "controls_record_ids", "promoted_bundle_ids"}
-    for source_kind, source in (("promoted", promoted_values), ("installed_readback", installed_readbacks)):
-        if not source:
-            continue
-        if not source.get("record_id") or not isinstance(source.get("values"), Mapping):
-            raise ValueError("Resolved values require a record_id and values mapping")
-        for key, value in source["values"].items():
-            if key not in values or key in {"mode", "condition_id", "experiment_id", "schema_version"}:
-                continue
-            if values[key] is None or (key in empty_resolvable and not values[key]):
-                values[key] = deepcopy(value)
-                # A human-readable record ID remains the operational source;
-                # retain source category separately without changing that ID.
-                values["settings_sources"][key] = str(source["record_id"])
-                values["settings_sources"][f"{key}:source_kind"] = source_kind
+    config = dict(configuration or {})
+    module = config.get("single_pump_scan_burst", {})
+    configured = dict(module.get("defaults", module.get("settings", {}))) if isinstance(module, Mapping) else {}
+    live = dict(cap.operating_values)
+    for supplied in (installed_readbacks,):
+        if supplied:
+            payload = supplied.get("values", supplied)
+            if isinstance(payload, Mapping):
+                live.update({key: value for key, value in payload.items() if key in AUTOMATIC_FIELDS})
+
+    def choose(name: str, fallback: Any, basis: str, *, use_live: bool = True) -> Any:
+        if values[name] is not None:
+            return values[name]
+        if use_live and live.get(name) is not None:
+            value, source = live[name], "live installed readback"
+        elif configured.get(name) is not None:
+            value, source = configured[name], "installed module configuration"
+        else:
+            value, source = fallback, basis
+        values[name] = deepcopy(value)
+        values["settings_sources"][name] = f"automatic: {source}"
+        return value
+
+    ranges = []
+    if _positive(values["scan_start_cm1"]) and _positive(values["scan_stop_cm1"]):
+        lo, hi = sorted((values["scan_start_cm1"], values["scan_stop_cm1"]))
+        ranges = [r for r in cap.qcl_ranges if r.get("minimum_cm1", float("inf")) <= lo and r.get("maximum_cm1", -float("inf")) >= hi]
+    selected_qcl = choose("qcl", int(ranges[0]["qcl"]) if ranges else 1,
+        "installed QCL covering both scan endpoints" if ranges else "provisional QCL 1 until installed range readback",
+        use_live=not bool(ranges))
+    # Current and pulse settings belong to a particular QCL. Preserve each
+    # installed channel's readback so changing spectral endpoints can resolve
+    # another channel without borrowing the previous channel's operating values.
+    qcl_parameters = live.get("qcl_parameters", ())
+    if isinstance(qcl_parameters, Mapping):
+        qcl_parameters = [{"qcl": int(key), **record} for key, record in qcl_parameters.items()]
+    matching_qcl = next((record for record in qcl_parameters if record.get("qcl") == selected_qcl), None)
+    if live.get("qcl") is not None and live["qcl"] != selected_qcl:
+        for name in ("probe_rate_hz", "probe_pulse_width_s", "probe_current_ma"):
+            live.pop(name, None)
+    if matching_qcl is not None:
+        for source, target in (("pulse_rate_hz", "probe_rate_hz"), ("current_ma", "probe_current_ma")):
+            if matching_qcl.get(source) is not None:
+                live[target] = matching_qcl[source]
+        if matching_qcl.get("pulse_width_ns") is not None:
+            live["probe_pulse_width_s"] = matching_qcl["pulse_width_ns"] * 1e-9
+
+    # Standing installed pulse topology; each value may be replaced independently
+    # by its live readback or explicit override. A missing laser current is kept
+    # as None so the service preserves the device's existing current.
+    choose("probe_rate_hz", 2_000_000.0, "installed 2 MHz reference/probe configuration")
+    choose("probe_pulse_width_s", 150e-9, "installed 150 ns probe pulse configuration")
+    choose("probe_current_ma", None, "preserve existing QCL current")
+    choose("sample_input_range_v", 1.0, "installed HF2LI 1 V input range")
+    choose("reference_input_range_v", 1.0, "installed HF2LI 1 V input range")
+    choose("pump_fire_to_q_s", 179830e-9, "ndyag_alignment_10hz nominal, uncalibrated Fire-to-Q-switch timing")
+    choose("pump_fire_width_s", 10e-6, "installed Surelite command width")
+    choose("pump_q_width_s", 10e-6, "installed Surelite command width")
+    choose("process_width_s", .010, "installed negative MIRcat process-trigger command")
+    choose("first_scan_delay_s", 0.0, "earliest scan after Q-switch command")
+    timing_candidates = [v for v in cap.timing_rates_hz if _positive(v)]
+    choose("timing_rate_hz", max(timing_candidates) if timing_candidates else 230000.0,
+           "highest installed timing stream rate" if timing_candidates else "HF2LI 230 kSa/s readout request", use_live=False)
+    auto_roles = [("sample_rate_hz", cap.sample_rates_hz)]
+    if values["mode"] == "dual":
+        auto_roles.append(("reference_rate_hz", cap.reference_rates_hz))
+    auto_names = {name for name, _ in auto_roles if values[name] is None}
+    if _positive(values["timing_rate_hz"]) and _positive(cap.hf2_aggregate_rate_max_hz):
+        available = cap.hf2_aggregate_rate_max_hz - values["timing_rate_hz"] - sum(values[name] for name, _ in auto_roles if name not in auto_names and _positive(values[name]))
+        per_auto = max(0., available / max(1, len(auto_names)))
+    else:
+        per_auto = 230000.0
+    for name, candidates in auto_roles:
+        supported = [v for v in candidates if _positive(v) and v <= per_auto]
+        fallback = max(supported) if supported else min(230000.0, per_auto)
+        choose(name, fallback, "highest supported detector rate within aggregate throughput" if supported else
+               "provisional detector rate request within aggregate throughput", use_live=False)
+    # Keep an unused reference field resolved for portable detector-mode settings.
+    if values["mode"] == "single":
+        choose("reference_rate_hz", values["sample_rate_hz"], "sample-matched unused reference rate", use_live=False)
+    matched_rates = [values["sample_rate_hz"]] + ([values["reference_rate_hz"]] if values["mode"] == "dual" else [])
+    rate = min(matched_rates) if all(_positive(v) for v in matched_rates) else 230000.0
+    choose("detector_matching_time_tolerance_s", .5 / rate, "half the slower detector sample interval", use_live=False)
+    speed = values["scan_speed_cm1_s"] if _positive(values["scan_speed_cm1_s"]) else 5000.0
+    choose("wavenumber_matching_tolerance_cm1", speed / rate, "scan distance over the slower detector sample interval", use_live=False)
+    for order_name, tc_name, orders, constants in (
+        ("hf2_filter_order", "hf2_filter_tc_s", cap.sample_filter_orders, cap.sample_timeconstants_by_order),
+        ("reference_filter_order", "reference_filter_tc_s", cap.reference_filter_orders, cap.reference_timeconstants_by_order)):
+        order = choose(order_name, min(orders) if orders else 1,
+                       "lowest supported order for fast spectral response" if orders else "provisional first-order filter request", use_live=False)
+        supported = constants.get(order, constants.get(str(order), ()))
+        supported = [v for v in supported if _positive(v)]
+        choose(tc_name, min(supported) if supported else .8e-6,
+               "shortest supported time constant for selected filter order" if supported else "provisional 0.8 microsecond time-constant request", use_live=False)
+
+    if all(_positive(values[key]) for key in ("scan_start_cm1", "scan_stop_cm1", "scan_speed_cm1_s")):
+        duration = abs(values["scan_stop_cm1"] - values["scan_start_cm1"]) / values["scan_speed_cm1_s"]
+    else:
+        duration = .01  # Invalid essentials are reported by the planner itself.
+    if all(isinstance(values[key], (int, float)) and isfinite(values[key]) for key in ("pump_fire_to_q_s", "first_scan_delay_s", "process_width_s")):
+        offset = values["pump_fire_to_q_s"] + values["first_scan_delay_s"]
+        cadence = offset + max(duration, values["process_width_s"]) + max(.001, duration * .2)
+    else:
+        cadence = .02
+    interval = choose("scan_interval_s", cadence, "scan/process duration plus 20% return allowance (minimum 1 ms)", use_live=False)
+    first_delay = values["first_scan_delay_s"] if isinstance(values["first_scan_delay_s"], (int, float)) and isfinite(values["first_scan_delay_s"]) else 0.0
+    early_count = max(1, ceil(max(0.0, values["early_observation_s"] - first_delay - duration) / interval) + 1) if _positive(values["early_observation_s"]) and _positive(interval) else 1
+    choose("early_scan_count", early_count, "minimum scans whose last scan end covers the requested early horizon", use_live=False)
+    choose("scans_per_burst", 3, "three individual spectra per later burst", use_live=False)
+    choose("final_scan_count", 3, "three final-state spectra", use_live=False)
+    choose("preliminary_scan_count", 3, "three unpumped blank/preliminary spectra", use_live=False)
+    early_end = first_delay + values["early_scan_count"] * interval if _positive(values["early_scan_count"]) and _positive(interval) else values["early_observation_s"]
+    first_later = choose("first_later_burst_s", max(early_end * 2, early_end + interval * 4), "separate burst after the complete early train", use_live=False)
+    ratio = values["observation_limit_s"] / first_later if _positive(values["observation_limit_s"]) and _positive(first_later) else 1
+    count = len(values["later_burst_times_s"]) if values["later_burst_times_s"] else max(1, ceil(max(0, log10(ratio)) * 3) + 1)
+    choose("later_burst_count", count, "three logarithmic intervals per elapsed-time decade", use_live=False)
+    for name, value in (("configuration_time_s", 10.0), ("tuning_settling_time_s", .1), ("controls_time_s", 0.0),
+                        ("restoration_time_s", 2.0), ("processing_time_s", 2.0), ("upload_seconds_per_frame", .04)):
+        choose(name, value, "preparation/processing estimate; actual stage durations retained")
     return Settings.from_dict(values)
+
+
+def resolve_live_settings(settings: Settings | Mapping[str, Any], readbacks: Mapping[str, Any] | Capabilities,
+                          configuration: Mapping[str, Any] | None = None) -> Settings:
+    """Owned adapters supply readbacks; this resolver itself performs no I/O."""
+    if not isinstance(settings, Settings):
+        settings = Settings.from_dict(settings)
+    if isinstance(readbacks, Capabilities):
+        return resolve_settings(settings, capabilities=readbacks, configuration=configuration)
+    names = {f.name for f in fields(Capabilities)}
+    payload = readbacks.get("capabilities", readbacks)
+    cap = Capabilities.from_dict({key: value for key, value in payload.items() if key in names})
+    return resolve_settings(settings, capabilities=cap, configuration=configuration,
+                            installed_readbacks={"values": readbacks.get("values", {})})
 
 
 def example_settings(mode: str = "single") -> Settings:

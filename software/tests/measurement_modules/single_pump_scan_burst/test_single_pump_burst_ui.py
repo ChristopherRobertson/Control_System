@@ -1,8 +1,9 @@
-"""Real host tab construction and interaction; injected operations only."""
+"""Compact host integration and experiment data compatibility, without hardware."""
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from threading import Event
+import json
 import time
 
 import numpy as np
@@ -20,11 +21,11 @@ def qt_app(monkeypatch):
 
 
 def wait_for(app, check):
-    limit = time.monotonic()+10
+    deadline = time.monotonic()+15
     while not check():
         app.processEvents()
-        if time.monotonic() > limit:
-            pytest.fail("Host worker did not finish")
+        if time.monotonic() > deadline:
+            pytest.fail("Host operation did not finish")
         time.sleep(.005)
     app.processEvents()
 
@@ -46,49 +47,48 @@ class InjectedRunner:
     def prepare(self, *, kind):
         self.kind = kind
         if kind == "capabilities":
-            from control_app.measurement_modules.single_pump_scan_burst.settings import Capabilities
-            self.store.finalize("completed")
-            return {"capabilities": Capabilities().to_dict(), "complete": True}
+            self.store.finalize("complete")
+            return {"capabilities": self.plan.capabilities.to_dict(), "complete": True}
         native = {"sample_time_s": np.array([0., .001, .002]), "wavenumber_cm1": np.array([1900., 1925., 1950.]),
                   "sample": np.array([.8, .7, .8]), "scan_index": np.zeros(3, dtype=np.int64)}
         if self.context.mode == "dual":
             native["reference"] = np.ones(3)
-        self.store.save_chunk(kind, native)
-        self.store.finalize("completed")
-        return {"complete": True, "native": native, "output_path": str(self.store.path)}
+        self.store.save_chunk("unpumped-"+kind, native)
+        self.store.finalize("complete")
+        return {"status": "complete", "complete": True, "native": native, "metadata": self.store.metadata,
+                "output_path": str(self.store.path)}
 
-    def run(self, review, baseline=None, continuation=None):
-        self.kind, self.review, self.baseline = "measurement", review, baseline
+    def run(self, baseline=None, continuation=None):
+        self.kind, self.baseline = "measurement", baseline
         while not self.gate.wait(.01):
             if self.cancelled.is_set():
                 self.store.finalize("stopped")
                 return {"status": "stopped", "output_path": str(self.store.path)}
-        self.progress({"stage": "saving", "message": "Native records", "fraction": .95,
-                       "elapsed_s": 4., "remaining_s": 1., "remaining_basis": "processing estimate"})
-        self.store.finalize("completed")
-        return {"status": "completed", "output_path": str(self.store.path),
+        self.progress({"stage": "saving", "message": "Saving", "fraction": .95, "elapsed_s": 4.})
+        self.store.finalize("complete")
+        return {"status": "complete", "output_path": str(self.store.path),
                 "data": {"processed": {"time_s": [-.1, .001, 1., 100.], "wavenumber_cm1": [1925.]*4,
-                    "delta_absorbance": [0., .2, .1, .05], "sample": [.8]*4,
+                    "delta_absorbance": [0., .2, .1, .05], "ratio": [.8]*4,
                     "scan_index": [0, 1, 2, 3], "direction": [1, 1, 1, 1]}}}
 
 
-def create_widget(tmp_path, mode="single", roots=None):
+def create_widget(tmp_path, mode="single", roots=None, *, runner_factory=InjectedRunner):
     from control_app.measurement_host.context import ContextFactory
     from control_app.measurement_modules.single_pump_scan_burst.widgets import SinglePumpScanBurstWidget
     roots = roots or [tmp_path]
     context = ContextFactory(save_root_provider=lambda: roots[0], ownership=object()).for_experiment("single_pump_scan_burst").for_mode(mode)
-    panel = SinglePumpScanBurstWidget(context, runner_factory=InjectedRunner)
-    panel.settings_widget.load_example()
-    return panel
+    return SinglePumpScanBurstWidget(context, runner_factory=runner_factory, hardware=False)
 
 
-def test_real_package_discovery_constructs_exact_two_tabs_without_devices(qt_app, tmp_path):
+def test_discovery_exact_tabs_compact_essentials_no_operator_gates(qt_app, tmp_path):
     from control_app.measurement_host.context import ContextFactory
     from control_app.measurement_host.registry import discover_modules, create_registered_tabs
+    from control_app.measurement_host.presentation import CompactMeasurementPanel
+    from control_app.measurement_modules.single_pump_scan_burst.widgets import ESSENTIALS
+    from PySide6.QtWidgets import QDoubleSpinBox
     def forbidden(**kwargs):
-        raise AssertionError("Construction must not instantiate any device")
-    factory = ContextFactory(save_root_provider=lambda: tmp_path, ownership=object(),
-                             real_device_factories={"hf2li": forbidden, "mircat": forbidden})
+        raise AssertionError("Construction must not instantiate a device")
+    factory = ContextFactory(save_root_provider=lambda: tmp_path, ownership=object(), real_device_factories={"hf2li": forbidden})
     descriptors = [item for item in discover_modules().descriptors if item.experiment_id == "single_pump_scan_burst"]
     result = create_registered_tabs(descriptors, factory)
     assert not result.issues
@@ -96,93 +96,231 @@ def test_real_package_discovery_constructs_exact_two_tabs_without_devices(qt_app
         ("single_pump_scan_burst:single", "Single-Pump Scan Bursts"),
         ("single_pump_scan_burst:dual", "Dual-Detector Single-Pump Scan Bursts")]
     first, second = [item.widget for item in result.handles]
+    assert isinstance(first, CompactMeasurementPanel)
     assert first.adapter is not second.adapter
-    assert first.settings_widget is not second.settings_widget
-    assert first.context.preferences.namespace == "measurements/single_pump_scan_burst/single/v1/"
-    assert second.context.preferences.namespace == "measurements/single_pump_scan_burst/dual/v1/"
-    assert not first.start_button.isEnabled()
-    assert first.capabilities_button.isEnabled()  # Discovery can resolve an incomplete plan.
+    assert first.plan.valid and second.plan.valid
+    expected = {item[0] for item in ESSENTIALS}
+    assert {item.objectName() for item in first.settings_widget.findChildren(QDoubleSpinBox)} == expected
+    assert len(expected) == 5
     for panel in (first, second):
+        assert not hasattr(panel, "review")
+        assert not hasattr(panel.settings_widget, "execution")
+        assert "sample_id" not in panel.settings_widget.controls
+        assert "measured_temperature_k" not in panel.settings_widget.controls
+        assert "hardware_evidence" not in panel.settings_widget.controls
+        assert not panel.advanced_content.isVisible()
+        assert panel.preliminary_button.isEnabled()
+        assert panel.adapter.hardware_required("measurement", {"_execution": "simulated"})
+        assert not panel.adapter.hardware_required("load_blank", {})
         panel.deleteLater()
 
 
-def test_single_blank_review_start_output_freeze_invalidation_and_new_run(qt_app, tmp_path):
-    roots = [tmp_path / "initial"]
-    panel = create_widget(tmp_path, roots=roots)
+def test_sample_without_blank_starts_and_compatible_data_are_reused(qt_app, tmp_path):
+    panel = create_widget(tmp_path)
     other = create_widget(tmp_path, "dual")
-    assert panel.plan is not None and other.plan is not None
-    assert not panel.preliminary_button.isEnabled()
-    with pytest.raises(ValueError, match="blank"):
-        panel.begin("preliminary")
-    panel.begin_blank()
-    wait_for(qt_app, lambda: not panel.command_running())
-    assert panel.adapter.blank["complete"] and panel.preliminary is None
     assert panel.preliminary_button.isEnabled()
     panel.begin("preliminary")
     wait_for(qt_app, lambda: not panel.command_running())
-    assert panel.preliminary and not panel.start_button.isEnabled()
-    panel.review.setChecked(True)
-    InjectedRunner.gate.clear()
-    try:
-        panel.begin("measurement")
-        snapshot = panel.snapshot
-        assert panel.command_running() and panel.close_blockers()
-        roots[0] = tmp_path / "different"
-        panel.output_location_changed(roots[0])
-        assert snapshot.operation.output_path.is_relative_to(tmp_path / "initial")
-        assert not snapshot.operation.output_path.is_relative_to(roots[0])
-        assert not panel.settings_widget.isEnabled()
-    finally:
-        InjectedRunner.gate.set()
-        wait_for(qt_app, lambda: not panel.command_running())
-    assert panel.result and other.result is None and other.adapter.blank is None
-    assert panel.plot.result is not None
-    old = deepcopy(panel.adapter.read_settings())
-    panel.settings_widget.controls["scan_speed_cm1_s"].setText("4000")
-    assert panel.preliminary is None and not panel.review.isChecked()
-    assert "scan_speed_cm1_s" in panel.blank_status.text()
-    panel.adapter.apply_settings(old)
-    assert panel.preliminary_button.isEnabled() and not panel.review.isChecked()
+    first = panel.preliminary
+    assert first and panel.start_button.isEnabled()
+    assert panel.adapter.blank is None
+    panel.settings_widget.controls["observation_limit_s"].setValue(2400.)
+    assert panel.preliminary is first and panel.start_button.isEnabled()
+    speed = panel.settings_widget.controls["scan_speed_cm1_s"]
+    speed.setValue(4000.)
+    assert not panel.start_button.isEnabled()
+    speed.setValue(5000.)
+    assert panel.preliminary is first and panel.start_button.isEnabled()
+    panel.begin_blank()
+    wait_for(qt_app, lambda: not panel.command_running())
+    assert panel.adapter.blank and panel.start_button.isEnabled()
+    panel.begin("measurement")
+    wait_for(qt_app, lambda: not panel.command_running())
+    assert panel.result and other.result is None
+    assert InjectedRunner.calls[-1].baseline["blank"] is not None
+    assert panel.preliminary is first and panel.start_button.isEnabled()
+    entered = deepcopy(panel.adapter.read_settings())
     panel.new_run()
     assert panel.result is panel.preliminary is panel.adapter.blank is None
-    assert panel.adapter.read_settings() == old
-    assert not panel.plot.figure.axes
+    assert panel.adapter.read_settings() == entered
+    assert not other.command_running()
     panel.deleteLater()
     other.deleteLater()
 
 
-def test_dual_no_blank_independent_cancel_and_plan_schema(qt_app, tmp_path):
+def test_loaded_sample_and_blank_reuse_without_dialog_gate(qt_app, tmp_path):
+    producer = create_widget(tmp_path)
+    producer.begin("preliminary")
+    wait_for(qt_app, lambda: not producer.command_running())
+    sample_path = producer.preliminary["output_path"]
+    producer.begin_blank()
+    wait_for(qt_app, lambda: not producer.command_running())
+    blank_path = producer.adapter.blank["output_path"]
+    consumer = create_widget(tmp_path)
+    consumer.load_run(sample_path)
+    wait_for(qt_app, lambda: not consumer.command_running())
+    assert consumer.preliminary and consumer.start_button.isEnabled(), consumer.status.text()
+    sample = consumer.preliminary
+    consumer.settings_widget.controls["observation_limit_s"].setValue(2400.)
+    assert consumer.preliminary is sample and consumer.start_button.isEnabled()
+    consumer.load_run(blank_path)
+    wait_for(qt_app, lambda: not consumer.command_running())
+    assert consumer.adapter.blank is not None and consumer.start_button.isEnabled()
+    producer.deleteLater()
+    consumer.deleteLater()
+
+
+def test_device_check_can_recover_while_an_advanced_override_is_invalid(qt_app, tmp_path):
+    panel = create_widget(tmp_path)
+    rate = panel.settings_widget.controls["sample_rate_hz"]
+    rate.setEditText("invalid rate")
+    assert panel.plan is None
+    assert not panel.preliminary_button.isEnabled()
+    assert panel.capabilities_button.isEnabled()
+    panel.begin_capabilities()
+    wait_for(qt_app, lambda: not panel.command_running())
+    assert InjectedRunner.calls[-1].kind == "capabilities"
+    assert panel.adapter.capabilities is not None
+    assert rate.currentText() == "invalid rate"
+    assert panel.plan is None
+    rate.setEditText("Automatic")
+    assert panel.plan is not None and panel.preliminary_button.isEnabled()
+    panel.deleteLater()
+
+
+def test_show_while_instrument_owned_retains_owner_and_allows_later_check(qt_app, tmp_path):
+    from control_app.measurement_host.context import ContextFactory
+    from control_app.measurement_host.ownership import HardwareCoordinator
+    from control_app.measurement_modules.single_pump_scan_burst.widgets import SinglePumpScanBurstWidget
+    cancelled = []
+    coordinator = HardwareCoordinator(tmp_path / "instrument.lock")
+    owner = coordinator.acquire("other:operation", cancel=lambda reason: cancelled.append(reason))
+    class OwnedCapabilityRunner(InjectedRunner):
+        def prepare(self, *, kind):
+            result = super().prepare(kind=kind)
+            self.context.ownership.release(self.operation.ownership, safe_verified=True, preservation_verified=True)
+            return result
+    def forbidden(**kwargs):
+        raise AssertionError("The UI must not instantiate hardware")
+    context = ContextFactory(save_root_provider=lambda: tmp_path, ownership=coordinator,
+        real_device_factories={"hf2li": forbidden}).for_experiment("single_pump_scan_burst").for_mode("single")
+    panel = SinglePumpScanBurstWidget(context, runner_factory=OwnedCapabilityRunner)
+    panel.show()
+    qt_app.processEvents()
+    assert panel.status.text().startswith("Instrument busy")
+    assert not panel._capability_check_attempted and not panel.command_running()
+    coordinator.assert_owner(owner)
+    assert not cancelled
+    coordinator.release(owner, safe_verified=True, preservation_verified=True)
+    panel.capabilities_button.click()
+    wait_for(qt_app, lambda: not panel.command_running())
+    assert panel._capability_check_attempted
+    assert panel.adapter.capabilities is not None
+    assert coordinator.snapshot()["state"] == "free"
+    panel.hide()
+    panel.deleteLater()
+
+
+def test_auto_overrides_remain_independent_and_saved_plan_keeps_auto(qt_app, tmp_path):
     panel = create_widget(tmp_path, "dual")
-    other = create_widget(tmp_path, "single")
-    assert panel.preliminary_button.isEnabled()
+    requested = panel.adapter.read_settings()
+    assert requested["sample_rate_hz"] is None and requested["reference_rate_hz"] is None
+    panel.settings_widget.controls["sample_rate_hz"].setEditText("10000")
+    changed = panel.adapter.read_settings()
+    assert changed["sample_rate_hz"] == 10000. and changed["reference_rate_hz"] is None
+    assert changed["early_scan_count"] is None and changed["scans_per_burst"] is None
+    assert panel.plan.settings.sample_rate_hz == 10000.
+    path = tmp_path / "independent-auto.json"
+    panel.adapter.save_plan(path, changed, panel.plan)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["settings"]["reference_rate_hz"] is None
+    assert saved["settings"]["early_scan_count"] is None
+    with pytest.raises(FileExistsError):
+        panel.adapter.save_plan(path, changed, panel.plan)
+    other = create_widget(tmp_path)
+    with pytest.raises(ValueError, match="mode"):
+        other.adapter.load_plan(path)
+    panel.deleteLater()
+    other.deleteLater()
+
+
+def test_frozen_output_and_abort_are_scoped(qt_app, tmp_path):
+    roots = [tmp_path / "first"]
+    panel = create_widget(tmp_path, "dual", roots)
+    other = create_widget(tmp_path)
     panel.begin("preliminary")
     wait_for(qt_app, lambda: not panel.command_running())
-    assert panel.preliminary and panel.adapter.blank is None
-    panel.review.setChecked(True)
     InjectedRunner.gate.clear()
     try:
         panel.begin("measurement")
+        snapshot = panel.snapshot
+        roots[0] = tmp_path / "second"
+        panel.output_location_changed(roots[0])
+        assert snapshot.operation.output_path.is_relative_to(tmp_path / "first")
+        assert not panel.settings_widget.isEnabled()
+        assert panel.close_blockers()
         wait_for(qt_app, lambda: panel.adapter._runner is not None)
         panel.request_abort("Stopped by user")
         wait_for(qt_app, lambda: not panel.command_running())
     finally:
         InjectedRunner.gate.set()
     assert panel.status.text().startswith("Acquisition stopped")
-    assert not other.command_running() and other.adapter._runner is None
-    path = tmp_path / "dual-plan.json"
-    panel.adapter.save_plan(path, panel.adapter.read_settings(), panel.plan)
-    with pytest.raises(ValueError, match="mode"):
-        other.adapter.load_plan(path)
-    with pytest.raises(FileExistsError):
-        panel.adapter.save_plan(path, panel.adapter.read_settings(), panel.plan)
+    assert not other.command_running()
+    assert panel.preliminary is not None
     panel.deleteLater()
     other.deleteLater()
 
 
-def test_native_log_plot_excludes_baseline_and_preserves_sparse_support(qt_app):
+def test_legacy_simulator_preferences_restore_live_automatic_values(qt_app, tmp_path):
+    panel = create_widget(tmp_path)
+    values = panel.adapter.read_settings()
+    values.update(example_only=True, _execution="simulated", probe_rate_hz=123., probe_current_ma=999., sample_rate_hz=42.)
+    panel.adapter.apply_settings(values)
+    restored = panel.adapter.read_settings()
+    assert not restored["example_only"]
+    assert "_execution" not in restored
+    assert restored["probe_rate_hz"] is restored["probe_current_ma"] is restored["sample_rate_hz"] is None
+    assert restored["scan_start_cm1"] == values["scan_start_cm1"]
+    panel.deleteLater()
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_connected_workflow_with_injected_virtual_devices_no_blank_gate(qt_app, tmp_path, mode):
+    from control_app.measurement_modules.single_pump_scan_burst.settings import Settings
+    from control_app.measurement_modules.single_pump_scan_burst.persistence import load_run
+    panel = create_widget(tmp_path, mode, runner_factory=None)
+    settings = Settings(mode=mode, early_observation_s=.05, observation_limit_s=.5, later_burst_count=2, scans_per_burst=2)
+    panel.adapter.apply_settings(settings.to_dict())
+    assert panel.plan.valid, panel.validation.text()
+    panel.begin("preliminary")
+    wait_for(qt_app, lambda: not panel.command_running())
+    assert panel.preliminary and panel.start_button.isEnabled(), panel.status.text()
+    panel.begin("measurement")
+    wait_for(qt_app, lambda: not panel.command_running())
+    assert panel.result and panel.result["status"] == "complete", panel.status.text()
+    result = load_run(panel.result["output_path"])
+    assert len([event for event in result["events"] if event["kind"] == "pump_intent"]) == 1
+    assert panel.plot.result["label"] == "ΔAbsorbance"
+    assert panel.start_button.isEnabled()
+    export = tmp_path / (mode + "-quantitative.csv")
+    panel.adapter.export_run(export, panel.result)
+    assert "delta_absorbance" in export.read_text(encoding="utf-8").splitlines()[0]
+    panel.deleteLater()
+
+
+def test_native_precision_and_electrical_time_labels_with_sparse_log_support(qt_app):
     from matplotlib.figure import Figure
     from control_app.measurement_modules.single_pump_scan_burst.widgets import BurstPlotAdapter, _display_points
-    raw = {"processed": {"time_s": [-1., 0., 1e-9, .001, 1000.], "wavenumber_cm1": [1934.]*5,
+    ticks = np.array([2**60+1, 2**60+2, 2**60+3], dtype=np.uint64)
+    native = {"metadata": {"mode": "single"}, "epoch": {"pump_time_s": 1., "pump_timestamp_ticks": 2**60,
+        "clockbase_hz": 1000000000, "electrical_observed": True}, "native": {
+        "native_sample_ticks": ticks, "sample_time_s": [1., 1., 1.], "clockbase_hz": 1000000000,
+        "wavenumber_cm1": [1934.]*3, "sample": [.8, .7, .8]}}
+    points = _display_points(native)
+    np.testing.assert_allclose(points["time"], [1e-9, 2e-9, 3e-9], rtol=0, atol=1e-24)
+    assert points["time_label"] == "Time from trigger (s)"
+    raw = {"metadata": {"mode": "dual"}, "summary": {"time_reference": "electrical_trigger"}, "processed": {
+        "time_s": [-1., 0., 1e-9, .001, 1000.], "wavenumber_cm1": [1934.]*5,
         "ratio": [1., 1., .5, np.nan, .9], "valid": [True, True, True, False, True],
         "scan_index": [0, 1, 2, 3, 4], "direction": [1]*5}}
     points = _display_points(raw)
@@ -191,152 +329,22 @@ def test_native_log_plot_excludes_baseline_and_preserves_sparse_support(qt_app):
     renderer.wavenumbers = np.array([1934.])
     figure = Figure()
     renderer.draw(figure, points)
-    axes = figure.axes[0]
-    assert axes.get_xscale() == "log"
-    assert np.array_equal(axes.lines[0].get_xdata(), [1e-9, .001, 1000.])
-    assert np.isnan(axes.lines[0].get_ydata()[1])
-    assert axes.lines[0].get_linestyle() == "None"  # No curve bridges unobserved waits.
-    assert "Reference-normalized" in axes.get_ylabel()
-    assert "Absorbance" not in axes.get_ylabel()
-    points["burst"] = np.array([0, 0, 0, 0, 1])
-    renderer.view = "Early linear kinetics"
-    early = Figure()
-    renderer.draw(early, points)
-    assert early.axes[0].get_xscale() == "linear"
-    assert np.array_equal(early.axes[0].lines[0].get_xdata(), [-1., 0., 1e-9, .001])
+    assert figure.axes[0].get_xscale() == "log"
+    assert np.array_equal(figure.axes[0].lines[0].get_xdata(), [1e-9, .001, 1000.])
+    assert np.isnan(figure.axes[0].lines[0].get_ydata()[1])
+    assert figure.axes[0].lines[0].get_linestyle() == "None"
+    assert figure.axes[0].get_xlabel() == "Time from trigger (s)"
 
 
-def test_explicit_capabilities_check_uses_host_worker_without_optics(qt_app, tmp_path):
-    panel = create_widget(tmp_path, "dual")
-    panel.begin_capabilities()
-    wait_for(qt_app, lambda: not panel.command_running())
-    assert InjectedRunner.calls[-1].kind == "capabilities"
-    assert panel.adapter.capabilities is not None
-    assert panel.preliminary is None and not panel.review.isChecked()
-    panel.deleteLater()
-
-
-@pytest.mark.parametrize("mode", ["single", "dual"])
-def test_integrated_virtual_instruments_complete_guided_one_pump_run(qt_app, tmp_path, mode):
-    from control_app.measurement_host.context import ContextFactory
-    from control_app.measurement_modules.single_pump_scan_burst.widgets import SinglePumpScanBurstWidget
-    from control_app.measurement_modules.single_pump_scan_burst.settings import example_settings
-    from control_app.measurement_modules.single_pump_scan_burst.persistence import load_run
-    context = ContextFactory(save_root_provider=lambda: tmp_path, ownership=object()).for_experiment("single_pump_scan_burst").for_mode(mode)
-    panel = SinglePumpScanBurstWidget(context)
-    settings = replace(example_settings(mode), observation_limit_s=4., first_later_burst_s=.5,
-                       later_burst_count=3, temperature_check_interval_s=.1)
-    panel.settings_widget.apply_settings({**settings.to_dict(), "_execution": "simulated"})
-    assert panel.plan is not None, panel.validation.text()
-    if mode == "single":
-        panel.begin_blank()
-        wait_for(qt_app, lambda: not panel.command_running())
-        assert panel.adapter.blank is not None, panel.status.text()
-    panel.begin("preliminary")
-    wait_for(qt_app, lambda: not panel.command_running())
-    assert panel.preliminary is not None, panel.status.text()
-    panel.review.setChecked(True)
-    panel.begin("measurement")
-    wait_for(qt_app, lambda: not panel.command_running())
-    assert panel.result is not None, panel.status.text()
-    assert panel.result["status"] == "complete"
-    run = load_run(panel.result["output_path"])
-    assert len([event for event in run["events"] if event["kind"] == "pump_intent"]) == 1
-    assert len([event for event in run["events"] if event["kind"] == "pump_epoch_observed"]) == 1
-    assert panel.plot.result is not None
-    assert np.max(panel.plot.result["time"]) >= settings.observation_limit_s
-    assert panel.plot.result["label"] == "ΔAbsorbance"
-    assert panel.preliminary is None and not panel.review.isChecked() and not panel.start_button.isEnabled()
-    assert settings.accepted_state_id in panel.adapter.used_accepted_states
-    assert len(panel.summary.text().splitlines()) <= 7
-    export = tmp_path / (mode + "-quantitative.csv")
-    panel.adapter.export_run(export, panel.result)
-    assert "delta_absorbance" in export.read_text(encoding="utf-8").splitlines()[0]
-    panel.new_run()
-    assert settings.accepted_state_id in panel.adapter.used_accepted_states
-    assert "already has a pump" in panel.status.text()
-    panel.deleteLater()
-
-
-def test_explicit_continuation_uses_retained_epoch_without_replacement_pump(qt_app, tmp_path):
-    import json
-    from control_app.measurement_host.context import ContextFactory
-    from control_app.measurement_modules.single_pump_scan_burst.widgets import SinglePumpScanBurstWidget
-    from control_app.measurement_modules.single_pump_scan_burst.settings import example_settings
-    from control_app.measurement_modules.single_pump_scan_burst.persistence import load_run
-    from control_app.measurement_modules.single_pump_scan_burst.runner import BurstRunner
-    def stop_during_wait(context, plan, operation, *, store, progress):
-        runner = BurstRunner(context, plan, operation, store=store)
-        def update(message):
-            progress(message)
-            if runner.pump_intent and message.get("stage") == "recovery_wait":
-                runner.cancel("Interrupted observation test")
-        runner.callback = update
-        return runner
-    context = ContextFactory(save_root_provider=lambda: tmp_path, ownership=object()).for_experiment("single_pump_scan_burst").for_mode("dual")
-    panel = SinglePumpScanBurstWidget(context, runner_factory=stop_during_wait)
-    settings = replace(example_settings("dual"), observation_limit_s=4., first_later_burst_s=1., later_burst_count=3, temperature_check_interval_s=.1)
-    panel.adapter.apply_settings({**settings.to_dict(), "_execution": "simulated"})
-    panel.begin("preliminary")
-    wait_for(qt_app, lambda: not panel.command_running())
-    panel.review.setChecked(True)
-    panel.begin("measurement")
-    wait_for(qt_app, lambda: not panel.command_running())
-    original_path = panel.snapshot.operation.output_path
-    original = load_run(original_path)
-    assert original["status"] == "stopped", panel.status.text()
-    proof_path = tmp_path / "continuity-proof.json"
-    proof_path.write_text(json.dumps({"accepted_by": "Named continuity reviewer", "uninterrupted_native_clock": True,
-        "unchanged_sample_state": True, "native_now_s": original["checkpoint"]["state"]["epoch"]["pump_time_s"] + .6}), encoding="utf-8")
-    panel.adapter.runner_factory = None
-    panel.load_continuation(original_path, proof_path)
-    wait_for(qt_app, lambda: not panel.command_running())
-    assert panel.adapter.continuation is not None, panel.status.text()
-    assert not panel.start_button.isEnabled() and "continuation" in panel.start_button.text()
-    panel.review.setChecked(True)
-    panel.begin("measurement")
-    wait_for(qt_app, lambda: not panel.command_running())
-    assert panel.result is not None and panel.result["status"] == "complete", panel.status.text()
-    resumed = load_run(panel.result["output_path"])
-    assert Path(resumed["output_path"]) != original_path
-    assert not any(event["kind"] == "pump_intent" for event in resumed["events"])
-    assert any(event["kind"] == "explicit_continuation" for event in resumed["events"])
-    assert load_run(original_path)["status"] == "stopped"
-    panel.deleteLater()
-
-
-def test_accepted_sample_and_promoted_bundle_fill_only_supported_unset_values(qt_app, tmp_path):
-    from control_app.measurement_host.context import ContextFactory
-    from control_app.measurement_host.interchange import SampleSpectralSelection, SourceRecord, SpectralWindow, save_sample_selection
-    from control_app.measurement_modules.single_pump_scan_burst.widgets import SinglePumpScanBurstWidget
-    from control_app.promoted_bundles import PromotedBundle
-    bundle = PromotedBundle("selected-instrument-bundle", tmp_path, {"measurement_modules": {"single_pump_scan_burst": {
-        "settings": {"sample_rate_hz": 8000., "scan_stop_cm1": 1929., "hardware_evidence": {"source_record": "qualified-recipe"}}}}})
-    context = ContextFactory(save_root_provider=lambda: tmp_path, ownership=object(),
-        promoted_bundle_loader=lambda identity: bundle).for_experiment("single_pump_scan_burst").for_mode("dual")
-    panel = SinglePumpScanBurstWidget(context)
-    panel.settings_widget.controls["scan_stop_cm1"].setText("1940")
-    selection = SampleSpectralSelection("sample-selection-001", "sample-001", "steady_state_slow_scan:dual",
-        SourceRecord("source-run", "retained/spectrum", "2026-09-09T00:00:00+00:00", "selection/1"),
-        "77K-HRP-G-S", {"matrix_id": "qualified-matrix", "measured_temperature_k": 77.2,
-                         "temperature_identity": "sample-thermometry-001", "accepted_state_id": "cryogenic-state-001"},
-        (SpectralWindow(1901., 1915., 1907., .1), SpectralWindow(1920., 1930., 1925., .1)),
-        "Named sample reviewer", "2026-09-09T00:00:00+00:00")
-    path = tmp_path / "accepted-selection.json"
-    save_sample_selection(selection, path)
-    panel.load_sample_selection(path)
-    values = panel.adapter.read_settings()
-    assert values["scan_start_cm1"] == 1901. and values["scan_stop_cm1"] == 1940.
-    assert values["plateau_band_windows_cm1"] == [[1901., 1915.], [1920., 1930.]]
-    assert values["measured_temperature_k"] == 77.2 and values["matrix_id"] == "qualified-matrix"
-    assert values["sample_rate_hz"] is None  # Sample acceptance does not establish instrument settings.
-    values["promoted_bundle_ids"] = ["selected-instrument-bundle"]
-    panel.adapter.apply_settings(values)
-    panel._resolve_bundles()
-    resolved = panel.adapter.read_settings()
-    assert resolved["sample_rate_hz"] == 8000. and resolved["scan_stop_cm1"] == 1940.
-    assert resolved["hardware_evidence"] == {"source_record": "qualified-recipe"}
-    assert resolved["settings_sources"]["sample_rate_hz"] == "selected-instrument-bundle"
-    assert panel.adapter.selected_records().sample_records[0]["selection_id"] == "sample-selection-001"
-    assert panel.adapter.selected_records().calibration_records[0]["bundle_id"] == "selected-instrument-bundle"
-    panel.deleteLater()
+def test_kinetic_slice_uses_actual_nearest_point_per_scan_within_resolution(qt_app):
+    from matplotlib.figure import Figure
+    from control_app.measurement_modules.single_pump_scan_burst.widgets import BurstPlotAdapter, _display_points
+    points = _display_points({"metadata": {"mode": "dual", "actual_settings": {"wavenumber_matching_tolerance_cm1": .05}},
+        "processed": {"time_s": [0., .1, .2, 1., 1.1, 1.2], "wavenumber_cm1": [1900., 1901., 1902., 1900.02, 1901.02, 1902.02],
+            "delta_absorbance": [1., 2., 3., 4., 5., 6.], "scan_index": [0, 0, 0, 1, 1, 1]}})
+    renderer = BurstPlotAdapter()
+    renderer.wavenumbers = np.asarray([1901.])
+    figure = Figure()
+    renderer.draw(figure, points)
+    np.testing.assert_array_equal(figure.axes[0].lines[0].get_xdata(), [.1, 1.1])
+    np.testing.assert_array_equal(figure.axes[0].lines[0].get_ydata(), [2., 5.])
