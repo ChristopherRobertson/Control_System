@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from numbers import Integral
 from pathlib import Path
 from typing import Any, Callable, Iterable, TextIO
 import csv
@@ -686,6 +687,100 @@ class HF2LIService:
             raise HF2LIError(
                 f"Unable to read HF2LI oscillator {int(index) + 1} frequency: {exc}"
             ) from exc
+
+    def read_acquisition_health(
+        self, *, reference_pll: int = 0, input_indices: Iterable[int] = (0, 1)
+    ) -> dict[str, Any]:
+        """Read live HF2 health without changing settings or acquisition streams.
+
+        Indices are zero-based. ``reference_locked`` is the selected enabled
+        reference PLL's lock; a disabled or unreadable enable state gives None.
+        ``clock_locked`` combines the internal clock-generation PLL and digital
+        clock manager. It does not independently verify an external 10 MHz
+        source: ``external_clock_selected`` reports only the configured source.
+        ``overload`` covers ADC clipping on the selected signal inputs only.
+
+        Reads are sequential, not an atomic or per-sample hardware snapshot.
+        ``timestamp_utc`` is the host observation time. Missing, unreadable or
+        nonbinary node values remain unknown (None), with errors retained by
+        full node path. There is no cached all-clear fallback. Connection and
+        ownership preconditions raise normally; individual SDK read failures
+        are retained in ``read_errors``. No connect, set, sync, poll or subscribe
+        is performed. Node meanings and polarity follow the HF2 node reference:
+        https://docs.zhinst.com/hf2_user_manual/nodedoc.html
+        """
+        from control_app.measurement_host.ownership import OwnershipError
+
+        def valid_index(value):
+            return isinstance(value, Integral) and not isinstance(value, bool) and value in (0, 1)
+
+        indices = tuple(input_indices)
+        if not valid_index(reference_pll):
+            raise ValueError("reference_pll must be the zero-based HF2 PLL index 0 or 1")
+        if not indices or any(not valid_index(index) for index in indices) or len(set(indices)) != len(indices):
+            raise ValueError("input_indices must contain distinct zero-based HF2 signal input indices 0 or 1")
+        reference_pll = int(reference_pll)
+        indices = tuple(int(index) for index in indices)
+        self._require_server()
+        base = f"/{self.device_id}"
+        timestamp_utc = datetime.now(UTC).isoformat()
+        nodes: dict[str, dict[str, Any]] = {}
+        read_errors: dict[str, str] = {}
+
+        def read_flag(suffix, *, inverted=False):
+            # Recheck ownership before every transport call. Never turn an
+            # expired operation token into an ordinary unavailable health node.
+            server = self._require_server()
+            path = base + suffix
+            try:
+                raw = server.getInt(path)
+                if not isinstance(raw, Integral) or raw not in (0, 1):
+                    raise ValueError(f"Expected binary integer 0 or 1, received {raw!r}")
+                raw = int(raw)
+                nodes[path] = {"type": "int", "value": raw}
+                return (raw == 0) if inverted else (raw == 1)
+            except OwnershipError:
+                raise
+            except Exception as exc:
+                read_errors[path] = f"{type(exc).__name__}: {exc}"
+                return None
+
+        def all_locked(states):
+            if any(state is False for state in states):
+                return False
+            return True if all(state is True for state in states) else None
+
+        enabled = read_flag(f"/plls/{reference_pll}/enable")
+        reference_flag = read_flag(f"/plls/{reference_pll}/locked")
+        clock_pll = read_flag("/status/flags/plllock", inverted=True)
+        clock_dcm = read_flag("/status/flags/dcmlock", inverted=True)
+        external_selected = read_flag("/system/extclk")
+        inputs = {}
+        for index in indices:
+            clipped = read_flag(f"/status/flags/adcclip/{index}")
+            inputs[str(index)] = {"input_index": index, "adc_clipped": clipped, "overload": clipped}
+        clipping = [state["adc_clipped"] for state in inputs.values()]
+        overload = True if any(state is True for state in clipping) else (
+            False if all(state is False for state in clipping) else None
+        )
+        self._require_server()
+        return {
+            "schema_version": "hf2li-acquisition-health/1",
+            "timestamp_utc": timestamp_utc,
+            "device_id": self.device_id,
+            "reference_locked": reference_flag if enabled is True else None,
+            "clock_locked": all_locked((clock_pll, clock_dcm)),
+            "clock_lock_basis": "internal_clock_generation_pll_and_digital_clock_manager",
+            "external_clock_selected": external_selected,
+            "external_reference_locked": None,
+            "overload": overload,
+            "overload_scope": "selected_signal_input_adc_clipping",
+            "inputs": inputs,
+            "reference": {"pll_index": reference_pll, "enabled": enabled, "locked": reference_flag},
+            "clock": {"pll_locked": clock_pll, "dcm_locked": clock_dcm},
+            "nodes": nodes,
+            "read_errors": read_errors,
+        }
 
     def discover_phase_scan_capabilities(self) -> dict[str, Any]:
         return self._discover_phase_scan_capabilities((0,))
