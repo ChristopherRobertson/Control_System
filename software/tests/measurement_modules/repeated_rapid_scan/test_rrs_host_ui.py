@@ -134,6 +134,24 @@ def test_rrs_dual_simultaneous_workflow_no_routine_blank(app, tabs):
     assert single.adapter.session.preliminary is None
 
 
+def test_rrs_standard_native_load_reuses_saved_sample(app, tabs):
+    panel = tabs[1].widget
+    small_plan(panel)
+    panel.begin("preliminary")
+    wait(app, panel)
+    path = Path(panel.preliminary["output_path"])
+    settings = panel.adapter.read_settings()
+    panel.new_run()
+    assert panel.adapter.session.preliminary is None
+    panel._launch(lambda _worker: panel.adapter.load_run(path), "load_run", path)
+    wait(app, panel)
+    assert panel.result["kind"] == "preliminary"
+    assert panel.adapter.session.preliminary is panel.result
+    assert panel.adapter.compatible_preliminary(panel.plan) is panel.result
+    assert panel.adapter.read_settings() == settings
+    assert panel.start_button.isEnabled()
+
+
 def test_rrs_compatible_sample_auto_reuse_and_metadata_never_gate(app, tabs):
     panel = tabs[1].widget
     small_plan(panel)
@@ -243,7 +261,11 @@ def test_rrs_compact_layout_keeps_plot_and_independent_auto_overrides(app, tabs)
     app.processEvents()
     assert panel.splitter.count() == 2
     assert panel.summary_group.isVisible()
-    assert not panel.advanced_content.isVisible()
+    from PySide6.QtWidgets import QGroupBox
+    assert isinstance(panel.advanced_content, QGroupBox)
+    assert panel.advanced_content.isVisible()
+    assert not panel.advanced_content.isCheckable()
+    assert not hasattr(panel, "advanced_button")
     assert panel.size().height() == 780
     assert panel.plots.height() >= 350
     settings = panel.settings_widget
@@ -257,6 +279,48 @@ def test_rrs_compact_layout_keeps_plot_and_independent_auto_overrides(app, tabs)
     panel.hide()
 
 
+@pytest.mark.parametrize("index", [0, 1])
+def test_rrs_visible_overrides_control_emitted_cadence_and_optical_width(app, tabs, index):
+    from PySide6.QtWidgets import QComboBox, QFormLayout, QGroupBox
+    panel = tabs[index].widget
+    panel.resize(1100, 780)
+    panel.show()
+    app.processEvents()
+    widget = panel.settings_widget
+    expected = {"scan_speed_cm1_s", "sample_rate_hz", "sample_filter_order",
+                "sample_filter_timeconstant_s", "probe_frequency_hz", "mircat_pulse_width_ns"}
+    if index == 1:
+        expected |= {"reference_rate_hz", "reference_filter_order", "reference_filter_timeconstant_s"}
+    assert set(widget.override_inputs) == expected
+    assert isinstance(panel.advanced_content, QGroupBox)
+    assert panel.advanced_content.isVisible() and not panel.advanced_content.isCheckable()
+    assert all(control.isVisible() for control in widget.override_inputs.values())
+    assert all("qcl" not in control.objectName().lower() for control in panel.findChildren(QComboBox))
+    form = widget.advanced.layout()
+    assert isinstance(form, QFormLayout)
+    rate = widget.override_inputs["probe_frequency_hz"]
+    width = widget.override_inputs["mircat_pulse_width_ns"]
+    assert form.labelForField(rate).text() == "Repetition rate (Hz)"
+    assert form.labelForField(width).text() == "Pulse width (ns)"
+    rate.setEditText("2000000")
+    width.setEditText("150")
+    width.lineEdit().editingFinished.emit()
+    assert panel.plan is not None, panel.validation.text()
+    selected = panel.plan.settings
+    assert selected.mircat_pulse_rate_hz is None
+    assert selected.mircat_pulse_width_ns == 150.
+    assert selected.probe_frequency_hz == 2_000_000.
+    assert selected.probe_pulse_width_s == 150e-9
+    width.setEditText("150.01")
+    width.lineEdit().editingFinished.emit()
+    assert panel.plan is None and "30%" in panel.validation.text()
+    assert not panel.start_button.isEnabled()
+    width.setCurrentIndex(0)
+    width.lineEdit().editingFinished.emit()
+    assert widget.read()["manual_overrides"] == {"probe_frequency_hz": 2_000_000.}
+    panel.hide()
+
+
 def test_rrs_user_edits_refresh_plan_and_precise_overrides_roundtrip(app, tabs):
     from control_app.measurement_modules.repeated_rapid_scan.planner import HardwareCapabilities
     panel = tabs[1].widget
@@ -266,13 +330,15 @@ def test_rrs_user_edits_refresh_plan_and_precise_overrides_roundtrip(app, tabs):
     widget.override_inputs["sample_filter_order"].setCurrentIndex(1)
     assert panel.plan.settings.manual_overrides["sample_filter_order"] == 4
     settings = widget.read()
-    settings["manual_overrides"]["measured_scan_period_s"] = .10000000001
+    settings["manual_overrides"]["mircat_pulse_width_ns"] = 142.12345678901
     widget.apply(settings)
-    assert widget.read()["measured_scan_period_s"] == .10000000001
-    widget.set_capabilities(HardwareCapabilities(live_settings={"memory_limit_bytes": 2**30}))
-    memory = widget.override_inputs["memory_limit_bytes"]
-    memory.setCurrentIndex(memory.findText("1024"))
-    assert widget.read()["memory_limit_bytes"] == 2**30
+    assert widget.read()["mircat_pulse_width_ns"] == 142.12345678901
+    widget.set_capabilities(HardwareCapabilities(live_settings={
+        "mircat_pulse_rate_hz": 2_000_000., "mircat_pulse_width_ns": 150.}))
+    width = widget.override_inputs["mircat_pulse_width_ns"]
+    width.setCurrentIndex(width.findText("150"))
+    assert widget.read()["mircat_pulse_width_ns"] == 150.
+    assert widget.read()["mircat_pulse_rate_hz"] == 2_000_000.
     precise = widget.read()
     precise["acquisition_intent"]["observation_duration_s"] = .1004
     precise["acquisition_intent"]["spectral_min_cm1"] = 1898.0004

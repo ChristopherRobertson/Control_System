@@ -3,7 +3,6 @@
 Run with PYTHONPATH=software and QT_QPA_PLATFORM=offscreen. Images and native
 preview records go to tmp/rrs-overhaul unless an output directory is supplied.
 """
-from dataclasses import replace
 from pathlib import Path
 import sys
 from time import monotonic, sleep
@@ -14,7 +13,8 @@ from PySide6.QtWidgets import QApplication
 
 from control_app.measurement_host.ownership import HardwareCoordinator
 from control_app.measurement_modules.repeated_rapid_scan.registration import DESCRIPTOR
-from control_app.measurement_modules.repeated_rapid_scan.settings import example_settings
+from control_app.measurement_modules.repeated_rapid_scan.planner import resolve_intent_settings
+from control_app.measurement_modules.repeated_rapid_scan.settings import AcquisitionIntent
 from control_app.measurement_modules.repeated_rapid_scan.simulation import SimulationAcquirer
 from control_app.paths import set_save_location
 from control_app.ui.contracts import blocked_handler
@@ -52,8 +52,8 @@ def render(folder):
         panel = next(window.tabs.widget(i) for i in range(window.tabs.count())
                      if window.tabs.widget(i).objectName() == f"repeated_rapid_scan:{mode}")
         snapshot(panel, f"rrs-{mode}-empty.png")
-        settings = replace(example_settings(mode), phase_offsets_s=(0.,),
-                           directions=("forward",), controls=("probe_only",), pre_scans=3, post_scans=24)
+        settings = resolve_intent_settings(AcquisitionIntent(
+            observation_duration_s=2.4, phase_count=1), mode=mode)
         panel.adapter.acquirer_factory = SimulationAcquirer
         panel.adapter.apply_settings(settings.to_dict())
         panel.refresh_plan()
@@ -71,6 +71,8 @@ def render(folder):
         snapshot(panel, f"rrs-{mode}-result.png")
         panel.plots.view.setCurrentIndex(1)
         snapshot(panel, f"rrs-{mode}-kinetics.png")
+        panel.settings_scroll.ensureWidgetVisible(panel.settings_widget.restore_auto_button)
+        snapshot(panel, f"rrs-{mode}-overrides.png")
         assert window.workspace_scroll.verticalScrollBar().maximum() == 0
         print(f"{mode}: {window.width()}x{window.height()}, plots {panel.plots.width()}x{panel.plots.height()}")
     window.hide()

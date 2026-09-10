@@ -28,6 +28,11 @@ class _EssentialDoubleSpinBox(QDoubleSpinBox):
         return str(value).replace(".", self.locale().decimalPoint())
 
 
+def _override_text(value):
+    number = float(value)
+    return str(int(number)) if number.is_integer() else repr(number)
+
+
 class SettingsWidget(QWidget):
     """Essential intent plus independent, optional instrument overrides."""
     changed = Signal()
@@ -36,12 +41,16 @@ class SettingsWidget(QWidget):
         super().__init__()
         self.mode = mode
         self.capabilities = None
-        self.inputs, self.override_inputs, self.window_inputs = {}, {}, {}
-        self._override_scale = {"memory_limit_bytes": 2**20}
-        self._base = settings or RepeatedRapidScanSettings(mode=mode)
+        self.inputs, self.override_inputs = {}, {}
+        if settings is None:
+            from .planner import resolve_intent_settings
+            from .settings import AcquisitionIntent
+            settings = resolve_intent_settings(AcquisitionIntent(), mode=mode)
+        self._base = settings
         self.advanced = QWidget()
         form = QFormLayout(self)
         form.setContentsMargins(0, 0, 0, 0)
+        form.setVerticalSpacing(3)
         self.sample = QLineEdit()
         self.sample.setObjectName("rrs_sample_name")
         self.sample.editingFinished.connect(lambda *_: self.changed.emit())
@@ -67,9 +76,9 @@ class SettingsWidget(QWidget):
             form.addRow(label, control)
         advanced = QFormLayout(self.advanced)
         advanced.setContentsMargins(0, 0, 0, 0)
+        advanced.setVerticalSpacing(3)
         overrides = [
             ("scan_speed_cm1_s", "Scan speed (cm⁻¹/s)"),
-            ("measured_scan_period_s", "Scan period (s)"),
             ("sample_rate_hz", "Sample rate (Sa/s)"),
             ("sample_filter_order", "Sample filter order"),
             ("sample_filter_timeconstant_s", "Sample filter τ (s)"),
@@ -81,32 +90,22 @@ class SettingsWidget(QWidget):
                 ("reference_filter_timeconstant_s", "Reference filter τ (s)"),
             ]
         overrides += [
-            ("pre_scans", "Scans before pump"),
-            ("probe_frequency_hz", "Probe rate (Hz)"),
-            ("probe_pulse_width_s", "Probe width (s)"),
-            ("fire_to_qswitch_s", "Fire → Q-switch (s)"),
-            ("fire_pulse_width_s", "Fire width (s)"),
-            ("qswitch_pulse_width_s", "Q-switch width (s)"),
-            ("memory_limit_bytes", "Memory budget (MiB)"),
+            ("probe_frequency_hz", "Repetition rate (Hz)"),
+            ("mircat_pulse_width_ns", "Pulse width (ns)"),
         ]
         for key, label in overrides:
             combo = QComboBox()
             combo.setEditable(True)
             combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
             combo.addItem("Automatic", None)
-            combo.addItem(f"{getattr(self._base, key) / self._override_scale.get(key, 1):.17g}", getattr(self._base, key))
+            initial = getattr(self._base, key)
+            if initial is not None:
+                combo.addItem(_override_text(initial), initial)
             combo.setObjectName("rrs_override_" + key)
             combo.currentIndexChanged.connect(lambda *_: self.changed.emit())
             combo.lineEdit().editingFinished.connect(lambda *_: self.changed.emit())
             self.override_inputs[key] = combo
             advanced.addRow(label, combo)
-        for key, label in (("band_windows_cm1", "Band windows (cm⁻¹)"),
-                           ("offband_windows_cm1", "Off-band windows (cm⁻¹)")):
-            entry = QLineEdit("Automatic")
-            entry.setToolTip("Automatic, or ranges such as 1903:1907, 1942:1946")
-            entry.editingFinished.connect(lambda *_: self.changed.emit())
-            self.window_inputs[key] = entry
-            advanced.addRow(label, entry)
         self.restore_auto_button = QPushButton("Restore automatic settings")
         self.restore_auto_button.clicked.connect(self.restore_automatic)
         advanced.addRow(self.restore_auto_button)
@@ -131,24 +130,11 @@ class SettingsWidget(QWidget):
                 value = float(text)
             except ValueError:
                 raise ValueError(f"{key.replace('_', ' ')}: enter Automatic or a number") from None
-            value *= self._override_scale.get(key, 1)
-            if key in ("pre_scans", "sample_filter_order", "reference_filter_order", "memory_limit_bytes"):
+            if key in ("sample_filter_order", "reference_filter_order"):
                 if not value.is_integer():
                     raise ValueError(f"{key.replace('_', ' ')} must be an integer")
                 value = int(value)
             overrides[key] = value
-        for key, control in self.window_inputs.items():
-            text = control.text().strip()
-            if not text or text.lower() == "automatic":
-                overrides.pop(key, None)
-                continue
-            try:
-                windows = [tuple(float(v) for v in pair.split(":")) for pair in text.replace(";", ",").split(",")]
-            except ValueError:
-                raise ValueError("Enter spectral windows as lower:upper, separated by commas") from None
-            if any(len(pair) != 2 for pair in windows):
-                raise ValueError("Enter spectral windows as lower:upper, separated by commas")
-            overrides[key] = windows
         settings = resolve_intent_settings(AcquisitionIntent(**values), mode=self.mode,
             base_settings=self._base, capabilities=self.capabilities, overrides=overrides)
         # Simulation is available through injected developer transports only.
@@ -157,7 +143,8 @@ class SettingsWidget(QWidget):
 
     def apply(self, value):
         from .settings import AcquisitionIntent
-        settings = RepeatedRapidScanSettings.from_dict(value)
+        from .session import normalize_ui_settings
+        settings = RepeatedRapidScanSettings.from_dict(normalize_ui_settings(value, mode=self.mode))
         if settings.mode != self.mode:
             raise ValueError("Plan detector mode does not match this tab")
         self._base = settings
@@ -177,12 +164,8 @@ class SettingsWidget(QWidget):
             value = settings.manual_overrides.get(key)
             control.setCurrentIndex(0)
             if value is not None:
-                control.setEditText(f"{value / self._override_scale.get(key, 1):.17g}")
+                control.setEditText(_override_text(value))
             control.blockSignals(False)
-
-        for key, control in self.window_inputs.items():
-            value = settings.manual_overrides.get(key)
-            control.setText(", ".join(f"{a:g}:{b:g}" for a, b in value) if value else "Automatic")
 
     def set_capabilities(self, capabilities):
         self.capabilities = capabilities
@@ -190,7 +173,7 @@ class SettingsWidget(QWidget):
         for key, control in self.override_inputs.items():
             value = live.get(key)
             if value is not None:
-                text = f"{value / self._override_scale.get(key, 1):.17g}"
+                text = _override_text(value)
                 if control.findText(text) < 0:
                     control.addItem(text, value)
 
@@ -201,8 +184,6 @@ class SettingsWidget(QWidget):
             control.blockSignals(True)
             control.setCurrentIndex(0)
             control.blockSignals(False)
-        for control in self.window_inputs.values():
-            control.setText("Automatic")
         self.changed.emit()
 
 
@@ -494,20 +475,19 @@ class RepeatedRapidScanPanel(CompactMeasurementPanel):
         self.load_blank_button.setVisible(context.mode == "single")
         self.plots = MoviePlots()
         self.add_result_widget(self.plots)
-        self.load_preliminary_button = QPushButton("Load saved sample…")
-        self.sample_selection_button = QPushButton("Load spectral bands…")
-        self.fit_model_button = QPushButton("Load fit model…")
-        self.fit_button = QPushButton("Fit selected movie")
+        self.sample_selection_button = QPushButton("Bands…")
+        self.fit_model_button = QPushButton("Fit model…")
+        self.fit_button = QPushButton("Fit movie")
         self.fit_summary = QLabel()
         self.fit_summary.setWordWrap(True)
         self.fit_summary.setMaximumHeight(45)
         self.preserve_button = QPushButton("Save retained records")
         self.preserve_button.hide()
-        for control in (self.load_preliminary_button, self.sample_selection_button,
-                        self.fit_model_button, self.fit_button, self.fit_summary):
-            self.advanced_layout.addWidget(control)
+        for control in (self.sample_selection_button, self.fit_model_button, self.fit_button):
+            self.run_file_layout.addWidget(control)
+        self.fit_summary.hide()
+        self.result_layout.addWidget(self.fit_summary)
         self.action_layout.addWidget(self.preserve_button)
-        self.load_preliminary_button.clicked.connect(lambda: self._load_record("preliminary"))
         self.sample_selection_button.clicked.connect(self._load_selection)
         self.fit_model_button.clicked.connect(self._load_fit_model)
         self.fit_button.clicked.connect(lambda: self._user_action(self._fit_movie))
@@ -553,6 +533,7 @@ class RepeatedRapidScanPanel(CompactMeasurementPanel):
             elif kind == "load_fit_model":
                 self.adapter.fit_model = result
                 self.fit_summary.setText("Fit model loaded")
+                self.fit_summary.show()
             elif kind == "preserve_retained":
                 self.preserve_button.hide()
                 self.result = result
@@ -563,6 +544,7 @@ class RepeatedRapidScanPanel(CompactMeasurementPanel):
                 summaries = [f"{direction}: apparent τ {fit.apparent_tau_s:.4g} s"
                     for direction, fit in result["fit_analysis"]["fits_by_direction"].items()]
                 self.fit_summary.setText(" · ".join(summaries))
+                self.fit_summary.show()
                 self.plots.view.setCurrentIndex(4)
             elif kind == "load_selection":
                 self.adapter.apply_selection(result)
@@ -589,14 +571,18 @@ class RepeatedRapidScanPanel(CompactMeasurementPanel):
 
     def _show_result(self, result):
         self.adapter.session.result = result
+        if result.get("kind") == "preliminary":
+            self.adapter.session.preliminary = result
+        elif result.get("kind") == "blank":
+            self.adapter.session.blank = result
         try:
             self.plots.set_result(result)
         except Exception as exc:
             self.set_status(f"Presentation failed: {exc}")
 
     def _busy_update(self, busy):
-        for button in (self.load_preliminary_button, self.sample_selection_button,
-                       self.fit_button, self.fit_model_button, self.preserve_button):
+        for button in (self.sample_selection_button, self.fit_button,
+                       self.fit_model_button, self.preserve_button):
             button.setEnabled(not busy)
         self.context.lifecycle.notify_state(busy, self.status.text())
 
