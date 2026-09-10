@@ -59,7 +59,7 @@ must not exceed 0.30. The internal pulse duty also remains at or below 30%,
 and tighter vendor limits still apply.
 
 The framed **Advanced overrides** form stays visible. It contains **Repetition
-rate**, **Pulse width**, **Event interval**, and detector **Rate**, **Filter time**
+rate**, **Pulse width**, **Event interval**, and detector **Rate**, **Time constant**
 and **Filter order**. Dual mode provides independent sample and reference
 columns. A blank value means Automatic. Changing one override does not freeze
 other automatic choices. **Restore automatic settings** clears instrument

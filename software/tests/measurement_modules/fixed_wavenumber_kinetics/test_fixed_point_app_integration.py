@@ -234,6 +234,7 @@ def test_fixed_point_essential_inputs_and_independent_automatic_overrides(app, t
         assert not hasattr(panel, "advanced_button")
         labels = [label.text() for label in panel.findChildren(QLabel)]
         assert "Repetition rate (Hz)" in labels and "Pulse width (ns)" in labels
+        assert "Time constant (s)" in labels and "Filter time (s)" not in labels
         assert not any("QCL" in text for text in labels)
         assert not {"memory_limit_mb", "tune_timeout_s", "pump_fire_delay_s", "baseline_cv_limit"}.intersection(panel.editor.fields)
         assert all(control.isVisible() for control in panel.editor.fields.values())
@@ -544,9 +545,11 @@ def test_fixed_point_actual_shell_fits_and_keeps_plot_labels_visible(app, tmp_pa
     assert panel.start_button.isVisible()
     assert panel.advanced_content.isVisible() and not panel.advanced_content.isCheckable()
     viewport = panel.settings_scroll.viewport()
-    for control in (*panel.editor.fields.values(), panel.editor.wavenumber, panel.editor.pump, panel.editor.positions):
+    for control in (*panel.editor.fields.values(), panel.editor.wavenumber, panel.editor.pump,
+                    panel.editor.positions, panel.save_plan_button, panel.load_plan_button):
         assert viewport.rect().contains(QRect(control.mapTo(viewport, QPoint()), control.size()))
     assert panel.settings_scroll.horizontalScrollBar().maximum() == 0
+    assert panel.save_plan_button.geometry().top() == panel.load_plan_button.geometry().top()
     window.hide()
     window.deleteLater()
     app.processEvents()

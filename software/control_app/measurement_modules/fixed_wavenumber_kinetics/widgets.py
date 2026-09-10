@@ -81,7 +81,7 @@ class SettingsEditor(QWidget):
                 heading.addWidget(QLabel(role.title()), 1)
             advanced.addRow("Detector", heading)
         for suffix, label in (("rate_sps", "Rate (Sa/s)"),
-                              ("timeconstant_s", "Filter time (s)"),
+                              ("timeconstant_s", "Time constant (s)"),
                               ("filter_order", "Filter order")):
             row = QHBoxLayout()
             for role in roles:
@@ -310,6 +310,11 @@ class FixedPointPanel(CompactMeasurementPanel):
         self._capability_check_attempted = False
         adapter = FixedPointAdapter(context, self.editor)
         super().__init__(self.editor, adapter, context, advanced_widget=self.editor.advanced)
+        self.file_layout.setDirection(QHBoxLayout.Direction.LeftToRight)
+        self.settings_layout.setContentsMargins(6, 3, 6, 3)
+        self.settings_layout.setSpacing(3)
+        self.settings_extras_layout.setSpacing(3)
+        self.advanced_layout.setContentsMargins(6, 6, 6, 6)
         self.setObjectName(context.instance_id)
         self.preliminary_button.setText("Acquire sample · pump off")
         self.start_button.setText("Start acquisition")
@@ -404,6 +409,10 @@ class FixedPointPanel(CompactMeasurementPanel):
             except (TypeError, ValueError):
                 pass
         self._update_extra_controls()
+
+    def refresh_readiness(self, *_):
+        super().refresh_readiness()
+        self.validation.setVisible(bool(self.validation.text()))
 
     def _update_extra_controls(self):
         if not hasattr(self, "blank_status"):
