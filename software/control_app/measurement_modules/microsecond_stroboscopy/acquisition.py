@@ -634,6 +634,21 @@ class InstalledAcquirer:
                 attempt(name+" settings restore", lambda u=unit, o=original: u.apply_recipe(o["recipe"]))
                 for edge, reference in original["edge_references"].items():
                     attempt(name+" edge "+edge, lambda u=unit,e=edge,r=reference: u.command(f"TIME:RELTo{e} {r}", expect_response=False))
+                references = restored[name+" edge references"] = {}
+                for edge, reference in original["edge_references"].items():
+                    def verify_reference(u=unit, e=edge, expected=reference, observed=references):
+                        entry = observed[e] = {"expected": expected, "actual": None}
+                        try:
+                            entry["actual"] = int(u.command(f"TIME:RELTo{e}?"))
+                        except Exception as exc:
+                            entry["error"] = str(exc)
+                            raise
+                        _equal(expected, entry["actual"], u.name+" TIME:RELTo"+e)
+                        return entry["actual"]
+                    # Read every captured reference even when another edge
+                    # failed. Equal delay/width scalars alone cannot establish
+                    # that the restored physical timing relationships match.
+                    attempt(name+" edge "+edge+" verified", verify_reference)
                 attempt(name+" restored verified", lambda u=unit,o=original: self._verify_timer(u,o["recipe"]))
             else:
                 attempt(name+" safe verified", lambda u=unit: self._verify_timer(u,{"trigger_source":"OFF", "channels":{c:{"enabled":False} for c in "ABCD"}}))

@@ -569,3 +569,73 @@ def test_us_reference_copy_memory_failure_releases_unused_operation(tmp_path,mon
         run_acquisition(context,operation,build_plan(s),kind="run",preliminary={"native_blocks":[]})
     assert not bus.created
     assert coordinator.snapshot()["state"]=="free"
+
+
+def _observe_timer_reference_restoration(monkeypatch,bus,ignored=None):
+    """Change references only; fake delay/width readbacks remain unchanged."""
+    original_init,original_command=Timer.__init__,Timer.command
+    queries={name:[] for name in ("t660_1","t660_2")}
+    restoring=False
+    def initialize(self,name,shared):
+        original_init(self,name,shared)
+        self.references={edge:edge-1 for edge in range(1,9)}
+    def command(self,text,**kwargs):
+        if restoring and text.startswith("TIME:RELTo"):
+            suffix=text.removeprefix("TIME:RELTo")
+            if suffix.endswith("?"):
+                queries[self.name].append(int(suffix[:-1]))
+            elif ignored==(self.name,int(suffix.split()[0])):
+                return "0"  # Silent ignored restoration command.
+        return original_command(self,text,**kwargs)
+    def progress(message):
+        nonlocal restoring
+        if message.startswith("Restoration:"):
+            restoring=True
+            for timer in (bus.probe,bus.timer):
+                timer.references={edge:edge for edge in range(1,9)}
+    monkeypatch.setattr(Timer,"__init__",initialize)
+    monkeypatch.setattr(Timer,"command",command)
+    return progress,queries
+
+
+@pytest.mark.parametrize("device",["t660_1","t660_2"])
+@pytest.mark.parametrize("ignored_edge",[1,8])
+def test_us_ignored_edge_reference_restore_retains_all_readbacks_and_faults(tmp_path,monkeypatch,device,ignored_edge):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    progress,queries=_observe_timer_reference_restoration(monkeypatch,bus,(device,ignored_edge))
+    with pytest.raises(AcquisitionFailure,match=f"{device} TIME:RELTo{ignored_edge}") as failed:
+        execute(context,inputs(),"preliminary",hardware=True,progress=progress)
+    record=failed.value.record
+    restoration=record["restoration"]
+    assert record["disposition"]=="cleanup_failed"
+    assert not restoration["safe_verified"] and not restoration["settings_restored"]
+    assert coordinator.snapshot()["state"]=="fault" and record["native_path"]
+    for name in ("t660_1","t660_2"):
+        observed=restoration["verification"][name+" edge references"]
+        assert set(observed)=={str(edge) for edge in range(1,9)}
+        assert queries[name]==list(range(1,9))
+        for edge in range(1,9):
+            assert observed[str(edge)]["expected"]==edge-1
+            assert observed[str(edge)]["actual"]==(edge if (name,edge)==(device,ignored_edge) else edge-1)
+        original=restoration["original"][name]["readback"]["channels"]
+        actual=restoration["verification"][name+" restored verified"]["channels"]
+        for channel in "ABCD":
+            for field in ("delay_edge","width_edge"):
+                assert actual[channel][field]==original[channel][field]
+
+
+def test_us_successful_edge_reference_restore_verifies_every_captured_edge(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    progress,queries=_observe_timer_reference_restoration(monkeypatch,bus)
+    record=execute(context,inputs(),"preliminary",hardware=True,progress=progress)
+    restoration=record["restoration"]
+    assert record["disposition"]=="complete"
+    assert restoration["safe_verified"] and restoration["settings_restored"]
+    assert coordinator.snapshot()["state"]=="free"
+    for name in ("t660_1","t660_2"):
+        observed=restoration["verification"][name+" edge references"]
+        assert set(observed)==set(restoration["original"][name]["edge_references"])
+        assert queries[name]==list(range(1,9))
+        assert all(item=={"expected":edge-1,"actual":edge-1} for edge,item in ((int(key),value) for key,value in observed.items()))
