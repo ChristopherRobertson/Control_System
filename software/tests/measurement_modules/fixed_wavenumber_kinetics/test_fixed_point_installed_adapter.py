@@ -23,6 +23,7 @@ class Timing(Owned):
     def __init__(self, state, name):
         self.state, self.name, self.calls = state, name, []
         self.source = "OFF"
+        self.synth_frequency_hz, self.predivider = 100000., 1
         self.channels = {c: False for c in "ABCD"}
         self.channel_settings = {c: {"delay": "200us" if name == "t660_2" and c == "B" else "0s",
             "width": "10us" if name == "t660_2" else "150ns",
@@ -62,12 +63,16 @@ class Timing(Owned):
             rising = 2*"ABCD".index(channel)+1
             self.references[rising+1] = rising
     def apply_recipe(self, recipe):
+        from control_app.measurement_modules.fixed_wavenumber_kinetics.adapters import _physical_number
         self.touch("apply_recipe")
         self.recipe = recipe
+        self.__dict__.setdefault("recipes", []).append(deepcopy(recipe))
+        if recipe.get("clock", {}).get("frequency") is not None:
+            self.synth_frequency_hz = _physical_number(recipe["clock"]["frequency"])
+        self.predivider = recipe.get("predivider", self.predivider)
         self.channels = {c: v["enabled"] for c, v in recipe["channels"].items()}
         for c, row in recipe["channels"].items():
             self.channel_settings[c].update({k: row[k] for k in ("delay", "width", "polarity", "termination")})
-            from control_app.measurement_modules.fixed_wavenumber_kinetics.adapters import _physical_number
             rising = 2*"ABCD".index(c)+1
             self.modes[c] = "DW"
             self.references[rising+1] = rising
@@ -77,8 +82,8 @@ class Timing(Owned):
     def read_active_settings(self):
         self.touch("readback")
         return {"queries": {"trigger_source": {"ok": True, "response": self.source},
-            "synth_frequency": {"ok": True, "response": "100000"},
-            "predivider": {"ok": True, "response": "1"},
+            "synth_frequency": {"ok": True, "response": str(self.synth_frequency_hz)},
+            "predivider": {"ok": True, "response": str(self.predivider)},
             "clock_connector_mode": {"ok": True, "response": "OUT" if self.name == "t660_2" else "IN"},
             "clock_lock_status": {"ok": True, "response": "LOCKED"}},
             "channels": {c: {"enabled": {"ok": True, "response": "ON" if on else "OFF"},
@@ -95,6 +100,7 @@ class Timing(Owned):
             self.set_channel_timing_mode(c, "DW")
             self.command(f"TIME:RELTo{2*i+1} 0")
         self.frames = frames
+        self.predivider = predivider
         self.period = predivider/input_frequency_hz
         for n in range(len(frames)+1): cancel_check(); progress(n, len(frames))
         return {"physical_frame_count": len(frames), "predivider": predivider}
@@ -244,16 +250,20 @@ class Mircat(Owned):
     def read_state(self): self.touch("state"); return SimpleNamespace(to_dict=lambda: {"emission_on": self.emission})
     def turn_emission_off(self): self.touch("off"); self.emission=False
     def start_emission(self): self.touch("on"); self.emission=True
-    def get_qcl_pulse_rate(self, qcl): self.touch("rate"); return self.pulse(qcl)["pulse_rate_hz"]
-    def get_qcl_pulse_width(self, qcl): self.touch("width"); return self.pulse(qcl)["pulse_width_ns"]
+    def qcl_call(self, method, qcl):
+        self.touch(method)
+        self.__dict__.setdefault("qcl_calls", []).append((method, qcl))
+    def get_qcl_pulse_rate(self, qcl): self.qcl_call("rate", qcl); return self.pulse(qcl)["pulse_rate_hz"]
+    def get_qcl_pulse_width(self, qcl): self.qcl_call("width", qcl); return self.pulse(qcl)["pulse_width_ns"]
     def get_active_qcl(self): self.touch("active_qcl"); return 1
     def get_num_installed_qcls(self): self.touch("qcl_count"); return 1
-    def get_qcl_tuning_range(self, qcl): self.touch("qcl_range"); return {"qcl": qcl, "min_cm1": 1800., "max_cm1": 2100.}
-    def get_qcl_pulse_limits(self, qcl): self.touch("pulse_limits"); return {"max_pulse_rate_hz": 3000000., "max_pulse_width_ns": 500., "max_duty_cycle": 30.}
+    def get_qcl_tuning_range(self, qcl): self.qcl_call("qcl_range", qcl); return {"qcl": qcl, "min_cm1": 1800., "max_cm1": 2100.}
+    def get_qcl_pulse_limits(self, qcl): self.qcl_call("pulse_limits", qcl); return {"max_pulse_rate_hz": 3000000., "max_pulse_width_ns": 500., "max_duty_cycle": 30.}
     def get_wavelength_trigger_params(self): self.touch("trigger_read"); return dict(pulse_mode=1,process_trigger_mode=1,start=1930.,stop=1930.,interval=0.,units=1,dwell_us=0,after_off_us=0)
     def set_wavelength_trigger_params(self, **kwargs): self.touch("trigger_set"); return kwargs
     def set_qcl_pulse_params(self, **kwargs):
-        self.touch("pulse")
+        self.qcl_call("pulse", kwargs["qcl"])
+        self.__dict__.setdefault("pulse_writes", []).append(deepcopy(kwargs))
         self.pulse(kwargs["qcl"]).update({k:kwargs[k] for k in ("pulse_rate_hz", "pulse_width_ns")})
         return kwargs
     def set_external_trigger_params(self, **kwargs): self.touch("external")
@@ -264,7 +274,7 @@ class Mircat(Owned):
     def disarm(self): self.touch("disarm"); self.armed=False
     def is_laser_armed(self): self.touch("armed"); return self.armed
     def is_emission_on(self): self.touch("emission"); return self.emission
-    def tune_to_wavenumber(self, value, *, qcl): self.touch("tune"); self.wavenumber=value
+    def tune_to_wavenumber(self, value, *, qcl): self.qcl_call("tune", qcl); self.wavenumber=value
     def is_tuned(self): self.touch("tuned"); return True
     def get_actual_wavelength(self): self.touch("actual"); return {"value": self.wavenumber,"units":"cm^-1","light_valid":True}
     def cancel_manual_tune(self): self.touch("cancel_tune")
@@ -289,7 +299,7 @@ class HF2(Owned):
     def sync(self): self.touch("sync")
     def export_settings_snapshot(self, *, preset=None): self.touch("snapshot"); return {"nodes":deepcopy(self.nodes),"read_errors":{}}
     def configure_signal_inputs(self, values): self.touch("inputs")
-    def configure_pll(self, values): self.touch("PLL")
+    def configure_pll(self, values): self.touch("PLL"); self.configured_pll = deepcopy(values)
     def configure_demodulators(self, values):
         self.touch("demods")
         for row in values:
@@ -551,3 +561,107 @@ def test_fixed_point_absolute_readback_requires_verified_reference_writes(tmp_pa
     else:
         assert int(checks["restored_reference"]) == 0
         assert not result["restoration"]["safe_verified"]
+
+
+def _inject_stale_multi_qcl_metadata(monkeypatch):
+    initialize = Mircat.__init__
+    def old_active_channel(self):
+        initialize(self)
+        self.pulses = {1: {"pulse_rate_hz": 2300000., "pulse_width_ns": 100.},
+            2: {"pulse_rate_hz": 700000., "pulse_width_ns": 300.}}
+    def ranges(self, qcl):
+        self.qcl_call("qcl_range", qcl)
+        return {"qcl": qcl, "min_cm1": 1800. if qcl == 1 else 2150.,
+            "max_cm1": 2100. if qcl == 1 else 2500.}
+    def broad_state_must_not_select_active_qcl(self):
+        raise AssertionError("Broad state snapshot would follow stale active QCL 2")
+    monkeypatch.setattr(Mircat, "__init__", old_active_channel)
+    monkeypatch.setattr(Mircat, "get_active_qcl", lambda self: self.touch("active_qcl") or 2)
+    monkeypatch.setattr(Mircat, "get_num_installed_qcls", lambda self: self.touch("qcl_count") or 2)
+    monkeypatch.setattr(Mircat, "get_qcl_tuning_range", ranges)
+    monkeypatch.setattr(Mircat, "read_state", broad_state_must_not_select_active_qcl)
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_fixed_point_stale_qcl2_metadata_cannot_route_any_installed_operation(tmp_path, monkeypatch, mode):
+    from control_app.measurement_modules.fixed_wavenumber_kinetics.adapters import InstalledDevices
+    _inject_stale_multi_qcl_metadata(monkeypatch)
+    stale = {"qcl": 2, "pulse_rate_hz": 700000., "pulse_width_ns": 300.}
+    class LegacySelection(InstalledDevices):
+        def configure(self, resolved, check):
+            old = deepcopy(resolved)
+            old["mircat"] = deepcopy(stale)
+            old.setdefault("value_sources", {})["mircat.pulse_width_ns"] = "user_override"
+            super().configure(old, check)
+            # Historical selection metadata cannot redirect tune or cleanup.
+            self.resolved["mircat"] = deepcopy(stale)
+            self.resolved["qcl_ranges"] = [{"qcl": 2, "min_cm1": 1800., "max_cm1": 2500.}]
+            self.before["mircat_extra_pulses"] = {"2": deepcopy(stale)}
+    fixture = build_connected_fixture(tmp_path, mode)
+    plan = fixture.plan.to_dict()
+    plan["resolved"]["mircat"] = deepcopy(stale)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context, device_factory=LegacySelection).run(operation, plan)
+    mircat = fixture.state["services"]["mircat"]
+    assert result["status"] == "complete", result.get("error", result.get("cleanup_error"))
+    assert {qcl for _, qcl in mircat.qcl_calls} == {1}
+    assert not {"active_qcl", "qcl_count"}.intersection(mircat.calls)
+    assert result["plan"]["resolved"]["mircat"] == {"qcl": 1, "pulse_rate_hz": 2300000., "pulse_width_ns": 100.}
+    assert result["events"][0]["tuning"]["qcl"] == 1
+    assert mircat.pulses[2] == {"pulse_rate_hz": 700000., "pulse_width_ns": 300.}
+    assert all(row["qcl"] == 1 and row["pulse_rate_hz"] == 2300000. and row["pulse_width_ns"] == 100.
+        for row in mircat.pulse_writes)
+    assert result["restoration"]["safe_verified"]
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_fixed_point_all_positions_must_fit_qcl1_before_any_emission(tmp_path, monkeypatch, mode):
+    from control_app.measurement_modules.fixed_wavenumber_kinetics.settings import Position
+    _inject_stale_multi_qcl_metadata(monkeypatch)
+    fixture = build_connected_fixture(tmp_path, mode)
+    settings = replace(fixture.settings, positions=(Position(1930.), Position(2200.)), event_budget=2)
+    operation = fixture.context.begin_operation(settings=settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, build_plan(settings))
+    mircat = fixture.state["services"]["mircat"]
+    assert result["status"] == "failed" and "QCL 1 range" in result["error"]
+    assert "on" not in mircat.calls and "tune" not in mircat.calls
+    assert {qcl for _, qcl in mircat.qcl_calls} == {1}
+    assert fixture.state["core"].dispatched == 0
+    assert result["restoration"]["safe_verified"] and result["preservation_verified"]
+
+
+def test_fixed_point_tune_rechecks_qcl1_range_before_emission(tmp_path, monkeypatch):
+    _inject_stale_multi_qcl_metadata(monkeypatch)
+    read_range = Mircat.get_qcl_tuning_range
+    def changing_range(self, qcl):
+        actual = read_range(self, qcl)
+        if sum(method == "qcl_range" for method, _ in self.qcl_calls) >= 3:
+            actual.update(min_cm1=1800., max_cm1=1920.)
+        return actual
+    monkeypatch.setattr(Mircat, "get_qcl_tuning_range", changing_range)
+    fixture = build_connected_fixture(tmp_path)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan)
+    mircat = fixture.state["services"]["mircat"]
+    assert result["status"] == "failed" and "QCL 1 range" in result["error"]
+    assert "on" not in mircat.calls and "tune" not in mircat.calls
+    assert {qcl for _, qcl in mircat.qcl_calls} == {1}
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_fixed_point_changed_repetition_and_width_reach_qcl1_devices(tmp_path, monkeypatch, mode):
+    _inject_stale_multi_qcl_metadata(monkeypatch)
+    fixture = build_connected_fixture(tmp_path, mode)
+    settings = replace(fixture.settings, probe_rate_hz=80000., probe_width_ns=120.)
+    operation = fixture.context.begin_operation(settings=settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, build_plan(settings))
+    services = fixture.state["services"]
+    assert result["status"] == "complete", result.get("error", result.get("cleanup_error"))
+    pulse = result["events"][0]["tuning"]["mircat_internal_pulse"]
+    assert pulse == {"qcl": 1, "pulse_rate_hz": 2300000., "pulse_width_ns": 120., "external_probe_rate_hz": 80000.}
+    assert services["t660_1"].recipes[0]["clock"]["frequency"] == "80000Hz"
+    assert services["hf2li"].configured_pll["freqcenter_hz"] == 80000.
+    assert services["mircat"].pulse_writes[0] == {"qcl": 1, "pulse_rate_hz": 2300000., "pulse_width_ns": 120.}
+    assert services["mircat"].pulse_writes[-1] == {"qcl": 1, "pulse_rate_hz": 2300000., "pulse_width_ns": 100.}
+    assert services["t660_1"].synth_frequency_hz == 100000.
+    assert result["restoration"]["safe_verified"]

@@ -121,10 +121,26 @@ class Plan:
             if row.get("timing") is not None and not isinstance(row["timing"], TimingProgram):
                 row["timing"] = TimingProgram.from_dict(row["timing"])
             blocks.append(CaptureBlock(**row))
-        return cls(settings, deepcopy(value["resolved"]), tuple(blocks), tuple(value["validation_errors"]),
-                   tuple(value["readiness_items"]), tuple(value["warnings"]), deepcopy(value["estimates"]),
+        resolved, historical = _qcl1_profile(value["resolved"])
+        _remove_unresolved_pulses(resolved)
+        resolved.setdefault("mircat", {})["qcl"] = 1
+        if historical and settings.probe_width_ns is not None:
+            resolved["mircat"]["pulse_width_ns"] = settings.probe_width_ns
+            resolved.setdefault("value_sources", {})["mircat.pulse_width_ns"] = "user_override"
+        evidence = deepcopy(value.get("evidence_records", {}))
+        pending = list(value["readiness_items"])
+        if historical:
+            evidence.setdefault("historical_qcl_routing", {})["saved_plan"] = historical
+            for key in ("pulse_rate_hz", "pulse_width_ns"):
+                if key not in resolved["mircat"]:
+                    pending.append(f"Read the current MIRcat QCL1 {key} when connecting")
+        errors = list(value["validation_errors"])
+        errors.extend(_resolved_pulse_errors(resolved))
+        errors.extend(_external_duty_errors(settings.probe_rate_hz, settings.probe_width_ns))
+        return cls(settings, resolved, tuple(blocks), tuple(dict.fromkeys(errors)),
+                   tuple(dict.fromkeys(pending)), tuple(value["warnings"]), deepcopy(value["estimates"]),
                    deepcopy(value["requested"]), deepcopy(value["selected"]), deepcopy(value["actual"]),
-                   deepcopy(value.get("evidence_records", {})))
+                   evidence)
 
 
 def _positive(value: Any, *, zero: bool = False) -> bool:
@@ -141,8 +157,9 @@ def mircat_pulse_errors(params: Mapping[str, Any], external_rate_hz: float,
     """Validate independent MIRcat internal pulses against external triggers.
 
     SDK ``max_duty_cycle`` is a percentage. Rates are Hz and width is ns,
-    therefore internal duty percent = rate * width * 1e-7. Missing optional
-    SDK limits impose no invented bounds, margin, or rate selection.
+    therefore internal duty percent = rate * width / 1e7. Both internal and
+    external duty have a hard 30% ceiling; tighter SDK limits still apply.
+    The internal rate is independent and must exceed the external rate.
     """
     errors = []
     rate, width = params.get("pulse_rate_hz"), params.get("pulse_width_ns")
@@ -154,6 +171,9 @@ def mircat_pulse_errors(params: Mapping[str, Any], external_rate_hz: float,
         errors.append("MIRcat external trigger rate must be finite and positive in Hz")
     elif _positive(rate) and rate <= external_rate_hz:
         errors.append("MIRcat internal pulse rate must be strictly greater than the external trigger rate")
+    errors.extend(_external_duty_errors(external_rate_hz, width))
+    if _positive(rate) and _positive(width) and rate * width > 300_000_000.:
+        errors.append(f"MIRcat internal duty cycle {rate * width / 1e7:g}% exceeds the 30% maximum")
     for key, value, label in (("max_pulse_rate_hz", rate, "internal pulse rate"),
                               ("max_pulse_width_ns", width, "pulse width")):
         limit = (limits or {}).get(key)
@@ -168,10 +188,67 @@ def mircat_pulse_errors(params: Mapping[str, Any], external_rate_hz: float,
         if not _positive(duty_limit, zero=True):
             errors.append("MIRcat SDK max_duty_cycle limit must be a finite nonnegative percentage")
         elif _positive(rate) and _positive(width):
-            duty_percent = rate * width * 1e-7
-            if duty_percent > duty_limit:
+            duty_percent = rate * width / 1e7
+            if rate * width > duty_limit * 1e7:
                 errors.append(f"MIRcat internal duty cycle {duty_percent:g}% exceeds SDK max_duty_cycle limit {duty_limit:g}%")
     return tuple(errors)
+
+
+def _external_duty_errors(rate: Any, width_ns: Any) -> tuple[str, ...]:
+    # Compare in Hz*ns to avoid introducing floating-point boundary error from
+    # converting the exact 30% ceiling to a fraction of a second.
+    if _positive(rate) and _positive(width_ns) and rate * width_ns > 300_000_000.:
+        return (f"External probe repetition rate × MIRcat pulse width gives {rate * width_ns / 1e7:g}% duty; maximum is 30%",)
+    return ()
+
+
+def _qcl1_profile(value: Mapping[str, Any]) -> tuple[dict, dict]:
+    """Separate historical routing from the one installed QCL's settings.
+
+    Null pulse fields are merge tombstones: a stale QCL2 source cannot inherit
+    lower-priority pulse data and appear to be a current QCL1 readback.
+    """
+    result, historical = deepcopy(dict(value)), {}
+    params = result.get("mircat", {})
+    other_qcl = isinstance(params, Mapping) and params.get("qcl", 1) != 1
+    if other_qcl:
+        historical["mircat"] = deepcopy(params)
+        result["mircat"] = {"qcl": 1, "pulse_rate_hz": None, "pulse_width_ns": None}
+        if "value_sources" in result:
+            result["value_sources"].update({"mircat.pulse_rate_hz": "unresolved",
+                "mircat.pulse_width_ns": "unresolved"})
+    readback = result.get("mircat_readback")
+    if isinstance(readback, Mapping) and (readback.get("qcl", 2 if other_qcl else 1) != 1):
+        historical["mircat_readback"] = deepcopy(readback)
+        result["mircat_readback"] = {"qcl": 1, "pulse_limits": None}
+    elif other_qcl and readback is None:
+        result["mircat_readback"] = {"qcl": 1, "pulse_limits": None}
+    if "qcl_ranges" in result:
+        ranges = result["qcl_ranges"]
+        selected = [row for row in ranges if isinstance(row, Mapping) and row.get("qcl") == 1]
+        if selected != ranges:
+            historical["qcl_ranges"] = deepcopy(ranges)
+            result["qcl_ranges"] = selected
+    return result, historical
+
+
+def _remove_unresolved_pulses(value: dict) -> None:
+    params = value.get("mircat", {})
+    for key in ("pulse_rate_hz", "pulse_width_ns"):
+        if key in params and params[key] is None:
+            params.pop(key)
+
+
+def _resolved_pulse_errors(value: Mapping[str, Any]) -> tuple[str, ...]:
+    probe, mircat = value.get("probe_recipe", {}), value.get("mircat", {})
+    frequency = _frequency_hz(probe.get("clock", {}).get("frequency"))
+    divider = probe.get("predivider", 1)
+    if frequency is None or not _integer(divider, 0):
+        return ()
+    external = frequency / max(1, divider)
+    if all(key in mircat for key in ("pulse_rate_hz", "pulse_width_ns")):
+        return mircat_pulse_errors(mircat, external, value.get("mircat_readback", {}).get("pulse_limits"))
+    return _external_duty_errors(external, mircat.get("pulse_width_ns"))
 
 
 def _merge(left: Mapping, right: Mapping) -> dict:
@@ -203,6 +280,7 @@ def _validate(s: Settings) -> list[str]:
     for name in ("pump_fire_delay_s", "pump_q_switch_delay_s"):
         if getattr(s, name) is not None and not _positive(getattr(s, name), zero=True):
             errors.append(f"{name} must be nonnegative or Automatic")
+    errors.extend(_external_duty_errors(s.probe_rate_hz, s.probe_width_ns))
     for name in ("baseline_drift_fraction", "baseline_cv_limit", "reset_tolerance_fraction"):
         if not _positive(getattr(s, name)) or getattr(s, name) >= 1:
             errors.append(f"{name} must lie strictly between zero and one")
@@ -257,10 +335,15 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
                             if preparation else s)
     config = deepcopy(dict(configuration or {}))
     evidence = deepcopy(dict(evidence or {}))
-    local = deepcopy(dict(config.get(EXPERIMENT_ID, {})))
-    profile = deepcopy(dict(evidence.get("operating_profile", {})))
-    live = deepcopy(dict(live_readbacks or {}))
+    local, old_local = _qcl1_profile(config.get(EXPERIMENT_ID, {}))
+    profile, old_profile = _qcl1_profile(evidence.get("operating_profile", {}))
+    live, old_live = _qcl1_profile(live_readbacks or {})
+    historical = {key: value for key, value in (("configured", old_local),
+        ("optional_profile", old_profile), ("installed_readback", old_live)) if value}
+    if historical:
+        evidence.setdefault("historical_qcl_routing", {}).update(historical)
     resolved = _merge(_merge(local, profile), live)
+    _remove_unresolved_pulses(resolved)
     sources = {}
 
     def source_for(path):
@@ -359,6 +442,7 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
 
     probe = deepcopy(dict(resolved.get("probe_recipe", {})))
     mircat = deepcopy(dict(resolved.get("mircat", {})))
+    mircat["qcl"] = 1
     timing_values = deepcopy(dict(resolved.get("timing", {})))
     if s.probe_rate_hz is not None:
         # External trigger carrier updates its timing/reference recipients. The
@@ -370,12 +454,13 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
         sources["probe_rate_hz"] = "user_override"
     else:
         sources["probe_rate_hz"] = source_for("probe_recipe.clock.frequency")
-    sources["mircat.pulse_rate_hz"] = source_for("mircat.pulse_rate_hz")
+    sources["mircat.qcl"] = "installed_topology_QCL1"
+    sources["mircat.pulse_rate_hz"] = source_for("mircat.pulse_rate_hz") if "pulse_rate_hz" in mircat else "unresolved"
     if s.probe_width_ns is not None:
         mircat["pulse_width_ns"] = s.probe_width_ns
         sources["mircat.pulse_width_ns"] = "user_override"
     else:
-        sources["mircat.pulse_width_ns"] = source_for("mircat.pulse_width_ns")
+        sources["mircat.pulse_width_ns"] = source_for("mircat.pulse_width_ns") if "pulse_width_ns" in mircat else "unresolved"
     for setting_name, key in (("pump_fire_delay_s", "fire_delay_s"), ("pump_q_switch_delay_s", "q_switch_delay_s"),
                               ("pump_fire_width_s", "fire_width_s"), ("pump_q_switch_width_s", "q_switch_width_s")):
         value = getattr(s, setting_name)
@@ -406,12 +491,7 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
     for key in ("qcl", "pulse_width_ns", "pulse_rate_hz"):
         if not _positive(mircat.get(key)):
             pending.append(f"Read the current MIRcat {key} when connecting")
-    external_frequency = _frequency_hz(probe.get("clock", {}).get("frequency"))
-    external_divider = probe.get("predivider", 1)
-    if external_frequency is not None and _integer(external_divider, 0) and all(
-            key in mircat for key in ("pulse_rate_hz", "pulse_width_ns")):
-        errors.extend(mircat_pulse_errors(mircat, external_frequency / max(1, external_divider),
-                                         resolved.get("mircat_readback", {}).get("pulse_limits")))
+    errors.extend(_resolved_pulse_errors(resolved))
     if not resolved.get("hf2li", {}).get("signal_inputs") or not resolved.get("hf2li", {}).get("pll"):
         pending.append("Read the installed HF2LI signal-input and reference-lock settings when connecting")
 
@@ -476,7 +556,8 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
                 "detectors": {role: deepcopy(resolved.get(role, {})) for role in roles},
                 "minimum_event_interval_s": interval, "finite_timing": timing.to_dict() if timing else None}
     return Plan(s, resolved, tuple(blocks), tuple(dict.fromkeys(errors)), tuple(dict.fromkeys(pending)),
-                tuple(warnings), estimates, s.to_dict(), selected, {"installed_readbacks": live} if live else {}, evidence)
+                tuple(warnings), estimates, s.to_dict(), selected,
+                {"installed_readbacks": deepcopy(dict(live_readbacks))} if live_readbacks else {}, evidence)
 
 
 def _frequency_hz(value: Any) -> float | None:

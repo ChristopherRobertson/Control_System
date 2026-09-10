@@ -77,6 +77,8 @@ class FixedPointAdapter:
         settings = Settings.from_dict(envelope["settings"])
         configuration = self.context.configuration()
         evidence = deepcopy(self.evidence)
+        if envelope.get("historical_ui_settings"):
+            evidence["historical_ui_settings"] = deepcopy(envelope["historical_ui_settings"])
         live = deepcopy(self.live_readbacks)
         if envelope.get("execution") == "simulation":
             from .simulation import simulation_profile

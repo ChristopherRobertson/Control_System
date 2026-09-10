@@ -217,7 +217,7 @@ def test_fixed_point_fault_blocks_close_after_worker_finishes(app, tmp_path):
 
 
 def test_fixed_point_essential_inputs_and_independent_automatic_overrides(app, tmp_path):
-    from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox
+    from PySide6.QtWidgets import QCheckBox, QGroupBox, QLabel
     pair, _ = tabs(tmp_path)
     for handle in pair:
         panel = handle.widget
@@ -227,10 +227,16 @@ def test_fixed_point_essential_inputs_and_independent_automatic_overrides(app, t
         assert not panel.findChildren(QCheckBox)
         assert not hasattr(panel.editor, "profile")
         assert not hasattr(panel.editor, "execution")
-        assert not panel.advanced_content.isVisible()
-        essential = panel.editor.findChildren(QLineEdit) + panel.editor.findChildren(QDoubleSpinBox) + panel.editor.findChildren(QSpinBox) + panel.editor.findChildren(QComboBox)
-        # Internal spin-box line edits are not additional visible inputs.
-        assert len(panel.editor.fields) > 6
+        panel.show()
+        app.processEvents()
+        assert isinstance(panel.advanced_content, QGroupBox)
+        assert panel.advanced_content.isVisible() and not panel.advanced_content.isCheckable()
+        assert not hasattr(panel, "advanced_button")
+        labels = [label.text() for label in panel.findChildren(QLabel)]
+        assert "Repetition rate (Hz)" in labels and "Pulse width (ns)" in labels
+        assert not any("QCL" in text for text in labels)
+        assert not {"memory_limit_mb", "tune_timeout_s", "pump_fire_delay_s", "baseline_cv_limit"}.intersection(panel.editor.fields)
+        assert all(control.isVisible() for control in panel.editor.fields.values())
         panel.editor.fields["sample_rate_sps"].setText("1234")
         values = panel.editor.values()["settings"]
         assert values["sample_rate_sps"] == 1234
@@ -239,7 +245,54 @@ def test_fixed_point_essential_inputs_and_independent_automatic_overrides(app, t
             assert values["reference_rate_sps"] is None
         panel.editor.restore_automatic()
         assert panel.editor.values()["settings"]["sample_rate_sps"] is None
+        panel.close()
         panel.deleteLater()
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_fixed_point_compact_overrides_migrate_removed_settings_and_preserve_positions(app, tmp_path, mode):
+    from control_app.measurement_modules.fixed_wavenumber_kinetics.settings import Settings
+    pair, _ = tabs(tmp_path)
+    panel = pair[0 if mode == "single" else 1].widget
+    settings = Settings(mode=mode).to_dict()
+    settings.update(positions=[{"wavenumber_cm1": 1930., "label": "band"},
+        {"wavenumber_cm1": 1940., "label": "off_band", "selection_record_id": "measured-position-2"}],
+        baseline_window_s=[-0.8, -0.2], memory_limit_mb=512., technical_repetitions=2,
+        probe_rate_hz=2000000., probe_width_ns=100., sample_timeconstant_s=0.0001,
+        pre_observation_s=0.0002, post_observation_s=0.000000123, pump_q_switch_delay_s=0.000213)
+    panel.editor.apply({"settings": settings})
+    values = panel.editor.values()["settings"]
+    assert values["positions"] == settings["positions"]
+    assert values["baseline_window_s"] is None and values["memory_limit_mb"] == 256.
+    assert values["pump_q_switch_delay_s"] is None
+    assert values["technical_repetitions"] == 1 and values["event_budget"] == 2
+    historical = panel.editor.values()["historical_ui_settings"]
+    assert historical["baseline_window_s"] == [-0.8, -0.2] and historical["memory_limit_mb"] == 512.
+    assert historical["pump_q_switch_delay_s"] == 0.000213 and historical["technical_repetitions"] == 2
+    assert settings["pump_q_switch_delay_s"] == 0.000213  # Original saved input is untouched.
+    assert values["probe_rate_hz"] == 2000000. and values["probe_width_ns"] == 100.
+    assert values["sample_timeconstant_s"] == 0.0001 and values["sample_rate_sps"] is None
+    assert values["pre_observation_s"] == 0.0002 and values["post_observation_s"] == 0.000000123
+    panel.editor.positions.setText("1940, 1920")
+    changed = panel.editor.values()["settings"]
+    assert changed["positions"][1]["selection_record_id"] == "measured-position-2"
+    assert changed["positions"][2] == {"wavenumber_cm1": 1920.}
+    panel.editor.wavenumber.setValue(1940)
+    panel.editor.positions.setText("1930, 1920")
+    reordered = panel.editor.values()["settings"]["positions"]
+    assert reordered[0]["selection_record_id"] == "measured-position-2"
+    assert reordered[1] == settings["positions"][0]
+    panel.editor.wavenumber.setValue(1925)
+    assert panel.editor.values()["settings"]["positions"][0] == {"wavenumber_cm1": 1925.}
+    panel.editor.restore_automatic()
+    restored = panel.editor.values()["settings"]
+    assert restored["probe_rate_hz"] is None and restored["probe_width_ns"] is None
+    assert restored["pump_q_switch_delay_s"] is None
+    assert restored["baseline_window_s"] is None and restored["memory_limit_mb"] == 256.
+    panel.editor.apply(panel.editor.values())
+    assert panel.editor.values()["historical_ui_settings"] == historical
+    for handle in pair:
+        handle.widget.deleteLater()
 
 
 def test_fixed_point_loaded_simulation_plan_cannot_switch_normal_execution(app, tmp_path):
@@ -309,6 +362,36 @@ def test_fixed_point_compact_real_factories_check_and_direct_start(app, tmp_path
         assert event["normalization_kind"] == "observed_sample_baseline"
         assert "Baseline-relative" in panel.quantity.itemText(1)
     assert pair[1 if mode == "single" else 0].widget.result is None
+    for handle in pair:
+        handle.widget.deleteLater()
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_fixed_point_visible_pulse_controls_reach_installed_transports(app, tmp_path, mode):
+    from test_fixed_point_installed_adapter import build_connected_fixture
+    from control_app.measurement_modules.fixed_wavenumber_kinetics.registration import create_tabs
+    fixture = build_connected_fixture(tmp_path, mode)
+    pair = create_tabs(fixture.context_factory.for_experiment("fixed_wavenumber_kinetics"))
+    panel = pair[0 if mode == "single" else 1].widget
+    panel.editor.apply({"settings": fixture.settings.to_dict()})
+    saved = panel.editor.values()
+    saved["settings"]["pump_q_switch_delay_s"] = 0.000213
+    panel.editor.apply(saved)
+    panel.editor.fields["probe_rate_hz"].setText("80000")
+    panel.editor.fields["probe_width_ns"].setText("120")
+    panel.begin("measurement")
+    wait(app, panel)
+    assert panel.result["status"] == "complete", panel.status.text()
+    selected = panel.result["plan"]["resolved"]
+    assert selected["probe_recipe"]["clock"]["frequency"] == "80000Hz"
+    assert selected["mircat"]["qcl"] == 1 and selected["mircat"]["pulse_width_ns"] == 120.
+    pulse = panel.result["events"][0]["tuning"]["mircat_internal_pulse"]
+    assert pulse["external_probe_rate_hz"] == 80000. and pulse["pulse_rate_hz"] == 110000.
+    assert pulse["pulse_width_ns"] == 120.
+    assert selected["timing"]["q_switch_delay_s"] == 0.0002
+    assert panel.result["plan"]["evidence_records"]["historical_ui_settings"]["pump_q_switch_delay_s"] == 0.000213
+    assert {"qcl": 1, "pulse_rate_hz": 110000., "pulse_width_ns": 120.} in fixture.state["services"]["mircat"].pulse_writes
+    assert panel.result["preservation_verified"] and panel.result["restoration"]["safe_verified"]
     for handle in pair:
         handle.widget.deleteLater()
 
@@ -434,6 +517,7 @@ def test_fixed_point_plot_relative_fallback_and_sequential_blank_labels():
 @pytest.mark.parametrize("index", [2, 3])
 def test_fixed_point_actual_shell_fits_and_keeps_plot_labels_visible(app, tmp_path, index):
     import numpy as np
+    from PySide6.QtCore import QPoint, QRect
     from control_app.ui.main_window import ControlSystemMainWindow
     from control_app.ui.contracts import blocked_handler
     from control_app.measurement_host.registry import DiscoveryResult
@@ -458,6 +542,11 @@ def test_fixed_point_actual_shell_fits_and_keeps_plot_labels_visible(app, tmp_pa
     renderer = panel.plot.canvas.get_renderer()
     assert panel.plot.figure.axes[-1].xaxis.label.get_window_extent(renderer).y0 >= 0
     assert panel.start_button.isVisible()
+    assert panel.advanced_content.isVisible() and not panel.advanced_content.isCheckable()
+    viewport = panel.settings_scroll.viewport()
+    for control in (*panel.editor.fields.values(), panel.editor.wavenumber, panel.editor.pump, panel.editor.positions):
+        assert viewport.rect().contains(QRect(control.mapTo(viewport, QPoint()), control.size()))
+    assert panel.settings_scroll.horizontalScrollBar().maximum() == 0
     window.hide()
     window.deleteLater()
     app.processEvents()

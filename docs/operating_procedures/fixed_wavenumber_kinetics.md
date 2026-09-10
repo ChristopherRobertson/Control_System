@@ -40,7 +40,7 @@ errors, finite event counts, exclusive ownership and cleanup remain enforced.
 Manual sample exchange and shutters are operator actions; the application does
 not claim to control unsupported hardware.
 
-## Automatic settings and Advanced
+## Automatic settings and overrides
 
 The default detector rate, filter, input configuration and probe/pump settings
 come from current connected readbacks and device capabilities. The maintained
@@ -50,16 +50,26 @@ carrier and finite pump interval are distinct.
 
 The MIRcat internal pulse rate is also independent of the external T660 probe
 trigger. Its connected setting must exceed the external rate and remain within
-the active QCL's pulse-rate, width and duty limits. External-rate overrides do
+QCL 1's pulse-rate, width and duty limits. External-rate overrides do
 not overwrite the internal rate. Both are recorded and checked before emission.
+The installed instrument has one QCL. Current operations always use QCL 1 and
+its connected tuning range; historical QCL metadata cannot route a new run to
+another laser channel. Repetition rate multiplied by pulse width in seconds
+must not exceed 0.30. The internal pulse duty also remains at or below 30%,
+and tighter vendor limits still apply.
 
-**Advanced** contains independent detector, probe and pump overrides, optional
-analysis windows, repetition/interval settings, retention limits, and additional
-ordered wavenumbers. A blank override means Automatic. Changing one override
-does not freeze other automatic choices. **Restore automatic instrument
-settings** clears the individual override values.
+The framed **Advanced overrides** form stays visible. It contains **Repetition
+rate**, **Pulse width**, **Event interval**, and detector **Rate**, **Filter time**
+and **Filter order**. Dual mode provides independent sample and reference
+columns. A blank value means Automatic. Changing one override does not freeze
+other automatic choices. **Restore automatic settings** clears instrument
+overrides. Loading older GUI preferences or plans resets removed engineering
+controls to current defaults or Automatic; their former values remain historical
+provenance and cannot silently steer a new run. Native runs and analysis records
+remain unchanged.
 
-Additional positions execute in row order; the result is a sequence of fixed
+**Other positions** accepts comma-separated wavenumbers; **Load** imports a
+measured selection. Additional positions execute in entered order; the result is a sequence of fixed
 points, not a simultaneously measured spectrum. Requested later events remain
 separately identifiable. Observed recovery/reset outcomes are recorded; an
 incomplete reset does not silently certify later events as equivalent or permit
@@ -122,12 +132,14 @@ normalization, missing/invalid streams, cancellation, cleanup-failure precedence
 tab isolation and the common compact panel. UI inspection uses retained test
 data and loaded fonts; no physical measurement is performed for screenshots.
 
-The module suite passed all **162 tests**, including independent MIRcat rates,
-T660 reference-topology restoration, failed-readback preservation and offline
-activation without hardware-access attempts. Shared host, service and existing
+The module suite passed all **185 tests**, including QCL 1 routing, independent
+MIRcat rates and duty boundaries, old-settings migration, T660 reference-topology
+restoration, failed-readback preservation and offline activation without
+hardware-access attempts. Shared host, service and existing
 Phase Scan regression coverage passed **277 tests**, with **6 skipped**. Both
 tabs were rendered in the actual application shell at 1100 by 780 pixels, with
-no outer vertical scrolling and no clipped plot labels.
+every override field visible, no outer vertical scrolling, no horizontal
+settings scrolling and no clipped plot labels.
 
 No lasers were fired and no physical acquisition was performed during this
 overhaul. Injected-device verification establishes the implemented connected

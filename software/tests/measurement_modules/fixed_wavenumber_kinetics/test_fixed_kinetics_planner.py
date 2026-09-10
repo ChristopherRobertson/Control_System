@@ -371,6 +371,122 @@ def test_planner_reports_equal_internal_rate_and_sdk_limit_as_invalid_operating_
     assert not limited.ready and any("max_pulse_width_ns" in error for error in limited.validation_errors)
 
 
+@pytest.mark.parametrize("source", ["configured", "optional_profile", "installed_readback"])
+def test_stale_qcl2_route_becomes_qcl1_without_relabeling_pulse_or_limit_data(source):
+    s, evidence = profile_case()
+    old = deepcopy(evidence["operating_profile"])
+    old["mircat"] = {"qcl": 2, "pulse_rate_hz": 123456., "pulse_width_ns": 88.}
+    old["mircat_readback"] = {"qcl": 2, "pulse_limits": {"max_pulse_width_ns": 10.}}
+    old["qcl_ranges"] = [{"qcl": 2, "min_cm1": 1900., "max_cm1": 2000.}]
+    arguments = {"configuration": {"fixed_wavenumber_kinetics": old}} if source == "configured" else (
+        {"evidence": {"operating_profile": old}} if source == "optional_profile" else {"live_readbacks": old})
+    p = build_plan(s, **arguments)
+    assert p.ready and not p.operational_ready
+    assert p.resolved["mircat"] == {"qcl": 1}
+    assert not p.resolved["mircat_readback"].get("pulse_limits")
+    assert p.resolved["qcl_ranges"] == []
+    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "unresolved"
+    assert p.evidence_records["historical_qcl_routing"][source]["mircat"] == old["mircat"]
+    assert old["mircat"]["qcl"] == 2
+
+
+def test_live_qcl1_overrides_saved_qcl2_without_inheriting_its_pulse_limits_or_ranges():
+    s, evidence = profile_case()
+    old = evidence["operating_profile"]
+    old["mircat"] = {"qcl": 2, "pulse_rate_hz": 100., "pulse_width_ns": 500.}
+    old["mircat_readback"] = {"pulse_limits": {"max_duty_cycle": .001}}
+    old["qcl_ranges"] = [{"qcl": 2, "min_cm1": 1800., "max_cm1": 2000.}]
+    live = {"mircat": {"qcl": 1, "pulse_rate_hz": 2_300_000., "pulse_width_ns": 100.},
+        "qcl_ranges": [{"qcl": 1, "min_cm1": 1900., "max_cm1": 2000.}]}
+    p = build_plan(replace(s, probe_rate_hz=2_000_000.), evidence=evidence, live_readbacks=live)
+    assert p.operational_ready, (p.validation_errors, p.readiness_items)
+    assert p.resolved["mircat"] == live["mircat"]
+    assert p.resolved["qcl_ranges"] == live["qcl_ranges"]
+    assert not p.resolved["mircat_readback"].get("pulse_limits")
+    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "installed_readback"
+    assert p.actual["installed_readbacks"] == live
+    partial = deepcopy(live)
+    partial["mircat"].pop("pulse_width_ns")
+    unresolved = build_plan(s, evidence=evidence, live_readbacks=partial)
+    assert not unresolved.operational_ready
+    assert "pulse_width_ns" not in unresolved.resolved["mircat"]
+
+
+def test_stale_live_qcl2_does_not_fall_back_to_lower_priority_pulse_values():
+    s, evidence = profile_case()
+    p = build_plan(s, evidence=evidence, live_readbacks={
+        "mircat": {"qcl": 2, "pulse_rate_hz": 4000., "pulse_width_ns": 25.}})
+    assert p.ready and not p.operational_ready
+    assert p.resolved["mircat"] == {"qcl": 1}
+    assert p.actual["installed_readbacks"]["mircat"]["qcl"] == 2
+
+
+def test_saved_plan_normalizes_historical_route_and_preserves_explicit_width_and_original_record():
+    s, evidence = profile_case()
+    s = replace(s, probe_width_ns=50.)
+    saved = build_plan(s, evidence=evidence).to_dict()
+    saved["resolved"]["mircat"] = {"qcl": 2, "pulse_rate_hz": 1234., "pulse_width_ns": 88.}
+    saved["resolved"]["qcl_ranges"] = [{"qcl": 2, "min_cm1": 1900., "max_cm1": 2000.}]
+    original = deepcopy(saved)
+    p = Plan.from_dict(saved)
+    assert p.ready and not p.operational_ready
+    assert p.resolved["mircat"] == {"qcl": 1, "pulse_width_ns": 50.}
+    assert p.settings == s and p.resolved["qcl_ranges"] == []
+    assert p.resolved["value_sources"]["mircat.pulse_width_ns"] == "user_override"
+    assert p.evidence_records["historical_qcl_routing"]["saved_plan"]["mircat"] == original["resolved"]["mircat"]
+    assert saved == original
+    assert Plan.from_dict(p.to_dict()).to_dict() == p.to_dict()
+
+
+def test_hard_internal_duty_boundary_and_tighter_sdk_limits_are_independent_of_rate_relationship():
+    params = {"pulse_rate_hz": 3_000_000., "pulse_width_ns": 100.}
+    assert mircat_pulse_errors(params, 2_900_000.) == ()
+    assert mircat_pulse_errors(params, 2_900_000., {"max_duty_cycle": 80.}) == ()
+    assert any("SDK max_duty_cycle limit 25%" in error for error in
+        mircat_pulse_errors(params, 2_900_000., {"max_duty_cycle": 25.}))
+    over = {**params, "pulse_width_ns": 100.000001}
+    assert any("30% maximum" in error for error in mircat_pulse_errors(over, 2_900_000.))
+    assert any("30% maximum" in error for error in mircat_pulse_errors(over, 2_900_000., {"max_duty_cycle": 80.}))
+    equal = mircat_pulse_errors(params, 3_000_000.)
+    assert any("strictly greater" in error for error in equal)
+    assert not any("duty" in error for error in equal)
+
+
+def test_external_duty_is_checked_before_connection_at_the_requested_thirty_percent_boundary():
+    s = Settings(positions=(Position(1944.2),), probe_rate_hz=2_000_000., probe_width_ns=150.)
+    boundary = build_plan(s)
+    assert boundary.ready and not boundary.operational_ready
+    over = build_plan(replace(s, probe_width_ns=150.000001))
+    assert not over.ready
+    assert any("External probe" in error and "30%" in error for error in over.validation_errors)
+    loaded = Plan.from_dict(boundary.to_dict())
+    assert loaded.ready
+    invalid_saved = boundary.to_dict()
+    invalid_saved["settings"]["probe_width_ns"] = 151.
+    assert not Plan.from_dict(invalid_saved).ready
+
+
+def test_actual_internal_duty_can_fail_while_external_product_is_exactly_thirty_percent():
+    s, evidence = profile_case()
+    live = deepcopy(evidence["operating_profile"])
+    live["mircat"].update(pulse_rate_hz=2_300_000., pulse_width_ns=150.)
+    live["mircat_readback"] = {"qcl": 1, "pulse_limits": {"max_duty_cycle": 80.}}
+    p = build_plan(replace(s, probe_rate_hz=2_000_000.), live_readbacks=live)
+    assert not p.ready
+    assert any("internal duty cycle 34.5%" in error and "30%" in error for error in p.validation_errors)
+    assert not any("External probe" in error for error in p.validation_errors)
+
+
+@pytest.mark.parametrize("key,value", [("pulse_rate_hz", float("nan")),
+    ("pulse_width_ns", float("inf")), ("pulse_width_ns", 0.)])
+def test_planner_rejects_invalid_qcl1_actual_pulse_values(key, value):
+    s, evidence = profile_case()
+    live = deepcopy(evidence["operating_profile"])
+    live["mircat"][key] = value
+    p = build_plan(s, live_readbacks=live)
+    assert not p.ready and any("finite and positive" in error for error in p.validation_errors)
+
+
 @pytest.mark.parametrize("updates", [{"pre_observation_s": float("nan")}, {"event_budget": True},
     {"technical_repetitions": 1.5}, {"baseline_window_s": (0, 1)}, {"retention_strategy": "ring_buffer"}])
 def test_invalid_values_are_reviewable_errors(updates):

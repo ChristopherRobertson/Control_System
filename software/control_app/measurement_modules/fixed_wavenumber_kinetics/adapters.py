@@ -201,7 +201,13 @@ class InstalledDevices:
                         service.set_channel_timing_mode(channel, "delay_width")
                         service.command(f"TIME:RELTo{2*index+1} 0", expect_response=False)
             elif name == "mircat":
-                self.before[name] = service.read_state().to_dict()
+                # A broad vendor state snapshot may follow its active-QCL field.
+                # This installed topology has exactly one QCL; read it directly.
+                self.before[name] = {"qcl": 1, "emission_on": service.is_emission_on(),
+                    "armed": service.is_laser_armed(), "interlock_set": service.is_interlock_set(),
+                    "key_switch_set": service.is_key_switch_set(), "tecs_ready": service.are_tecs_ready(),
+                    "pulse_rate_hz": service.get_qcl_pulse_rate(1),
+                    "pulse_width_ns": service.get_qcl_pulse_width(1)}
                 if prepare:
                     service.turn_emission_off()
             else:
@@ -289,19 +295,15 @@ class InstalledDevices:
             profile["hf2li"]["signal_inputs"][role] = {"index": index,
                 "ac": bool(node(f"sigins/{index}/ac")), "impedance_50ohm": bool(node(f"sigins/{index}/imp50")),
                 "differential": bool(node(f"sigins/{index}/diff")), "range_v": float(node(f"sigins/{index}/range"))}
-        qcl = int(mircat.get_active_qcl())
-        if qcl < 1:
-            qcl = 1
-        profile["qcl_ranges"] = [mircat.get_qcl_tuning_range(i) for i in range(1, mircat.get_num_installed_qcls()+1)]
+        qcl_range = self._read_qcl1_range()
+        profile["qcl_ranges"] = [qcl_range]
         position = settings.get("positions", [{}])[0].get("wavenumber_cm1") if settings.get("positions") else None
-        if position is not None:
-            covering = [r["qcl"] for r in profile["qcl_ranges"] if r["min_cm1"] <= float(position) <= r["max_cm1"]]
-            if not covering:
-                raise RuntimeError("Selected wavenumber lies outside all installed MIRcat QCL ranges")
-            qcl = qcl if qcl in covering else covering[0]
-        profile["mircat"] = {"qcl": qcl, "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
-            "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
-        profile["mircat_readback"] = {**profile["mircat"], "pulse_limits": mircat.get_qcl_pulse_limits(qcl)}
+        for selected in settings.get("positions", ()):
+            if not qcl_range["min_cm1"] <= float(selected["wavenumber_cm1"]) <= qcl_range["max_cm1"]:
+                raise RuntimeError("Selected wavenumber lies outside installed MIRcat QCL 1 range")
+        profile["mircat"] = {"qcl": 1, "pulse_rate_hz": mircat.get_qcl_pulse_rate(1),
+            "pulse_width_ns": mircat.get_qcl_pulse_width(1)}
+        profile["mircat_readback"] = {**profile["mircat"], "pulse_limits": mircat.get_qcl_pulse_limits(1)}
         profile["settling_s"] = max(10*p["timeconstant_s"]*p["order"] for p in (profile[r] for r in ("sample", "reference") if r in profile))
         profile["settling_basis"] = "Conservative 10 × filter order × live time constant; estimated filter settling, not measured acquisition response"
         # The SDK returns single precision cm^-1; report an operational check
@@ -320,29 +322,51 @@ class InstalledDevices:
         recipe = self.resolved["probe_recipe"]
         return _physical_number(recipe["clock"]["frequency"]) / max(1, int(recipe.get("predivider", 1)))
 
+    def _read_qcl1_range(self):
+        actual = self.services["mircat"].get_qcl_tuning_range(1)
+        if int(actual.get("qcl", 1)) != 1:
+            raise RuntimeError("MIRcat QCL 1 range readback identifies a different QCL")
+        low, high = float(actual["min_cm1"]), float(actual["max_cm1"])
+        if not math.isfinite(low) or not math.isfinite(high) or low > high:
+            raise RuntimeError("MIRcat QCL 1 range readback is invalid")
+        return {**actual, "qcl": 1, "min_cm1": low, "max_cm1": high}
+
     def _verify_mircat_pulse(self, expected):
         from .planner import mircat_pulse_errors
         mircat = self.services["mircat"]
-        qcl = int(expected["qcl"])
-        actual = {"qcl": qcl, "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
-                  "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
-        errors = mircat_pulse_errors(actual, self._external_probe_rate(), mircat.get_qcl_pulse_limits(qcl))
+        actual = {"qcl": 1, "pulse_rate_hz": mircat.get_qcl_pulse_rate(1),
+                  "pulse_width_ns": mircat.get_qcl_pulse_width(1)}
+        errors = mircat_pulse_errors(actual, self._external_probe_rate(), mircat.get_qcl_pulse_limits(1))
         if errors:
             raise RuntimeError("; ".join(errors))
         for key in ("pulse_rate_hz", "pulse_width_ns"):
             if not math.isclose(float(actual[key]), float(expected[key]), rel_tol=1e-6):
-                raise RuntimeError(f"MIRcat QCL {qcl} {key} differs from selected internal setting")
+                raise RuntimeError(f"MIRcat QCL 1 {key} differs from selected internal setting")
         actual["external_probe_rate_hz"] = self._external_probe_rate()
-        self.readbacks.setdefault("mircat_pulses_by_qcl", {})[str(qcl)] = actual
+        self.readbacks.setdefault("mircat_pulses_by_qcl", {})["1"] = actual
         return actual
 
     def configure(self, resolved, check):
         self.resolved = deepcopy(dict(resolved))
         check()
         from .planner import mircat_pulse_errors
-        params = self.resolved["mircat"]
+        mircat = self.services["mircat"]
+        supplied = self.resolved.get("mircat", {})
+        params = {"qcl": 1, "pulse_rate_hz": mircat.get_qcl_pulse_rate(1),
+            "pulse_width_ns": mircat.get_qcl_pulse_width(1)}
+        sources = self.resolved.setdefault("value_sources", {})
+        if supplied.get("qcl", 1) == 1 and sources.get("mircat.pulse_width_ns") == "user_override":
+            params["pulse_width_ns"] = supplied["pulse_width_ns"]
+        else:
+            sources["mircat.pulse_width_ns"] = "connected QCL 1 readback"
+        if supplied.get("qcl", 1) != 1:
+            self.resolved["historical_mircat_selection"] = deepcopy(supplied)
+        sources["mircat.pulse_rate_hz"] = "connected QCL 1 readback"
+        sources["mircat.qcl"] = "single installed QCL 1"
+        self.resolved["mircat"] = params
+        self.resolved["qcl_ranges"] = [self._read_qcl1_range()]
         errors = mircat_pulse_errors(params, self._external_probe_rate(),
-            self.services["mircat"].get_qcl_pulse_limits(int(params["qcl"])))
+            mircat.get_qcl_pulse_limits(1))
         if errors:
             raise RuntimeError("; ".join(errors))
         hf = self.services["hf2li"]
@@ -398,13 +422,14 @@ class InstalledDevices:
         self.services["t660_1"].start_continuous_clock()
         mircat = self.services["mircat"]
         params = self.resolved["mircat"]
-        qcl = int(params["qcl"])
-        self.before["mircat_pulse"] = {"qcl": qcl,
-            "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
-            "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
+        self._qcl1_original_pulse = {"qcl": 1,
+            "pulse_rate_hz": mircat.get_qcl_pulse_rate(1),
+            "pulse_width_ns": mircat.get_qcl_pulse_width(1)}
+        self.before["mircat_pulse"] = deepcopy(self._qcl1_original_pulse)
         self.before["mircat_trigger"] = mircat.get_wavelength_trigger_params()
         self.readbacks["mircat_pulse_command"] = mircat.set_qcl_pulse_params(**params)
         self.readbacks["mircat_pulse"] = self._verify_mircat_pulse(params)
+        self._qcl1_selected_pulse = deepcopy(params)
         self.readbacks["hf2li"] = actual
         self.readbacks["probe"] = self.services["t660_1"].read_active_settings()
         probe_state = self.readbacks["probe"]
@@ -436,28 +461,14 @@ class InstalledDevices:
     def tune(self, wavenumber_cm1, settings, check, progress):
         mircat = self.services["mircat"]
         mircat.turn_emission_off()
-        qcl = int(self.resolved["mircat"]["qcl"])
-        ranges = self.resolved.get("qcl_ranges", ())
-        if ranges:
-            available = [int(r["qcl"]) for r in ranges if r["min_cm1"] <= wavenumber_cm1 <= r["max_cm1"]]
-            if not available:
-                raise RuntimeError("Selected wavenumber lies outside installed QCL coverage")
-            qcl = qcl if qcl in available else available[0]
-        if qcl != int(self.resolved["mircat"]["qcl"]):
-            saved = self.before.setdefault("mircat_extra_pulses", {})
-            if str(qcl) not in saved:
-                saved[str(qcl)] = {"qcl": qcl, "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
-                    "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
-            selected_pulse = deepcopy(saved[str(qcl)])
-            if self.resolved.get("value_sources", {}).get("mircat.pulse_width_ns") == "user_override":
-                selected_pulse["pulse_width_ns"] = self.resolved["mircat"]["pulse_width_ns"]
-            from .planner import mircat_pulse_errors
-            errors = mircat_pulse_errors(selected_pulse, self._external_probe_rate(), mircat.get_qcl_pulse_limits(qcl))
-            if errors:
-                raise RuntimeError("; ".join(errors))
-            mircat.set_qcl_pulse_params(**selected_pulse)
-        else:
-            selected_pulse = self.resolved["mircat"]
+        qcl_range = self._read_qcl1_range()
+        if not qcl_range["min_cm1"] <= wavenumber_cm1 <= qcl_range["max_cm1"]:
+            raise RuntimeError("Selected wavenumber lies outside installed MIRcat QCL 1 range")
+        if not hasattr(self, "_qcl1_selected_pulse"):
+            raise RuntimeError("MIRcat QCL 1 pulse configuration has not been verified")
+        selected_pulse = deepcopy(self._qcl1_selected_pulse)
+        self.resolved["mircat"] = deepcopy(selected_pulse)
+        self.resolved["qcl_ranges"] = [qcl_range]
         mircat.set_external_trigger_params(wavenumber_cm1=wavenumber_cm1)
         self._verify_mircat_pulse(selected_pulse)
         if not mircat.is_interlock_set() or not mircat.is_key_switch_set():
@@ -469,7 +480,7 @@ class InstalledDevices:
             if time.monotonic() >= deadline:
                 raise RuntimeError("MIRcat TEC readiness timeout")
             time.sleep(.05)
-        mircat.tune_to_wavenumber(wavenumber_cm1, qcl=qcl)
+        mircat.tune_to_wavenumber(wavenumber_cm1, qcl=1)
         while not mircat.is_tuned():
             check()
             if time.monotonic() >= deadline:
@@ -486,7 +497,7 @@ class InstalledDevices:
             check()
             progress({"stage": "tuning/settling", "message": "Waiting selected detector/HF2LI settling interval"})
             time.sleep(min(.05, max(0, settling_end-time.monotonic())))
-        return {"requested_cm1": wavenumber_cm1, "actual": actual, "qcl": qcl, "tuned": mircat.is_tuned(),
+        return {"requested_cm1": wavenumber_cm1, "actual": actual, "qcl": 1, "tuned": mircat.is_tuned(),
                 "settling_s": self.resolved["settling_s"], "mircat_internal_pulse": actual_pulse}
 
     def upload(self, program, check, progress):
@@ -631,10 +642,8 @@ class InstalledDevices:
             attempt("MIRcat emission OFF", mircat.turn_emission_off)
             attempt("MIRcat cancel tune", mircat.cancel_manual_tune)
             attempt("MIRcat stop scan", mircat.stop_scan_if_needed)
-            if self.before.get("mircat_pulse"):
-                attempt("MIRcat pulse restoration", lambda: mircat.set_qcl_pulse_params(**self.before["mircat_pulse"]))
-            for key, pulse in self.before.get("mircat_extra_pulses", {}).items():
-                attempt(f"MIRcat QCL {key} pulse restoration", lambda saved=pulse: mircat.set_qcl_pulse_params(**saved))
+            if getattr(self, "_qcl1_original_pulse", None):
+                attempt("MIRcat pulse restoration", lambda: mircat.set_qcl_pulse_params(**self._qcl1_original_pulse))
             if self.before.get("mircat_trigger"):
                 old = self.before["mircat_trigger"]
                 allowed = ("pulse_mode", "process_trigger_mode", "start", "stop", "interval", "units", "dwell_us", "after_off_us")
@@ -645,16 +654,14 @@ class InstalledDevices:
                 if mircat.is_emission_on() or mircat.is_laser_armed():
                     raise RuntimeError("MIRcat emission OFF/disarmed not verified")
                 pulses = {}
-                expected_pulses = [self.before["mircat_pulse"]] if self.before.get("mircat_pulse") else []
-                expected_pulses.extend(self.before.get("mircat_extra_pulses", {}).values())
+                expected_pulses = [self._qcl1_original_pulse] if getattr(self, "_qcl1_original_pulse", None) else []
                 for expected in expected_pulses:
-                    qcl = int(expected["qcl"])
-                    actual = {"pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
-                              "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
+                    actual = {"pulse_rate_hz": mircat.get_qcl_pulse_rate(1),
+                              "pulse_width_ns": mircat.get_qcl_pulse_width(1)}
                     if any(not math.isclose(float(actual[key]), float(expected[key]), rel_tol=1e-6)
                            for key in actual):
-                        raise RuntimeError(f"MIRcat QCL {qcl} internal pulse restoration mismatch")
-                    pulses[str(qcl)] = actual
+                        raise RuntimeError("MIRcat QCL 1 internal pulse restoration mismatch")
+                    pulses["1"] = actual
                 return {"emission_on": False, "armed": False, "pulse_settings": pulses}
             attempt("MIRcat safe readback", verify_mircat)
         hf = self.services.get("hf2li")

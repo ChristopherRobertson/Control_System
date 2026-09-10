@@ -5,12 +5,17 @@ from pathlib import Path
 from PySide6.QtCore import Signal, QTimer
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog)
+    QFileDialog)
 from control_app.measurement_host import TabHandle
 from control_app.measurement_host.presentation import (
     CompactMeasurementPanel, LinkedSliceControl, PlotPanel, choose_time_display)
 from .settings import Settings
 from .app_adapter import FixedPointAdapter
+
+
+class _ObservationTimeInput(QDoubleSpinBox):
+    def textFromValue(self, value):
+        return f"{value:.9f}".rstrip("0").rstrip(".") or "0"
 
 
 class SettingsEditor(QWidget):
@@ -21,10 +26,12 @@ class SettingsEditor(QWidget):
         self.mode, self.sample_selection = mode, None
         self._base_data = Settings(mode=mode).to_dict()
         self._execution, self._applying = "connected", False
+        self._historical_ui_settings = {}
         self.fields = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
+        form.setVerticalSpacing(3)
         layout.addLayout(form)
         sample = QLineEdit()
         sample.setPlaceholderText("Optional label")
@@ -39,70 +46,61 @@ class SettingsEditor(QWidget):
         form.addRow("Wavenumber", self.wavenumber)
         self._number(form, "pre_observation_s", "Before pump", 1, 1e7, " s")
         self._number(form, "post_observation_s", "Recovery", 10, 1e7, " s")
-        self.fields["pre_observation_s"].setDecimals(3)
-        self.fields["post_observation_s"].setDecimals(3)
+        self.fields["pre_observation_s"].setDecimals(9)
+        self.fields["post_observation_s"].setDecimals(9)
         self._integer(form, "events_per_position", "Events", 1, 1000000)
         self.pump = QComboBox()
         self.pump.addItem("Pump event", True)
         self.pump.addItem("No pump", False)
         form.addRow("Acquisition", self.pump)
+        self.positions = QLineEdit()
+        self.positions.setPlaceholderText("Optional, comma separated")
+        self.positions.setToolTip("Additional wavenumbers in acquisition order")
+        self.selection_button = QPushButton("Load…")
+        self.selection_button.setFixedWidth(56)
+        self.selection_button.setToolTip("Load measured positions")
+        positions_row = QHBoxLayout()
+        positions_row.addWidget(self.positions, 1)
+        positions_row.addWidget(self.selection_button)
+        form.addRow("Other positions (cm⁻¹)", positions_row)
 
         self.advanced = QWidget()
         advanced_layout = QVBoxLayout(self.advanced)
         advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.setSpacing(3)
         advanced = QFormLayout()
+        advanced.setVerticalSpacing(3)
         advanced_layout.addLayout(advanced)
-        self._integer(advanced, "technical_repetitions", "Repetitions", 1, 1000000)
+        self._text(advanced, "probe_rate_hz", "Repetition rate (Hz)")
+        self._text(advanced, "probe_width_ns", "Pulse width (ns)")
         self._text(advanced, "minimum_event_interval_s", "Event interval (s)")
-        self._text(advanced, "baseline_window_s", "Baseline [start, end] (s)")
-        self._text(advanced, "integration_window_s", "Integration [start, end] (s)")
-        for role in (("sample", "reference") if mode == "dual" else ("sample",)):
-            for suffix, label in (("rate_sps", "rate (Sa/s)"),
-                                   ("timeconstant_s", "filter time (s)"),
-                                   ("filter_order", "filter order")):
-                self._text(advanced, f"{role}_{suffix}", f"{role.title()} {label}")
-        for key, label in (("probe_rate_hz", "Probe rate (Hz)"),
-                           ("probe_width_ns", "Probe width (ns)"),
-                           ("pump_fire_delay_s", "FIRE delay (s)"),
-                           ("pump_q_switch_delay_s", "Q-switch delay (s)"),
-                           ("pump_fire_width_s", "FIRE width (s)"),
-                           ("pump_q_switch_width_s", "Q-switch width (s)"),
-                           ("wavenumber_tolerance_cm1", "Tune tolerance (cm⁻¹)")):
-            self._text(advanced, key, label)
-        self._number(advanced, "baseline_drift_fraction", "Baseline drift limit", .01, 1)
-        self._number(advanced, "baseline_cv_limit", "Baseline noise limit", .05, 1)
-        self._number(advanced, "reset_tolerance_fraction", "Recovery tolerance", .02, 1)
-        self._number(advanced, "chunk_duration_s", "Write interval", 1, 60, " s")
-        self._number(advanced, "memory_limit_mb", "Memory limit", 256, 100000, " MiB")
-        self._number(advanced, "storage_limit_mb", "Storage limit", 10240, 1e7, " MiB")
-        self._number(advanced, "tune_timeout_s", "Tune timeout", 60, 3600, " s")
-        reset = QPushButton("Restore automatic instrument settings")
+        roles = ("sample", "reference") if mode == "dual" else ("sample",)
+        if mode == "dual":
+            heading = QHBoxLayout()
+            for role in roles:
+                heading.addWidget(QLabel(role.title()), 1)
+            advanced.addRow("Detector", heading)
+        for suffix, label in (("rate_sps", "Rate (Sa/s)"),
+                              ("timeconstant_s", "Filter time (s)"),
+                              ("filter_order", "Filter order")):
+            row = QHBoxLayout()
+            for role in roles:
+                control = self._text(None, f"{role}_{suffix}", label)
+                control.setToolTip(f"{role.title()} {label.lower()}")
+                row.addWidget(control, 1)
+            advanced.addRow(label, row)
+        reset = QPushButton("Restore automatic settings")
         reset.clicked.connect(self.restore_automatic)
         advanced_layout.addWidget(reset)
-        advanced_layout.addWidget(QLabel("Additional positions · acquired in row order"))
-        self.positions = QTableWidget(0, 3)
-        self.positions.setHorizontalHeaderLabels(["cm⁻¹", "Band / off-band", "Label"])
-        self.positions.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.positions.setMaximumHeight(145)
-        advanced_layout.addWidget(self.positions)
-        row = QHBoxLayout()
-        add, remove = QPushButton("Add position"), QPushButton("Remove")
-        add.clicked.connect(lambda: self.positions.insertRow(self.positions.rowCount()))
-        remove.clicked.connect(self.remove_position)
-        row.addWidget(add)
-        row.addWidget(remove)
-        advanced_layout.addLayout(row)
-        self.selection_button = QPushButton("Load positions…")
-        advanced_layout.addWidget(self.selection_button)
         for control in self.fields.values():
             (control.textChanged if isinstance(control, QLineEdit) else control.valueChanged).connect(self._changed)
         self.wavenumber.valueChanged.connect(self._changed)
         self.pump.currentIndexChanged.connect(self._changed)
-        self.positions.itemChanged.connect(self._changed)
+        self.positions.textChanged.connect(self._changed)
         self.apply({"settings": self._base_data})
 
     def _number(self, form, key, label, default, maximum, suffix=""):
-        control = QDoubleSpinBox()
+        control = _ObservationTimeInput() if key in ("pre_observation_s", "post_observation_s") else QDoubleSpinBox()
         control.setRange(0, maximum)
         control.setDecimals(6)
         control.setSuffix(suffix)
@@ -123,19 +121,19 @@ class SettingsEditor(QWidget):
         control = QLineEdit()
         control.setPlaceholderText("Automatic")
         self.fields[key] = control
-        form.addRow(label, control)
+        if form is not None:
+            form.addRow(label, control)
+        return control
 
     def _changed(self, *_):
         if not self._applying:
             self.changed.emit()
 
-    def remove_position(self):
-        if self.positions.currentRow() >= 0:
-            self.positions.removeRow(self.positions.currentRow())
-            self._changed()
-
     def restore_automatic(self):
         self._applying = True
+        for key in ("pump_fire_delay_s", "pump_q_switch_delay_s", "pump_fire_width_s",
+                    "pump_q_switch_width_s", "wavenumber_tolerance_cm1"):
+            self._base_data[key] = None
         for key, control in self.fields.items():
             if isinstance(control, QLineEdit) and key != "sample_label":
                 control.clear()
@@ -155,25 +153,44 @@ class SettingsEditor(QWidget):
                     data[key] = (int(text) if key.endswith("_order") else float(text)) if text else None
             else:
                 data[key] = control.value()
-        previous = self._base_data.get("positions", [])
-        first = {**(previous[0] if previous else {}), "wavenumber_cm1": self.wavenumber.value()}
-        positions = [first] if self.wavenumber.value() else []
-        for row in range(self.positions.rowCount()):
-            cells = [self.positions.item(row, col).text().strip() if self.positions.item(row, col) else "" for col in range(3)]
-            positions.append({"wavenumber_cm1": float(cells[0]), "label": cells[1] or "band", "band_assignment": cells[2]})
+        previous = {}
+        for point in self._base_data.get("positions", []):
+            previous.setdefault(point["wavenumber_cm1"], []).append(point)
+        requested = [self.wavenumber.value()] if self.wavenumber.value() else []
+        for text in self.positions.text().split(","):
+            if not text.strip():
+                continue
+            requested.append(float(text.strip()))
+        positions = []
+        for value in requested:
+            matching = previous.get(value, [])
+            saved = matching.pop(0) if matching else {}
+            positions.append({**saved, "wavenumber_cm1": value})
         data["positions"] = positions
         data["pump_enabled"] = self.pump.currentData()
         data["event_budget"] = len(positions)*data["events_per_position"]*data["technical_repetitions"] if data["pump_enabled"] else 0
         data["retention_strategy"] = "continuous_to_disk"
         return {"schema_version": 1, "record_kind": "fixed_point_plan", "experiment_id": "fixed_wavenumber_kinetics",
-                "settings": data, "execution": self._execution, "sample_selection": deepcopy(self.sample_selection)}
+                "settings": data, "execution": self._execution, "sample_selection": deepcopy(self.sample_selection),
+                "historical_ui_settings": deepcopy(self._historical_ui_settings)}
 
     def apply(self, envelope):
         self._applying = True
         try:
-            data = {**Settings(mode=self.mode).to_dict(), **envelope.get("settings", {})}
+            defaults = Settings(mode=self.mode).to_dict()
+            data = {**defaults, **envelope.get("settings", {})}
             if data["mode"] != self.mode:
                 raise ValueError("Detector mode differs from this tab")
+            historical = deepcopy(envelope.get("historical_ui_settings", {}))
+            for key in ("technical_repetitions", "baseline_window_s", "integration_window_s",
+                        "baseline_drift_fraction", "baseline_cv_limit", "reset_tolerance_fraction",
+                        "pump_fire_delay_s", "pump_q_switch_delay_s", "pump_fire_width_s",
+                        "pump_q_switch_width_s", "wavenumber_tolerance_cm1", "chunk_duration_s",
+                        "memory_limit_mb", "storage_limit_mb", "tune_timeout_s"):
+                if data[key] != defaults[key]:
+                    historical[key] = deepcopy(data[key])
+                data[key] = defaults[key]
+            self._historical_ui_settings = historical
             self._base_data = deepcopy(data)
             self._execution = "connected"
             self.sample_selection = deepcopy(envelope.get("sample_selection"))
@@ -185,10 +202,7 @@ class SettingsEditor(QWidget):
                     control.setValue(value)
             positions = data.get("positions", [])
             self.wavenumber.setValue(positions[0]["wavenumber_cm1"] if positions else 0)
-            self.positions.setRowCount(max(0, len(positions)-1))
-            for row, point in enumerate(positions[1:]):
-                for col, value in enumerate((point["wavenumber_cm1"], point.get("label", "band"), point.get("band_assignment", ""))):
-                    self.positions.setItem(row, col, QTableWidgetItem(str(value)))
+            self.positions.setText(", ".join(str(point["wavenumber_cm1"]) for point in positions[1:]))
             self.pump.setCurrentIndex(0 if data["pump_enabled"] else 1)
         finally:
             self._applying = False

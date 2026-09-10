@@ -223,7 +223,11 @@ class Runner:
                 runtime_plan = build_plan(settings, mapping(operation.configuration), purpose=kind, live_readbacks=live)
                 if not runtime_plan.operational_ready:
                     raise RuntimeError("Instrument settings unresolved: " + "; ".join((*runtime_plan.validation_errors, *runtime_plan.readiness_items)))
-                plan = runtime_plan.to_dict()
+                runtime_record = runtime_plan.to_dict()
+                for history in ("historical_ui_settings", "historical_qcl_routing"):
+                    if plan.get("evidence_records", {}).get(history):
+                        runtime_record["evidence_records"][history] = plan["evidence_records"][history]
+                plan = runtime_record
                 resolved = dict(plan["resolved"])
                 device.configure(resolved, check)
                 resolved = device.resolved
