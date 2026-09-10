@@ -49,6 +49,7 @@ def test_existing_scan_buttons_show_state_keep_stop_available_and_wait_for_clean
     from control_app.ui.main_window import ControlSystemMainWindow
     from control_app import paths
     from control_app.ui.widgets.mircat_widget import MIRCAT_WIDGET_SPEC
+    from control_app.measurement_host.ownership import HardwareCoordinator
     monkeypatch.setattr(paths, '_selected_save_location', tmp_path)
     app = QApplication.instance() or QApplication([])
     entered, release = Event(), Event()
@@ -72,7 +73,10 @@ def test_existing_scan_buttons_show_state_keep_stop_available_and_wait_for_clean
                                   data={'scan_rows': [[2050, .1, .2]],
                                         'scan_metadata': {'detector_status': 'diagnostic', 'markers_observed': 80, 'markers_expected': 81}})
     handler = Handler()
-    window = ControlSystemMainWindow(handler)
+    # This synthetic scan must not inherit a live application's durable owner
+    # or modify the operator's saved UI preferences.
+    handler.coordinator = HardwareCoordinator(tmp_path / "test_instrument.lock")
+    window = ControlSystemMainWindow(handler, persist_settings=False)
     widget = window.mircat_widget
     window.tabs.setCurrentWidget(widget)
     widget.parameter_tabs.setCurrentIndex(1)
