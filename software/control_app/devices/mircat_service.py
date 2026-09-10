@@ -113,7 +113,7 @@ class MircatCommandError(MircatError):
 
 
 class MircatSafetyError(MircatError):
-    """Raised when a requested laser action is not safety-approved."""
+    """Raised for unmet physical readiness or legacy approval requirements."""
 
 
 @dataclass(frozen=True)
@@ -828,6 +828,38 @@ class MircatService:
             raise MircatSafetyError(
                 "MIRcat emission-on requires approved_laser_safety_condition=True"
             )
+        self._open_emission_gate()
+
+    def start_emission(self) -> None:
+        """Open emission from current device readiness under the active owner.
+
+        No procedural acknowledgement is required. The actual connection,
+        interlock, key switch, armed state, TEC readiness and system error word
+        must permit emission. This method never arms, tunes, resets errors or
+        changes physical interlocks. The SDK remains authoritative for tuned
+        state, laser mode and other device-specific emission limits.
+
+        Use inside the measurement's ownership scope. Ownership remains held by
+        the caller through acquisition, shutdown, restoration and native saving.
+        """
+        from control_app.measurement_host.ownership import require_hardware_owner
+        require_hardware_owner(self)
+        for readback, message in (
+            (self.is_connected, "MIRcat is not connected"),
+            (self.is_interlock_set, "MIRcat interlock is open"),
+            (self.is_key_switch_set, "MIRcat key switch is not set"),
+            (self.is_laser_armed, "MIRcat is not armed"),
+            (self.are_tecs_ready, "MIRcat TECs are not ready"),
+        ):
+            if not readback():
+                raise MircatSafetyError(message)
+        error_word = self.get_system_error_word()
+        if error_word:
+            raise MircatSafetyError(f"MIRcat reports system error word {error_word}")
+        self._open_emission_gate()
+
+    def _open_emission_gate(self) -> None:
+        """Shared vendor command; preserve legacy return-code handling exactly."""
         status = self._call("MIRcatSDK_TurnEmissionOn")
         if status not in {RET_SUCCESS, RET_EMISSION_ALREADY_ON}:
             self._raise(status, "MIRcatSDK_TurnEmissionOn")
