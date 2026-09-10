@@ -1,0 +1,204 @@
+"""Hardware-free scientific settings; absence of evidence is represented explicitly."""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field, fields
+from typing import Any, Mapping
+
+EXPERIMENT_ID = "steady_state_slow_scan"
+SCHEMA_VERSION = "1.0"
+CONDITION_PROFILES = {
+    "rt_hrp_co": {"label": "Room-temperature HRP–CO", "protein": "HRP–CO", "temperature_regime": "room_temperature"},
+    "rt_mbco": {"label": "Room-temperature MbCO", "protein": "MbCO", "temperature_regime": "room_temperature"},
+    "77k_hrp_co": {"label": "77 K HRP–CO", "protein": "HRP–CO", "temperature_regime": "cryogenic"},
+    "77k_mbco": {"label": "77 K MbCO", "protein": "MbCO", "temperature_regime": "cryogenic"},
+}
+PURPOSES = ("survey", "local_spectrum", "state_verification", "pre_post_comparison")
+
+
+def _known(cls, data: Mapping[str, Any]) -> dict[str, Any]:
+    values = dict(data)
+    unknown = set(values) - {item.name for item in fields(cls)}
+    if unknown:
+        raise ValueError(f"Unsupported {cls.__name__} fields: {', '.join(sorted(unknown))}")
+    return values
+
+
+@dataclass(frozen=True)
+class ConditionIdentity:
+    condition_id: str = "rt_hrp_co"
+    sample_id: str = ""
+    preparation_id: str = ""
+    cell_id: str = ""
+    position_id: str = ""
+    temperature_id: str = ""
+    matrix_id: str = ""
+    configuration_id: str = ""
+    temperature_k: float | None = None
+    temperature_uncertainty_k: float | None = None
+    temperature_record_id: str = ""
+    state_id: str = "initial"
+    exposure_history_id: str = ""
+    pH: float | None = None
+    cell_reload_id: str = ""
+    lot_id: str = ""
+    state_verification_id: str = ""
+    thermal_history_id: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ConditionIdentity":
+        result = cls(**_known(cls, data))
+        if result.condition_id not in CONDITION_PROFILES:
+            raise ValueError(f"Unknown independent protein/temperature condition {result.condition_id!r}")
+        return result
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class SpectralSegment:
+    segment_id: str
+    qcl: int
+    lower_cm1: float
+    upper_cm1: float
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "SpectralSegment":
+        return cls(**_known(cls, data))
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class SlowScanSettings:
+    mode: str = "single"
+    condition: ConditionIdentity = field(default_factory=ConditionIdentity)
+    segments: tuple[SpectralSegment, ...] = ()
+    purpose: str = "survey"
+    # This is an editable scientific request, not a commissioned operating value.
+    requested_resolution_cm1: float = 0.25
+    measured_linewidth_cm1: float | None = None
+    requested_scan_speed_cm1_s: float | None = None
+    sample_rate_hz: float | None = None
+    time_constant_s: float | None = None
+    filter_order: int | None = None
+    replicates: int = 2
+    settle_s: float | None = None
+    marker_interval_cm1: float | None = None
+    marker_width_s: float | None = None
+    probe_rate_hz: float | None = None
+    probe_width_s: float | None = None
+    process_pulse_width_s: float | None = None
+    dark_duration_s: float | None = None
+    condition_equilibrated: bool = False
+    physical_controls_confirmed: bool = False
+    hardware: bool = False
+    calibration_bundle_ids: tuple[str, ...] = ()
+    plan_label: str = ""
+    fit_peak_count: int = 1
+    fit_line_shape: str = "gaussian"
+    fit_baseline_degree: int = 1
+    fit_fringe_periods_cm1: tuple[float, ...] = ()
+    acceptance_reviewer: str = ""
+    acceptance_rationale: str = ""
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("single", "dual"):
+            raise ValueError("Slow scan mode must be single or dual")
+        if self.purpose not in PURPOSES:
+            raise ValueError(f"Unsupported slow scan purpose {self.purpose!r}")
+        if self.condition.condition_id not in CONDITION_PROFILES:
+            raise ValueError("Unknown independent protein/temperature condition")
+        object.__setattr__(self, "segments", tuple(self.segments))
+        object.__setattr__(self, "calibration_bundle_ids", tuple(self.calibration_bundle_ids))
+        object.__setattr__(self, "fit_fringe_periods_cm1", tuple(self.fit_fringe_periods_cm1))
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "SlowScanSettings":
+        data = dict(data)
+        if str(data.pop("schema_version", SCHEMA_VERSION)) != SCHEMA_VERSION:
+            raise ValueError("Unsupported slow scan plan schema_version")
+        if data.pop("experiment_id", EXPERIMENT_ID) != EXPERIMENT_ID:
+            raise ValueError("Plan belongs to another experiment")
+        instance_id = data.pop("instance_id", None)
+        values = _known(cls, data)
+        if isinstance(values.get("condition"), Mapping):
+            values["condition"] = ConditionIdentity.from_dict(values["condition"])
+        if "segments" in values:
+            values["segments"] = tuple(item if isinstance(item, SpectralSegment) else SpectralSegment.from_dict(item)
+                                       for item in values["segments"])
+        result = cls(**values)
+        if instance_id is not None and instance_id != result.instance_id:
+            raise ValueError("Plan instance_id and detector mode disagree")
+        return result
+
+    @property
+    def instance_id(self) -> str:
+        return f"{EXPERIMENT_ID}:{self.mode}"
+
+    def to_dict(self) -> dict[str, Any]:
+        result = asdict(self)
+        result.update(schema_version=SCHEMA_VERSION, experiment_id=EXPERIMENT_ID, instance_id=self.instance_id)
+        return result
+
+
+@dataclass(frozen=True)
+class QCLWindow:
+    qcl: int
+    lower_cm1: float
+    upper_cm1: float
+    minimum_speed_cm1_s: float | None = None
+    maximum_speed_cm1_s: float | None = None
+    speed_increment_cm1_s: float | None = None
+    tuning_settle_s: float | None = None
+    source_id: str = ""
+    qualified: bool = False
+
+
+@dataclass(frozen=True)
+class PlannerInputs:
+    """Detached readbacks and applicable promoted evidence, never live services.
+
+    ``scientific_profile`` holds measured settings, independent sample/reference
+    HF2LI configurations, and named evidence IDs. No candidate global recipe is
+    imported. ``promoted_bundle_ids`` must come from the host promotion loader.
+    """
+
+    scientific_profile: dict[str, Any] = field(default_factory=dict)
+    qcl_windows: tuple[QCLWindow, ...] = ()
+    supported_sample_rates_hz: tuple[float, ...] = ()
+    supported_reference_sample_rates_hz: tuple[float, ...] = ()
+    available_demodulators: tuple[int, ...] = ()
+    demodulator_roles: dict[str, int] = field(default_factory=lambda: {"sample": 0, "reference": 3, "timing": 2})
+    aggregate_max_rate_hz: float | None = None
+    timing_rate_hz: float | None = None
+    t660_tick_s: float | None = None
+    t660_maximum_delay_s: float | None = None
+    t660_frame_capacity: int | None = None
+    frames_feature_observed: bool = False
+    tee_receiver_topology_verified: bool = False
+    process_trigger_qualified: bool = False
+    wavelength_markers_qualified: bool = False
+    promoted_bundle_ids: tuple[str, ...] = ()
+    configuration_id: str = ""
+    condition_ids: tuple[str, ...] = ()
+    modes: tuple[str, ...] = ()
+    source_records: tuple[dict[str, Any], ...] = ()
+    actual_readbacks: dict[str, Any] = field(default_factory=dict)
+    simulation: bool = False
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PlannerInputs":
+        values = _known(cls, data)
+        if "qcl_windows" in values:
+            values["qcl_windows"] = tuple(item if isinstance(item, QCLWindow) else QCLWindow(**_known(QCLWindow, item))
+                                         for item in values["qcl_windows"])
+        for name in ("supported_sample_rates_hz", "supported_reference_sample_rates_hz", "available_demodulators", "promoted_bundle_ids", "condition_ids", "modes", "source_records"):
+            if name in values:
+                values[name] = tuple(values[name])
+        return cls(**values)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
