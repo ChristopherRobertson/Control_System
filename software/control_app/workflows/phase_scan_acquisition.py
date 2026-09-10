@@ -776,8 +776,11 @@ class LivePhaseScanAcquirer:
         errors.extend(getattr(self, "_safe_errors", []))
         for block in self.blocks:
             if block["daq"] is not None:
-                block["daq"].close()
-                errors.extend(block["daq"].raw.get("cleanup_errors", []))
+                try:
+                    block["daq"].close()
+                    errors.extend(block["daq"].raw.get("cleanup_errors", []))
+                except Exception as exc:
+                    errors.append(f"DAQ cleanup failed: {exc}")
         if self._start_thread is not None and self._start_thread.is_alive():
             self._start_thread.join(timeout=2)
             if self._start_thread.is_alive():

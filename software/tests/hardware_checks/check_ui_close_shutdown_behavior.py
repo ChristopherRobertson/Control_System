@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import _common  # noqa: F401 - adds repository root to sys.path
 
 from control_app.ui.contracts import WorkflowResult
@@ -43,9 +45,12 @@ def _window(handler) -> ControlSystemMainWindow:
     window.command_handler = handler
     window.safe_shutdown_completed = False
     window.safe_shutdown_completed_callback = None
+    window.measurement_lifecycle = SimpleNamespace(close_blockers=lambda: [])
+    window._recovery_worker = None
     window.mircat_widget = _FakeWidget(False)
     window.t660_widget = _FakeWidget(False)
     window.ndyag_widget = _FakeWidget(False)
+    window.iris_widget = _FakeWidget(False)
     window.close_errors = []
     window._show_close_error = lambda title, message: window.close_errors.append((title, message))
     return window

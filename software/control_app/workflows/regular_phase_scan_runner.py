@@ -1,11 +1,14 @@
 """App-owned blank, preliminary review and continuous pumped acquisition."""
 from __future__ import annotations
 
-from dataclasses import asdict, replace
+from copy import deepcopy
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from threading import Event, Lock
 
 import numpy as np
+
+from control_app.measurement_host.ownership import default_coordinator
 
 from control_app.workflows.phase_scan_data import (
     DETECTOR_INPUT, SINGLE_DETECTOR_MODE, absorbance, save_native, transmission, utc_now, write_json,
@@ -26,9 +29,25 @@ def _preservation_progress(callback, message):
         pass
 
 
+@dataclass(frozen=True)
+class PhaseScanOperationSelection:
+    """Detached legacy selection captured before dispatch; no hardware access."""
+    instance_id: str
+    background: object
+    preliminary: object
+    preliminary_reviewed: bool
+    calibration: object = None
+
+
 class RegularPhaseScanRunner:
     """A resolved blank/sample pair keeps identical sequence and detector settings."""
-    def __init__(self, acquirer_factory=None, *, capabilities=None, capability_provider=None):
+    def __init__(self, acquirer_factory=None, *, capabilities=None, capability_provider=None,
+                 coordinator=None, hardware_access=False, instance_id="phase_scan:single"):
+        self.coordinator = coordinator or default_coordinator()
+        self.hardware_access = bool(hardware_access)
+        self.instance_id = instance_id
+        self._ownership_token = None
+        self.status_callback_errors = []
         self.acquirer_factory = acquirer_factory
         self.capabilities = capabilities
         self.capability_provider = capability_provider
@@ -39,24 +58,37 @@ class RegularPhaseScanRunner:
         self.cancel = Event()
         self._lock = Lock()
         self._active_acquirer = None
+        self._faulted_acquirer = None
+
+    @property
+    def hardware_cleanup_pending(self):
+        acquirer = self._active_acquirer or self._faulted_acquirer
+        worker = getattr(acquirer, "_start_thread", None)
+        return bool(self.hardware_access and worker is not None and worker.is_alive())
 
     @property
     def available(self):
         return self.acquirer_factory is not None
 
     def set_capabilities(self, capabilities):
+        if self._lock.locked():
+            raise RuntimeError("Cannot replace capabilities during an operation")
         self.capabilities = capabilities
 
     def refresh_capabilities(self):
         if not self._lock.acquire(blocking=False):
             raise RuntimeError("Cannot discover settings during an acquisition")
+        ownership = None
+        succeeded = False
         try:
+            ownership = self._begin_hardware("capability_discovery")
             if self.capability_provider is None:
                 from control_app.workflows.regular_phase_scan import discover_regular_capabilities
                 capabilities = discover_regular_capabilities()
             else:
                 capabilities = self.capability_provider()
-            self.set_capabilities(capabilities)
+            self.capabilities = capabilities
+            succeeded = True
             return capabilities
         except BaseException:
             # Retain the choices so a failed device check never traps the
@@ -66,7 +98,39 @@ class RegularPhaseScanRunner:
                 self.capabilities = replace(HF2Capabilities.from_dict(self.capabilities), verified=False)
             raise
         finally:
-            self._lock.release()
+            try:
+                self._finish_hardware(ownership, safe_verified=succeeded, preservation_verified=True,
+                                      detail="Capability discovery and restoration completed" if succeeded else "Capability discovery failed; explicit recovery required")
+            finally:
+                self._lock.release()
+
+    def _begin_hardware(self, purpose):
+        if not self.hardware_access:
+            return None
+        token = self.coordinator.acquire(self.instance_id, purpose=purpose, cancel=lambda reason: self.abort())
+        scope = self.coordinator.scope(token)
+        scope.__enter__()
+        self._ownership_token = token
+        return token, scope
+
+    def _finish_hardware(self, ownership, **outcome):
+        if ownership is None:
+            return
+        token, scope = ownership
+        try:
+            self.coordinator.release(token, **outcome)
+        finally:
+            scope.__exit__(None, None, None)
+            self._ownership_token = None
+
+    def _safe_progress(self, callback):
+        self.status_callback_errors = []
+        def report(message):
+            try:
+                callback(message)
+            except Exception as exc:
+                self.status_callback_errors.append(f"{type(exc).__name__}: {exc}")
+        return report
 
     def configuration_preview(self, settings, overrides=None):
         from control_app.workflows.regular_phase_scan import build_regular_phase_scan_plan
@@ -101,6 +165,8 @@ class RegularPhaseScanRunner:
         return not compatibility_conflicts(saved, expected)
 
     def mark_preliminary_reviewed(self):
+        if self._lock.locked():
+            raise RuntimeError("Cannot change preliminary review during an operation")
         if self.preliminary is None:
             raise ValueError("Acquire and inspect the preliminary unpumped sample spectrum first")
         if not self.preliminary_reviewed:
@@ -111,9 +177,27 @@ class RegularPhaseScanRunner:
         self.preliminary_reviewed = True
 
     def invalidate_background(self):
+        if self._lock.locked():
+            raise RuntimeError("Cannot replace baseline selections during an operation")
+        self._clear_background()
+
+    def _clear_background(self):
         self.background = None
         self.preliminary = None
         self.preliminary_reviewed = False
+
+    def _capture_operation_selection(self, plan):
+        return PhaseScanOperationSelection(self.instance_id, deepcopy(self.background),
+            deepcopy(self.preliminary), bool(self.preliminary_reviewed))
+
+    def freeze_operation_selection(self, plan):
+        """Freeze selected baseline/review data for an about-to-dispatch worker."""
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError("Cannot freeze another operation while this runner is busy")
+        try:
+            return self._capture_operation_selection(plan)
+        finally:
+            self._lock.release()
 
     def load_background(self, path, plan=None):
         if self._lock.locked():
@@ -133,19 +217,30 @@ class RegularPhaseScanRunner:
             raise InterruptedError("Phase Scan aborted")
 
     def execute(self, kind, root, plan, *, on_scan=lambda *args: None,
-                progress=lambda message: None, laser_authorized=False):
+                progress=lambda message: None, laser_authorized=False, selection_snapshot=None):
         if kind not in {"background", "test", "run"}:
             raise ValueError("Regular Phase Scan supports blank, preliminary spectrum and pumped phase scan only")
         if not self.available:
             raise RuntimeError(OPTICAL_ADAPTER_BLOCKER)
+        plan, root = deepcopy(plan), Path(root)
         if not self._lock.acquire(blocking=False):
             raise RuntimeError("Phase Scan is already acquiring")
+        progress = self._safe_progress(progress)
+        ownership = None
+        preservation_verified = True
         store = acquirer = candidate = result = None
         error = cleanup_error = None
         records, native_blocks = [], []
         readback = {}
         closed = False
-        background = self.background
+        background = preliminary = None
+
+        def preserve(callback, *args, **kwargs):
+            nonlocal preservation_verified
+            preservation_verified = False
+            result = callback(*args, **kwargs)
+            preservation_verified = True
+            return result
 
         def close():
             nonlocal closed, cleanup_error
@@ -159,18 +254,29 @@ class RegularPhaseScanRunner:
 
         try:
             self._check()
+            selected = deepcopy(selection_snapshot) if selection_snapshot is not None else self._capture_operation_selection(plan)
+            if selected.instance_id != self.instance_id:
+                raise ValueError("Selected baseline belongs to a different measurement instance")
+            background, preliminary = selected.background, selected.preliminary
+            def background_conflicts(frozen_plan):
+                if background is None:
+                    return ["Acquire or select a complete matching buffer-blank sequence"]
+                return compatibility_conflicts(background.settings, experiment_contract(frozen_plan))
             if kind == "background":
-                self.invalidate_background()
-                background = None
+                self._clear_background()
+                background = preliminary = None
             else:
-                conflicts = self.background_conflicts(plan)
+                conflicts = background_conflicts(plan)
                 if conflicts:
                     raise ValueError("Buffer blank incompatible: " + "; ".join(conflicts))
                 if kind == "test":
                     self.preliminary = None
                     self.preliminary_reviewed = False
-                elif not self.preliminary_matches(plan) or not self.preliminary_reviewed:
+                    preliminary = None
+                elif (preliminary is None or not selected.preliminary_reviewed or
+                      compatibility_conflicts(preliminary["experiment_contract"], experiment_contract(plan))):
                     raise ValueError("Acquire and explicitly review a compatible preliminary unpumped sample spectrum before starting the pump")
+            ownership = self._begin_hardware(kind)
             acquirer = self.acquirer_factory()
             self._active_acquirer = acquirer
             if hasattr(acquirer, "resolve_plan"):
@@ -179,7 +285,7 @@ class RegularPhaseScanRunner:
             # alter the already captured blank/sample experiment.
             contract = experiment_contract(plan)
             if kind != "background":
-                conflicts = self.background_conflicts(plan)
+                conflicts = background_conflicts(plan)
                 if conflicts:
                     raise ValueError("Resolved experiment differs from the buffer blank: " + "; ".join(conflicts))
             store = RegularScanStore(root, kind, plan)
@@ -244,14 +350,16 @@ class RegularPhaseScanRunner:
                               "device_settings": background.device_settings,
                               "records": [{"event": asdict(e), "spectrum": s.to_dict()}
                                           for e, s in background.records]},
-                          "preliminary_source": None if self.preliminary is None else str(self.preliminary["path"])}
+                          "preliminary_source": None if preliminary is None else str(preliminary["path"])}
+                preservation_verified = False
                 raw_path = store.save_block([(e, {"spectrum": s.to_dict()}) for e, s in records], native=native)
+                preservation_verified = True
                 if error is None and cleanup_error is None:
                     self._check()
                     if kind == "background":
                         validate_blank_sequence(records, plan)
                         candidate = BackgroundSequence(records, native, experiment_contract(plan), readback, raw_path)
-                        save_scan_csv(store.path / "processed" / "blank_first_scan.csv", candidate.spectrum,
+                        preserve(save_scan_csv, store.path / "processed" / "blank_first_scan.csv", candidate.spectrum,
                                       candidate.spectrum.normalization_signal(), background=True, publication_eligible=False)
                         result = {"kind": kind, "path": store.path, "background": candidate,
                                   "readback": readback, "plan": plan}
@@ -262,9 +370,9 @@ class RegularPhaseScanRunner:
                         values = absorbance(spectrum, background.spectrum)
                         if not np.isfinite(values).any():
                             raise ValueError("No measured wavelength support overlaps the matching buffer blank")
-                        save_scan_csv(store.path / "processed" / "preliminary.csv", spectrum, values,
+                        preserve(save_scan_csv, store.path / "processed" / "preliminary.csv", spectrum, values,
                                       transmission_values=transmission(spectrum, background.spectrum), publication_eligible=False)
-                        save_native(store.path / "processed" / "preliminary.npz", {
+                        preserve(save_native, store.path / "processed" / "preliminary.npz", {
                             "spectrum": spectrum.to_dict(), "absorbance": values,
                             "transmission": transmission(spectrum, background.spectrum)})
                         result = {"kind": kind, "path": store.path, "spectrum": spectrum, "absorbance": values,
@@ -277,9 +385,9 @@ class RegularPhaseScanRunner:
                             raise ValueError("No supported reconstructed absorbance cells; native records retained")
                         reconstruction.update({"experiment_contract": experiment_contract(plan), "device_settings": readback,
                                                "hf2li_resolution": readback.get("hf2li_resolution", getattr(plan, "hf2_selection", {})),
-                                               "preliminary_source": str(self.preliminary["path"]), "run_id": store.id})
-                        save_native(store.path / "processed" / "reconstruction.npz", reconstruction)
-                        save_regular_reconstruction_csv(store.path / "processed" / "reconstruction.csv", reconstruction)
+                                               "preliminary_source": str(preliminary["path"]), "run_id": store.id})
+                        preserve(save_native, store.path / "processed" / "reconstruction.npz", reconstruction)
+                        preserve(save_regular_reconstruction_csv, store.path / "processed" / "reconstruction.csv", reconstruction)
                         result = {"kind": kind, "path": store.path, "reconstruction": reconstruction,
                                   "readback": readback, "plan": plan}
         except KeyboardInterrupt:
@@ -287,7 +395,10 @@ class RegularPhaseScanRunner:
         except Exception as exc:
             # A failed save after cancellation must still be reported as a
             # failure, rather than claiming that the requested stop completed.
-            error = exc if error is None or isinstance(error, InterruptedError) else error
+            if error is None or isinstance(error, InterruptedError):
+                error = exc
+            else:
+                error = RuntimeError(f"Acquisition failed: {error}; subsequent processing/preservation failed: {exc}")
         finally:
             try:
                 if self.cancel.is_set() and error is None:
@@ -296,18 +407,27 @@ class RegularPhaseScanRunner:
                     status = ("FAILED_SAFE_STATE_UNVERIFIED" if cleanup_error else
                               "ABORTED" if isinstance(error, InterruptedError) else
                               "INCOMPLETE" if error else "COMPLETE")
+                    preservation_verified_before_finish = preservation_verified
+                    preservation_verified = False
                     store.finish(status, error=str(error) if error else None,
                                  cleanup_error=str(cleanup_error) if cleanup_error else None,
                                  safe_shutdown_and_restoration_verified=cleanup_error is None,
-                                 publication_eligible=False)
+                                 publication_eligible=False, status_callback_errors=list(self.status_callback_errors))
+                    preservation_verified = preservation_verified_before_finish
                 if error is None and cleanup_error is None:
                     if candidate is not None:
                         self.background = candidate
                     if kind == "test":
                         self.preliminary = result
             finally:
+                self._faulted_acquirer = acquirer if cleanup_error is not None or not preservation_verified else None
                 self._active_acquirer = None
-                self._lock.release()
+                try:
+                    self._finish_hardware(ownership, safe_verified=cleanup_error is None,
+                        preservation_verified=preservation_verified,
+                        detail=f"Phase Scan outcome; cleanup={cleanup_error}; error={error}; data={store.path if store else None}")
+                finally:
+                    self._lock.release()
         if cleanup_error is not None:
             raise RuntimeError(f"Safe shutdown or restoration failed: {cleanup_error}. Data: {store.path if store else 'none'}") from cleanup_error
         if isinstance(error, InterruptedError):

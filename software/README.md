@@ -11,6 +11,14 @@ by these tabs; acquisition plans are managed in the phase-scan tabs.
 The default Save Location is `evidence/experiments/runs/YYYY-MM-DD`, using the
 local date. An explicitly chosen custom destination remains available on restart.
 
+Independent measurement packages add their own single/dual tab pairs through
+`measurement_modules/<experiment_id>/registration.py`; no central import edit is
+needed. See the [repository architecture and parallel-development instructions](../README.md#control-application)
+and the [frozen host API](control_app/measurement_host/README.md). The workspace
+selector keeps all installed tabs accessible, including for offline work while
+hardware is owned. Hardware ownership is enforced at backend device entry points
+and retained through safe restoration and data preservation.
+
 Scientific phase ordering, evidence status, and acceptance decisions do not belong
 in the application. The application may load an explicitly promoted bundle from
 `instrument/promoted_bundles/` and writes ordinary run packages under

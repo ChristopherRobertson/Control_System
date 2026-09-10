@@ -191,7 +191,8 @@ class PhaseScanWidget(QWidget):
         latest_scan_received = Signal(object, object, str)  # compatibility with spectrum providers
         busy_changed = Signal(bool)
 
-    def __init__(self, parent=None, *, runner=None, diagnostic=None, before_start=None, preferences=None, dual_detector=False):
+    def __init__(self, parent=None, *, runner=None, diagnostic=None, before_start=None, preferences=None, dual_detector=False,
+                 save_root_provider=None):
         if not PYSIDE6_AVAILABLE:
             raise RuntimeError("PySide6 is required to instantiate PhaseScanWidget")
         super().__init__(parent)
@@ -210,6 +211,8 @@ class PhaseScanWidget(QWidget):
         self.plan_method = "dual_detector_phase_scan" if dual_detector else "regular_single_detector_phase_scan"
         self.before_start = before_start or (lambda: None)
         self.preferences = preferences
+        self.save_root_provider = save_root_provider or get_save_location
+        self._pending_instrument_changes = []
         self.worker, self.plan, self._pending_result, self._current_kind = None, None, None, None
         self.inputs, self.summary_values, self.override_inputs, self._overrides = {}, {}, {}, {}
         self._restoring = False
@@ -606,7 +609,20 @@ class PhaseScanWidget(QWidget):
                 return
         self.runner.cancel.clear()
         self._pending_result, self._current_kind = None, kind
-        plan = self.plan
+        # Capture before scheduling the worker. A later editor/destination
+        # change cannot retarget an operation waiting to enter its thread.
+        from copy import deepcopy
+        plan = deepcopy(self.plan)
+        save_root = Path(self.save_root_provider()).expanduser().resolve()
+        selected = {}
+        if kind != "capabilities":
+            freeze_selection = getattr(self.runner, "freeze_operation_selection", None)
+            if callable(freeze_selection):
+                try:
+                    selected["selection_snapshot"] = freeze_selection(plan)
+                except Exception as exc:
+                    self.scan_status.setText(f"Cannot freeze acquisition selections: {exc}")
+                    return
         if kind == "capabilities":
             def operation(worker):
                 worker.message.emit("Discovering connected supported settings and restoring instruments; no laser acquisition…")
@@ -617,7 +633,8 @@ class PhaseScanWidget(QWidget):
                     worker.message.emit(message)
                     if self.runner.last_readback:
                         worker.configured.emit(self.runner.last_readback)
-                return self.runner.execute(kind, get_save_location(), plan, on_scan=worker.scan.emit, progress=progress, laser_authorized=True)
+                return self.runner.execute(kind, save_root, plan, on_scan=worker.scan.emit, progress=progress,
+                                           laser_authorized=True, **selected)
         self.worker = _PhaseWorker(operation, self)
         self.worker.message.connect(self.scan_status.setText)
         self.worker.scan.connect(self._receive_spectrum)
@@ -683,6 +700,10 @@ class PhaseScanWidget(QWidget):
             self.save_status.setText(f"Saved: {result['path']}")
             if readback:
                 self._show_actual_readback(readback)
+        if self._pending_instrument_changes:
+            changes, self._pending_instrument_changes = self._pending_instrument_changes, []
+            for change in changes:
+                self.instrument_state_changed(change)
 
     def show_reconstruction(self, result, run_path=None):
         self.reconstruction.set_result(result, run_path)
@@ -741,9 +762,28 @@ class PhaseScanWidget(QWidget):
     def command_running(self):
         return self.worker is not None
 
-    def output_location_changed(self):
+    def output_location_changed(self, path=None):
         # Moving the destination does not alter the saved blank's experiment.
         self._update_buttons()
+
+    def close_blockers(self):
+        return (["Operation is running; wait for restoration and native saving."]
+                if self.command_running() else [])
+
+    def request_abort(self, reason):
+        if self.command_running():
+            self._abort()
+
+    def instrument_state_changed(self, change):
+        if self.command_running():
+            self._pending_instrument_changes.append(change)
+            return
+        # Invalidation is visible and affects readiness only. The entered
+        # scientific settings and all saved measurements remain intact.
+        self.runner.invalidate_background()
+        self._update_buttons()
+        self.scan_status.setText(f"Instrument state changed: {change.reason}. "
+                                 "Baseline and preliminary review need revalidation.")
 
     def _new_run(self):
         if self.command_running():

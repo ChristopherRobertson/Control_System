@@ -93,6 +93,9 @@ class ELL15IrisService:
         )
 
     def connect(self) -> None:
+        if self.serial_factory is None:
+            from control_app.measurement_host.ownership import require_hardware_owner
+            require_hardware_owner(self)
         if self._serial is not None:
             return
         try:
@@ -249,6 +252,8 @@ class ELL15IrisService:
     def _exchange(
         self, command: str, *, final_prefix: str, timeout_s: float | None = None
     ) -> str:
+        from control_app.measurement_host.ownership import check_bound_hardware_owner
+        check_bound_hardware_owner(self)
         if self._serial is None:
             raise ELL15CommunicationError("iris is not connected")
         address = str(self.device_config.get("device_address", "0"))

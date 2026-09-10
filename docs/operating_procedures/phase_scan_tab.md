@@ -272,3 +272,43 @@ The correction passed 133 focused simulated tests, including the exact reported
 frequency readback and a laser simulation that rejects emission when untuned.
 It has not been retested on physical hardware. Restart the application and retry
 the buffer blank; saving a plan alone does not acquire a blank.
+
+## Shared host and recovery
+
+The tab now participates in the shared measurement host. Its visible controls,
+timing, normalization, plan/run formats and **Phase Scan** output layout remain
+the same. Existing settings and cached HF2 choices migrate to the single-mode
+preference namespace; the dual mode has its own settings, runner, baseline,
+review and cancellation. The plan and destination are captured before dispatch,
+so subsequent changes apply to future operations.
+
+Connected-device checks take exclusive ownership before real discovery or
+connection. If another tab or app task owns the instrument, use that owner's
+Stop, Emission Off, Safe Idle or Deinitialize control and wait for cleanup and
+saving. Retry **Check connected device** if its automatic check was blocked.
+The workspace selector keeps all tabs reachable for offline plan editing,
+simulation and saved-data inspection.
+
+Normal **Abort acquisition** targets this tab only. Application close checks all
+installed handles, including dual mode and future modules. Emergency exit
+requests cancellation of live hardware operations and waits for their workers;
+it does not abort unrelated offline analysis or simulation. A worker finishing
+does not establish safe shutdown. Available native, partial and restoration
+records are retained; cleanup/save failures remain failures after cancellation.
+
+A restoration failure, preservation failure or abandoned process leaves an
+instrument ownership/fault message. Owner cleanup controls remain available to
+inhibit outputs. After physical restoration and required native-data preservation
+have been verified, use **Review instrument recovery…**. Supply the named verifier
+and a retained evidence file covering both outcomes, then confirm both checks.
+Recovery performs fresh safe-shutdown checks and records their readbacks and the
+verification evidence before releasing ownership. It never fires, repeats a run,
+deletes partial records or erases fault history. Failed verification or a still
+live SDK call keeps hardware unavailable.
+
+The Windows lock is shared by app/task processes and checkouts under
+`%PROGRAMDATA%/ControlSystem/`. Access failures require correcting permissions;
+do not delete records or use a second lock to bypass an owner. Vendor apps are
+outside this coordinator and must release their sessions separately. Host tests
+used synthetic instruments, offscreen Qt and retained native replay without
+physical acquisition; live shutdown, restoration and recovery need commissioning.

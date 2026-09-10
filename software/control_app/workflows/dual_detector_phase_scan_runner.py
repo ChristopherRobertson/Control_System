@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict, replace
+from pathlib import Path
 
 import numpy as np
 
@@ -15,6 +16,7 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
     """Keep Q0 separate from simultaneous Q and from any calibrated balance B."""
 
     def __init__(self, *args, calibration_provider=None, **kwargs):
+        kwargs.setdefault("instance_id", "phase_scan:dual")
         super().__init__(*args, **kwargs)
         self.calibration_provider = calibration_provider
         self.requested_channel_balance = {}
@@ -27,16 +29,24 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
         from control_app.workflows.dual_detector_phase_scan import DualHF2Capabilities, discover_dual_phase_scan_capabilities
         if not self._lock.acquire(blocking=False):
             raise RuntimeError("Cannot discover settings during an acquisition")
+        ownership = None
+        succeeded = False
         try:
+            ownership = self._begin_hardware("capability_discovery")
             capabilities = (self.capability_provider or discover_dual_phase_scan_capabilities)()
-            self.set_capabilities(capabilities)
+            self.capabilities = capabilities
+            succeeded = True
             return capabilities
         except BaseException:
             if self.capabilities is not None:
                 self.capabilities = replace(DualHF2Capabilities.from_dict(self.capabilities), verified=False)
             raise
         finally:
-            self._lock.release()
+            try:
+                self._finish_hardware(ownership, safe_verified=succeeded, preservation_verified=True,
+                    detail="Dual capability discovery and restoration completed" if succeeded else "Dual capability discovery failed; explicit recovery required")
+            finally:
+                self._lock.release()
 
     def configuration_preview(self, settings, overrides=None):
         from control_app.workflows.dual_detector_phase_scan import build_dual_detector_phase_scan_plan
@@ -91,6 +101,8 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
         raise ValueError("Dual-detector mode measures the reference path simultaneously; a single-detector buffer blank is incompatible")
 
     def mark_preliminary_reviewed(self):
+        if self._lock.locked():
+            raise RuntimeError("Cannot change preliminary review during an operation")
         if self.preliminary is None:
             raise ValueError("Acquire and inspect the preliminary unpumped sample/reference spectrum first")
         if not self.preliminary_reviewed:
@@ -103,6 +115,9 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
                 "pump_acquisition_authorized": False,
                 "experiment_contract": self.preliminary["experiment_contract"]})
         self.preliminary_reviewed = True
+
+    def _capture_operation_selection(self, plan):
+        return replace(super()._capture_operation_selection(plan), calibration=deepcopy(self._calibration(plan)))
 
     def _calibration(self, plan):
         if self.calibration_provider is not None:
@@ -126,7 +141,7 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
         return replace(plan, channel_balance_calibration=deepcopy(actual))
 
     def execute(self, kind, root, plan, *, on_scan=lambda *args: None,
-                progress=lambda message: None, laser_authorized=False):
+                progress=lambda message: None, laser_authorized=False, selection_snapshot=None):
         from control_app.workflows.dual_detector_phase_scan_data import (
             DETECTOR_MODE, DualScanStore, baseline_values, compatibility_conflicts,
             experiment_contract, reconstruct_sequence, save_dual_reconstruction_csv,
@@ -140,16 +155,27 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
             raise ValueError("A single-detector plan cannot be used for dual-detector acquisition")
         if not self.available:
             raise RuntimeError(OPTICAL_ADAPTER_BLOCKER)
+        plan, root = deepcopy(plan), Path(root)
         if not self._lock.acquire(blocking=False):
             raise RuntimeError("Dual-Detector Phase Scan is already acquiring")
+        progress = self._safe_progress(progress)
+        ownership = None
+        preservation_verified = True
         store = acquirer = result = None
         error = cleanup_error = None
         records, native_blocks = [], []
         readback = {}
         closed = False
-        baseline = self.preliminary
+        baseline = None
         calibration = None
         acquisition_started_utc = None
+
+        def preserve(callback, *args, **kwargs):
+            nonlocal preservation_verified
+            preservation_verified = False
+            result = callback(*args, **kwargs)
+            preservation_verified = True
+            return result
 
         def close():
             nonlocal closed, cleanup_error
@@ -163,20 +189,28 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
 
         try:
             self._check()
-            calibration = self._calibration(plan)
+            selected = deepcopy(selection_snapshot) if selection_snapshot is not None else self._capture_operation_selection(plan)
+            if selected.instance_id != self.instance_id:
+                raise ValueError("Selected baseline belongs to a different measurement instance")
+            baseline, calibration = selected.preliminary, selected.calibration
             plan = self._plan_with_calibration(plan, calibration)
+            def baseline_conflicts(frozen_plan):
+                if baseline is None:
+                    return ["Acquire and review the preliminary unpumped sample/reference spectrum"]
+                return compatibility_conflicts(baseline["experiment_contract"], experiment_contract(frozen_plan))
             if kind == "test":
-                self.invalidate_background()
+                self._clear_background()
                 baseline = None
-            elif self.baseline_conflicts(plan) or not self.preliminary_reviewed:
+            elif baseline_conflicts(plan) or not selected.preliminary_reviewed:
                 raise ValueError("Acquire and explicitly review a compatible preliminary unpumped sample/reference spectrum before starting the pump")
+            ownership = self._begin_hardware(kind)
             acquirer = self.acquirer_factory()
             self._active_acquirer = acquirer
             if hasattr(acquirer, "resolve_plan"):
                 plan = acquirer.resolve_plan(plan)
             contract = experiment_contract(plan)
             if kind == "run":
-                conflicts = self.baseline_conflicts(plan)
+                conflicts = baseline_conflicts(plan)
                 if conflicts:
                     raise ValueError("Resolved experiment differs from the reviewed baseline: " + "; ".join(conflicts))
                 previous = baseline.get("channel_balance")
@@ -244,7 +278,9 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
                           "hf2li_requested_selected": deepcopy(plan.hf2_selection),
                           "unpumped_baseline": retained_baseline, "channel_balance": None if calibration is None else calibration.to_dict(),
                           "calculation": "Q=S/R; delta_absorbance=-log10(Q/Q0); absolute_absorbance=-log10(Q/B) only with validated B"}
+                preservation_verified = False
                 store.save_block([(event, {"spectrum": spectrum.to_dict()}) for event, spectrum in records], native=native)
+                preservation_verified = True
                 if error is None and cleanup_error is None:
                     self._check()
                     if kind == "test":
@@ -256,11 +292,11 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
                         result = {"kind": kind, "path": store.path, "spectrum": spectrum, **values,
                                   "experiment_contract": experiment_contract(plan), "readback": readback,
                                   "plan": plan, "channel_balance": calibration}
-                        save_native(store.path / "processed" / "preliminary.npz", {
+                        preserve(save_native, store.path / "processed" / "preliminary.npz", {
                             "spectrum": spectrum.to_dict(), **values,
                             "experiment_contract": experiment_contract(plan),
                             "channel_balance": None if calibration is None else calibration.to_dict()})
-                        save_dual_spectrum_csv(store.path / "processed" / "preliminary.csv", spectrum, calibration)
+                        preserve(save_dual_spectrum_csv, store.path / "processed" / "preliminary.csv", spectrum, calibration)
                         on_scan(spectrum.wavenumber_cm1, values["values"], "Preliminary unpumped sample/reference spectrum")
                     else:
                         progress("Matching both detectors and the reviewed unpumped baseline by measured wavelength…")
@@ -271,8 +307,8 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
                         reconstruction.update(experiment_contract=experiment_contract(plan), device_settings=readback,
                             hf2li_resolution=readback.get("hf2li_resolution", deepcopy(plan.hf2_selection)),
                             preliminary_source=str(baseline["path"]), run_id=store.id)
-                        save_native(store.path / "processed" / "reconstruction.npz", reconstruction)
-                        save_dual_reconstruction_csv(store.path / "processed" / "reconstruction.csv", reconstruction)
+                        preserve(save_native, store.path / "processed" / "reconstruction.npz", reconstruction)
+                        preserve(save_dual_reconstruction_csv, store.path / "processed" / "reconstruction.csv", reconstruction)
                         result = {"kind": kind, "path": store.path, "reconstruction": reconstruction,
                                   "readback": readback, "plan": plan}
         except KeyboardInterrupt:
@@ -280,7 +316,10 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
         except Exception as exc:
             # Keep a retention failure visible even when the operator stopped
             # the preceding acquisition successfully.
-            error = exc if error is None or isinstance(error, InterruptedError) else error
+            if error is None or isinstance(error, InterruptedError):
+                error = exc
+            else:
+                error = RuntimeError(f"Acquisition failed: {error}; subsequent processing/preservation failed: {exc}")
         finally:
             try:
                 if self.cancel.is_set() and error is None:
@@ -288,14 +327,24 @@ class DualDetectorPhaseScanRunner(RegularPhaseScanRunner):
                 if store is not None:
                     status = ("FAILED_SAFE_STATE_UNVERIFIED" if cleanup_error else "ABORTED" if isinstance(error, InterruptedError)
                               else "INCOMPLETE" if error else "COMPLETE")
+                    preservation_verified_before_finish = preservation_verified
+                    preservation_verified = False
                     store.finish(status, error=str(error) if error else None,
                                  cleanup_error=str(cleanup_error) if cleanup_error else None,
-                                 safe_shutdown_and_restoration_verified=cleanup_error is None, publication_eligible=False)
+                                 safe_shutdown_and_restoration_verified=cleanup_error is None, publication_eligible=False,
+                                 status_callback_errors=list(self.status_callback_errors))
+                    preservation_verified = preservation_verified_before_finish
                 if error is None and cleanup_error is None and kind == "test":
                     self.preliminary = result
             finally:
+                self._faulted_acquirer = acquirer if cleanup_error is not None or not preservation_verified else None
                 self._active_acquirer = None
-                self._lock.release()
+                try:
+                    self._finish_hardware(ownership, safe_verified=cleanup_error is None,
+                        preservation_verified=preservation_verified,
+                        detail=f"Dual Phase Scan outcome; cleanup={cleanup_error}; error={error}; data={store.path if store else None}")
+                finally:
+                    self._lock.release()
         if cleanup_error is not None:
             raise RuntimeError(f"Safe shutdown or restoration failed: {cleanup_error}. Data: {store.path if store else 'none'}") from cleanup_error
         if isinstance(error, InterruptedError):

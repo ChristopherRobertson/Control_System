@@ -98,3 +98,27 @@ No new laser, pump or optical acquisition was used to validate this tab. Live
 three-stream throughput, physical path stability and simultaneous detector timing
 remain hardware-validation limitations. Creating or saving a plan changes no
 campaign readiness status and promotes no calibration bundle.
+
+## Shared host and recovery
+
+The host registers this tab as `phase_scan:dual` and the original Phase Scan as
+`phase_scan:single`. Existing dual plans, native data, Q₀ review, promoted balance
+calibration selection and detector calculations retain their meaning. The old
+dual settings/HF2 menu values migrate independently to
+`measurements/phase_scan/dual/v1/`.
+
+Real capability checks and acquisitions use the same coupled-instrument
+ownership as manual controls and other measurements. A competing owner blocks
+hardware access before discovery or configuration. The workspace selector keeps
+all tabs accessible for offline work. Stop/Abort targets its owning operation;
+app close and emergency cancellation include both detector modes and future
+registrations. The plan and destination are captured for the operation, and
+ownership persists through restoration and required native/partial saving.
+
+Follow the [shared recovery procedure](phase_scan_tab.md#shared-host-and-recovery)
+for a fault or abandoned process. **Review instrument recovery…** requires a
+named verifier, retained restoration/preservation evidence and successful fresh
+safe-shutdown checks. It does not restart the experiment, remove prior failure
+records or turn sample-derived baselines into calibration. Worker completion is
+not safe-state verification. Live recovery and simultaneous-detector hardware
+behavior remain commissioning limitations; host verification contacted no devices.

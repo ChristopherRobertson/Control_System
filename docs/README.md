@@ -59,6 +59,15 @@ instrument ownership, and safe shutdown. Device communication stays in
 MIRcat control requires manufacturer-GUI ownership to be released before the
 application opens the SDK connection.
 
+The shared measurement host and independent package-development baseline are
+described in the [canonical repository README](../README.md#control-application).
+Its [version 1 Python module interface](../software/control_app/measurement_host/README.md)
+defines automatic pair registration, scoped settings and frozen operation inputs,
+machine-wide ownership, lifecycle notification routing and standalone sample
+spectral selection records. Feature packages own their scientific engines and
+procedures; the host owns integration. Optional package failures leave working
+tabs available. No module registration authorizes an acquisition or promotion.
+
 The [Phase Scan](operating_procedures/phase_scan_tab.md) and
 [Dual-Detector Phase Scan](operating_procedures/dual_detector_phase_scan_tab.md)
 tabs retain their own acquisition plans, preliminary review, and saved data.

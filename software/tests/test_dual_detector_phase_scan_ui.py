@@ -122,7 +122,7 @@ def test_plan_modes_and_new_run_preserve_settings_and_files(qt_app, tmp_path):
         single.deleteLater()
 
 
-def test_dual_main_window_exclusion_and_short_desktop(qt_app):
+def test_dual_main_window_keeps_offline_tabs_accessible_on_short_desktop(qt_app):
     from control_app.ui.main_window import ControlSystemMainWindow
     window = ControlSystemMainWindow()
     try:
@@ -135,7 +135,9 @@ def test_dual_main_window_exclusion_and_short_desktop(qt_app):
         assert window.height() == 780
         window._phase_busy_changed(True, dual)
         assert window.tabs.isTabEnabled(window.tabs.indexOf(dual))
-        assert not window.tabs.isTabEnabled(window.tabs.indexOf(window.phase_scan_widget))
+        # Hardware exclusion is enforced by backend ownership; opening another
+        # tab for plan editing or native-data inspection remains independent.
+        assert window.tabs.isTabEnabled(window.tabs.indexOf(window.phase_scan_widget))
         window._phase_busy_changed(False, dual)
         assert all(window.tabs.isTabEnabled(i) for i in range(window.tabs.count()))
     finally:

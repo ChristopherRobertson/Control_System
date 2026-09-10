@@ -59,6 +59,87 @@ bundle explicitly marked `PROMOTED` in both the promoted-bundle registry and its
 manifest. A plan, recipe, directory, or registry row never authorizes hardware or
 changes scientific status.
 
+The desktop is composed by the small `software/control_app/measurement_host/`
+host. **Phase Scan** and **Dual-Detector Phase Scan** retain their scientific
+workflows, native files, timing and review controls. Additional measurements
+register their own pair through
+`software/control_app/measurement_modules/<experiment_id>/registration.py`.
+Discovery sorts descriptors by display order and stable ID, isolates optional
+import/construction failures, and adds the pairs before the unchanged MIRcat,
+T660-1, Nd:YAG, OPO Iris and Plotter device-tab order. A workspace selector and
+scrolling tab bar keep every tab reachable. Offline analysis, simulation and
+plan editing can continue while another tab owns the instrument.
+
+The [version 1 module API](software/control_app/measurement_host/README.md)
+specifies the descriptor, two lifecycle handles, scoped context, frozen operation
+inputs, independent preference/output namespaces, reusable scientific-adapter
+presentation and standalone sample-selection interchange. This task owns the
+host, discovery package, shared shell, state machine, service boundaries and
+existing regressions. Each of the six feature tasks owns only its named package,
+its tests and its operating procedure. Features must not import sibling features
+or edit a central import list. This is a measurement host, not a user-authored
+workflow language or scheduler.
+
+All real backend connections and commands require exclusive ownership of the
+coupled spectrometer. On Windows the default OS lock and durable ownership
+records live under `%PROGRAMDATA%/ControlSystem/`; all app/task processes and
+checkouts use that same location. Access failures block hardware rather than
+falling back to a different lock. In-memory tokens prevent late callbacks from
+releasing another operation. Manual alignment/emission sessions retain ownership
+until explicit cleanup; an acquisition retains it through restoration and native
+preservation. Loss of a process or lock never proves physical safe idle. Faults
+retain their owner/history records and require explicit evidenced recovery using
+**Review instrument recovery…** after physical restoration and data preservation
+have been verified. The procedure does not restart an experiment. External vendor
+software does not participate in this lock; release its device sessions before
+using the application.
+
+The Phase Scan adapter migrates only the old regular/dual settings and HF2 choice
+keys into `measurements/phase_scan/<mode>/v1/`, preserving the old values. New
+feature runs use the frozen destination
+`<save_root>/measurements/<experiment_id>/<mode>/<run_uuid>/`; existing Phase Scan
+native directory names and schemas remain unchanged. Selected instrument
+calibration is loaded only through promoted-bundle access. Accepted sample
+spectral selections are independent versioned data with producer, condition,
+source and uncertainty; they do not require the Slow Scan package to be installed.
+
+For parallel feature development, use the checkpoint branch
+`measurement-host-v1` (also `codex/shared-measurement-host` and the integrated
+commit on `main`) as
+the baseline for all six worktrees. The starting checkout was clean at `5b89bcb`,
+the merge containing the current working Phase Scan code and fixes; the shared
+foundation is a descendant of that merge. Do not branch features from the older
+pre-Phase-Scan history. For example:
+
+```powershell
+git worktree add -b codex/steady-state-slow-scan ../Control_System_slow_scan measurement-host-v1
+$env:QT_QPA_PLATFORM = 'offscreen'
+.venv\Scripts\python.exe -m pytest software/tests -q
+```
+
+Each worktree needs its own editable installation/environment, or must launch
+from its `software/` directory with an explicitly selected Python runtime.
+`run_gui.ps1` already launches from that directory. Once feature packages pass
+their tests, integrate their package/test/procedure commits onto this foundation
+and rerun the suite; discovery requires no shell integration changes. Two
+retained local fixture directories used by existing replay tests are ignored by
+Git (`single_detector_ftir_20260906T203723_580408Z` and
+`exploratory_air_checkout_20260902T224505_935642Z`, under
+`evidence/experiments/runs/`). Preserve their originals; a separate checkout may
+use local read-only fixture copies or links for those optional replay tests.
+
+Foundation validation uses simulated instruments, synthetic registrations, Qt
+offscreen interaction, Windows subprocess contention/crash tests and retained
+native replay only. Live SDK shutdown/recovery behavior, sustained simultaneous
+detector throughput and physical safe-state readbacks require commissioning on
+the installed instrument. Code tests do not qualify scientific measurements,
+change campaign status or promote calibration.
+The completed foundation passed **755 tests**, **24 subtests**, and both read-only
+UI boundary/close checks. The three skipped tests are the pre-existing obsolete
+administrative-gate cases; the two warnings come from existing diagnostic plots
+with no labeled artists. The retained 322-scan replay still checks absolute and
+delta absorbance within `1e-14`, including the same 174 unsupported cells.
+
 The [default wiring diagram](instrument/default_wiring_state.md) shows the
 detector split connections: each signal passes through a female-to-female BNC
 adapter and a male-to-two-female BNC tee. Sample feeds HF2LI Signal 1 In (+)

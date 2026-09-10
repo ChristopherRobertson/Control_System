@@ -13,13 +13,19 @@ from control_app.ui.widgets.iris_widget import IrisWidget
 from control_app.ui.widgets.ndyag_widget import NdYagWidget
 from control_app.ui.widgets.scan_plotter_widget import ScanPlotterWidget
 from control_app.ui.widgets.t660_widget import T660Widget
-from control_app.ui.widgets.phase_scan_widget import PhaseScanWidget
+from control_app.measurement_host.context import ContextFactory
+from control_app.measurement_host.device_factories import installed_device_factories
+from control_app.measurement_host.legacy_phase_scan import create_phase_scan_tabs
+from control_app.measurement_host.lifecycle import MeasurementLifecycle
+from control_app.measurement_host.ownership import default_coordinator
+from control_app.measurement_host.registry import create_registered_tabs, discover_modules
 
 
 try:
-    from PySide6.QtCore import QSettings, QTimer
+    from PySide6.QtCore import QObject, QSettings, QTimer, Signal, Slot, Qt
     from PySide6.QtWidgets import (QMessageBox, QMainWindow, QTabWidget, QWidget,
-                                  QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QScrollArea)
+                                  QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QScrollArea, QComboBox,
+                                  QDialog, QDialogButtonBox, QFormLayout, QCheckBox)
 
     PYSIDE6_AVAILABLE = True
 except ImportError:  # pragma: no cover - import-safe in non-UI environments
@@ -27,6 +33,43 @@ except ImportError:  # pragma: no cover - import-safe in non-UI environments
     QMessageBox = object
     QMainWindow = object
     QTabWidget = object
+
+
+if PYSIDE6_AVAILABLE:
+    class _MeasurementStateBridge(QObject):
+        """Accept any handle state signal, then deliver on the shell's Qt thread.
+
+        The handle may expose a signal owned by a worker QObject. Forwarding
+        only emits a Qt signal; all widget inspection/mutation happens in the
+        queued QObject slot, independently of the source object's affinity.
+        """
+
+        changed = Signal(object)
+
+        def __init__(self, callback, parent=None):
+            super().__init__(parent)
+            self.callback = callback
+            self.changed.connect(self.deliver, Qt.ConnectionType.QueuedConnection)
+
+        def forward(self, *state):
+            self.changed.emit(tuple(state))
+
+        @Slot(object)
+        def deliver(self, state):
+            self.callback(*state)
+
+
+    class _InstrumentNotificationBridge(QObject):
+        changed = Signal(object)
+
+        def __init__(self, callback, parent=None):
+            super().__init__(parent)
+            self.callback = callback
+            self.changed.connect(self.deliver, Qt.ConnectionType.QueuedConnection)
+
+        @Slot(object)
+        def deliver(self, change):
+            self.callback(change)
 
 
 class ControlSystemMainWindow(QMainWindow):
@@ -37,6 +80,7 @@ class ControlSystemMainWindow(QMainWindow):
         command_handler: WorkflowCommandHandler | None = None,
         *,
         persist_settings: bool = False,
+        module_discovery=None,
     ) -> None:
         if not PYSIDE6_AVAILABLE:
             raise RuntimeError("PySide6 is required to instantiate ControlSystemMainWindow")
@@ -47,18 +91,48 @@ class ControlSystemMainWindow(QMainWindow):
         self.preferences = QSettings("ControlSystem", "IRSpectroscope") if persist_settings else None
         self.safe_shutdown_completed = False
         self.safe_shutdown_completed_callback: Callable[[], None] | None = None
+        self._recovery_worker = None
+        self.ownership = getattr(handler, "coordinator", None) or default_coordinator()
+        self.measurement_lifecycle = MeasurementLifecycle(self.ownership)
+        setattr(handler, "measurement_lifecycle", self.measurement_lifecycle)
+        self._instrument_bridge = _InstrumentNotificationBridge(self.measurement_lifecycle.deliver_instrument_state, self)
+        self.measurement_lifecycle.instrument_dispatcher = self._instrument_bridge.changed.emit
+        setattr(handler, "instrument_state_change_callback", self._manual_instrument_changed)
+        inventory = getattr(handler, "inventory", None)
+        self.measurement_context_factory = ContextFactory(
+            configuration_provider=lambda: inventory.to_dict() if inventory is not None else {},
+            real_device_factories=(installed_device_factories()
+                                   if getattr(handler, "hardware_access", False) else {}),
+            simulated_device_factories=getattr(handler, "simulated_device_factories", {}),
+            preference_backend=self.preferences, ownership=self.ownership,
+            lifecycle=self.measurement_lifecycle, save_root_provider=get_save_location,
+        )
 
         self.tabs = tabs = QTabWidget()
-        self.phase_scan_widget = PhaseScanWidget(
-            runner=getattr(handler, "phase_scan_runner", None),
-            before_start=self._phase_start_blocker, preferences=self.preferences,
+        tabs.setUsesScrollButtons(True)
+        tabs.tabBar().setExpanding(False)
+        phase_handles = create_phase_scan_tabs(
+            self.measurement_context_factory.for_experiment("phase_scan"),
+            single_runner=getattr(handler, "phase_scan_runner", None),
+            dual_runner=getattr(handler, "dual_detector_phase_scan_runner", None),
+            before_start=self._phase_start_blocker, legacy_preferences=self.preferences,
         )
-        tabs.addTab(self.phase_scan_widget, "Phase Scan")
-        self.dual_detector_phase_scan_widget = PhaseScanWidget(
-            runner=getattr(handler, "dual_detector_phase_scan_runner", None),
-            before_start=self._phase_start_blocker, preferences=self.preferences, dual_detector=True,
+        self.phase_scan_widget, self.dual_detector_phase_scan_widget = (h.widget for h in phase_handles)
+        discovered = discover_modules() if module_discovery is None else module_discovery
+        created = create_registered_tabs(
+            discovered, self.measurement_context_factory,
+            existing_titles=("Phase Scan", "Dual-Detector Phase Scan", "MIRcat", "T660-1", "Nd:YAG", "OPO Iris", "Plotter"),
+            existing_instance_ids=tuple(h.instance_id for h in phase_handles),
         )
-        tabs.addTab(self.dual_detector_phase_scan_widget, "Dual-Detector Phase Scan")
+        self.registration_issues = created.issues
+        self._measurement_state_bridges = []
+        for handle in (*phase_handles, *created.handles):
+            self.measurement_lifecycle.register(handle)
+            tabs.addTab(handle.widget, handle.title)
+            bridge = _MeasurementStateBridge(
+                lambda *state, h=handle: self._measurement_state_changed(h, *state), self)
+            self._measurement_state_bridges.append(bridge)
+            handle.state_changed.connect(bridge.forward)
         self.mircat_widget = MircatWidget(handler, before_scan=self._mircat_scan_start_blocker)
         tabs.addTab(self.mircat_widget, "MIRcat")
         self.t660_widget = T660Widget(handler)
@@ -87,6 +161,21 @@ class ControlSystemMainWindow(QMainWindow):
         self.save_location_status = QLabel()
         self.save_location_status.setWordWrap(True)
         layout.addWidget(self.save_location_status)
+        self.host_status = QLabel()
+        self.host_status.setWordWrap(True)
+        layout.addWidget(self.host_status)
+        self.recovery_button = QPushButton("Review instrument recovery…")
+        self.recovery_button.clicked.connect(self._review_recovery)
+        layout.addWidget(self.recovery_button)
+        # A direct selector complements Qt's scrolling tab bar when all seven
+        # experiment pairs are installed on a short or narrow desktop.
+        self.tab_selector = QComboBox()
+        self.tab_selector.setObjectName("workspace_tab_selector")
+        for index in range(tabs.count()):
+            self.tab_selector.addItem(tabs.tabText(index))
+        self.tab_selector.currentIndexChanged.connect(tabs.setCurrentIndex)
+        tabs.currentChanged.connect(self.tab_selector.setCurrentIndex)
+        layout.addWidget(self.tab_selector)
         # Instrument forms can be taller than a monitor's usable desktop.
         # Scroll the workspace instead of imposing their combined minimum
         # size on the native window (especially on secondary monitors).
@@ -97,13 +186,12 @@ class ControlSystemMainWindow(QMainWindow):
         self.setCentralWidget(central)
         self.save_location.editingFinished.connect(self._apply_save_location)
         self.browse_save_location.clicked.connect(self._browse_save_location)
-        self.phase_scan_widget.busy_changed.connect(lambda busy: self._phase_busy_changed(busy, self.phase_scan_widget))
-        self.dual_detector_phase_scan_widget.busy_changed.connect(lambda busy: self._phase_busy_changed(busy, self.dual_detector_phase_scan_widget))
         self.mircat_widget.scan_busy_changed.connect(self._mircat_scan_busy_changed)
         self.iris_widget.busy_changed.connect(self._iris_busy_changed)
         self._save_timer = QTimer(self)
         self._save_timer.timeout.connect(self._update_save_enabled)
         self._save_timer.start(250)
+        self._update_host_status()
         saved = self.preferences.value("save_location", "") if self.preferences else ""
         if saved:
             # Upgrade the old undated default; keep custom destinations.
@@ -112,8 +200,18 @@ class ControlSystemMainWindow(QMainWindow):
             self.save_location.setText(str(saved))
             self._apply_save_location()
 
-    def _phase_start_blocker(self):
-        blockers = self._close_blockers()
+    def _phase_start_blocker(self, hardware=True):
+        if not hardware:
+            # Simulations use the already selected destination and their own
+            # frozen root; a live instrument owner does not block their work.
+            return None
+        blockers = []
+        state = self.ownership.snapshot()
+        if state["state"] != "free":
+            blockers.append(f"Instrument {state['state']}: {state.get('owner')}. {state.get('detail', '')}")
+        handler_blockers = getattr(self.command_handler, "ui_close_blockers", None)
+        if callable(handler_blockers):
+            blockers.extend(handler_blockers())
         if blockers:
             return "Stop other instrument activity first: " + "; ".join(blockers)
         try:
@@ -126,11 +224,123 @@ class ControlSystemMainWindow(QMainWindow):
         return None
 
     def _phase_busy_changed(self, busy, active_widget=None):
-        setattr(self.command_handler, "phase_scan_active", busy) if hasattr(self.command_handler, "hardware_access") else None
-        for index in range(self.tabs.count()):
-            if self.tabs.widget(index) is not (active_widget or self.phase_scan_widget):
-                self.tabs.setTabEnabled(index, not busy)
+        # Compatibility hook for existing callers; ownership is enforced by
+        # backend tokens while every tab remains available for offline work.
         self._update_save_enabled()
+
+    def _measurement_state_changed(self, handle, *state):
+        busy = bool(state[0]) if state else bool(handle.command_running())
+        self.measurement_lifecycle.notify_state(handle.instance_id, busy, str(state[1]) if len(state) > 1 else "")
+        self._update_save_enabled()
+
+    def _update_host_status(self):
+        messages = [f"{issue.module}: {issue.stage}: {issue.message}" for issue in self.registration_issues]
+        state = self.ownership.snapshot()
+        if state["state"] != "free":
+            owner = state.get("owner") or {}
+            messages.append(f"Instrument {state['state']}: {owner.get('instance_id', 'unknown owner')}. {state.get('detail', '')}")
+        messages.extend(self.measurement_lifecycle.errors[-3:])
+        self.host_status.setText("\n".join(messages))
+        self.host_status.setVisible(bool(messages))
+        self.recovery_button.setVisible(state["state"] != "free" and callable(
+            getattr(self.command_handler, "ui_recover_instrument", None)))
+        self.recovery_button.setEnabled(self._recovery_worker is None)
+
+    def _review_recovery(self):
+        """Explicit, recorded verification of a fault; never repeat acquisition."""
+        if self._recovery_worker is not None or self.live_worker_blockers():
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Verify instrument recovery")
+        layout = QVBoxLayout(dialog)
+        explanation = QLabel("First stop emission and timing outputs using the owning controls. "
+                             "Inspect the retained native, partial, cleanup and restoration records. "
+                             "Identify the evidence for the two confirmations below. Recovery runs "
+                             "the safe-shutdown checks and records your verification; it never restarts a measurement.")
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        form = QFormLayout()
+        operator, evidence = QLineEdit(), QLineEdit()
+        form.addRow("Verified by", operator)
+        form.addRow("Recovery evidence file", evidence)
+        layout.addLayout(form)
+        browse = QPushButton("Select evidence file…")
+        def select_evidence():
+            path, _ = QFileDialog.getOpenFileName(dialog, "Recovery evidence", str(get_save_location()))
+            if path:
+                evidence.setText(path)
+        browse.clicked.connect(select_evidence)
+        layout.addWidget(browse)
+        restoration = QCheckBox("I verified instrument restoration against the retained configuration records")
+        preservation = QCheckBox("I verified preservation of all required native and partial data")
+        layout.addWidget(restoration)
+        layout.addWidget(preservation)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if not (operator.text().strip() and evidence.text().strip() and restoration.isChecked() and preservation.isChecked()):
+            self._show_close_error("Recovery verification incomplete", "A named verifier, evidence file and both verified outcomes are required.")
+            return
+        from control_app.measurement_host.presentation import OperationWorker
+        operator_name, evidence_path = operator.text().strip(), evidence.text().strip()
+        worker = OperationWorker(lambda _: self.command_handler.ui_recover_instrument(
+            operator=operator_name, evidence=evidence_path,
+            restoration_verified=True, preservation_verified=True), self)
+        self._recovery_worker = worker
+        worker.finished.connect(self._recovery_finished)
+        worker.start()
+        self._update_save_enabled()
+
+    def _recovery_finished(self):
+        worker, self._recovery_worker = self._recovery_worker, None
+        outcome = worker.outcome
+        worker.deleteLater()
+        if outcome is not None and outcome.state == "failed":
+            self.measurement_lifecycle.report_error("recovery", outcome.error)
+            self._show_close_error("Recovery failed", outcome.error)
+        elif outcome is not None and getattr(outcome.result, "status", None) != "complete":
+            self._show_close_error("Recovery incomplete", str(getattr(outcome.result, "message", outcome.result)))
+        self._update_save_enabled()
+
+    def request_emergency_stop(self, reason):
+        """Cancel all registered live hardware operations, preserving offline work."""
+        errors = self.measurement_lifecycle.request_emergency_stop(reason)
+        stop = getattr(self.command_handler, "emergency_stop", None)
+        result = stop(reason=reason) if callable(stop) else None
+        if errors:
+            self.measurement_lifecycle.report_error("application", "; ".join(errors))
+        return result
+
+    def live_worker_blockers(self):
+        """Include analysis workers when deciding whether Qt can be destroyed."""
+        blockers = []
+        for handle in self.measurement_lifecycle.handles:
+            try:
+                if handle.command_running():
+                    blockers.append(f"{handle.title} worker is still running.")
+            except Exception as exc:
+                blockers.append(f"{handle.title}: cannot verify worker completion: {exc}")
+        if self._recovery_worker is not None:
+            blockers.append("Instrument recovery verification is running.")
+        for widget in (self.mircat_widget, self.t660_widget, self.ndyag_widget, self.iris_widget):
+            if widget.command_running():
+                blockers.append("A manual device worker is still running.")
+        return blockers
+
+    def _manual_instrument_changed(self, device_ids, configuration_changes=None, reason="Manual instrument configuration changed"):
+        from control_app.measurement_host.interchange import DeviceConfigurationChange, InstrumentStateChange
+        changes = tuple(DeviceConfigurationChange(str(device), str(key), None, value)
+                        for device in device_ids
+                        for key, value in (configuration_changes or {"configuration": "changed"}).items())
+        if not changes:
+            return
+        self._instrument_bridge.changed.emit(InstrumentStateChange(
+            producer_instance_id="manual:instrument", reason=str(reason), changes=changes,
+            recipients=tuple(h.instance_id for h in self.measurement_lifecycle.handles),
+        ))
 
     def _iris_start_blocker(self):
         blockers = self._close_blockers()
@@ -156,22 +366,15 @@ class ControlSystemMainWindow(QMainWindow):
             if busy:
                 self.command_handler.mircat_scan_cancel.clear()
         if busy:
-            self.phase_scan_widget.runner.invalidate_background()
-            self.dual_detector_phase_scan_widget.runner.invalidate_background()
-        self.phase_scan_widget._update_buttons()
-        self.dual_detector_phase_scan_widget._update_buttons()
-        for index in range(self.tabs.count()):
-            if self.tabs.widget(index) is not self.mircat_widget:
-                self.tabs.setTabEnabled(index, not busy)
+            self._manual_instrument_changed(("mircat", "t660_1", "t660_2"),
+                                            {"acquisition_configuration": "manual sweep"}, "MIRcat Sweep Scan started")
         self._update_save_enabled()
 
     def _iris_busy_changed(self, busy):
-        for index in range(self.tabs.count()):
-            if self.tabs.widget(index) is not self.iris_widget:
-                self.tabs.setTabEnabled(index, not busy)
         self._update_save_enabled()
 
     def _update_save_enabled(self):
+        self._update_host_status()
         try:
             busy = bool(self._close_blockers())
         except Exception:
@@ -201,8 +404,7 @@ class ControlSystemMainWindow(QMainWindow):
             self._last_applied_save_location = selected
             self._using_daily_save_location = selected == default_save_location().resolve()
             if selected != previous:
-                self.phase_scan_widget.output_location_changed()
-                self.dual_detector_phase_scan_widget.output_location_changed()
+                self.measurement_lifecycle.output_location_changed(selected)
                 self.scan_plotter_widget.destination.setText(str(selected))
                 callback = getattr(self.command_handler, "output_location_changed", None)
                 if callback:
@@ -276,10 +478,10 @@ class ControlSystemMainWindow(QMainWindow):
         event.accept()
 
     def _close_blockers(self) -> list[str]:
-        blockers: list[str] = []
+        blockers: list[str] = self.measurement_lifecycle.close_blockers()
+        if self._recovery_worker is not None:
+            blockers.append("Instrument recovery verification is running.")
         candidates = (
-            ("Phase Scan", getattr(self, "phase_scan_widget", None)),
-            ("Dual-Detector Phase Scan", getattr(self, "dual_detector_phase_scan_widget", None)),
             ("MIRcat", self.mircat_widget),
             ("T660-1", self.t660_widget),
             ("Nd:YAG", self.ndyag_widget),

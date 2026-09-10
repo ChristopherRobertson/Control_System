@@ -919,6 +919,8 @@ class MircatService:
         )
 
     def _load_sdk(self):
+        from control_app.measurement_host.ownership import require_hardware_owner
+        require_hardware_owner(self)
         candidates = [str(path) for path in self._sdk_candidates()]
         errors: list[str] = []
         for candidate in candidates:
@@ -1120,6 +1122,8 @@ class MircatService:
             return None
 
     def _call(self, name: str, *args) -> int:
+        from control_app.measurement_host.ownership import check_bound_hardware_owner
+        check_bound_hardware_owner(self)
         if self._sdk is None:
             raise MircatCommandError("MIRcat SDK is not loaded")
         status = int(getattr(self._sdk, name)(*args))

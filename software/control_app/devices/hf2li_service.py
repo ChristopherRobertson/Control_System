@@ -418,16 +418,25 @@ class HF2LIService:
     def stop_acquisition(self) -> None:
         """Unsubscribe all paths used by this service acquisition."""
 
+        from control_app.measurement_host.ownership import check_bound_hardware_owner
+        check_bound_hardware_owner(self)
         if self._server is None:
             return
+        errors, remaining = [], []
         for path in self._subscribed_paths:
             try:
                 self._server.unsubscribe(path)
                 self._log(f"unsubscribe {path}")
             except Exception as exc:
-                self._log(f"unsubscribe {path} failed: {exc}")
-        self._subscribed_paths = []
-        self.sync()
+                errors.append(f"unsubscribe {path} failed: {exc}")
+                remaining.append(path)
+        self._subscribed_paths = remaining
+        try:
+            self.sync()
+        except Exception as exc:
+            errors.append(f"final synchronization failed: {exc}")
+        if errors:
+            raise HF2LIConnectionError("; ".join(errors))
 
     def acquire_record(
         self,
@@ -821,15 +830,25 @@ class HF2LIService:
     def close(self) -> None:
         """Close the LabOne session if the API exposes disconnect."""
 
-        self.stop_acquisition()
+        from control_app.measurement_host.ownership import check_bound_hardware_owner
+        check_bound_hardware_owner(self)
+        errors = []
+        try:
+            self.stop_acquisition()
+        except Exception as exc:
+            errors.append(str(exc))
         if self._server is not None:
             disconnect = getattr(self._server, "disconnect", None)
             if disconnect is not None:
                 try:
                     disconnect()
+                    self._server = None
                 except Exception as exc:
-                    self._log(f"disconnect failed: {exc}")
-            self._server = None
+                    errors.append(f"disconnect failed: {exc}")
+            else:
+                self._server = None
+        if errors:
+            raise HF2LIConnectionError("; ".join(errors))
 
     def _configured_device_id(self) -> str | None:
         value = self.device_config.get("device_id") or self.device_config.get("serial_number")
@@ -937,11 +956,15 @@ class HF2LIService:
         raise HF2LIConfigurationError(f"unsupported node type {value_type!r}")
 
     def _require_server(self):
+        from control_app.measurement_host.ownership import check_bound_hardware_owner
+        check_bound_hardware_owner(self)
         if self._server is None:
             raise HF2LIConnectionError("LabOne server is not connected")
         return self._server
 
     def _load_labone_module(self):
+        from control_app.measurement_host.ownership import require_hardware_owner
+        require_hardware_owner(self)
         if self._zi_module is not None:
             return self._zi_module
         _add_labone_package_paths(self.device_config)

@@ -615,6 +615,8 @@ class PicoScopeService:
     def stop(self) -> None:
         """Stop the PicoScope if it is open."""
 
+        from control_app.measurement_host.ownership import check_bound_hardware_owner
+        check_bound_hardware_owner(self)
         if self._driver is not None and self._is_open:
             status = self._driver.ps5000aStop(self._handle)
             self._check(status, "ps5000aStop")
@@ -622,6 +624,8 @@ class PicoScopeService:
     def close_unit(self) -> None:
         """Close the PicoScope unit."""
 
+        from control_app.measurement_host.ownership import check_bound_hardware_owner
+        check_bound_hardware_owner(self)
         if self._driver is not None and self._is_open:
             status = self._driver.ps5000aCloseUnit(self._handle)
             self._check(status, "ps5000aCloseUnit")
@@ -630,6 +634,8 @@ class PicoScopeService:
             self._driver = None
 
     def _load_driver(self):
+        from control_app.measurement_host.ownership import require_hardware_owner
+        require_hardware_owner(self)
         candidates: list[str] = []
         driver_path = self.device_config.get("driver_path")
         if driver_path:
@@ -665,6 +671,8 @@ class PicoScopeService:
         return resolve_compat_path(candidate)
 
     def _require_open(self) -> None:
+        from control_app.measurement_host.ownership import check_bound_hardware_owner
+        check_bound_hardware_owner(self)
         if self._driver is None:
             raise PicoScopeError("PicoScope unit is not open")
 

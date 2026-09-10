@@ -7,6 +7,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 import json
+from threading import Lock
+
+from control_app.measurement_host.ownership import HardwareCoordinator, OwnershipError, default_coordinator
 
 import yaml
 
@@ -101,7 +104,13 @@ class WorkflowStateMachine:
         run_dir: str | Path | None = None,
         bundle_id: str | None = None,
         bundle_root: str | Path | None = None,
+        coordinator: HardwareCoordinator | None = None,
     ) -> None:
+        self.coordinator = coordinator or default_coordinator()
+        self._manual_token = None
+        self._pending_output_location = None
+        self._command_mutex = Lock()
+        self.instrument_state_change_callback = None
         self.operator = operator
         self.inventory = inventory or load_config_inventory(config_path, write_files=False)
         self.config_path = Path(self.inventory.config_path)
@@ -149,6 +158,7 @@ class WorkflowStateMachine:
         self.phase_scan_runner = RegularPhaseScanRunner(
             (lambda: RegularPhaseScanAcquirer(config_path=self.config_path,
                                              promoted_bundle=self.promoted_bundle)) if hardware_access else None,
+            coordinator=self.coordinator, hardware_access=hardware_access, instance_id="phase_scan:single",
             capability_provider=(lambda: discover_regular_capabilities(config_path=self.config_path))
             if hardware_access else None,
         )
@@ -158,6 +168,7 @@ class WorkflowStateMachine:
         self.dual_detector_phase_scan_runner = DualDetectorPhaseScanRunner(
             (lambda: DualDetectorPhaseScanAcquirer(config_path=self.config_path,
                                                  promoted_bundle=self.promoted_bundle)) if hardware_access else None,
+            coordinator=self.coordinator, hardware_access=hardware_access, instance_id="phase_scan:dual",
             capability_provider=(lambda: discover_dual_phase_scan_capabilities(config_path=self.config_path))
             if hardware_access else None,
         )
@@ -165,6 +176,79 @@ class WorkflowStateMachine:
             self._remember_command_log(str(command_log.name))
 
     def __call__(self, command: WorkflowCommand) -> WorkflowResult:
+        """Atomically own the instrument before dispatching any live command."""
+        name = _normalize_command(command.command)
+        if not self.hardware_access or name == "startup_check":
+            return self._dispatch_command(command)
+        if name in {"safe_shutdown", "abort_to_safe"}:
+            return self._ui_shutdown(reason=str(command.parameters.get("reason", name)),
+                                     emergency=bool(command.parameters.get("emergency", False)))
+        if not self._command_mutex.acquire(blocking=False):
+            return WorkflowResult(status="blocked", message="An instrument command is still running; owner cleanup and saving must finish.")
+        token = None
+        newly_acquired = False
+        was_fault = False
+        try:
+            instance = f"manual:{command.device_key}"
+            if self._manual_token is not None:
+                was_fault = self.coordinator.snapshot()["state"] == "fault"
+                owner_cleanup = command.command in {"mircat.emission_off", "mircat.stop_scan", "mircat.stop_detector_alignment",
+                    "mircat.disarm", "mircat.deinitialize", "mircat.red_laser_pointer_off", "t660_1.safe_idle", "ndyag.safe_idle"}
+                if was_fault and not owner_cleanup:
+                    raise OwnershipError("Instrument safety or preservation is unverified. Use explicit Safe Shutdown recovery.")
+                if self._manual_token.instance_id != instance:
+                    raise OwnershipError(f"{self._manual_token.instance_id} retains the instruments. Use its Stop/Safe Idle or application Safe Shutdown first.")
+                token = self._manual_token
+                self.coordinator.assert_owner(token)
+            else:
+                token = self.coordinator.acquire(instance, purpose=command.command,
+                    cancel=lambda reason: self.request_mircat_scan_stop())
+                self._manual_token = token
+                newly_acquired = True
+            with self.coordinator.scope(token):
+                result = self._dispatch_command(command)
+            # Outputs can remain live after a command worker exits. Retain this
+            # session until its explicit cleanup; transport closure is not idle.
+            transient = (command.device_key == "opo_iris" or
+                         command.command in {"t660_1.refresh_status", "ndyag.refresh_status"})
+            ended = command.command in {"t660_1.safe_idle", "ndyag.safe_idle", "mircat.deinitialize", "mircat.start_sweep_scan"}
+            live_session = any(service is not None for service in
+                               (self._mircat_service, self._picoscope_service, self._hf2li_service))
+            if command.device_key == "mircat" and self._mircat_handler is not None:
+                ended = ended or (not self._mircat_handler.initialized and not self._mircat_handler.alignment_running)
+                live_session = live_session or self._mircat_handler.initialized or self._mircat_handler.alignment_running
+            if result.status == "failed":
+                self.coordinator.release(token, safe_verified=False, preservation_verified=False, detail=result.message)
+            elif was_fault:
+                self.coordinator.release(token, safe_verified=False, preservation_verified=False,
+                    detail=result.message + "; original restoration/preservation still require explicit evidenced recovery")
+                result = WorkflowResult(status=result.status,
+                    message=result.message + ". Prior restoration/preservation fault remains; use explicit evidenced recovery.",
+                    data={**result.data, "ownership": self.coordinator.snapshot()})
+            elif (ended and result.status == "complete") or (newly_acquired and (
+                    (transient and result.status == "complete") or (result.status == "blocked" and not live_session))):
+                self.coordinator.release(token, safe_verified=True, detail=result.message)
+                self._manual_token = None
+            callback = self.instrument_state_change_callback
+            if callback is not None and result.status == "complete" and not command.command.endswith("refresh_status"):
+                try:
+                    callback((command.device_key,), {command.device_key: command.command}, result.message)
+                except Exception as exc:
+                    result.data["instrument_notification_error"] = str(exc)
+            return result
+        except OwnershipError as exc:
+            return WorkflowResult(status="blocked", message=str(exc), data={"ownership": self.coordinator.snapshot()})
+        except BaseException as exc:
+            if token is not None:
+                self.coordinator.release(token, safe_verified=False, preservation_verified=False, detail=str(exc))
+            if not isinstance(exc, Exception):
+                raise
+            return WorkflowResult(status="failed", message=str(exc))
+        finally:
+            self._command_mutex.release()
+            self._apply_pending_output_location()
+
+    def _dispatch_command(self, command: WorkflowCommand) -> WorkflowResult:
         """Handle one UI command through the workflow state machine."""
 
         if self.mircat_scan_active and command.command != 'mircat.start_sweep_scan':
@@ -191,7 +275,16 @@ class WorkflowStateMachine:
 
     def output_location_changed(self, selected: Path) -> None:
         """Start future UI artifacts in the selected folder; preserve previous runs."""
+        selected = Path(selected)
+        if self._command_mutex.locked() or self._manual_token is not None:
+            self._pending_output_location = selected
+            return
         self.run_dir = self._resolve_run_dir(selected / f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_workflow_state_machine")
+
+    def _apply_pending_output_location(self):
+        if self._manual_token is None and self._pending_output_location is not None:
+            selected, self._pending_output_location = self._pending_output_location, None
+            self.output_location_changed(selected)
 
     def export_event_log(self, path: str | Path) -> Path:
         """Write state-machine events as JSON."""
@@ -224,6 +317,13 @@ class WorkflowStateMachine:
         """Return user actions that must happen before normal UI close."""
 
         blockers: list[str] = []
+        for runner in (self.phase_scan_runner, self.dual_detector_phase_scan_runner):
+            if runner._lock.locked():
+                blockers.append(f"{runner.instance_id} is running; wait for cancellation, restoration and saving.")
+        if self._manual_token is not None and self._manual_token.instance_id in {"manual:ndyag", "manual:t660_1"}:
+            blockers.append(f"{self._manual_token.instance_id} timing session remains active; use Safe Idle first.")
+        if self.coordinator.snapshot()["state"] == "fault":
+            blockers.append("Instrument restoration or data preservation is unverified; use explicit Safe Shutdown recovery and inspect its retained records.")
         if self.mircat_scan_active:
             blockers.append("MIRcat Sweep Scan is running. Press Stop Scan and wait for shutdown and saving to finish.")
         if self.iris_command_active:
@@ -280,11 +380,144 @@ class WorkflowStateMachine:
     def emergency_stop(self, *, reason: str = "emergency_stop") -> WorkflowResult:
         """Best-effort shutdown for forced process exit paths."""
 
-        self.phase_scan_runner.abort()
-        self.request_mircat_scan_stop()
+        issues = self.coordinator.request_emergency_stop(reason)
+        # The coordinator registers only real operations, so offline work and
+        # simulations are not cancelled. Cleanup remains in the owning worker.
+        if any(runner._lock.locked() and runner.hardware_access for runner in
+               (self.phase_scan_runner, self.dual_detector_phase_scan_runner)) or self._command_mutex.locked():
+            return WorkflowResult(status="accepted", message="Emergency cancellation requested; wait for owner cleanup and native saving.", data={"errors": issues})
+        if issues:
+            return WorkflowResult(status="failed", message="; ".join(issues), data={"errors": issues})
         return self._ui_shutdown(reason=reason, emergency=True)
 
     def _ui_shutdown(self, *, reason: str, emergency: bool) -> WorkflowResult:
+        if any(runner.hardware_cleanup_pending for runner in
+               (self.phase_scan_runner, self.dual_detector_phase_scan_runner)):
+            return WorkflowResult(status="blocked", message="A live SDK call has not returned; retain ownership and wait before recovery.")
+        if not self.hardware_access:
+            return self._ui_shutdown_actions(reason=reason, emergency=emergency)
+        if not self._command_mutex.acquire(blocking=False):
+            return WorkflowResult(status="blocked", message="Wait for the owning command to finish safety cleanup and saving.")
+        token = None
+        try:
+            previous = self.coordinator.snapshot()
+            if self._manual_token is not None and previous["state"] != "fault":
+                token = self._manual_token
+            else:
+                token = self.coordinator.acquire("manual:recovery", purpose=reason,
+                    recovery=previous["state"] != "free")
+                self._manual_token = token
+            with self.coordinator.scope(token):
+                result = self._ui_shutdown_actions(reason=reason, emergency=emergency)
+            verified = result.status == "complete"
+            # A fresh process cannot infer the previous owner's restoration or
+            # preservation outcome from successfully inhibiting outputs now.
+            if previous["state"] != "free" and (previous["state"] == "fault" or
+                    (previous.get("owner") or {}).get("token_id") != token.token_id):
+                result = WorkflowResult(status="failed", message=(
+                    result.message + " Previous owner restoration/data preservation remain unverified. "
+                    "Inspect the recorded owner and native/restoration records, then use Recover instrument "
+                    "with named, evidenced restoration and preservation verification."),
+                    data={**result.data, "previous_ownership": previous, "safe_idle_verified": verified})
+                verified = False
+            self.coordinator.release(token, safe_verified=verified, preservation_verified=verified, detail=result.message)
+            if verified:
+                self._manual_token = None
+            return result
+        except OwnershipError as exc:
+            return WorkflowResult(status="blocked", message=str(exc), data={"ownership": self.coordinator.snapshot()})
+        except Exception as exc:
+            if token is not None:
+                self.coordinator.release(token, safe_verified=False, preservation_verified=False, detail=str(exc))
+            return WorkflowResult(status="failed", message=str(exc))
+        finally:
+            self._command_mutex.release()
+            self._apply_pending_output_location()
+
+    def verify_hardware_recovery(self, *, restoration_verifier, preservation_verifier,
+                                 reason="explicit_operator_recovery"):
+        """Explicit repair/verification without ever restarting an experiment.
+
+        Each callable receives the retained ownership record and must return
+        exactly True after checking/repairing its evidence. Restoration runs in
+        the recovery ownership scope, so real device services remain guarded.
+        Failed verification retains the fault and all earlier journal records.
+        """
+        if not self.hardware_access:
+            raise OwnershipError("Real hardware recovery is disabled")
+        if any(runner.hardware_cleanup_pending for runner in
+               (self.phase_scan_runner, self.dual_detector_phase_scan_runner)):
+            raise OwnershipError("A live SDK call has not returned; recovery must wait")
+        if not self._command_mutex.acquire(blocking=False):
+            raise OwnershipError("The current command must finish before recovery")
+        token = None
+        safe = preserved = False
+        previous = self.coordinator.snapshot()
+        try:
+            token = self.coordinator.acquire("manual:recovery", purpose=reason, recovery=True)
+            self._manual_token = token
+            with self.coordinator.scope(token):
+                shutdown = self._ui_shutdown_actions(reason=reason, emergency=True)
+                self._last_recovery_shutdown = shutdown.to_dict()
+                if shutdown.status != "complete":
+                    raise OwnershipError(shutdown.message)
+                safe = restoration_verifier(previous) is True
+                preserved = preservation_verifier(previous) is True
+            if not (safe and preserved):
+                raise OwnershipError("Recovery verification remains incomplete; original evidence is retained")
+            return WorkflowResult(status="complete", message="Explicit recovery verified safe idle, restoration and required preservation.")
+        finally:
+            try:
+                if token is not None:
+                    self.coordinator.release(token, safe_verified=safe, preservation_verified=preserved, detail=reason)
+                    if safe and preserved:
+                        self._manual_token = None
+            finally:
+                self._command_mutex.release()
+                self._apply_pending_output_location()
+
+    def ui_recover_instrument(self, *, operator, evidence, restoration_verified,
+                              preservation_verified):
+        """Recover explicitly from named, evidenced operator verification.
+
+        Evidence is a retained local report covering the previous owner's
+        settings restoration and required native/partial data preservation.
+        The application independently performs fresh hardware safe-state checks;
+        it records the operator's restoration/preservation assertions as such.
+        """
+        operator = str(operator).strip()
+        evidence = Path(evidence).expanduser().resolve()
+        if not operator or not evidence.is_file() or evidence.stat().st_size == 0:
+            return WorkflowResult(status="blocked", message="Recovery requires a named operator and an existing nonempty restoration/preservation evidence file.")
+        if restoration_verified is not True or preservation_verified is not True:
+            return WorkflowResult(status="blocked", message="Explicitly verify prior settings restoration and required native/partial data preservation before recovery.")
+        record = {"schema_version": 1, "operator": operator,
+                  "evidence_path": str(evidence), "evidence_size_bytes": evidence.stat().st_size,
+                  "evidence_modified_utc": datetime.fromtimestamp(evidence.stat().st_mtime, UTC).isoformat(),
+                  "operator_attests_prior_settings_restored": True,
+                  "operator_attests_required_data_preserved": True,
+                  "automatic_experiment_restart": False}
+        target = self.run_dir / ("instrument_recovery_" + datetime.now(UTC).strftime("%Y%m%dT%H%M%S_%fZ") + ".json")
+        def preserve(previous):
+            record.update(previous_ownership=previous, verified_utc=datetime.now(UTC).isoformat(),
+                          safe_shutdown_actions=self._last_recovery_shutdown)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("x", encoding="utf-8") as stream:
+                json.dump(record, stream, indent=2, sort_keys=True)
+                stream.write("\n")
+                stream.flush()
+                import os
+                os.fsync(stream.fileno())
+            return True
+        try:
+            result = self.verify_hardware_recovery(restoration_verifier=lambda previous: True,
+                preservation_verifier=preserve, reason=f"Named recovery by {operator}; evidence={evidence}; record={target}")
+            result.data["recovery_record"] = str(target)
+            return result
+        except Exception as exc:
+            return WorkflowResult(status="failed", message=str(exc), data={"ownership": self.coordinator.snapshot()})
+
+    def _ui_shutdown_actions(self, *, reason: str, emergency: bool) -> WorkflowResult:
         actions: dict[str, Any] = {
             "reason": reason,
             "emergency": emergency,
@@ -293,17 +526,26 @@ class WorkflowStateMachine:
         }
         errors: list[str] = []
 
+        from control_app.measurement_host.ownership import adopt_recovery_session
+        for service in (self._mircat_service, self._picoscope_service, self._hf2li_service,
+                        getattr(self._mircat_handler, "service", None),
+                        getattr(getattr(self._mircat_handler, "alignment_workflow", None), "mircat_service", None)):
+            adopt_recovery_session(service)
         if self._mircat_handler is not None:
-            result = self._mircat_handler.shutdown_for_ui_close(
-                emergency=emergency,
-                reason=reason,
-            )
-            actions["mircat_widget_shutdown"] = result.to_dict()
-            if result.status != "complete":
-                errors.append(result.message)
+            try:
+                result = self._mircat_handler.shutdown_for_ui_close(
+                    emergency=emergency,
+                    reason=reason,
+                )
+                actions["mircat_widget_shutdown"] = result.to_dict()
+                if result.status != "complete":
+                    errors.append(result.message)
+            except Exception as exc:
+                errors.append(f"MIRcat widget shutdown failed: {exc}")
+                actions["mircat_widget_shutdown"] = {"status": "failed", "error": str(exc)}
 
-        safe_result = self(
-            WorkflowCommand(
+        safe_result = self._handle_workflow_command(
+            "safe_shutdown", WorkflowCommand(
                 device_key="workflow",
                 command="workflow.safe_shutdown",
                 parameters={"reason": reason, "emergency": emergency},
@@ -1019,6 +1261,12 @@ class WorkflowStateMachine:
                 self._hf2li_service = None
                 self._hf2li_preset = None
 
+        if self._mircat_service is None:
+            try:
+                self._mircat_service = MircatService.from_config(config_path=self.config_path, command_log=self.command_log)
+                self._mircat_service.initialize()
+            except Exception as exc:
+                errors.append(f"MIRcat recovery connection/initialization failed: {exc}")
         if self._mircat_service is not None:
             try:
                 stop_status = self._mircat_service.stop_scan_if_needed()
@@ -1031,6 +1279,8 @@ class WorkflowStateMachine:
                     self._mircat_service.turn_emission_off()
                     self._mircat_service.disarm()
                     state = self._mircat_service.read_state().to_dict()
+                    if any(state.get(key) is not False for key in ("emission_on", "armed", "scan_in_progress")):
+                        errors.append("MIRcat safe shutdown readbacks did not verify emission off, disarmed and scan stopped")
                     self._mircat_service.deinitialize()
                     actions["mircat"] = {
                         "safe_state": "emission_off_disarmed_deinitialized",

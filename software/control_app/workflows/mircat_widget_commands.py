@@ -235,15 +235,22 @@ class MircatWidgetCommandHandler:
             self.scan_running = False
             return self._complete("MIRcat disarmed", command_log)
         if name == "mircat.deinitialize":
+            state = None
             if self.initialized:
                 service.stop_scan_if_needed()
                 service.turn_emission_off()
                 service.disarm()
+                state = service.read_state().to_dict()
                 service.deinitialize()
             self.initialized = False
             self.scan_running = False
             self.service = None
-            return WorkflowResult(status="complete", message="MIRcat deinitialized")
+            if state is not None and any(state.get(key) is not False for key in
+                                         ("emission_on", "armed", "scan_in_progress")):
+                return WorkflowResult(status="failed", message="MIRcat deinitialized, but final readbacks did not verify emission off, disarmed and scan stopped.",
+                                      data={"state_before_deinitialize": state, "safe_state_verified": False})
+            return WorkflowResult(status="complete", message="MIRcat deinitialized",
+                                  data={"state_before_deinitialize": state, "safe_state_verified": state is not None})
         if name == "mircat.emission_on":
             self._require_initialized()
             service.turn_emission_on(
@@ -655,6 +662,8 @@ class MircatWidgetCommandHandler:
                         self.service.turn_emission_off()
                         self.service.disarm()
                         state = self.service.read_state().to_dict()
+                        if any(state.get(key) is not False for key in ("emission_on", "armed", "scan_in_progress")):
+                            errors.append("MIRcat final readbacks did not verify emission off, disarmed and scan stopped")
                         self.service.deinitialize()
                         actions["mircat_shutdown"] = {
                             "safe_state": "scan_stopped_emission_off_disarmed_deinitialized",

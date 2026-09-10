@@ -87,7 +87,9 @@ def test_existing_scan_buttons_show_state_keep_stop_available_and_wait_for_clean
     assert handler.mircat_scan_active and widget.command_running()
     assert widget.buttons_by_command['mircat.stop_scan'].isEnabled()
     assert not widget.buttons_by_command['mircat.start_sweep_scan'].isEnabled()
-    assert not window.tabs.isTabEnabled(window.tabs.indexOf(window.phase_scan_widget))
+    # Navigation remains available for offline inspection. Backend ownership
+    # excludes competing real starts; the owning Stop control stays usable.
+    assert window.tabs.isTabEnabled(window.tabs.indexOf(window.phase_scan_widget))
     widget.buttons_by_command['mircat.stop_scan'].click()
     app.processEvents()
     assert handler.mircat_scan_cancel.is_set() and widget.command_running()

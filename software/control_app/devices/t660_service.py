@@ -77,6 +77,9 @@ class T660Service:
     def connect(self) -> None:
         """Open the configured serial or TCP command session."""
 
+        from control_app.measurement_host.ownership import require_hardware_owner
+        require_hardware_owner(self)
+
         interface = self.device_config.get("interface")
         if interface is None:
             interface = "tcp" if self.device_config.get("host") else "serial"
@@ -734,6 +737,8 @@ class T660Service:
     ) -> str:
         """Send one command and return the raw text response."""
 
+        from control_app.measurement_host.ownership import check_bound_hardware_owner
+        check_bound_hardware_owner(self)
         if self._serial is None and self._socket is None:
             raise T660Error(f"{self.name} is not connected")
         if self._serial is not None:
