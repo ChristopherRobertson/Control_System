@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
+from decimal import Decimal
 import math
 from typing import Any, Mapping
 
 EXPERIMENT_ID = "repeated_rapid_scan"
 SCHEMA_VERSION = 1
+MIRCAT_QCL = 1
+MIRCAT_MAX_DUTY_FRACTION = Decimal("0.30")
 
 
 @dataclass(frozen=True)
@@ -63,8 +66,10 @@ class RepeatedRapidScanSettings:
     reference_filter_order: int = 4
     sample_filter_timeconstant_s: float = 0.001
     reference_filter_timeconstant_s: float = 0.001
+    # T660 external trigger carrier and TTL width, not optical pulse settings.
     probe_frequency_hz: float = 1000000.0
     probe_pulse_width_s: float = 150e-9
+    # QCL1 internal optical pulse settings; None preserves the connected member.
     mircat_pulse_rate_hz: float | None = None
     mircat_pulse_width_ns: float | None = None
     mircat_current_ma: float | None = None
@@ -145,9 +150,19 @@ class RepeatedRapidScanSettings:
                     "timing_quantum_s", "storage_bytes_per_second")
         for name in positive:
             _finite(getattr(self, name), name, positive=True)
-        for name in ("mircat_pulse_rate_hz", "mircat_pulse_width_ns", "mircat_current_ma"):
-            if getattr(self, name) is not None:
-                _finite(getattr(self, name), name, positive=True)
+        validate_mircat_pulse_pair(self.mircat_pulse_rate_hz, self.mircat_pulse_width_ns)
+        if self.mircat_current_ma is not None:
+            _finite(self.mircat_current_ma, "mircat_current_ma", positive=True)
+        if not isinstance(self.manual_overrides, Mapping):
+            raise ValueError("manual_overrides must be a mapping")
+        if {"qcl", "qcl_id", "qcl_index", "mircat_qcl"} & self.manual_overrides.keys():
+            raise ValueError("Repeated Rapid-Scan uses QCL1 only; QCL selection is not a manual override")
+        # Saved intent may contain a request different from selected/readback
+        # values. Validate that effective pair as well, including one-member
+        # overrides. An unknown automatic member is validated at live resolution.
+        pulse_override = {name: value for name, value in self.manual_overrides.items() if value is not None}
+        validate_mircat_pulse_pair(pulse_override.get("mircat_pulse_rate_hz", self.mircat_pulse_rate_hz),
+                                  pulse_override.get("mircat_pulse_width_ns", self.mircat_pulse_width_ns))
         for name in ("process_delay_s", "tuning_settling_s", "preparation_s", "restoration_s", "analysis_s", "upload_acknowledgment_s"):
             _finite(getattr(self, name), name, nonnegative=True)
         _finite(self.scan_start_cm1, "scan_start_cm1")
@@ -194,6 +209,24 @@ def _finite(value: Any, name: str, *, positive=False, nonnegative=False) -> None
         raise ValueError(f"{name} must be a finite number")
     if (positive and value <= 0) or (nonnegative and value < 0):
         raise ValueError(f"{name} must be {'positive' if positive else 'nonnegative'}")
+
+
+def validate_mircat_pulse_pair(rate_hz: float | None, width_ns: float | None) -> float | None:
+    """Validate QCL1 internal optical duty; connected vendor limits also apply.
+
+    Unknown members stay unknown until readback. Decimal multiplication avoids
+    rejecting an exact 30% boundary due to binary floating-point multiplication.
+    The external T660 carrier and TTL width do not enter this optical product.
+    """
+    for name, value in (("mircat_pulse_rate_hz", rate_hz), ("mircat_pulse_width_ns", width_ns)):
+        if value is not None:
+            _finite(value, name, positive=True)
+    if rate_hz is None or width_ns is None:
+        return None
+    duty = Decimal(str(rate_hz)) * Decimal(str(width_ns)) * Decimal("1e-9")
+    if duty > MIRCAT_MAX_DUTY_FRACTION:
+        raise ValueError("MIRcat internal repetition rate times optical pulse width must be at most 30% duty (0.30)")
+    return float(duty)
 
 
 def example_settings(mode: str = "single") -> RepeatedRapidScanSettings:

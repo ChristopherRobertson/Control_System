@@ -6,6 +6,7 @@ import pytest
 
 from control_app.measurement_modules.repeated_rapid_scan.settings import (
     AcquisitionIntent, ConditionProfile, RepeatedRapidScanSettings, example_settings,
+    validate_mircat_pulse_pair,
 )
 from control_app.measurement_modules.repeated_rapid_scan.timing import compile_movie
 from control_app.measurement_modules.repeated_rapid_scan.planner import (
@@ -367,3 +368,111 @@ def test_rrs_unused_reset_timer_annotation_does_not_change_wall_estimate():
     settings = resolve_intent_settings(AcquisitionIntent(observation_duration_s=.2))
     changed = replace(settings, recovery=replace(settings.recovery, max_reset_wait_s=10000.))
     assert build_plan(settings).estimates["wall_time_s"] == build_plan(changed).estimates["wall_time_s"]
+
+
+@pytest.mark.parametrize("rate,width,duty", [(2_500_000., 120., .30), (1_500_000., 200., .30),
+                                           (1_000_000., 150., .15), (None, 150., None),
+                                           (1_000_000., None, None), (None, None, None)])
+def test_rrs_mircat_internal_optical_duty_has_exact_boundary_and_unknown_members(rate, width, duty):
+    assert validate_mircat_pulse_pair(rate, width) == duty
+
+
+@pytest.mark.parametrize("rate,width", [(2_500_000., 120.000001), (1_500_000., 200.000001),
+                                      (1e300, 1e300)])
+def test_rrs_mircat_internal_duty_over_thirty_percent_is_rejected(rate, width):
+    with pytest.raises(ValueError, match="at most 30% duty"):
+        validate_mircat_pulse_pair(rate, width)
+
+
+@pytest.mark.parametrize("rate,width", [(0., None), (None, -1.), (float("nan"), None),
+                                      (None, float("inf")), (True, 100.)])
+def test_rrs_mircat_known_members_are_validated_even_when_the_pair_is_incomplete(rate, width):
+    with pytest.raises(ValueError, match="mircat_pulse"):
+        validate_mircat_pulse_pair(rate, width)
+
+
+def test_rrs_external_t660_ttl_duty_is_not_mircat_internal_optical_duty():
+    settings = compact(probe_frequency_hz=1_000_000., probe_pulse_width_s=400e-9,
+                       mircat_pulse_rate_hz=2_000_000., mircat_pulse_width_ns=100.)
+    plan = build_plan(settings)
+    assert plan.selected["mircat_duty_fraction"] == .2
+    assert plan.selected["probe_pulse_width_s"] == 400e-9
+    assert plan.selected["probe_frequency_hz"] == 1_000_000.
+    with pytest.raises(ValueError, match="at most 30% duty"):
+        build_plan(replace(settings, probe_pulse_width_s=10e-9, mircat_pulse_width_ns=151.))
+
+
+@pytest.mark.parametrize("overrides,expected", [({"mircat_pulse_rate_hz": 3_000_000.}, (3_000_000., 100.)),
+                                               ({"mircat_pulse_width_ns": 200.}, (1_500_000., 200.))])
+def test_rrs_mircat_each_internal_override_resolves_its_partner_from_live_readback(overrides, expected):
+    caps = HardwareCapabilities(live_settings={"mircat_pulse_rate_hz":1_500_000.,
+        "mircat_pulse_width_ns":100., "probe_frequency_hz":1_000_000., "probe_pulse_width_s":150e-9})
+    selected = resolve_intent_settings(AcquisitionIntent(observation_duration_s=.2), capabilities=caps,
+                                      overrides=overrides)
+    assert (selected.mircat_pulse_rate_hz, selected.mircat_pulse_width_ns) == expected
+    assert selected.manual_overrides == overrides
+    assert build_plan(selected).selected["mircat_duty_fraction"] == .3
+
+
+@pytest.mark.parametrize("overrides", [{"mircat_pulse_rate_hz":3_000_001.}, {"mircat_pulse_width_ns":200.001}])
+def test_rrs_automatic_partner_cannot_make_an_internal_override_unsafe(overrides):
+    caps = HardwareCapabilities(live_settings={"mircat_pulse_rate_hz":1_500_000., "mircat_pulse_width_ns":100.})
+    with pytest.raises(ValueError, match="at most 30% duty"):
+        resolve_intent_settings(AcquisitionIntent(observation_duration_s=.2), capabilities=caps, overrides=overrides)
+
+
+def test_rrs_saved_null_mircat_override_uses_readback_and_never_the_external_ttl_pair():
+    caps = HardwareCapabilities(live_settings={"mircat_pulse_rate_hz":2_000_000., "mircat_pulse_width_ns":120.})
+    selected = resolve_intent_settings(AcquisitionIntent(observation_duration_s=.2), capabilities=caps,
+        overrides={"mircat_pulse_rate_hz":None, "mircat_pulse_width_ns":None})
+    assert selected.manual_overrides == {}
+    assert (selected.mircat_pulse_rate_hz, selected.mircat_pulse_width_ns) == (2_000_000., 120.)
+    unknown = build_plan(compact())
+    assert unknown.selected["mircat_pulse_rate_hz"] is None
+    assert unknown.selected["mircat_pulse_width_ns"] is None
+    assert unknown.selected["mircat_duty_fraction"] is None
+
+
+@pytest.mark.parametrize("changes", [
+    {"mircat_pulse_rate_hz":3_000_001., "mircat_pulse_width_ns":100.},
+    {"mircat_pulse_rate_hz":2_000_000., "mircat_pulse_width_ns":100.,
+     "manual_overrides":{"mircat_pulse_rate_hz":3_000_001.}},
+    {"mircat_pulse_rate_hz":2_000_000., "mircat_pulse_width_ns":100.,
+     "manual_overrides":{"mircat_pulse_width_ns":151.}},
+    {"manual_overrides":{"mircat_pulse_rate_hz":3_000_001., "mircat_pulse_width_ns":100.}},
+])
+def test_rrs_loaded_settings_validate_selected_and_effective_saved_internal_pulse_pairs(changes):
+    payload = compact().to_dict()
+    payload.update(changes)
+    with pytest.raises(ValueError, match="at most 30% duty"):
+        RepeatedRapidScanSettings.from_dict(json.loads(json.dumps(payload)))
+
+
+def test_rrs_saved_internal_manual_request_revalidates_against_new_automatic_partner(tmp_path):
+    intent = AcquisitionIntent(observation_duration_s=.2)
+    first = resolve_intent_settings(intent,
+        capabilities=HardwareCapabilities(live_settings={"mircat_pulse_rate_hz":2_000_000., "mircat_pulse_width_ns":100.}),
+        overrides={"mircat_pulse_rate_hz":3_000_000.})
+    loaded = load_plan(save_plan(build_plan(first), tmp_path / "pulse.json"))
+    assert loaded.settings.manual_overrides == {"mircat_pulse_rate_hz":3_000_000.}
+    with pytest.raises(ValueError, match="at most 30% duty"):
+        resolve_intent_settings(intent, base_settings=loaded.settings,
+            capabilities=HardwareCapabilities(live_settings={"mircat_pulse_rate_hz":2_000_000., "mircat_pulse_width_ns":101.}))
+
+
+def test_rrs_plans_have_only_qcl1_and_do_not_route_historical_qcl_metadata(tmp_path):
+    historical = HardwareCapabilities(live_settings={"qcl":2, "qcl_id":3})
+    plan = build_plan(compact(), capabilities=historical)
+    assert plan.requested["qcl"] == plan.selected["qcl"] == 1
+    assert plan.actual["live_settings"]["qcl"] == 2
+    saved = plan.to_dict()
+    saved["requested"]["qcl"] = saved["selected"]["qcl"] = 2
+    path = tmp_path / "historical.json"
+    path.write_text(json.dumps(saved), encoding="utf-8")
+    rebuilt = load_plan(path)
+    assert rebuilt.requested["qcl"] == rebuilt.selected["qcl"] == 1
+    assert rebuilt.capabilities.live_settings == historical.live_settings
+    with pytest.raises(ValueError, match="QCL1 only"):
+        build_plan(replace(compact(), manual_overrides={"qcl":2}))
+    with pytest.raises(ValueError, match="Unsupported manual"):
+        resolve_intent_settings(AcquisitionIntent(), overrides={"qcl":2})

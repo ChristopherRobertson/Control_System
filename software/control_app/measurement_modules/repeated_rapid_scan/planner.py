@@ -8,7 +8,8 @@ import math
 from pathlib import Path
 from typing import Any, Mapping
 
-from .settings import EXPERIMENT_ID, AcquisitionIntent, RepeatedRapidScanSettings
+from .settings import (EXPERIMENT_ID, MIRCAT_QCL, AcquisitionIntent, RepeatedRapidScanSettings,
+                       validate_mircat_pulse_pair)
 from .timing import CompiledMovie, T660_FRAME_CAPACITY, compile_movie
 
 
@@ -167,6 +168,11 @@ def resolve_intent_settings(intent: AcquisitionIntent | Mapping[str, Any], *, mo
         raise ValueError("mode must be single or dual")
     caps = _typed(capabilities, HardwareCapabilities)
     manual = dict(base.manual_overrides if overrides is None else overrides)
+    # Optional MIRcat members are independently automatic: a saved null is not
+    # a command to erase a known connected value or copy the external TTL pair.
+    for name in ("mircat_pulse_rate_hz", "mircat_pulse_width_ns", "mircat_current_ma"):
+        if manual.get(name) is None:
+            manual.pop(name, None)
     protected = {"mode", "execution", "condition", "experiment_id", "schema_version", "acquisition_intent",
                  "manual_overrides", "scan_start_cm1", "scan_stop_cm1", "repeats", "phase_offsets_s", "post_scans"}
     known = set(base.__dataclass_fields__)
@@ -351,16 +357,25 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
                          + settings.analysis_s + blank_action_storage / settings.storage_bytes_per_second)
                         if blank_action_count else 0.0)
     readiness = _readiness(settings, caps, evidence)
-    requested = {"scan_period_s": settings.measured_scan_period_s, "phase_offsets_s": list(settings.phase_offsets_s),
+    requested = {"qcl": MIRCAT_QCL, "scan_period_s": settings.measured_scan_period_s, "phase_offsets_s": list(settings.phase_offsets_s),
                  "sample_rate_hz": settings.sample_rate_hz, "reference_rate_hz": settings.reference_rate_hz,
-                 "scan_speed_cm1_s": settings.scan_speed_cm1_s}
+                 "scan_speed_cm1_s": settings.scan_speed_cm1_s,
+                 "mircat_pulse_rate_hz": settings.mircat_pulse_rate_hz,
+                 "mircat_pulse_width_ns": settings.mircat_pulse_width_ns,
+                 "mircat_current_ma": settings.mircat_current_ma,
+                 "probe_pulse_width_s": settings.probe_pulse_width_s}
     requested.update(settings.manual_overrides)
     if settings.acquisition_intent:
         requested["acquisition_intent"] = dict(settings.acquisition_intent)
-    selected = {**requested, "scan_period_s": first.scan_period_s,
+    selected = {**requested, "qcl": MIRCAT_QCL, "scan_period_s": first.scan_period_s,
                 "sample_rate_hz": settings.sample_rate_hz, "reference_rate_hz": settings.reference_rate_hz,
                 "phase_offsets_s": [compile_movie(settings, phase).selected_phase_s for phase in settings.phase_offsets_s],
-                "predivider": first.predivider, "probe_frequency_hz": first.input_frequency_hz}
+                "predivider": first.predivider, "probe_frequency_hz": first.input_frequency_hz,
+                "mircat_pulse_rate_hz": settings.mircat_pulse_rate_hz,
+                "mircat_pulse_width_ns": settings.mircat_pulse_width_ns,
+                "mircat_current_ma": settings.mircat_current_ma,
+                "mircat_duty_fraction": validate_mircat_pulse_pair(settings.mircat_pulse_rate_hz,
+                                                                  settings.mircat_pulse_width_ns)}
     actual = {"sample_rate_hz": caps.actual_sample_rate_hz, "reference_rate_hz": caps.actual_reference_rate_hz,
               "scan_period_s": caps.actual_scan_period_s, "readback_id": caps.connected_readback_id,
               "timing_rate_hz": caps.acquisition_timing_rate_hz, "live_settings": dict(caps.live_settings),
@@ -421,6 +436,7 @@ def resolve_operating_settings(settings, *, promoted_bundle: Mapping[str, Any], 
                        value_source=evidence.source)
     plan = build_plan(selected, capabilities=installed_readbacks, calibration=evidence)
     requested = {name: getattr(settings, name) for name in plan.requested if hasattr(settings, name)}
+    requested["qcl"] = MIRCAT_QCL
     requested["scan_period_s"] = settings.measured_scan_period_s
     requested["phase_offsets_s"] = list(settings.phase_offsets_s)
     requested["value_source"] = settings.value_source
