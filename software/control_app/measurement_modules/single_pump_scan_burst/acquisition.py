@@ -51,6 +51,19 @@ def acquisition_identity(settings):
     return result
 
 
+def _frequency_hz(response):
+    text = str(response).strip().lower()
+    scale = 1.
+    for suffix, factor in (("mhz", 1e6), ("khz", 1e3), ("hz", 1.)):
+        if text.endswith(suffix):
+            text, scale = text[:-len(suffix)], factor
+            break
+    value = float(text) * scale
+    if not math.isfinite(value) or value <= 0:
+        raise ReadinessError("External T660 probe repetition readback must be finite and positive")
+    return value
+
+
 def flatten_native(record, prefix=""):
     """Flatten SDK trees without coercing any native numeric dtype."""
     result = {}
@@ -310,13 +323,14 @@ class ConnectedBurstAdapter:
         if not probe or probe.get("trigger_source") != "OFF" or probe.get("channels", {}).get("D", {}).get("enabled"):
             raise ReadinessError("T660-1 probe/reference/frame table must start inhibited with unwired D disabled")
         self.clock.apply_recipe(probe)
+        cadence = self._read_probe_cadence(stage="configuration")
         pulse = self.recipe["qcl_pulse_parameters"]
-        self._validate_probe_parameters(pulse, external_rate_hz=self.recipe["frame_input_frequency_hz"])
+        self._validate_probe_parameters(pulse, external_rate_hz=cadence)
         applied = self.qcl.set_qcl_pulse_params(**pulse)
         self.qcl_readbacks = {"qcl": pulse["qcl"], "pulse_rate_hz": applied["pulse_rate_hz"],
             "pulse_width_ns": applied["pulse_width_ns"], "current_ma": self.qcl.get_qcl_current(pulse["qcl"])}
         self.store.append_event("qcl_pulse_readback", {"requested": pulse, "actual": self.qcl_readbacks})
-        self._validate_probe_parameters(self.qcl_readbacks, external_rate_hz=self.recipe["frame_input_frequency_hz"])
+        self._validate_probe_parameters(self.qcl_readbacks, external_rate_hz=cadence)
         for key in ("pulse_rate_hz", "pulse_width_ns", "current_ma"):
             if pulse[key] is not None and not math.isclose(float(self.qcl_readbacks[key]), float(pulse[key]), rel_tol=1e-6, abs_tol=1e-5):
                 raise ReadinessError(f"MIRcat {key} readback differs from the selected setting")
@@ -328,6 +342,7 @@ class ConnectedBurstAdapter:
         self.temperature()
         return {"hf2li": self.hf.export_settings_snapshot(preset=self._hf_preset),
                 "probe_recipe": probe, "clockbase_hz": self.clockbase, "qcl_pulse_parameters": self.qcl_readbacks,
+                "actual_probe_rate_hz": cadence,
                 "actual_settings": self.settings.to_dict(), "capabilities": capabilities.to_dict(),
                 "optical_arrival_observed": False, "time_reference": "electrical_trigger"}
 
@@ -362,15 +377,7 @@ class ConnectedBurstAdapter:
         frequency = self.original["t660_1"]["readback"]["queries"]["synth_frequency"]
         if not frequency.get("ok"):
             raise ReadinessError("Cannot read the external T660 probe repetition rate")
-        text = str(frequency["response"]).strip().lower()
-        scale = 1.
-        for suffix, factor in (("mhz", 1e6), ("khz", 1e3), ("hz", 1.)):
-            if text.endswith(suffix):
-                text, scale = text[:-len(suffix)], factor
-                break
-        external_rate = float(text) * scale
-        if not math.isfinite(external_rate) or external_rate <= 0:
-            raise ReadinessError("External T660 probe repetition readback must be finite and positive")
+        external_rate = _frequency_hz(frequency["response"])
         values.update(qcl=1, probe_current_ma=self.qcl.get_qcl_current(1), probe_rate_hz=external_rate,
             probe_pulse_width_s=self.qcl.get_qcl_pulse_width(1) / 1e9,
             mircat_internal_pulse_rate_hz=self.qcl.get_qcl_pulse_rate(1))
@@ -448,7 +455,9 @@ class ConnectedBurstAdapter:
         if pulse.get("qcl") != 1:
             raise ReadinessError("Only installed QCL 1 may receive pulse settings")
         rate, width = float(pulse["pulse_rate_hz"]), float(pulse["pulse_width_ns"])
-        limits = self.original["mircat"]["pulse_limits"]
+        limits = getattr(self, "_current_probe_limits", None)
+        if limits is None:
+            limits = self.original["mircat"]["pulse_limits"]
         for value, maximum, label in ((rate, limits["max_pulse_rate_hz"], "internal pulse rate"),
                 (width, limits["max_pulse_width_ns"], "pulse width")):
             if not math.isfinite(value) or value <= 0 or not math.isfinite(maximum) or maximum <= 0 or value > maximum:
@@ -467,9 +476,75 @@ class ConnectedBurstAdapter:
                 raise ReadinessError("External repetition rate times pulse width exceeds the vendor/30% limit")
         current = pulse.get("current_ma")
         if current is not None:
-            low, high = self.original["mircat"]["current_limits_ma"]
+            current_limits = getattr(self, "_current_probe_current_limits", None)
+            low, high = current_limits if current_limits is not None else self.original["mircat"]["current_limits_ma"]
             if not all(math.isfinite(float(v)) for v in (current, low, high)) or not low <= float(current) <= high:
                 raise ReadinessError("MIRcat current is outside the QCL1 vendor limits")
+
+    def _cadence_matches(self, actual, requested):
+        tolerance = float(field(self.plan.capabilities, "synthesizer_quantum_hz", .02)) / 1000.
+        return math.isclose(actual, requested, rel_tol=0., abs_tol=tolerance)
+
+    def _read_probe_cadence(self, *, stage, block_id=None):
+        record = {"stage": stage, "block_id": block_id,
+                  "requested_rate_hz": self.recipe["frame_input_frequency_hz"]}
+        try:
+            record["response"] = self.clock.command("TRIG:FREQ:SYN?")
+            record["actual_rate_hz"] = _frequency_hz(record["response"])
+        except Exception as exc:
+            record["read_error"] = f"{type(exc).__name__}: {exc}"
+            self.store.append_event("probe_cadence_readback", record)
+            raise
+        self.store.append_event("probe_cadence_readback", record)
+        self.actual_probe_rate_hz = record["actual_rate_hz"]
+        if not self._cadence_matches(record["actual_rate_hz"], float(record["requested_rate_hz"])):
+            raise ReadinessError("T660 external repetition rate readback differs from the selected cadence")
+        return self.actual_probe_rate_hz
+
+    def _verify_emission_inhibited(self, block):
+        record = {"block_id": field(block, "block_id")}
+        try:
+            record["emission_on"] = self.qcl.is_emission_on()
+        except Exception as exc:
+            record["read_error"] = f"{type(exc).__name__}: {exc}"
+            self.store.append_event("mircat_emission_inhibited", record)
+            raise
+        self.store.append_event("mircat_emission_inhibited", record)
+        if record["emission_on"] is not False:
+            raise ReadinessError("MIRcat emission gate did not close before block programming")
+
+    def _refresh_qcl_pre_emission(self, block):
+        cadence = self._read_probe_cadence(stage="pre_emission", block_id=field(block, "block_id"))
+        record = {"block_id": field(block, "block_id"), "requested": deepcopy(self.recipe["qcl_pulse_parameters"]),
+                  "actual": {"qcl": 1}, "external_rate_hz": cadence}
+        try:
+            for key, getter in (("pulse_rate_hz", self.qcl.get_qcl_pulse_rate),
+                    ("pulse_width_ns", self.qcl.get_qcl_pulse_width), ("current_ma", self.qcl.get_qcl_current),
+                    ("pulse_limits", self.qcl.get_qcl_pulse_limits), ("current_limits_ma", self.qcl.get_qcl_current_limits)):
+                self.check()
+                try:
+                    value = getter(1)
+                    if key in ("pulse_limits", "current_limits_ma"):
+                        record[key] = value
+                    else:
+                        record["actual"][key] = value
+                except Exception as exc:
+                    record.setdefault("read_errors", {})[key] = f"{type(exc).__name__}: {exc}"
+        finally:
+            self.store.append_event("qcl_pre_emission_readback", record)
+        if "pulse_limits" in record:
+            self._current_probe_limits = record["pulse_limits"]
+        if "current_limits_ma" in record:
+            self._current_probe_current_limits = record["current_limits_ma"]
+        if record.get("read_errors"):
+            raise ReadinessError("MIRcat QCL1 pre-emission readback failed: " + ", ".join(record["read_errors"]))
+        self._validate_probe_parameters(record["actual"], external_rate_hz=cadence)
+        for key in ("pulse_rate_hz", "pulse_width_ns", "current_ma"):
+            selected = record["requested"][key]
+            if selected is not None and not math.isclose(float(record["actual"][key]), float(selected), rel_tol=1e-6, abs_tol=1e-5):
+                raise ReadinessError(f"MIRcat QCL1 {key} changed during block programming")
+        self.qcl_readbacks = deepcopy(record["actual"])
+        self.check()
 
     def temperature(self):
         """Optional observation only; absent/stale temperature does not gate data."""
@@ -492,7 +567,9 @@ class ConnectedBurstAdapter:
     def program_block(self, block, *, pump_allowed=False):
         self.check()
         self.idle()
+        self._verify_emission_inhibited(block)
         self.clock.apply_recipe(deepcopy(self.recipe["probe_clock_recipe"]))
+        self._read_probe_cadence(stage="block_configuration", block_id=field(block, "block_id"))
         frames = deepcopy(list(field(block, "frames")))
         enabled = sum(bool(f["channels"]["A"]["enabled"]) or bool(f["channels"]["B"]["enabled"]) for f in frames)
         if enabled != (1 if pump_allowed else 0):
@@ -514,6 +591,7 @@ class ConnectedBurstAdapter:
         if trigger.get("pulse_mode") != PULSE_MODE_EXTERNAL_TRIGGER or trigger.get("process_trigger_mode") != PROC_TRIG_MODE_EXTERNAL:
             raise ReadinessError("MIRcat did not accept external pulse and external process triggering")
         self.qcl.set_wavelength_trigger_pulse_width_us(int(trajectory["marker_width_us"]))
+        self._refresh_qcl_pre_emission(block)
         # This explicit Blank/Sample/Start operation authorizes emission. The
         # installed service still enforces the actual key/interlock/TEC state.
         self.qcl.start_emission()
@@ -600,7 +678,7 @@ class ConnectedBurstAdapter:
         self.clock.disable_channel("B")
         elapsed = monotonic() - self._probe_enabled_at
         self._probe_enabled_at = None
-        duty = float(self.settings.probe_rate_hz) * float(self.settings.probe_pulse_width_s)
+        duty = self.actual_probe_rate_hz * (float(self.qcl_readbacks["pulse_width_ns"]) / 1e9)
         exposure = {"block_id": field(block, "block_id"), "enabled_command_interval_s": elapsed,
             "pulse_on_upper_bound_s": elapsed * duty, "pulse_duty_fraction": duty,
             "basis": "host monotonic before probe enable command through acknowledged disable"}
@@ -914,6 +992,9 @@ class ConnectedBurstAdapter:
                                 "polarity": response(values["polarity"]), "termination": response(values["termination"])}
                         u.apply_recipe(recipe)
                         after = u.read_active_settings()
+                        records[device_name + "-restored-synth-frequency"] = {
+                            "expected": original["queries"]["synth_frequency"],
+                            "actual": after["queries"]["synth_frequency"]}
                         actual_references = {}
                         for edge in range(1, 9):
                             try:
@@ -923,6 +1004,9 @@ class ConnectedBurstAdapter:
                         records[device_name + "-restored-references"] = {
                             "expected": saved["references"], "actual": actual_references}
                         after["references"] = actual_references
+                        if not self._cadence_matches(_frequency_hz(response(after["queries"]["synth_frequency"])),
+                                                     _frequency_hz(response(original["queries"]["synth_frequency"]))):
+                            raise RuntimeError("Timing synthesizer frequency did not restore")
                         if actual_references != saved["references"]:
                             raise RuntimeError("Timing edge references did not restore")
                         for channel, values in original["channels"].items():

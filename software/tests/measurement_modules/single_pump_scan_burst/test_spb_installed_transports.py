@@ -43,6 +43,7 @@ class MircatSDKTransport:
         self.marker_width = 20
         self.scan_waiting = False
         self.stuck_scan_field = None
+        self.ignore_emission_off = False
 
     def __getattr__(self, name):
         if not name.startswith("MIRcatSDK_"):
@@ -110,7 +111,9 @@ class MircatSDKTransport:
         elif name == "ArmLaser": self.armed = True
         elif name == "DisarmLaser": self.armed = False
         elif name == "TurnEmissionOn": self.emission = True
-        elif name == "TurnEmissionOff": self.emission = False
+        elif name == "TurnEmissionOff":
+            if not self.ignore_emission_off:
+                self.emission = False
         elif name == "DeInitialize": self.closed = True
         elif name == "GetRedLaserPointerStatus": out([False, False])
         elif name == "StopScanInProgress": self.scan_waiting = False
@@ -118,6 +121,9 @@ class MircatSDKTransport:
             pass
         else:
             raise AssertionError(f"Unimplemented SDK transport call {name}")
+        callback = getattr(self, "after_dispatch", None)
+        if callback is not None:
+            callback(name, values)
         return 0
 
 
@@ -185,7 +191,13 @@ class SerialTransport:
         elif "?" in key:
             return self.state.get(key.replace("?", ""), "0")
         else:
-            self.state[key] = arg
+            mutation = getattr(self.bank, "synth_write_mutation", None)
+            if key == "TRIG:FREQ:SYN" and self.port == "COM3" and mutation is not None:
+                replacement = mutation(self, arg)
+                if replacement is not None:
+                    self.state[key] = replacement
+            else:
+                self.state[key] = arg
         return "OK"
 
 
@@ -589,3 +601,140 @@ def test_restoration_readback_above_thirty_percent_retains_fault(transports):
     restoration = json.loads((Path(result["output_path"]) / "records/restoration.json").read_text())
     assert restoration["records"]["qcl-1-restored-pulse"]["pulse_width_ns"] > 150.
     assert_only_qcl1_calls(transports.sdk)
+
+
+def _assert_no_emission_or_finite_start(bank):
+    assert bank.pumps == 0
+    assert "TurnEmissionOn" not in [name for name, values in bank.sdk.calls]
+    assert not any(command.upper().lstrip(":") == "TFRAME:START"
+                   for serial in bank.serials for command in serial.commands)
+    assert not bank.sdk.emission and not bank.sdk.armed
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+@pytest.mark.parametrize("write_number", [1, 2], ids=["configure", "block-reapply"])
+@pytest.mark.parametrize("fault", ["ignored", "coerced"])
+def test_actual_synthesizer_readback_rejects_changed_cadence_before_emission(transports, mode, write_number, fault):
+    writes = 0
+    def mutate(serial, requested):
+        nonlocal writes
+        writes += 1
+        if writes == write_number:
+            if fault == "ignored" and write_number == 2:
+                # Model a clock changed since configure, followed by a failed
+                # attempt to reapply the selected rate for the next block.
+                serial.state["TRIG:FREQ:SYN"] = "1250000"
+            return None if fault == "ignored" else "1000100"
+        return requested
+    transports.synth_write_mutation = mutate
+    runner = make_runner(transports, mode, probe_rate_hz=1e6, probe_pulse_width_s=120e-9)
+    result = runner.prepare("preliminary")
+    assert not result["complete"], result
+    _assert_no_emission_or_finite_start(transports)
+    events = [event["payload"] for event in load_run(result["output_path"])["events"]
+              if event["kind"] == "probe_cadence_readback"]
+    expected = (2e6 if write_number == 1 else 1250000.) if fault == "ignored" else 1000100.
+    assert events[-1]["requested_rate_hz"] == 1e6
+    assert events[-1]["actual_rate_hz"] == expected
+    assert bool(events[-1].get("block_id")) == (write_number == 2)
+    assert "readback" in result["error"].lower() or "cadence" in result["error"].lower()
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_actual_external_clock_above_duty_ceiling_is_retained_and_never_emits(transports, mode):
+    changed = False
+    def mutate(serial, requested):
+        nonlocal changed
+        if not changed:
+            changed = True
+            return "3000000"
+        return requested
+    transports.synth_write_mutation = mutate
+    result = make_runner(transports, mode, probe_rate_hz=1e6, probe_pulse_width_s=120e-9).prepare("preliminary")
+    assert not result["complete"], result
+    _assert_no_emission_or_finite_start(transports)
+    event = next(event["payload"] for event in load_run(result["output_path"])["events"]
+                 if event["kind"] == "probe_cadence_readback")
+    assert event["actual_rate_hz"] * 120e-9 > .30
+    assert event["requested_rate_hz"] * 120e-9 < .30
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+@pytest.mark.parametrize("stage", ["TuneToWW", "SetWlTrigParams"], ids=["after-tune", "after-trigger"])
+@pytest.mark.parametrize("changed_field", ["rate", "width", "current", "limits", "current_limits"])
+def test_live_qcl1_changes_after_programming_are_retained_and_caught_before_emission(transports, mode, stage, changed_field):
+    changed = False
+    def mutate(name, values):
+        nonlocal changed
+        if changed or name != stage or (name == "SetWlTrigParams" and values[:2] != [2, 2]):
+            return
+        changed = True
+        if changed_field == "rate":
+            transports.sdk.qcls[1][0] = 2110000.
+        elif changed_field == "width":
+            transports.sdk.qcls[1][1] = 130.
+        elif changed_field == "current":
+            transports.sdk.qcls[1][2] = 441.
+        elif changed_field == "limits":
+            transports.sdk.pulse_limits[2] = 20.
+        else:
+            transports.sdk.current_limits[1] = 430
+    transports.sdk.after_dispatch = mutate
+    result = make_runner(transports, mode, probe_rate_hz=1e6, probe_pulse_width_s=120e-9,
+                         probe_current_ma=440.).prepare("preliminary")
+    assert changed and not result["complete"], result
+    _assert_no_emission_or_finite_start(transports)
+    records = [event["payload"] for event in load_run(result["output_path"])["events"]
+               if event["kind"] == "qcl_pre_emission_readback"]
+    assert records and records[-1]["block_id"] == "preliminary"
+    record = records[-1]
+    assert record["actual"]["qcl"] == 1 and record["external_rate_hz"] == 1e6
+    if changed_field == "limits":
+        assert record["pulse_limits"]["max_duty_cycle"] == 20.
+        assert "duty" in result["error"].lower()
+    elif changed_field == "current_limits":
+        assert record["current_limits_ma"][1] == 430.
+        assert record["actual"]["current_ma"] == 440.
+        assert "current" in result["error"].lower()
+    else:
+        key, expected = {"rate": ("pulse_rate_hz", 2110000.), "width": ("pulse_width_ns", 130.),
+                         "current": ("current_ma", 441.)}[changed_field]
+        assert record["actual"][key] == expected
+        assert record["requested"][key] != expected
+    assert_only_qcl1_calls(transports.sdk)
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_tuning_width_drift_over_thirty_percent_is_not_hidden_by_match_tolerance(transports, mode):
+    transports.sdk.qcls[1] = [2e6, 150., 420.]
+    changed = False
+    def mutate(name, values):
+        nonlocal changed
+        if name == "TuneToWW" and not changed:
+            transports.sdk.qcls[1][1] = 150.00002
+            changed = True
+    transports.sdk.after_dispatch = mutate
+    result = make_runner(transports, mode, probe_rate_hz=1e6).prepare("preliminary")
+    assert not result["complete"] and "duty" in result["error"].lower(), result
+    _assert_no_emission_or_finite_start(transports)
+    record = next(event["payload"] for event in load_run(result["output_path"])["events"]
+                  if event["kind"] == "qcl_pre_emission_readback")
+    assert record["actual"]["pulse_width_ns"] > 150.
+    assert record["actual"]["pulse_rate_hz"] == 2e6
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_ignored_emission_gate_close_prevents_tuning_and_retains_owner_fault(transports, mode):
+    transports.sdk.emission = True
+    transports.sdk.ignore_emission_off = True
+    result = make_runner(transports, mode).prepare("preliminary")
+    assert not result["complete"] and result["status"] == "cleanup_failed", result
+    calls = [name for name, values in transports.sdk.calls]
+    assert "TuneToWW" not in calls and "TurnEmissionOn" not in calls
+    assert transports.pumps == 0
+    assert not any(command.upper().lstrip(":") == "TFRAME:START"
+                   for serial in transports.serials for command in serial.commands)
+    record = next(event["payload"] for event in load_run(result["output_path"])["events"]
+                  if event["kind"] == "mircat_emission_inhibited")
+    assert record["emission_on"] is True
+    assert transports.coordinator.snapshot()["state"] == "fault"

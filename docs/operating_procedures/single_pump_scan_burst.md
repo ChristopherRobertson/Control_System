@@ -31,6 +31,11 @@ must exceed the external trigger rate, and its rate-times-width product must
 also satisfy the duty limit. A width can therefore be invalid even when the
 external trigger duty is exactly 30%. Both rates and the applied width are
 recorded and verified before emission.
+After each timing recipe is applied, the application reads and retains the
+T660 synthesizer cadence. It also refreshes QCL1 pulse settings and vendor
+limits after tuning and trigger configuration. The emission gate is closed
+and checked before each block's reconfiguration. A changed cadence or pulse
+setting prevents emission; duty checks use the observed values.
 
 Use **Acquire blank** to record an unpumped blank spectrum in single-detector
 mode and **Acquire unpumped sample** to record the sample. They use the same

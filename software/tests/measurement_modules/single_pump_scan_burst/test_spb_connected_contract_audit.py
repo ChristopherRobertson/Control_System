@@ -68,8 +68,16 @@ def _adapter(*, marker_interval=25., requested_rate=1000000.):
     adapter.qcl = create_autospec(MircatService, instance=True)
     adapter.timing.preload_frame_table.return_value = {"physical_frame_count": len(plan.blocks[0].frames)}
     adapter.qcl.is_tuned.return_value = True
+    adapter.qcl.is_emission_on.return_value = False
     adapter.qcl.get_scan_waiting_process_trigger.return_value = True
     adapter.qcl.set_external_sweep_trigger_params.return_value = {"pulse_mode": 2, "process_trigger_mode": 2}
+    adapter.clock.command.return_value = str(plan.selected_values["probe_rate_hz"]["selected"])
+    adapter.qcl.get_qcl_pulse_rate.return_value = plan.settings.mircat_internal_pulse_rate_hz
+    adapter.qcl.get_qcl_pulse_width.return_value = plan.selected_values["probe_pulse_width_s"]["selected"] * 1e9
+    adapter.qcl.get_qcl_current.return_value = plan.settings.probe_current_ma
+    adapter.qcl.get_qcl_pulse_limits.return_value = {
+        "qcl": 1, "max_pulse_rate_hz": 2_200_000., "max_pulse_width_ns": 500., "max_duty_cycle": 30.}
+    adapter.qcl.get_qcl_current_limits.return_value = (0., 500.)
     adapter.hf.get_oscillator_frequency.return_value = plan.selected_values["probe_rate_hz"]["selected"]
     adapter.hf.read_acquisition_health.return_value = {"reference_locked": True, "clock_locked": True, "overload": False}
     adapter.qcl.get_sweep_parameters.return_value = {
@@ -204,7 +212,7 @@ def test_connected_adapter_preflight_capture_and_restore_through_injected_host_s
             "channels": {ch: {"enabled": reply(0), "timing_mode": reply("DW"), "polarity": reply("POS"),
                 "termination": reply("50OHM"), "delay_edge": reply("0s"), "width_edge": reply("1us")}
                 for ch in "ABCD"}}
-        unit.command.side_effect = lambda command, **kwargs: "0" if "RELTo" in command else "1us" if command.endswith(("2?", "4?", "6?", "8?")) else "0s"
+        unit.command.side_effect = lambda command, **kwargs: str(settings.probe_rate_hz) if command == "TRIG:FREQ:SYN?" else "0" if "RELTo" in command else "1us" if command.endswith(("2?", "4?", "6?", "8?")) else "0s"
     timing.preload_frame_table.return_value = {"physical_frame_count": len(block.frames)}
     timing.get_frames_status.return_value = "DONE"
     timing.verified_frame_capacity.return_value = 8192
