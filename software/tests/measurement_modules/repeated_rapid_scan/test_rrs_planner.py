@@ -64,7 +64,8 @@ def test_rrs_dual_duration_is_not_doubled_but_throughput_is():
     assert dual.estimates["aggregate_rate_hz"] == 2 * single.estimates["aggregate_rate_hz"]
     assert dual.estimates["movie_native_bytes"] == 2 * single.estimates["movie_native_bytes"]
     assert dual.estimates["preliminary_s"] == single.estimates["preliminary_s"]
-    assert dual.estimates["blank_s"] == 0 < single.estimates["blank_s"]
+    assert dual.estimates["blank_s"] == single.estimates["blank_s"] == 0
+    assert dual.estimates["blank_action_acquisition_s"] == 0 < single.estimates["blank_action_acquisition_s"]
 
 
 def test_rrs_timing_stream_counts_towards_aggregate_limit():
@@ -323,3 +324,46 @@ def test_rrs_automatic_memory_budget_uses_available_host_memory_and_keeps_overri
                                     overrides={"memory_limit_bytes":2 * 1024**3})
     assert manual.memory_limit_bytes == 2 * 1024**3
     assert manual.manual_overrides["memory_limit_bytes"] == 2 * 1024**3
+
+
+def test_rrs_start_budget_counts_sample_movies_and_auto_baseline_but_no_optional_blank():
+    settings = resolve_intent_settings(AcquisitionIntent(observation_duration_s=.3))
+    plan = build_plan(settings)
+    expected_count = len(plan.movies) + len(settings.directions)
+    assert plan.estimates["total_capture_count"] == expected_count
+    assert plan.estimates["acquisition_s"] == pytest.approx(sum(movie.duration_s for movie in plan.movies) + plan.estimates["preliminary_s"])
+    assert plan.estimates["blank_s"] == 0
+    assert plan.estimates["qualification_s"] == 0
+    assert plan.estimates["reset_allowance_s"] == 0
+    assert plan.estimates["blank_action_acquisition_s"] == pytest.approx(sum(movie.duration_s for movie in plan.movies))
+    assert plan.estimates["blank_action_memory_bytes"] > 0
+    # A budget fitting Start need not also fit a second unrequested blank run.
+    budget = plan.estimates["retained_run_memory_bytes"] + plan.estimates["blank_action_memory_bytes"] // 2
+    assert build_plan(replace(settings, memory_limit_bytes=budget)).ready_for_hardware
+
+
+def test_rrs_loaded_native_baseline_footprint_is_counted_when_known():
+    settings = resolve_intent_settings(AcquisitionIntent(observation_duration_s=.2))
+    empty = build_plan(settings)
+    retained = build_plan(settings, HardwareCapabilities(selected_baseline_bytes=1234567))
+    assert retained.estimates["retained_run_memory_bytes"] - empty.estimates["retained_run_memory_bytes"] == 1234567
+    assert retained.estimates["storage_bytes"] - empty.estimates["storage_bytes"] == 1234567
+    assert retained.actual["selected_baseline_bytes"] == 1234567
+    with pytest.raises(ValueError, match="nonnegative byte count"):
+        build_plan(settings, HardwareCapabilities(selected_baseline_bytes=-1))
+
+
+def test_rrs_hardware_omitted_controls_do_not_inflate_acquisition_budget():
+    settings = replace(compact(), execution="hardware")
+    plan = build_plan(settings)
+    active = [movie for movie in plan.movies if movie.control in ("sample", "probe_only")]
+    omitted = [movie for movie in plan.movies if movie.control == "pump_blocked"]
+    assert plan.estimates["acquisition_movie_count"] == len(active)
+    assert plan.estimates["omitted_control_count"] == len(omitted)
+    assert plan.estimates["acquisition_s"] == pytest.approx(sum(movie.duration_s for movie in active) + plan.estimates["preliminary_s"])
+
+
+def test_rrs_unused_reset_timer_annotation_does_not_change_wall_estimate():
+    settings = resolve_intent_settings(AcquisitionIntent(observation_duration_s=.2))
+    changed = replace(settings, recovery=replace(settings.recovery, max_reset_wait_s=10000.))
+    assert build_plan(settings).estimates["wall_time_s"] == build_plan(changed).estimates["wall_time_s"]

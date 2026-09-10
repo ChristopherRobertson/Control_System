@@ -18,6 +18,7 @@ class HardwareCapabilities:
     max_aggregate_rate_hz: float | None = None
     max_movie_bytes: int | None = None
     available_memory_bytes: int | None = None
+    selected_baseline_bytes: int = 0
     available_demodulators: tuple[int, ...] = (0, 1, 2, 3, 4, 5)
     connected_readback_id: str = ""
     detector_roles_verified: bool = False
@@ -301,22 +302,25 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
     movie_memory = movie_native * 3 + len(first.frames) * 2048
     if movie_memory > min(settings.memory_limit_bytes, caps.max_movie_bytes or settings.memory_limit_bytes):
         raise ValueError("full uninterrupted movie exceeds memory budget; no circular reuse, split or scan slowing is permitted")
-    qualification_s = sum(movie.qualification_scans + 1 for movie in movies if movie.qualification_scans) * first.scan_period_s
-    # The single sequential blank repeats the full phase/control schedule. The
-    # sample preliminary supplies one unpumped movie per direction in both modes.
-    # The runner retains those records alongside native chunks/results until the
-    # run is preserved, so capacity must cover the entire in-memory run as well.
-    measurement_s = sum(movie.duration_s for movie in movies)
-    blank_s = measurement_s if settings.mode == "single" else 0.0
+    if type(caps.selected_baseline_bytes) is not int or caps.selected_baseline_bytes < 0:
+        raise ValueError("selected baseline bytes must be a measured nonnegative byte count")
+    # Start does not acquire a separate blank or qualification train. Conservatively
+    # include one unpumped sample movie per direction even when S0 may be reusable.
+    # Retained loaded records are counted only when their measured footprint is supplied.
+    active_movies = tuple(movie for movie in movies if settings.execution == "simulation" or movie.control in ("sample", "probe_only"))
+    qualification_s = 0.0
+    measurement_s = sum(movie.duration_s for movie in active_movies)
+    blank_s = 0.0
     preliminary_s = first.duration_s * len(settings.directions)
-    acquisition_s = measurement_s + qualification_s + preliminary_s + blank_s
+    total_capture_count = len(active_movies) + len(settings.directions)
+    acquisition_s = measurement_s + preliminary_s
     native_total = math.ceil(acquisition_s * aggregate) * native_bytes_per_sample
-    storage_bytes = native_total * 3 + len(movies) * 32768
+    storage_bytes = native_total * 3 + total_capture_count * 32768 + caps.selected_baseline_bytes
     if storage_bytes > settings.storage_limit_bytes:
         raise ValueError("retained native, reconstructed and control records exceed storage budget")
-    retained_run_memory = native_total * 6 + len(movies) * len(first.frames) * 4096
+    retained_run_memory = native_total * 6 + total_capture_count * len(first.frames) * 4096 + caps.selected_baseline_bytes
     if retained_run_memory > settings.memory_limit_bytes:
-        raise ValueError("complete retained run exceeds memory budget, including blank/preliminary, native chunks and results; reduce the explicit movie/repeat plan or raise a justified budget")
+        raise ValueError("complete retained run exceeds memory budget, including sample baseline, selected loaded records, native chunks and results; reduce the explicit movie/repeat plan or raise a justified budget")
     def unpumped_commands(movie, count=None):
         frames = []
         for frame in movie.compiled.frames[:count]:
@@ -326,16 +330,26 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
         if count is not None:
             frames.append(movie.compiled.frames[-1])
         return replace(movie.compiled, frames=tuple(frames)).command_count
-    upload_commands = sum(movie.compiled.command_count for movie in movies)
-    if settings.mode == "single":
-        upload_commands += sum(unpumped_commands(movie) for movie in movies)
+    upload_commands = sum(movie.compiled.command_count for movie in active_movies)
     upload_commands += len(settings.directions) * unpumped_commands(movies[0])
-    upload_commands += sum(unpumped_commands(movie, movie.qualification_scans) for movie in movies if movie.qualification_scans)
     upload_s = upload_commands * settings.upload_acknowledgment_s
-    reset_s = sum(movie.control == "sample" for movie in movies) * settings.recovery.max_reset_wait_s
-    total_capture_count = len(movies) * (2 if settings.mode == "single" else 1) + len(settings.directions) + sum(bool(movie.qualification_scans) for movie in movies)
+    # Recovery assessment uses the recorded movie interval. There is no extra
+    # timer-based reset wait or implicit extension after the finite movie.
+    reset_s = 0.0
     wall = (settings.preparation_s + acquisition_s + upload_s + total_capture_count * settings.tuning_settling_s
             + reset_s + settings.restoration_s + settings.analysis_s + storage_bytes / settings.storage_bytes_per_second)
+    # Acquire blank is an explicit separate action. Expose its costs without
+    # charging ordinary Start for data it will not acquire.
+    blank_action_s = sum(movie.duration_s for movie in movies) if settings.mode == "single" else 0.0
+    blank_action_native = math.ceil(blank_action_s * aggregate) * native_bytes_per_sample
+    blank_action_count = len(movies) if settings.mode == "single" else 0
+    blank_action_upload = sum(unpumped_commands(movie) for movie in movies) * settings.upload_acknowledgment_s if blank_action_count else 0.0
+    blank_action_storage = blank_action_native * 3 + blank_action_count * 32768
+    blank_action_memory = blank_action_native * 6 + blank_action_count * len(first.frames) * 4096
+    blank_action_wall = ((settings.preparation_s + blank_action_s + blank_action_upload
+                         + blank_action_count * settings.tuning_settling_s + settings.restoration_s
+                         + settings.analysis_s + blank_action_storage / settings.storage_bytes_per_second)
+                        if blank_action_count else 0.0)
     readiness = _readiness(settings, caps, evidence)
     requested = {"scan_period_s": settings.measured_scan_period_s, "phase_offsets_s": list(settings.phase_offsets_s),
                  "sample_rate_hz": settings.sample_rate_hz, "reference_rate_hz": settings.reference_rate_hz,
@@ -351,6 +365,7 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
               "scan_period_s": caps.actual_scan_period_s, "readback_id": caps.connected_readback_id,
               "timing_rate_hz": caps.acquisition_timing_rate_hz, "live_settings": dict(caps.live_settings),
               "available_memory_bytes": caps.available_memory_bytes,
+              "selected_baseline_bytes": caps.selected_baseline_bytes,
               "pump_timestamps": "available only in acquired native records"}
     estimates = {"movie_count": len(movies), "pump_count": sum(movie.pump_count for movie in movies),
                  "scans_per_movie": first.expected_scan_count, "movie_duration_s": first.duration_s,
@@ -363,9 +378,17 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
                  "timing_stream_estimate_known": caps.acquisition_timing_rate_hz is not None,
                  "upload_commands": upload_commands, "upload_s": upload_s,
                  "total_capture_count": total_capture_count,
+                 "acquisition_movie_count": len(active_movies),
+                 "omitted_control_count": len(movies) - len(active_movies),
+                 "selected_baseline_bytes": caps.selected_baseline_bytes,
+                 "blank_action_acquisition_s": blank_action_s,
+                 "blank_action_upload_s": blank_action_upload,
+                 "blank_action_memory_bytes": blank_action_memory,
+                 "blank_action_storage_bytes": blank_action_storage,
+                 "blank_action_wall_time_s": blank_action_wall,
                  "qualification_s": qualification_s, "preliminary_s": preliminary_s, "blank_s": blank_s,
                  "acquisition_s": acquisition_s, "reset_allowance_s": reset_s, "wall_time_s": wall,
-                 "estimate_basis": "Full finite movies, separate pre-pump qualification, preliminary/blank, acknowledged pending-field upload, settling, maximum reset allowance, restoration, saving and analysis; actual recovery may stop the sequence.",
+                 "estimate_basis": "Start: finite sample/probe-only movies, conservative automatic sample baseline per direction, acknowledged upload, preparation/settling, restoration, saving and analysis. Recovery is observed within each movie; no additional reset timer or qualification. Optional Acquire blank is estimated separately; supplied measured loaded-record bytes are retained.",
                  "planning_scan_duration_s": (settings.scan_stop_cm1 - settings.scan_start_cm1) / settings.scan_speed_cm1_s,
                  "planning_filter_smear_cm1": settings.scan_speed_cm1_s * settings.sample_filter_timeconstant_s,
                  "planning_only": "width/speed, phase+n*period and filter-smear relationships never replace native timestamps/trajectories"}
