@@ -1,0 +1,9 @@
+{
+  "status": "PAUSED_AT_USER_REQUEST",
+  "last_review": "R012",
+  "total_deleted_bytes": 70131328931,
+  "total_deleted_files": 12640,
+  "free_disk_bytes": 87503826944,
+  "next_pending_review": "R013",
+  "instruction": "delete, and that should be good enough for now"
+}

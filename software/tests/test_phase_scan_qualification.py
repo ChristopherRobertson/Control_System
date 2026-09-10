@@ -25,7 +25,8 @@ def test_runtime_bundle_supplies_trajectory_without_modification(tmp_path):
     bundle = make_bundle(tmp_path)
     before = (bundle.path / "manifest.yaml").read_bytes()
     qualification = phase_scan_qualification_from_bundle(bundle)
-    plan = build_phase_scan_plan(PhaseScanSettings(), calibrated_trajectory=qualification["calibrated_trajectory"])
+    settings = PhaseScanSettings(start_wavenumber_cm1=1950., stop_wavenumber_cm1=1940.)
+    plan = build_phase_scan_plan(settings, calibrated_trajectory=qualification["calibrated_trajectory"])
     assert plan.calibrated
     assert plan.first_phase_delay_us == -3500
     assert qualification["qualified_sweep_active_s"] == .00232

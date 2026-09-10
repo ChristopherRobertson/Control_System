@@ -678,6 +678,146 @@ class HF2LIService:
                 f"Unable to read HF2LI oscillator {int(index) + 1} frequency: {exc}"
             ) from exc
 
+    def discover_phase_scan_capabilities(self) -> dict[str, Any]:
+        return self._discover_phase_scan_capabilities((0,))
+
+    def discover_dual_phase_scan_capabilities(self) -> dict[str, Any]:
+        """Probe both detector demods with all three streams enabled, restoring nodes."""
+        return self._discover_phase_scan_capabilities((0, 3))
+
+    def _discover_phase_scan_capabilities(self, detector_indices: tuple[int, ...]) -> dict[str, Any]:
+        """Probe accepted demodulator settings, then restore the prior settings.
+
+        This is configuration-only: no poll, DAQ execution, signal output or
+        external instrument command. Only values actually returned by this
+        HF2 are offered to the phase-scan dropdowns. The bounded requests are
+        candidates from the HF2 manual, not a universal supported-value list.
+        The actual detector streams and DIO carrier are part of each profile.
+        """
+        base = f"/{self.device_id}/demods"
+        paths = [(f"{base}/{i}/{node}", kind) for i in range(6)
+                 for node, kind in (("enable", "int"), ("order", "int"),
+                                    ("timeconstant", "double"), ("rate", "double"))]
+        before = {path: {"type": kind, "value": self._get_node(kind, path)} for path, kind in paths}
+        observations = []
+        expected_streams = tuple(sorted((*detector_indices, 2)))
+        profiles = {}
+        def set_read(node, value, kind="double"):
+            self._set_node("setInt" if kind == "int" else "setDouble", node, value)
+            self.sync()
+            actual = self._get_node(kind, node)
+            if not isinstance(actual, (int, float)) or not math.isfinite(actual):
+                raise HF2LIConfigurationError(f"Nonfinite HF2LI capability readback at {node}")
+            observations.append({"node": node, "requested": value, "actual": actual})
+            return actual
+        def unique(values, candidate):
+            return not any(math.isclose(candidate, value, rel_tol=1e-9, abs_tol=1e-15) for value in values)
+        discovery_error = None
+        try:
+            for i in range(6):
+                set_read(f"{base}/{i}/enable", int(i in expected_streams), "int")
+            # Published max readout for 2–3 active HF2 demodulators: ~230 kSa/s.
+            # The actual oscillator divisor gives 230263... on dev18500.
+            timing = set_read(f"{base}/2/rate", 230000.)
+            if not 16000 <= timing <= 231000:
+                raise HF2LIConfigurationError("HF2LI cannot provide the documented timing rate with the enabled streams")
+            for demod in detector_indices:
+                orders, constants, rates = [], {}, set()
+                prefix = f"{base}/{demod}"
+                top = set_read(f"{prefix}/rate", 230000.)
+                if not 0 < top <= 231000:
+                    raise HF2LIConfigurationError(f"HF2LI demod {demod} exceeds the documented active-stream readout rate")
+                for exponent in range(15):
+                    try:
+                        actual = set_read(f"{prefix}/rate", top / 2**exponent)
+                    except Exception as exc:
+                        observations.append({"node": f"{prefix}/rate", "requested": top / 2**exponent,
+                                             "rejected": str(exc)})
+                        continue
+                    if 0 < actual <= 231000 and unique(rates, actual):
+                        repeated = set_read(f"{prefix}/rate", actual)
+                        if math.isclose(actual, repeated, rel_tol=1e-9, abs_tol=1e-12):
+                            rates.add(float(actual))
+                # Documented orders 1–8, TC >= 0.8 us; only idempotent actual
+                # readbacks enter each detector's supported-value dropdowns.
+                for order in range(1, 9):
+                    try:
+                        accepted_order = set_read(f"{prefix}/order", order, "int")
+                        if accepted_order != order:
+                            continue
+                        values = []
+                        for nominal_us in (.8, 1., 2., 5., 8., 10., 20., 50., 100., 200., 500., 1000.):
+                            try:
+                                actual = set_read(f"{prefix}/timeconstant", nominal_us*1e-6)
+                                if actual > 0 and unique(values, actual):
+                                    repeated = set_read(f"{prefix}/timeconstant", actual)
+                                    if math.isclose(actual, repeated, rel_tol=1e-9, abs_tol=1e-15):
+                                        values.append(float(actual))
+                            except Exception as exc:
+                                observations.append({"demodulator": demod, "order": order,
+                                    "requested_timeconstant_s": nominal_us*1e-6, "rejected": str(exc)})
+                        if values:
+                            orders.append(order)
+                            constants[order] = tuple(sorted(values))
+                    except Exception as exc:
+                        observations.append({"demodulator": demod, "order": order, "rejected": str(exc)})
+                if not rates or not orders:
+                    raise HF2LIConfigurationError(f"No stable HF2LI demod {demod} phase-scan capabilities were returned")
+                profiles[demod] = {"orders": tuple(orders), "timeconstants_by_order": constants,
+                                   "rates_sps": tuple(sorted(rates))}
+            # Recheck the streams together at their highest accepted rates.
+            for demod, profile in profiles.items():
+                set_read(f"{base}/{demod}/rate", max(profile["rates_sps"]))
+            timing = set_read(f"{base}/2/rate", timing)
+            for demod, profile in profiles.items():
+                if self._get_node("double", f"{base}/{demod}/rate") != max(profile["rates_sps"]):
+                    raise HF2LIConfigurationError(f"HF2LI demod {demod} rate changed with all requested streams enabled")
+            if timing + sum(max(p["rates_sps"]) for p in profiles.values()) > 700000:
+                raise HF2LIConfigurationError("HF2LI active streams exceed the documented cumulative 700 kSa/s readout capacity")
+            enabled = tuple(i for i in range(6) if self._get_node("int", f"{base}/{i}/enable"))
+            if enabled != expected_streams:
+                raise HF2LIConfigurationError("HF2LI enabled-stream readbacks changed during discovery")
+            common = {"device_id": self.device_id,
+                    "timing_rate_sps": timing, "enabled_streams": enabled, "verified": True,
+                    "source": f"{self.device_id} configuration readbacks {datetime.now(UTC).isoformat()}",
+                    "readback_records": tuple(observations)}
+            if detector_indices == (0,):
+                return {**common, **profiles[0]}
+            return {**common, "sample": {**common, **profiles[0]},
+                    "reference": {**common, **profiles[3]}}
+        except Exception as exc:
+            discovery_error = exc
+            raise
+        finally:
+            failures = []
+            # Disable first; restore filters/rates before reinstating enables.
+            for i in range(6):
+                try:
+                    self._set_node("setInt", f"{base}/{i}/enable", 0)
+                except Exception as exc:
+                    failures.append(str(exc))
+            for enable_pass in (False, True):
+                for path, item in before.items():
+                    if path.endswith("/enable") != enable_pass:
+                        continue
+                    try:
+                        self._set_node("setInt" if item["type"] == "int" else "setDouble", path, item["value"])
+                    except Exception as exc:
+                        failures.append(f"{path}: {exc}")
+            try:
+                self.sync()
+            except Exception as exc:
+                failures.append(f"restoration sync: {exc}")
+            for path, item in before.items():
+                try:
+                    actual = self._get_node(item["type"], path)
+                    if not math.isclose(actual, item["value"], rel_tol=1e-9, abs_tol=1e-12):
+                        failures.append(f"{path}: restoration readback differs")
+                except Exception as exc:
+                    failures.append(f"{path}: {exc}")
+            if failures:
+                raise HF2LIConfigurationError("HF2LI capability discovery restoration failed: " + "; ".join(failures)) from discovery_error
+
     def close(self) -> None:
         """Close the LabOne session if the API exposes disconnect."""
 

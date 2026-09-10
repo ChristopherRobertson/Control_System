@@ -31,12 +31,6 @@ from control_app.workflows.picoscope_settings_test import (
 )
 from control_app.workflows.t660_widget_commands import T660WidgetCommandHandler
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
-from control_app.workflows.selectable_workflows import (
-    ConfiguredWorkflow,
-    SelectableWorkflowError,
-    configure_workflow,
-    load_workflow_catalog,
-)
 
 
 REQUIRED_WORKFLOW_COMMANDS = (
@@ -51,7 +45,6 @@ REQUIRED_WORKFLOW_COMMANDS = (
 )
 WORKFLOW_DEVICE_KEYS = ("mircat", "t660", "t660_1", "picoscope", "hf2li")
 DEVICE_COMMAND_KEYS = WORKFLOW_DEVICE_KEYS + ("ndyag", "opo_iris")
-IRIS_MOTION_COMPATIBLE_ACTIVE_WORKFLOWS = frozenset({"ndyag_alignment_10hz"})
 INITIAL_STATE = "SAFE_IDLE"
 HARDWARE_REQUIRED_STATES = {
     "SAFE_SHUTDOWN_SENT",
@@ -146,17 +139,27 @@ class WorkflowStateMachine:
         self._mircat_service: MircatService | None = None
         self._hf2li_service: HF2LIService | None = None
         self._hf2li_preset: HF2LIPreset | None = None
-        self._configured_ui_workflow: ConfiguredWorkflow | None = None
-        self._active_ui_workflow: ConfiguredWorkflow | None = None
         self.phase_scan_active = False
         self.mircat_scan_active = False
         from threading import Event
         self.mircat_scan_cancel = Event()
-        from control_app.workflows.phase_scan_runner import PhaseScanRunner
-        from control_app.workflows.phase_scan_acquisition import LivePhaseScanAcquirer
-        self.phase_scan_runner = PhaseScanRunner(
-            (lambda: LivePhaseScanAcquirer(config_path=self.config_path,
-                                          promoted_bundle=self.promoted_bundle)) if hardware_access else None
+        from control_app.workflows.regular_phase_scan_runner import RegularPhaseScanRunner
+        from control_app.workflows.regular_phase_scan_acquisition import RegularPhaseScanAcquirer
+        from control_app.workflows.regular_phase_scan import discover_regular_capabilities
+        self.phase_scan_runner = RegularPhaseScanRunner(
+            (lambda: RegularPhaseScanAcquirer(config_path=self.config_path,
+                                             promoted_bundle=self.promoted_bundle)) if hardware_access else None,
+            capability_provider=(lambda: discover_regular_capabilities(config_path=self.config_path))
+            if hardware_access else None,
+        )
+        from control_app.workflows.dual_detector_phase_scan_runner import DualDetectorPhaseScanRunner
+        from control_app.workflows.dual_detector_phase_scan_acquisition import DualDetectorPhaseScanAcquirer
+        from control_app.workflows.dual_detector_phase_scan import discover_dual_phase_scan_capabilities
+        self.dual_detector_phase_scan_runner = DualDetectorPhaseScanRunner(
+            (lambda: DualDetectorPhaseScanAcquirer(config_path=self.config_path,
+                                                 promoted_bundle=self.promoted_bundle)) if hardware_access else None,
+            capability_provider=(lambda: discover_dual_phase_scan_capabilities(config_path=self.config_path))
+            if hardware_access else None,
         )
         if command_log is not None and getattr(command_log, "name", None):
             self._remember_command_log(str(command_log.name))
@@ -174,12 +177,6 @@ class WorkflowStateMachine:
                 message="The OPO iris owns instrument control until its command finishes.",
             )
         name = _normalize_command(command.command)
-        if command.device_key == "workflow" and name == "configure_selected":
-            return self._configure_selected_workflow(command)
-        if command.device_key == "workflow" and name == "run_selected":
-            return self._run_selected_workflow(command)
-        if command.device_key == "workflow" and name == "stop_selected":
-            return self._stop_selected_workflow()
         if name in REQUIRED_WORKFLOW_COMMANDS:
             return self._handle_workflow_command(name, command)
         if command.device_key in DEVICE_COMMAND_KEYS:
@@ -195,93 +192,6 @@ class WorkflowStateMachine:
     def output_location_changed(self, selected: Path) -> None:
         """Start future UI artifacts in the selected folder; preserve previous runs."""
         self.run_dir = self._resolve_run_dir(selected / f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_workflow_state_machine")
-        # Existing configured workflows point into their previous output folder.
-        # Require Configure again rather than redirecting an existing run.
-        self._configured_ui_workflow = None
-
-    def _configure_selected_workflow(self, command: WorkflowCommand) -> WorkflowResult:
-        """Validate and persist a complete UI workflow plan before Run is enabled."""
-
-        if self._active_ui_workflow is not None:
-            return WorkflowResult(
-                status="blocked",
-                message="Stop the active selected workflow before configuring another workflow.",
-            )
-        workflow_id = str(command.parameters.get("workflow_id", "")).strip()
-        values = command.parameters.get("workflow_parameters")
-        if not workflow_id or not isinstance(values, dict):
-            return WorkflowResult(
-                status="blocked",
-                message="Select a workflow and provide its settings before configuring it.",
-            )
-        plan_dir = (
-            output_run_root()
-            / "configured_workflows"
-            / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        )
-        try:
-            configured = configure_workflow(workflow_id, values, output_dir=plan_dir)
-        except SelectableWorkflowError as exc:
-            return WorkflowResult(status="blocked", message=str(exc))
-        self._configured_ui_workflow = configured
-        return WorkflowResult(
-            status="complete",
-            message=(
-                f"{workflow_id} settings validated and saved. Run is enabled until a setting changes."
-            ),
-            data={
-                "workflow_id": configured.workflow_id,
-                "configured_workflow_path": str(configured.saved_path),
-                "parameters": configured.parameters,
-            },
-        )
-
-    def _run_selected_workflow(self, command: WorkflowCommand) -> WorkflowResult:
-        """Run only the exact configuration most recently validated and saved."""
-
-        configured = self._configured_ui_workflow
-        workflow_id = str(command.parameters.get("workflow_id", ""))
-        if configured is None or workflow_id != configured.workflow_id:
-            return WorkflowResult(
-                status="blocked",
-                message="Workflow settings are not configured and saved. Configure & Save first.",
-            )
-        if configured.safety_approval_required and not command.safety_approval:
-            return WorkflowResult(
-                status="blocked",
-                message="Safety approval is required before this configured workflow can run.",
-            )
-        delegated = WorkflowCommand(
-            device_key=configured.device_key,
-            command=configured.command,
-            parameters=dict(configured.parameters),
-            safety_approval=bool(command.safety_approval),
-        )
-        result = self._handle_device_command(delegated)
-        if result.status == "complete" and configured.stop_command is not None:
-            self._active_ui_workflow = configured
-        result.data.setdefault("configured_workflow_path", str(configured.saved_path))
-        result.data.setdefault("workflow_id", configured.workflow_id)
-        return result
-
-    def _stop_selected_workflow(self) -> WorkflowResult:
-        """Invoke the configured workflow's established stop/safe-idle command."""
-
-        configured = self._active_ui_workflow or self._configured_ui_workflow
-        if configured is None or configured.stop_command is None:
-            return WorkflowResult(
-                status="blocked",
-                message="The selected workflow has no configured stop action.",
-            )
-        result = self._handle_device_command(
-            WorkflowCommand(
-                device_key=configured.device_key,
-                command=configured.stop_command,
-            )
-        )
-        if result.status == "complete":
-            self._active_ui_workflow = None
-        return result
 
     def export_event_log(self, path: str | Path) -> Path:
         """Write state-machine events as JSON."""
@@ -324,8 +234,6 @@ class WorkflowStateMachine:
 
     def ui_mircat_scan_blockers(self) -> list[str]:
         blockers = []
-        if self._active_ui_workflow is not None:
-            blockers.append("Stop the configured workflow before MIRcat Sweep Scan")
         if any(service is not None for service in (
             self._mircat_service, self._picoscope_service, self._hf2li_service,
         )):
@@ -353,14 +261,6 @@ class WorkflowStateMachine:
             blockers.append("MIRcat Sweep Scan owns the instruments")
         if self.phase_scan_active:
             blockers.append("Phase Scan owns the instruments")
-        if (
-            self._active_ui_workflow is not None
-            and self._active_ui_workflow.workflow_id
-            not in IRIS_MOTION_COMPATIBLE_ACTIVE_WORKFLOWS
-        ):
-            blockers.append(
-                f"configured workflow {self._active_ui_workflow.workflow_id!r} is active"
-            )
         if self._mircat_handler is not None:
             blockers.extend(self._mircat_handler.close_blockers())
         return blockers

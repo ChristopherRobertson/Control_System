@@ -1,0 +1,2045 @@
+[
+  {
+    "path": "evidence/catalogs",
+    "bytes": 183,
+    "files": 1,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 183,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/logs",
+    "bytes": 3259679,
+    "files": 27,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 3259679,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/20260624_day7_workflow_interface",
+    "bytes": 49417,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 49417,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260624_mircat_detector_alignment",
+    "bytes": 72768,
+    "files": 9,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 72768,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260624_t6602_ui",
+    "bytes": 15178,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 15178,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260624_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_121522_mircat_detector_alignment_ui",
+    "bytes": 43757,
+    "files": 10,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 43757,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_122052_mircat_detector_alignment_ui",
+    "bytes": 44106,
+    "files": 10,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 44106,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_123202_mircat_detector_alignment_ui",
+    "bytes": 18469,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 18469,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_123901_mircat_detector_alignment_ui",
+    "bytes": 19683,
+    "files": 6,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 19683,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_124106_mircat_detector_alignment_ui",
+    "bytes": 50232,
+    "files": 12,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 50232,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_130350_mircat_detector_alignment_ui",
+    "bytes": 19685,
+    "files": 6,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 19685,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_130825_mircat_detector_alignment_ui",
+    "bytes": 19685,
+    "files": 6,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 19685,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_133457_mircat_detector_alignment_ui",
+    "bytes": 25917,
+    "files": 9,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 25917,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_144940_polystyrene_fast_sweep",
+    "bytes": 6279,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6279,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_145159_polystyrene_fast_sweep",
+    "bytes": 6382,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6382,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_ndyag_ui",
+    "bytes": 21759,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 21759,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_polystyrene_fast_sweep",
+    "bytes": 6251,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6251,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_polystyrene_validation",
+    "bytes": 38631,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 38631,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_t6602_chb_signal_verification",
+    "bytes": 48162,
+    "files": 6,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 48162,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260701_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260702_ndyag_ui",
+    "bytes": 21760,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 21760,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260702_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_arduino_mux_diagnostic",
+    "bytes": 3030,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 3030,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_day7_workflow_interface",
+    "bytes": 49127,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 49127,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_day8_timing_calibration",
+    "bytes": 19772,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 19772,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_day8_timing_pump_fire_to_q_switch_db9_pins",
+    "bytes": 19912,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 19912,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_day8_timing_pump_fire_to_q_switch_db9_pins_retry1",
+    "bytes": 27393,
+    "files": 6,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 27393,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_day8_timing_pump_fire_to_q_switch_db9_pins_retry2",
+    "bytes": 1329362032,
+    "files": 613,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 1329362032,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_myoglobin_co_validation",
+    "bytes": 38837,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 38837,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_ndyag_ui",
+    "bytes": 21654,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 21654,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_t6602_ui",
+    "bytes": 7589,
+    "files": 1,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 7589,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260707_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260710T205217335293Z_timing_calibration_e100ae1a",
+    "bytes": 233126,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 233126,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260710_ndyag_ui",
+    "bytes": 21665,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 21665,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260714_ndyag_ui",
+    "bytes": 21665,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 21665,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_142039_mircat_sweep_scan",
+    "bytes": 20811,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20811,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_142635_mircat_sweep_scan",
+    "bytes": 20639,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20639,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_143017_mircat_sweep_scan",
+    "bytes": 20639,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20639,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_143305_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_143547_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_143753_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_144557_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_144845_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_153740_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_163436_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_163542_mircat_sweep_scan",
+    "bytes": 9645,
+    "files": 1,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 9645,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_163717_mircat_sweep_scan",
+    "bytes": 20711,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20711,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_164111_mircat_sweep_scan",
+    "bytes": 20711,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20711,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_164849_mircat_sweep_scan",
+    "bytes": 20639,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20639,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_165703_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_170405_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_171256_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_171529_mircat_sweep_scan",
+    "bytes": 24649,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 24649,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_171915_mircat_sweep_scan",
+    "bytes": 27067,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 27067,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_172130_mircat_sweep_scan",
+    "bytes": 27067,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 27067,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_172341_mircat_sweep_scan",
+    "bytes": 27067,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 27067,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_172518_mircat_sweep_scan",
+    "bytes": 27067,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 27067,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_172732_mircat_sweep_scan",
+    "bytes": 24649,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 24649,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_173328_mircat_sweep_scan",
+    "bytes": 24695,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 24695,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_173537_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_173815_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_174044_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_174245_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_181141_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_181236_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_181341_mircat_sweep_scan",
+    "bytes": 20640,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20640,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_t6602_ui",
+    "bytes": 29987,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 29987,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260717_workflow_state_machine",
+    "bytes": 23132,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 23132,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260720_day7_workflow_interface",
+    "bytes": 41634,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 41634,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260720_myoglobin_co_validation",
+    "bytes": 38863,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 38863,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260720_workflow_state_machine",
+    "bytes": 23132,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 23132,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260722_workflow_state_machine",
+    "bytes": 23132,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 23132,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260723_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260724_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_123944_mircat_sweep_scan",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_123946_mircat_sweep_scan",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_132135_mircat_dio_mapping_gui",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_132220_mircat_dio_mapping_gui",
+    "bytes": 43668,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 43668,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_132330_mircat_dio_mapping_gui",
+    "bytes": 31130532,
+    "files": 7,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 31130532,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_132516_mircat_dio_mapping_gui_opposite",
+    "bytes": 31187448,
+    "files": 7,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 31187448,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_135103_water_vapor_side_spectrum",
+    "bytes": 47355,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 47355,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_135249_water_vapor_side_spectrum",
+    "bytes": 54937309,
+    "files": 9,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 54937309,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_135522_water_vapor_side_spectrum_retake",
+    "bytes": 54019518,
+    "files": 7,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 54019518,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_135722_water_vapor_side_spectrum_retake_complete",
+    "bytes": 44537,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 44537,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_135757_water_vapor_side_spectrum_retake_complete",
+    "bytes": 54247180,
+    "files": 7,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 54247180,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_135909_water_vapor_side_spectrum_final_retake",
+    "bytes": 58354048,
+    "files": 11,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 58354048,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_144626_polystyrene_side_spectrum",
+    "bytes": 68100285,
+    "files": 16,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 68100285,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_t6602_ui",
+    "bytes": 9455,
+    "files": 1,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 9455,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260727_workflow_state_machine",
+    "bytes": 23042,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 23042,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260729_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260819_ndyag_ui",
+    "bytes": 26998,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 26998,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260819_workflow_state_machine",
+    "bytes": 22764,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 22764,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260820_ndyag_ui",
+    "bytes": 26998,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 26998,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260821_ndyag_ui",
+    "bytes": 27000,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 27000,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260826_ndyag_ui",
+    "bytes": 27000,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 27000,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260826_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260827_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260831_102814_mircat_detector_alignment_ui",
+    "bytes": 76818,
+    "files": 12,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 76818,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260831_103014_mircat_detector_alignment_ui",
+    "bytes": 76847,
+    "files": 12,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 76847,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260831_103306_mircat_detector_alignment_ui",
+    "bytes": 76815,
+    "files": 12,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 76815,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260831_103810_mircat_detector_alignment_ui",
+    "bytes": 76802,
+    "files": 12,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 76802,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260831_111108_mircat_detector_alignment_ui",
+    "bytes": 42524,
+    "files": 9,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 42524,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260831_175811_mircat_detector_alignment_ui",
+    "bytes": 76854,
+    "files": 12,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 76854,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260831_182112_mircat_detector_alignment_ui",
+    "bytes": 76828,
+    "files": 12,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 76828,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260831_192404_mircat_detector_alignment_ui",
+    "bytes": 76825,
+    "files": 12,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 76825,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260831_workflow_state_machine",
+    "bytes": 22798,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 22798,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260901_ndyag_ui",
+    "bytes": 26999,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 26999,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260901_workflow_state_machine",
+    "bytes": 22786,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 22786,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260902_workflow_state_machine",
+    "bytes": 22798,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 22798,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260903_workflow_state_machine",
+    "bytes": 22800,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 22800,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260905_workflow_state_machine",
+    "bytes": 0,
+    "files": 0,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260906_ndyag_ui",
+    "bytes": 31186,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 31186,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260906_workflow_state_machine",
+    "bytes": 24660,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 24660,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/20260907_workflow_state_machine",
+    "bytes": 24660,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 24660,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/air_scan_20260902T234406_925881Z",
+    "bytes": 75658,
+    "files": 19,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 75658,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/air_scan_detector_orientation_retest_20260903T214018_1110992Z",
+    "bytes": 900827839,
+    "files": 44,
+    "planned_deleted_bytes": 9437,
+    "remaining_bytes": 900818402,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/air_scan_post_alignment_repeat_20260903T214445_6204197Z",
+    "bytes": 900975054,
+    "files": 43,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 900975054,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/air_scan_ui_validation_20260902T234213_553349Z",
+    "bytes": 62064,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 62064,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/All Stop",
+    "bytes": 4623,
+    "files": 7,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 4623,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/authorized_air_scan_after_detector_recovery_20260903T213002_3743882Z",
+    "bytes": 902048028,
+    "files": 70,
+    "planned_deleted_bytes": 1863227,
+    "remaining_bytes": 900184801,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/authorized_consecutive_air_pair_20260903T230900_5823500Z",
+    "bytes": 1805727990,
+    "files": 84,
+    "planned_deleted_bytes": 7508,
+    "remaining_bytes": 1805720482,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/authorized_mbco_phase_qualification_pair_20260904T000245_9725934Z",
+    "bytes": 52098171,
+    "files": 94,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 52098171,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/authorized_mbco_phase_reconstruction_20260904T002152_3132654Z",
+    "bytes": 44091870407,
+    "files": 7597,
+    "planned_deleted_bytes": 17023709085,
+    "remaining_bytes": 27068161322,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/authorized_preliminary_mbco_100cm_2cmps_repeat_20260903T234012_8651278Z",
+    "bytes": 1166716633,
+    "files": 52,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 1166716633,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/authorized_preliminary_mbco_100cm_scan_20260903T232625_9651341Z",
+    "bytes": 231845610,
+    "files": 49,
+    "planned_deleted_bytes": 21367,
+    "remaining_bytes": 231824243,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/configured_workflows",
+    "bytes": 13041,
+    "files": 16,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 13041,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/consecutive_ddg_fast_timing_qualification_20260904T011446_8616440Z",
+    "bytes": 12232924,
+    "files": 17,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 12232924,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/consecutive_ddg_probe_gate_qualification_20260904T020222_2599500Z",
+    "bytes": 77914085,
+    "files": 18,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 77914085,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/consecutive_ddg_production_path_qualification_20260904T011033_8226044Z",
+    "bytes": 12391516,
+    "files": 19,
+    "planned_deleted_bytes": 10795,
+    "remaining_bytes": 12380721,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/consecutive_ddg_pumped_transition_qualification_20260904T011845_7268738Z",
+    "bytes": 21280080,
+    "files": 18,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 21280080,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/consecutive_ddg_sweep_qualification_20260904T010332_2383400Z",
+    "bytes": 28322587,
+    "files": 17,
+    "planned_deleted_bytes": 16440,
+    "remaining_bytes": 28306147,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/day8_prehardware_audit",
+    "bytes": 20980,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 20980,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/detector_power_cycle_confirmation_20260903T212437_0377633Z",
+    "bytes": 249673,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 249673,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/direct_air_1000ma_three_modes_20260903T024905_977175Z",
+    "bytes": 2689603310,
+    "files": 112,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 2689603310,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/direct_air_after_powercycle_20260903T023954_119062Z",
+    "bytes": 896316612,
+    "files": 35,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 896316612,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/direct_air_external_pulse_20260903T024207_749523Z",
+    "bytes": 1865572,
+    "files": 25,
+    "planned_deleted_bytes": 1738450,
+    "remaining_bytes": 127122,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/direct_air_external_pulse_tec_settle_20260903T024327_956949Z",
+    "bytes": 896332056,
+    "files": 35,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 896332056,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/direct_air_repeat_20260903T023625_729904Z",
+    "bytes": 896211107,
+    "files": 35,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 896211107,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/direct_air_reset_explicit_on_three_modes_20260903T025720_147056Z",
+    "bytes": 2691634434,
+    "files": 158,
+    "planned_deleted_bytes": 1685288,
+    "remaining_bytes": 2689949146,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/exploratory_air_checkout_20260902T224505_935642Z",
+    "bytes": 4473283079,
+    "files": 234,
+    "planned_deleted_bytes": 7490086,
+    "remaining_bytes": 4465792993,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/exploratory_mbco_readiness_20260902T224148_508839Z",
+    "bytes": 38426,
+    "files": 9,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 38426,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/fixed_1850_three_modes_20260903T175753_281072Z",
+    "bytes": 67634262,
+    "files": 89,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 67634262,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/fixed_1850_three_modes_retest_20260903T185413_4414657Z",
+    "bytes": 67836560,
+    "files": 92,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 67836560,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/hf2li_2v_range_20260903T000908_565521Z",
+    "bytes": 12970,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 12970,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/hf2li_max_range_20260903T000839_573415Z",
+    "bytes": 12975,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 12975,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/hf2_1842k_verification_20260907",
+    "bytes": 580092503,
+    "files": 174,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 580092503,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/hf2_deferred_capacity_20260907",
+    "bytes": 12275545739,
+    "files": 10030,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 12275545739,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/high_sensitivity_phase_coverage_qualification_20260904T030350_8378840Z",
+    "bytes": 255382,
+    "files": 17,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 255382,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/logs",
+    "bytes": 229785,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 229785,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_2v_ui_20260903T001031_402317Z",
+    "bytes": 0,
+    "files": 2,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 0,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_explicit_gate_fix_20260903T004047_383503Z",
+    "bytes": 753,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 753,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_external_mode_checks_20260903T022515_644760Z",
+    "bytes": 440,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 440,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_gui_crash_fix_20260903T000404_244227Z",
+    "bytes": 146272,
+    "files": 7,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 146272,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_scan_feedback_validation_20260903T000001_356505Z",
+    "bytes": 86708,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 86708,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_scan_readonly_diagnostic_20260902T235828_832340Z",
+    "bytes": 1274,
+    "files": 1,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 1274,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_sweep_20260902T235457_288595Z",
+    "bytes": 76861,
+    "files": 20,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 76861,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_sweep_20260903T000141_198237Z",
+    "bytes": 77082,
+    "files": 20,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 77082,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_sweep_20260903T000501_193871Z",
+    "bytes": 77027,
+    "files": 20,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 77027,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_sweep_20260903T000615_006057Z",
+    "bytes": 77026,
+    "files": 20,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 77026,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_sweep_20260903T003041_531945Z",
+    "bytes": 897495150,
+    "files": 31,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 897495150,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_sweep_20260903T003520_142287Z",
+    "bytes": 897849514,
+    "files": 31,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 897849514,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_sweep_20260903T020532_909748Z",
+    "bytes": 897606881,
+    "files": 34,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 897606881,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_sweep_20260903T023336_016356Z",
+    "bytes": 897457840,
+    "files": 37,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 897457840,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_sweep_ui_validation_20260902T235235_385170Z",
+    "bytes": 92950,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 92950,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/mircat_ui_script_comparison_20260903T020924_868381Z",
+    "bytes": 2980,
+    "files": 1,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 2980,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/offline_etalon_phase_reanalysis_20260903T230414_3082045Z",
+    "bytes": 1196972,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 1196972,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/offline_etalon_phase_reanalysis_v2_20260903T230619_5930905Z",
+    "bytes": 1197312,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 1197312,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/Phase Scan",
+    "bytes": 2369582,
+    "files": 51,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 2369582,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/red_alignment_20260903T182514_301325Z",
+    "bytes": 4833,
+    "files": 6,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 4833,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/red_alignment_20260903T213818_1499545Z",
+    "bytes": 4834,
+    "files": 6,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 4834,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/red_alignment_20260903T214327_0261109Z",
+    "bytes": 4834,
+    "files": 6,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 4834,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/side_spectrum_daq_probe",
+    "bytes": 93884,
+    "files": 6,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 93884,
+    "disposition": "KEEP_DOCUMENTATION_REVIEW_RELEVANCE",
+    "reason": "Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review."
+  },
+  {
+    "path": "evidence/experiments/runs/single_detector_ftir_20260906T203723_580408Z",
+    "bytes": 1110197185,
+    "files": 741,
+    "planned_deleted_bytes": 43092,
+    "remaining_bytes": 1110154093,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/single_rearm_ddg_qualification_20260904T020735_1948699Z",
+    "bytes": 76937595,
+    "files": 19,
+    "planned_deleted_bytes": 7894,
+    "remaining_bytes": 76929701,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/single_rearm_ordered_ddg_qualification_20260904T021008_3633770Z",
+    "bytes": 80486249,
+    "files": 18,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 80486249,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/single_rearm_prompt_ddg_qualification_20260904T021220_5897745Z",
+    "bytes": 19184380,
+    "files": 24,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 19184380,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "evidence/experiments/runs/single_sweep_recovery_qualification_20260904T020501_7329946Z",
+    "bytes": 9198654,
+    "files": 21,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 9198654,
+    "disposition": "HUMAN_REVIEW",
+    "reason": "Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/AR-01",
+    "bytes": 8128,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 8128,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/ATT-01",
+    "bytes": 15222,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 15222,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/CH-00",
+    "bytes": 51877,
+    "files": 27,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 51877,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/CH-00.1",
+    "bytes": 35469,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 35469,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/CL-01",
+    "bytes": 5868,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5868,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/DET-01",
+    "bytes": 5177,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5177,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/DET-02",
+    "bytes": 6516,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6516,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/DET-03",
+    "bytes": 6464,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6464,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/DET-04",
+    "bytes": 7514,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 7514,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/E2E-01",
+    "bytes": 6072,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6072,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/E2E-CH",
+    "bytes": 6528,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6528,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/FE-01",
+    "bytes": 7039,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 7039,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/HF-01",
+    "bytes": 2683009865,
+    "files": 567,
+    "planned_deleted_bytes": 296216740,
+    "remaining_bytes": 2386793125,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/HF-01.1",
+    "bytes": 7823,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 7823,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/HF-02",
+    "bytes": 6705,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6705,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/IR-01",
+    "bytes": 5639,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5639,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/MC-01",
+    "bytes": 4143980,
+    "files": 113,
+    "planned_deleted_bytes": 55773,
+    "remaining_bytes": 4088207,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/MD-01",
+    "bytes": 6193,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6193,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/MS-01",
+    "bytes": 289343163,
+    "files": 238,
+    "planned_deleted_bytes": 16787,
+    "remaining_bytes": 289326376,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/MS-02",
+    "bytes": 286824398,
+    "files": 231,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 286824398,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/MS-02.1",
+    "bytes": 7979,
+    "files": 3,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 7979,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/MSW-01",
+    "bytes": 7472,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 7472,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/OG-01",
+    "bytes": 5397,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5397,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/OM-01",
+    "bytes": 192455,
+    "files": 51,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 192455,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/OP-01",
+    "bytes": 201413,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 201413,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/OV-01",
+    "bytes": 5080,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5080,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/P0",
+    "bytes": 67453,
+    "files": 13,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 67453,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/PB-01",
+    "bytes": 5362,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5362,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/PB-02",
+    "bytes": 7398,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 7398,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/PF-00",
+    "bytes": 4051,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 4051,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/PF-01",
+    "bytes": 5870,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5870,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/PROM-01",
+    "bytes": 4490,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 4490,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/PROM-CH",
+    "bytes": 3851,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 3851,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/PT-01",
+    "bytes": 1372667879,
+    "files": 662,
+    "planned_deleted_bytes": 5267,
+    "remaining_bytes": 1372662612,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/QB-01",
+    "bytes": 6624,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6624,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/RP-01",
+    "bytes": 5408,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5408,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/RPT-01",
+    "bytes": 6342,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 6342,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/RPT-CH",
+    "bytes": 4546,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 4546,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/S0",
+    "bytes": 192873,
+    "files": 14,
+    "planned_deleted_bytes": 26677,
+    "remaining_bytes": 166196,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/SC-01",
+    "bytes": 5227,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5227,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/SP-01",
+    "bytes": 4309,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 4309,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/SP-02",
+    "bytes": 5542,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 5542,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/SV-01",
+    "bytes": 4053,
+    "files": 4,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 4053,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/SV-02A",
+    "bytes": 8910,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 8910,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/SV-02B",
+    "bytes": 95841,
+    "files": 5,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 95841,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/T1-01",
+    "bytes": 1975977152,
+    "files": 3061,
+    "planned_deleted_bytes": 51430088,
+    "remaining_bytes": 1924547064,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/T2-01",
+    "bytes": 940534089,
+    "files": 1903,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 940534089,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/TR-01",
+    "bytes": 53756,
+    "files": 22,
+    "planned_deleted_bytes": 0,
+    "remaining_bytes": 53756,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  },
+  {
+    "path": "campaigns/instrument_readiness_001/phases/WM-01",
+    "bytes": 100182,
+    "files": 44,
+    "planned_deleted_bytes": 24172,
+    "remaining_bytes": 76010,
+    "disposition": "KEEP_THESIS_CALIBRATION_OR_PHASE_DOCUMENTATION",
+    "reason": "Registered readiness phase and its accepted calibration/procedure support; selected failed payload removals logged separately."
+  }
+]

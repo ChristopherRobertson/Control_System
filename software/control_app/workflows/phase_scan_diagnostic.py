@@ -109,7 +109,7 @@ def capture_inhibited_diagnostic(root: Path, *, cancel: Event | None = None,
                 chunks, capture_errors = [], []
                 after = {}
                 try:
-                    hf.start_acquisition(demodulators=(0, 2, 3))
+                    hf.start_acquisition(demodulators=(0, 2))
                     chunks.append(hf.read_acquisition(0.05))
                     for unit in units:
                         check_cancel()

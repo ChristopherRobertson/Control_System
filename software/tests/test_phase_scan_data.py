@@ -5,7 +5,8 @@ import pytest
 
 from control_app.workflows.phase_scan import PhaseScanSettings, build_phase_scan_plan
 from control_app.workflows.phase_scan_data import (
-    ScanStore, Spectrum, absorbance, interpolate_supported, save_native, load_native, reconstruct,
+    ANALYSIS_VERSION, DETECTOR_INPUT, SINGLE_DETECTOR_MODE, ScanStore, Spectrum, absorbance,
+    acquisition_settings, interpolate_supported, save_native, load_native, reconstruct, transmission,
 )
 
 
@@ -20,6 +21,47 @@ def spectrum(delay=0, *, background=False, offset=0):
 def plan(repetitions=1):
     return build_phase_scan_plan(PhaseScanSettings(start_wavenumber_cm1=2000, stop_wavenumber_cm1=1998, scan_speed_cm1_s=1000,
                                   phase_delay_us=500, rest_period_s=.3, repetitions=repetitions))
+
+
+def single_spectrum(delay=0, *, background=False, offset=0):
+    result = spectrum(delay, background=background, offset=offset)
+    result.reference_r = None
+    result.metadata.update(detector_mode=SINGLE_DETECTOR_MODE, detector_input=DETECTOR_INPUT,
+                           record_role="buffer_blank" if background else "pumped_sample")
+    return result
+
+
+def test_controller_marker_basis_is_explicit_provisional_and_reconstructable():
+    p = plan()
+    background = single_spectrum(background=True)
+    records = [(p.event_at(i), single_spectrum((p.event_at(i).phase_delay_us or 0)*1e-6))
+               for i in range(p.total_scans)]
+    for item in [background, *(record for _, record in records)]:
+        item.metadata.update(wavenumber_basis="controller_markers", provisional=True,
+                             marker_identity_basis={"source": "MIRcatSDK_GetWlTrigChanParams", "channel": 1})
+    result = reconstruct(records, background, p)
+    assert result["provisional"]
+    assert result["wavenumber_bases"] == ["controller_markers"]
+    assert np.isfinite(result["absorbance"]).all()
+    assert any("independent absolute wavelength calibration" in line for line in result["limitations"])
+    background.metadata["provisional"] = False
+    with pytest.raises(ValueError, match="provisional"):
+        background.validate()
+    background.metadata["provisional"] = True
+    background.metadata.pop("marker_identity_basis")
+    with pytest.raises(ValueError, match="readback provenance"):
+        background.validate()
+
+
+@pytest.mark.parametrize("sample_basis", ["measured", "nominal_sweep_bounds"])
+def test_blank_ratio_rejects_mixed_controller_and_other_coordinate_bases(sample_basis):
+    background = single_spectrum(background=True)
+    background.metadata.update(wavenumber_basis="controller_markers", provisional=True,
+                               marker_identity_basis={"source": "MIRcatSDK_GetWlTrigChanParams"})
+    sample = single_spectrum()
+    sample.metadata.update(wavenumber_basis=sample_basis, provisional=sample_basis != "measured")
+    with pytest.raises(ValueError, match="wavenumber bases must match"):
+        transmission(sample, background)
 
 
 def test_native_roundtrip_keeps_uint64_ticks_and_unknown_nested_fields(tmp_path):
@@ -200,3 +242,155 @@ def test_marker_bearing_sweep_selection_preserves_ancillary_process_interval():
     assert markers.tolist() == ticks[[55, 65, 75]].tolist()
     assert intervals == [(int(ticks[10]), int(ticks[30])), selected]
     assert ancillary == [(int(ticks[10]), int(ticks[30]))]
+
+
+def test_single_detector_uses_prior_blank_intensity_and_keeps_native_arrays(tmp_path):
+    wn = np.array([2000., 1999., 1998.])
+    sample = single_spectrum()
+    expected = np.array([-.02, .12, .08])
+    blank = single_spectrum(background=True)
+    blank.sample_r = np.array([4., 2., 3.])
+    sample.sample_r = blank.sample_r * 10**(-expected)
+    source = sample.sample_r.copy()
+    np.testing.assert_allclose(transmission(sample, blank), 10**(-expected))
+    np.testing.assert_allclose(absorbance(sample, blank), expected, atol=1e-14)
+    np.testing.assert_array_equal(sample.sample_r, source)
+    np.testing.assert_array_equal(sample.wavenumber_cm1, wn)
+    np.testing.assert_array_equal(blank.normalization_signal(), blank.sample_r)
+    with pytest.raises(ValueError, match="separate buffer blank"):
+        sample.ratio()
+    path = tmp_path / "single.npz"
+    save_native(path, sample.to_dict())
+    restored = Spectrum.from_dict(load_native(path))
+    assert restored.reference_r is None
+    assert restored.detector_mode == SINGLE_DETECTOR_MODE
+    np.testing.assert_array_equal(restored.sample_r, source)
+
+
+def test_single_detector_blank_interpolation_keeps_invalid_points_and_no_extrapolation():
+    blank = single_spectrum(background=True)
+    blank.wavenumber_cm1 = np.array([2000., 1998., 1996.])
+    blank.sample_r = np.array([4., 2., 6.])
+    sample = single_spectrum()
+    sample.wavenumber_cm1 = np.array([2001., 1999., 1997.])
+    sample.sample_r = np.array([1., 1.5, 1.])
+    np.testing.assert_allclose(transmission(sample, blank), [np.nan, .5, .25], equal_nan=True)
+    blank.sample_r[1] = 0
+    assert np.isnan(absorbance(sample, blank)).all()
+    blank.sample_r[1] = np.nan
+    assert np.isnan(absorbance(sample, blank)).all()
+
+
+@pytest.mark.parametrize("defect", ["dual", "baseline", "pumped", "acquisition_settings", "hf2li_detector_settings", "hf2li_device"])
+def test_single_detector_requires_matching_unpumped_buffer_blank(defect):
+    sample, blank = single_spectrum(), single_spectrum(background=True)
+    if defect == "dual":
+        blank = spectrum(background=True)
+    elif defect == "baseline":
+        blank.metadata["record_role"] = "unpumped_sample_baseline"
+    elif defect == "pumped":
+        blank.pump_time_s = 10.
+    else:
+        sample.metadata[defect] = {"value": 1}
+        blank.metadata[defect] = {"value": 2}
+    with pytest.raises(ValueError, match="match|unpumped buffer blank"):
+        absorbance(sample, blank)
+
+
+def test_single_detector_processing_uses_runner_tolerance_for_hf2li_readbacks():
+    sample, blank = single_spectrum(), single_spectrum(background=True)
+    sample.metadata["hf2li_detector_settings"] = {"/dev/demods/0/rate": {"value": 1000.0002}}
+    blank.metadata["hf2li_detector_settings"] = {"/dev/demods/0/rate": {"value": 1000.}}
+    np.testing.assert_allclose(absorbance(sample, blank), [0, .03, .06], atol=1e-12)
+    blank.metadata["hf2li_detector_settings"]["/dev/demods/0/rate"]["value"] = 900.
+    with pytest.raises(ValueError, match="hf2li_detector_settings must match"):
+        absorbance(sample, blank)
+
+
+def test_single_detector_rejects_fabricated_reference_and_undeclared_mode():
+    sample = single_spectrum()
+    sample.reference_r = np.ones(3)
+    with pytest.raises(ValueError, match="CH2 reference"):
+        sample.validate()
+    sample.reference_r = None
+    sample.metadata.pop("detector_mode")
+    with pytest.raises(ValueError, match="actual reference"):
+        sample.validate()
+
+
+def test_single_detector_settings_include_input_mode_and_preserve_blank_compatibility():
+    settings = PhaseScanSettings()
+    metadata = acquisition_settings(settings)
+    assert metadata["detector_mode"] == SINGLE_DETECTOR_MODE
+    assert metadata["detector_input"] == DETECTOR_INPUT
+    assert metadata["hf2_preset"] == "exploratory_phase_scan_single_detector"
+    from dataclasses import replace
+    assert acquisition_settings(replace(settings, phase_delay_us=20, repetitions=3)) == metadata
+    assert acquisition_settings(replace(settings, scan_speed_cm1_s=settings.scan_speed_cm1_s / 2)) != metadata
+
+
+def test_single_detector_reconstruction_uses_buffer_blank_keeps_unpumped_baseline_separate():
+    p = plan(2)
+    records = []
+    for i in range(p.total_scans):
+        event = p.event_at(i)
+        value = single_spectrum((event.phase_delay_us or 0)*1e-6, offset=.02*(event.repetition-1))
+        if not event.pump_enabled:
+            value.metadata["record_role"] = "unpumped_sample_baseline"
+            value.pump_time_s = None
+            value.sample_r[:] = 1e-9  # Baseline cannot alter the ratio denominator.
+        records.append((event, value))
+    blank = single_spectrum(background=True)
+    result = reconstruct(records, blank, p)
+    expected = (2000-result["wavenumber_cm1"])[None, :]*.01 + result["time_s"][:, None]*20 + .01
+    np.testing.assert_allclose(result["absorbance"], expected, atol=1e-12)
+    assert result["analysis_version"] == ANALYSIS_VERSION
+    assert result["detector_mode"] == SINGLE_DETECTOR_MODE
+    assert result["normalization"] == "-log10(CH1_sample / prior_CH1_buffer_blank)"
+    assert any("drift" in limitation for limitation in result["limitations"])
+    assert np.all(result["repetition_count"] == 2)
+
+
+def test_single_detector_native_marker_mapping_needs_no_ch2_and_retains_large_ticks():
+    from control_app.workflows.phase_scan_native import marker_spectrum
+    base = 2**60
+    ticks = np.array([base+5+i*10 for i in range(5)], dtype=np.uint64)
+    stream = {"timestamp": ticks, "x": np.ones(5), "y": np.zeros(5),
+              "dio": np.zeros(5, dtype=np.uint32), "auxin0": np.zeros(5), "auxin1": np.zeros(5)}
+    record = {"optical_valid": True, "clockbase_hz": 10000, "detector_mode": SINGLE_DETECTOR_MODE,
+              "detector_input": DETECTOR_INPUT, "native_chunks": [{"data": {"/dev/demods/0/sample": stream}}]}
+    args = {"marker_ticks": np.array([base, base+40], dtype=np.uint64),
+            "marker_wavenumbers_cm1": [2000, 1900], "pump_tick": base+10}
+    actual = marker_spectrum(record, **args)
+    assert actual.reference_r is None
+    assert actual.metadata["reference_demodulator"] is None
+    assert actual.metadata["detector_input"] == DETECTOR_INPUT
+    np.testing.assert_allclose(actual.wavenumber_cm1, [1987.5, 1962.5, 1937.5, 1912.5])
+    np.testing.assert_allclose(actual.sample_time_s-actual.pump_time_s, [-.0005,.0005,.0015,.0025])
+    with pytest.raises(ValueError, match="CH1 demodulator 0"):
+        marker_spectrum(record, sample_demod=3, **args)
+
+
+def test_single_detector_sweep_decode_preserves_timing_without_reference_stream():
+    from control_app.workflows.phase_scan_native import spectrum_from_sweep
+    base = 2**60
+    ticks = np.arange(100, dtype=np.uint64) + np.uint64(base)
+    dio = np.zeros(100, dtype=np.uint32)
+    dio[20:80] |= np.uint32(1 << 21)
+    for start in (30, 50, 70):
+        dio[start:start+2] |= np.uint32(1 << 22)
+    def stream(native_ticks, signal, bits):
+        return {"timestamp": native_ticks, "x": signal, "y": np.zeros(len(native_ticks)),
+                "dio": bits, "auxin0": np.zeros(len(native_ticks)), "auxin1": np.zeros(len(native_ticks))}
+    record = {"optical_valid": True, "clockbase_hz": 10000, "detector_mode": SINGLE_DETECTOR_MODE,
+              "record_role": "buffer_blank", "native_chunks": [{"data": {
+                  "/dev/demods/0/sample": stream(ticks[[35, 45, 55, 65]], np.array([2., 3., 4., 5.]), np.zeros(4, dtype=np.uint32)),
+                  "/dev/demods/2/sample": stream(ticks, np.zeros(100), dio)}}]}
+    actual = spectrum_from_sweep(record, start_cm1=2000, stop_cm1=1998,
+                                 targets_cm1=[2000, 1999, 1998], origin_tick=base)
+    assert actual.reference_r is None
+    assert actual.metadata["record_role"] == "buffer_blank"
+    assert actual.metadata["wavenumber_basis"] == "measured"
+    assert actual.metadata["timestamp_origin_ticks"] == base
+    np.testing.assert_allclose(actual.wavenumber_cm1, [1999.75, 1999.25, 1998.75, 1998.25])
+    np.testing.assert_array_equal(actual.normalization_signal(), [2., 3., 4., 5.])

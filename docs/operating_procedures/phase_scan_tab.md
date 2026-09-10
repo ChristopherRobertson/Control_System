@@ -1,85 +1,274 @@
 # Phase Scan tab
 
-The **Phase Scan** tab develops and runs finite room-temperature MbCO single-scan
-phase-delay acquisitions. Planning controls and **Save Plan** do not access
-hardware. **Capture Background**, **Capture Test Scan (pump OFF)**,
-**Capture Inhibited Diagnostic**, **Start Scan**, and **Abort Scan** use the
-connected acquisition workflow and its readiness checks. Output remains labeled
-`EXPLORATORY_PROOF_OF_CONCEPT` and not for publication; software readiness does
-not promote scientific evidence.
+For simultaneous sample/reference detection, use the separate
+[Dual-Detector Phase Scan tab](dual_detector_phase_scan_tab.md). The workflow
+below and saved single-detector runs retain their existing meaning.
 
-## Wiring and scheduling
+Use **Phase Scan** for the regular single-detector swept-wavenumber phase
+experiment. The app provides a complete matching buffer-blank sequence,
+preliminary unpumped sample review, explicit pumped acquisition, and quantitative
+reconstruction. The 48-scan diagnostics and fixed-wavenumber fast measurements
+are separate experiments and are not actions in this tab.
 
-Use the [default wiring](../../instrument/default_wiring_state.md). T660-1 A
-supplies HF2LI DIO0, B supplies MIRcat TRIG IN, and C supplies T660-2 TRIG IN.
-T660-2 runs the preloaded event frames: A FIRE, B Q-switch, C MIRcat Process
-Trigger. Both D outputs and HF2LI DIO1 are unwired. T660-2 CLOCK OUT distributes
-the separate 10 MHz reference to T660-1 and HF2LI.
+Use **HF2LI CH1 SIG IN +** for both buffer and sample. Keep the detector, cell
+geometry, optical alignment and any diagnostic tee loading consistent between
+them. Configuration checks cannot detect a physical optical-path change. See
+[default wiring](../../instrument/default_wiring_state.md) for the fixed wiring.
+The fixed probe recipe uses 2 MHz external triggering with 150 ns TTL pulses;
+MIRcat internal acceptance settings are 2.1 MHz and 142 ns. These settings are
+displayed for reference and are not normal editable experiment controls.
 
-Sample feeds HF2LI Signal 1 In (+)/PicoScope CHA and reference feeds Signal 2
-In (+)/PicoScope CHB through separate adapter/tee branches. Both receivers stay
-connected. MIRcat DB9 pin 2 Sweep Active feeds HF2LI DIO21 and PicoScope EXT;
-DIO17 records the synchronized electrical pump event. Chemical time zero still
-requires the measured electrical-to-optical correction and uncertainty.
+## App-only acquisition
 
-The complete timing table is prepared before execution. One unpumped baseline
-precedes the nominal phase series; repetitions repeat that phase series, not
-the baseline. Per-frame channel OFF states suppress pump outputs in baseline
-and inactive padding frames. Train count zero selects no additional pulses
-and does not disable an enabled channel. Physical padding frames and logical scan counts
-are recorded separately. Host polling does not set the frame or pulse times.
+1. Open **Phase Scan** and choose the save location through the app. Override
+   dropdowns are available immediately from saved device choices (or the
+   retained experiment settings on first use). The tab automatically checks
+   connected HF2LI settings and installed MIRcat tuning ranges, then restores
+   settings. You can continue editing while this check runs. It does not enable
+   laser emission or acquire an optical measurement. Acquisition waits for a
+   successful check; **Check connected device** retries a failed check or checks
+   a newly connected device. No refresh action is needed to view the choices.
+2. Set the pump rate, start/stop wavenumber, scan speed and phase-delay spacing.
+   The defaults are **10 Hz, 2000 → 1900 cm⁻¹, 10,000 cm⁻¹/s and 50 µs**.
+   Inspect the derived scan count, duration, timing coverage, automatic HF2LI
+   settings and estimated resolution. Resolve any reported conflict before
+   proceeding. **Save plan…** records the preview without starting hardware.
+   **Load plan…** restores editable settings and overrides, recalculating the
+   experiment using current device capabilities.
+3. Load the buffer blank and select **1 · Acquire buffer blank sequence**.
+   Confirm the app's probe acquisition action. Every pump output is inhibited.
+   The blank has the same complete signed scan schedule, cadence, trajectory,
+   probe and detector configuration as the upcoming sample sequence. Alternatively,
+   use **Select saved buffer blank…** to select a compatible completed run.
+4. Load the sample and select **2 · Acquire preliminary sample (pump OFF)**.
+   Review the **Preliminary spectral review** view and select **I reviewed the
+   preliminary unpumped spectrum**. This is one unpumped sample scan matched to
+   blank sequence position zero; it remains a separate saved acquisition.
+5. Select **3 · Start pumped phase scan** and explicitly confirm the pumped
+   acquisition. Reviewing the preliminary spectrum does not itself enable the
+   pump. The continuous sample sequence first captures its own unpumped baseline,
+   then all signed phase steps. Resolved HF2LI settings and effective instrument
+   readbacks must still match the blank before acquisition starts.
+6. Inspect **Reconstructed phase-scan data**. Select absolute absorbance or its
+   change from the unpumped sample baseline; rotate, zoom, use the toolbar Home icon, and
+   inspect linked spectral/time slices and cursor values. Use **Export quantitative
+   data…** or the toolbar Save icon as needed. The arrow-shaped **Mouse selection**
+   toolbar action exits pan/zoom. Sliders are labeled by the coordinate they change:
+   **Time** selects the spectrum; **Wavenumber** selects the time trace.
+   Enter a time in ms or a wavenumber in cm⁻¹ beside its slider and press Enter
+   to select the nearest reconstructed coordinate. The field updates to the
+   actual selected coordinate; missing data stay missing and no interpolation
+   is added. Sliders and mouse selection update the numeric fields too.
+   **Load phase-scan run…** also opens
+   existing reconstructions without accessing hardware.
 
-## Controls and derived values
+**Abort acquisition** stops timing and emission, retains available native data,
+and attempts every restoration and safe-idle action. Wait for the completion or
+failure message. An abort, partial acquisition, integrity failure or unverified
+restoration does not become a compatible blank or a completed quantitative run.
+There are no automatic optical retries.
 
-- **T660-1 Trigger Rate** is fixed at 2 MHz for this implementation. MIRcat
-  internal acceptance settings and the external trigger train are separate;
-  the former does not establish the optical opportunity rate.
-- **Start/Stop Wavenumber** and **Scan Speed** define nominal duration. Live
-  acquisition needs calibrated trajectory bounds and observed timing.
-- **Phase Delay** sets the nominal phase increment. **Before Pump** and
-  **After Pump** define the reconstruction window. The calibrated trajectory
-  determines the signed hardware phase range; it is not limited to `0..T`.
-- **Frame Period** is fixed at 0.3 s, from a 600000 predivider of the 2 MHz
-  event-input stream. This is a workflow-specific bound, not a general
-  experiment cadence or proof of sample recovery.
-- **Repetitions** repeats the complete phase series while retaining native
-  identities. The preview budgets frame timing; initialization, returning,
-  tuning, settling, and final-output completion can extend elapsed time.
+**Sequence duration** covers the hardware scan sequence. Before it starts, the
+app programs every timing-table entry and prepares the instruments; large tables
+can take several minutes to load. The status line reports timing-table progress,
+instrument preparation, scanning, retrieval and saving separately. For example,
+1,402 scans at 10 Hz require about 2 minutes 20 seconds of scanning, in addition
+to preparation and final processing. A stopped run can contain partial native
+measurements even when its completed scan count is zero.
 
-A phase increment is not temporal resolution. Numeric pulse/duty limits and a
-valid preview do not establish installed source, detector, or sample suitability.
-**Save Plan** exports the versioned settings, counts, sequence, and planning
-status. Changing settings invalidates the configured background when the
-acquisition contract requires it.
+## Parameters and combination limits
 
-## Acquisition and records
+The editable pump rate is positive and no greater than 10 Hz. Its period must
+be exactly representable by the T660's integer predivider of the 2 MHz source
+clock; 10, 5, 2 and 1 Hz are examples. The app rejects an unrepresentable cadence
+instead of rounding it. Start and stop are each limited to 1650–2050 cm⁻¹, must
+differ, and must fit inside one installed MIRcat QCL's tuning range for an
+uninterrupted sweep. Equal bounds belong to the future fixed-wavenumber workflow.
 
-Live acquisition requires promoted timing qualification, verified T660 frame
-capacity and LabOne resident-history capacity, exclusive device ownership,
-MIRcat readiness, matching background/settings, and successful readbacks.
-A missing prerequisite fails preflight before a finite sequence starts.
+Scan speed accepts requests from 1 to 10,000 cm⁻¹/s. The connected MIRcat speed
+readback must support the requested value; a numerical entry alone is not a
+claim of hardware support. Phase-delay spacing accepts 1–1000 µs. The app checks
+the complete signed schedule and capture/return margin against the chosen
+cadence, timing-table capacity and available acquisition memory. An otherwise valid
+speed or spacing can fail in combination with a large range or fast cadence.
+An unsupported run is not silently slowed, divided into blocks or otherwise
+changed.
 
-Detector records use bounded Sweep-Active-triggered LabOne histories plus a
-separate small synchronized pump-event record. A consolidated native acquisition
-retains the full records, frame table, requested/read-back settings, and partial
-results on failure. PicoScope pulse diagnostics establish signal fidelity and
-trigger/receiver behavior; they are not a mandatory missing-pulse retry recorder.
+**Reconstruct before pump** and **Reconstruct after pump** set the reconstruction
+window relative to electrical pump sync (defaults: 1 ms before and 5 ms after).
+There are no independently editable acquisition-time controls. The planner
+derives sweep-start delays, scan count and capacity from this window, the full
+nominal sweep duration and phase spacing. For sweep duration T, before/after
+durations B/A and spacing d, start delays run from floor((-T-B)/d)×d to ceil(A/d)×d.
+The reconstructed interval remains [-B, A]; measured marker support determines
+valid cells and missing measurements are not extrapolated. Invalid combinations
+disable acquisition with a brief setting-specific solution. Window changes
+persist and invalidate blanks when they change the requested sequence.
 
-Ordinary one-pass reconstruction uses the calibrated trajectory, observed scan
-and pump timestamps, and detector/reference/background normalization. It does
-not perform automatic missing-pulse retries, coverage merging, or etalon removal.
-Unsupported regions stay empty. Rejected and diagnostic records remain available.
+At the defaults, one sequence contains **322 scans: one unpumped baseline plus
+321 pumped phases** from −11 to +5 ms in 50 µs steps. At 10 Hz, this is about
+32.2 seconds per blank or sample sequence, plus setup, settling and final data
+retrieval. Nominal sweep duration is 10 ms. The engineering capture envelope is
+20.28 ms, including trigger margins; it is not a calibrated trajectory.
+Measured controller markers determine reconstructed wavelength coordinates and
+whether particular time/wavelength cells have support.
 
-**Latest Scan**, **Show Background**, and **Completed 3D Map** display the
-corresponding retained products. Diagnostic coordinates and electrical pump sync
-remain explicitly provisional where their physical calibration is unavailable.
-The plot does not turn requested wavenumbers or small phase steps into calibrated
-axes or resolution.
+The resolved pair includes cadence, scan count, signed phase range, sweep
+settings, probe configuration, HF2LI selected settings and actual readbacks.
+Changing any relevant field identifies a specific blank-compatibility conflict
+and requires another matching blank and preliminary review. Selecting a different
+saved blank also clears the previous preliminary review. A fresh capability
+discovery timestamp alone is not a reason to reject unchanged settings.
 
-**Abort Scan** requests interruptible shutdown, closes emission, stops the frame
-and probe timing, preserves partial native data, and reports restoration. Other
-device controls respect exclusive ownership. Completion waits for final scheduled
-outputs as well as frame-engine status and reconciles scan/pump/frame counts.
+## HF2LI automatic selection and manual overrides
 
-Scientific methods and claims remain in [EXPERIMENTS.md](../../EXPERIMENTS.md)
-and the applicable campaign plans.
+The automatic selector uses values accepted and read back from the connected
+HF2LI with CH1 detector and DIO timing streams enabled (API demodulators 0 and 2).
+Other enabled demodulator streams affect rate capacity. Unsupported nominal
+sample rates do not appear as valid manual choices. The retained profile is
+identified as a preview until the automatic connected-device check succeeds.
+Previously checked dropdown choices persist between app sessions, without
+restoring acquisition permission or treating a disconnected device as verified.
+
+Selection considers the requested phase increment and a 1 cm⁻¹ spectral target,
+with a temporal target equal to the smaller of phase spacing and
+`1 cm⁻¹ / scan speed`. The response estimate combines the cascaded RC filter's
+10–90% step rise, two detector sample intervals and two DIO sample intervals in
+quadrature. Spectral broadening is scan speed multiplied by filter rise time;
+group delay is reported separately. These are engineering response estimates,
+not a measurement of the optical impulse response. A fine phase grid or the
+highest sample rate does not establish equivalent temporal resolution. If the
+best supported configuration cannot meet the target, the displayed warning
+states the estimated effective resolution; the requested experiment is retained.
+
+Expand **Advanced HF2LI overrides** to select supported filter order, time
+constant and CH1 sample rate from dropdowns. Time-constant choices depend on
+an explicitly selected order. With order set to **Automatic**, constants for all
+supported orders remain available. Valid combinations also depend on filter
+bandwidth and enabled-stream rates. An invalid combination keeps all correction
+controls available and explains which settings conflict, the required change,
+and supported alternatives. An unavailable previous selection stays visibly
+marked; choose another value or **Automatic** without losing the other choices.
+**Restore automatic settings** clears overrides. The app displays the automatically or manually selected
+settings and the actual post-configuration readbacks, and records requested,
+selected and actual settings in the saved acquisition.
+
+Supported hardware behavior is grounded in the
+[HF2 specifications](https://docs.zhinst.com/hf2_user_manual/specifications.html),
+[filter response documentation](https://docs.zhinst.com/hf2_user_manual/signal_processing_basics.html)
+and [node documentation](https://docs.zhinst.com/hf2_user_manual/nodedoc.html),
+plus device discovery/readbacks. MIRcat tuning and sweep capabilities use the
+installed [SDK interface](../../references/sdk/MIRcat/include/MIRcatSDK.h) and
+readbacks. These sources do not establish a universal list of nominal rates
+accepted by every connected configuration.
+
+## Timing, reconstruction and retained files
+
+The regular execution path uses **250 µs FIRE → Q-switch**. Signed delays preserve
+the tested Process Trigger schedule even when the matching blank inhibits FIRE
+and Q-switch. DIO17 records electrical pump sync, DIO21 records Sweep Active,
+and the identified controller-marker channel supplies wavelength anchors. A
+commanded phase delay is not substituted for an observed pump timestamp.
+
+Each complete blank/sample sequence uses one timing table and one uninterrupted
+MIRcat emission interval. LabOne retains results on the host through the sequence;
+normal data retrieval occurs after completion. Memory and timing capacity are
+preflighted. There are no artificial 16-scan partitions or intervening MIRcat
+emission restarts. Host allocation does not guarantee internal LabOne memory:
+count, continuity, loss and clipping checks still determine whether acquisition
+completed successfully. Partial native data remain saved if those checks fail.
+
+For each sample scan `i`, the app interpolates blank scan `i` only between
+adjacent supported measured wavelengths, then calculates:
+
+`Transmission = CH1 sample / matched CH1 buffer blank`
+
+`Absorbance = −log10(Transmission)`
+
+The continuous sample run's position-zero unpumped baseline remains separate.
+The change view subtracts that baseline's absorbance from absolute absorbance at
+each supported wavelength. The earlier preliminary scan is retained for review
+and provenance and does not replace that baseline. Nonpositive detector values,
+unobserved wavelengths, invalid intervals and unsupported time regions remain
+missing. No smoothing, fitted flattening, normalization, extrapolation or
+filter-delay correction is applied to the quantitative values. Linked slices
+show the stored grid; the full measured native records remain available.
+
+Run folders under **Phase Scan / date / acquisition ID** contain `run.json`,
+one lossless `raw/acquisition.npz`, `scan_index.jsonl`, settings/readbacks,
+restoration/cleanup records and `result.json`. Completed sample runs also contain
+`processed/reconstruction.npz` and `processed/reconstruction.csv`, including
+absolute absorbance, delta absorbance and the unpumped baseline. Existing files
+are not overwritten. Saved current blanks are checked against their frozen
+configuration; retained legacy full sequences can be imported only when actual
+cadence, complete signed frame schedule, probe/HF2LI readbacks and safe shutdown
+are reconstructable from their saved records. Incomplete or unmatched records
+are rejected with the missing or conflicting evidence identified. No hash
+matching is required to load data or accept a compatible blank.
+
+Time is labeled relative to **electrical pump sync**. Optical arrival at the
+sample has not been calibrated. Marker wavelengths are controller readbacks,
+not an independent absolute wavelength calibration. Sequential blank correction
+assumes repeatable sequence-dependent intensity behavior and cannot remove
+nonrepeatable inter-run drift. The surface alone does not establish photolysis
+kinetics. This implementation preserves the retained experiments' scientific
+disposition and does not promote a calibration bundle or complete a campaign
+phase. Scientific methods and claims remain in
+[EXPERIMENTS.md](../../EXPERIMENTS.md) and the applicable campaign records.
+
+The 7–10× sample-rate-to-filter-bandwidth recommendation is an anti-aliasing
+guideline, not a hardware acceptance limit. Automatic selection prefers settings
+meeting its 7× lower margin where available. Supported manual settings below
+that margin remain selectable and do not require an extra confirmation. The
+UI displays a brief advisory and compact settings and resolution readouts.
+The saved selection retains the sample-rate/bandwidth ratio and estimated
+filter attenuation at Nyquist. That attenuation describes
+the filter response, not measured total aliasing error; signal and noise content
+also matter. If no automatic candidate meets the guideline, the app retains a
+supported configuration with the same advisory. Actual hardware, cadence, timing
+and memory constraints still apply. The resolved selection records the advisory
+and its numerical estimates with the run.
+See the [HF2 rate guidance](https://docs.zhinst.com/hf2_user_manual/functional_description/lock_in.html).
+
+Memory quantities use decimal MB (1 MB = 1,000,000 bytes). Preflight separates
+uncompressed samples/timestamps from estimated record storage. Record storage
+includes per-record metadata, with no percentage margin or buffer/copy multiplier
+in either planning or the exact DAQ preflight. It does not predict peak process
+RAM or compressed saved file size. The historical 536.9 MB application budget
+is an advisory threshold, not a start gate or a measured HF2LI hardware limit.
+Exceeding it displays a brief memory warning. Exact DAQ preflight checks current
+available host memory (or an explicit executor memory limit); cadence, supported
+hardware settings, timing-table capacity and reconstruction allocation limits
+remain enforced.
+Halving phase spacing approximately doubles scan count at fixed scan trajectory
+and HF2LI rates. Automatic selection can also raise the detector sample rate
+to improve temporal resolution, further increasing data volume. Inspect the
+selected rates and resolution alongside the memory estimate.
+To reduce scan span, bring **Start wavenumber** and **Stop wavenumber** closer
+together. There is no separate scan-size control. Sequence scan count is derived;
+increasing **Phase-delay spacing** reduces the number of phase scans.
+
+After completion or failure, **New run** clears the session's blank selection,
+preliminary review and plots without deleting saved files or changing the entered
+settings. Acquire or select a blank to begin again. Editing settings updates the
+selected HF2LI summary; actual acquisition readbacks remain in the saved run and
+are displayed at completion, rather than being represented as current settings
+after an edit.
+
+Implementation verification used simulated devices and retained records only:
+588 tests passed, with three obsolete administrative-gate tests skipped. The
+retained 322-scan 10 Hz sample replay reproduced absolute and delta absorbance
+within 1e-14, including all 174 missing cells.
+
+The September 8 UTC blank attempt exposed two startup/restoration faults:
+MIRcat returned `LASER_NOT_TUNED` after non-emitting sweep setup, and T660 rejected
+a unitless signed frequency readback replayed as a command. Restoration now
+formats that frequency with explicit Hz units while retaining the original
+readback. Sweep capability checking remains non-emitting; that check is stopped,
+the start wavenumber is retuned, and the tested emission-on/manual-tune-cancel/
+sweep-arm order starts the actual continuous sequence. Settings are checked again
+before any measurement frames start. There is one emission interval per sequence.
+The correction passed 133 focused simulated tests, including the exact reported
+frequency readback and a laser simulation that rejects emission when untuned.
+It has not been retested on physical hardware. Restart the application and retry
+the buffer blank; saving a plan alone does not acquire a blank.

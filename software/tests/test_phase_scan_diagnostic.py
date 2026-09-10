@@ -68,7 +68,8 @@ def test_inhibited_capture_never_enables_laser_outputs_and_preserves_partial_dat
         def reload_settings_snapshot(self, snapshot): HF.restored = True
         def compare_settings_snapshots(self, *args): return {"mismatches": []}
         def get_clockbase(self): return 210000000
-        def start_acquisition(self, **kwargs): pass
+        def start_acquisition(self, **kwargs):
+            assert kwargs["demodulators"] == (0, 2)
         def stop_acquisition(self): pass
         def read_acquisition(self, duration):
             HF.polls += 1

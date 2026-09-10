@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -17,10 +18,13 @@ import numpy as np
 
 from control_app.workflows.phase_scan import PhaseScanEvent, PhaseScanPlan, PhaseScanSettings
 
-SCHEMA_VERSION = "phase-scan/4.0"
-ANALYSIS_VERSION = "absolute-absorbance/3.0"
+SCHEMA_VERSION = "phase-scan/5.0"
+ANALYSIS_VERSION = "absolute-absorbance/4.1"
 QCL_CURRENT_MA = 750.0
-HF2_PRESET = "exploratory_phase_scan_poc"
+HF2_PRESET = "exploratory_phase_scan_single_detector"
+SINGLE_DETECTOR_MODE = "single_ch1_buffer_blank"
+DUAL_DETECTOR_MODE = "dual_detector"
+DETECTOR_INPUT = "HF2LI CH1 SIG IN +"
 
 
 def utc_now() -> str:
@@ -98,7 +102,20 @@ def acquisition_settings(settings: PhaseScanSettings) -> dict:
     for name in ("phase_delay_us", "rest_period_s", "repetitions", "pre_pump_ms", "post_pump_ms",
                  "pump_reference"):
         fields.pop(name)
-    return {**fields, "qcl_current_ma": QCL_CURRENT_MA, "hf2_preset": HF2_PRESET}
+    return {**fields, "qcl_current_ma": QCL_CURRENT_MA, "hf2_preset": HF2_PRESET,
+            "detector_mode": SINGLE_DETECTOR_MODE, "detector_input": DETECTOR_INPUT,
+            "normalization": "CH1_sample / prior_CH1_buffer_blank"}
+
+
+def compatible_readbacks(left, right):
+    """Compare settings with one shared tolerance for device readback rounding."""
+    if isinstance(left, dict) and isinstance(right, dict):
+        return left.keys() == right.keys() and all(compatible_readbacks(left[k], right[k]) for k in left)
+    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+        return len(left) == len(right) and all(compatible_readbacks(a, b) for a, b in zip(left, right))
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return math.isclose(left, right, rel_tol=1e-6, abs_tol=1e-12)
+    return left == right
 
 
 class ScanStore:
@@ -177,29 +194,50 @@ class ScanStore:
 class Spectrum:
     wavenumber_cm1: np.ndarray
     sample_r: np.ndarray
-    reference_r: np.ndarray
+    reference_r: np.ndarray | None
     sample_time_s: np.ndarray
     pump_time_s: float | None
     metadata: dict
     segment_id: np.ndarray | None = None
 
+    @property
+    def detector_mode(self):
+        # Version 4 and earlier spectra contain actual simultaneous reference
+        # observations. Absence of the mode never invents a reference detector.
+        mode = self.metadata.get("detector_mode", DUAL_DETECTOR_MODE)
+        if mode not in {SINGLE_DETECTOR_MODE, DUAL_DETECTOR_MODE}:
+            raise ValueError(f"Unknown detector mode: {mode}")
+        return mode
+
     def validate(self):
         values = [np.asarray(v, dtype=float) for v in (self.wavenumber_cm1, self.sample_r,
-                  self.reference_r, self.sample_time_s)]
+                  self.sample_time_s)]
+        if self.detector_mode == SINGLE_DETECTOR_MODE:
+            if self.reference_r is not None:
+                raise ValueError("Single-detector spectra must not contain a CH2 reference array")
+            if self.metadata.get("detector_input", DETECTOR_INPUT) != DETECTOR_INPUT:
+                raise ValueError("Single-detector spectra require HF2LI CH1 SIG IN +")
+        else:
+            if self.reference_r is None:
+                raise ValueError("Legacy dual-detector spectra require actual reference samples")
+            values.append(np.asarray(self.reference_r, dtype=float))
         if any(v.ndim != 1 for v in values) or len({len(v) for v in values}) != 1 or len(values[0]) < 2:
             raise ValueError("A spectrum requires at least two equally sized 1D arrays")
         if not self.metadata.get("optical_valid"):
             raise ValueError("Dark/diagnostic records cannot be used as optical spectra or backgrounds")
-        if self.metadata.get("wavenumber_basis") not in {"measured", "nominal_sweep_bounds"}:
-            raise ValueError("Wavenumber coordinates need an explicit measured or provisional sweep-bound basis")
-        if self.metadata.get("wavenumber_basis") == "nominal_sweep_bounds" and not self.metadata.get("provisional"):
-            raise ValueError("Nominal coordinates must be explicitly marked provisional")
-        if not np.isfinite(values[0]).all() or not np.isfinite(values[3]).all():
+        basis = self.metadata.get("wavenumber_basis")
+        if basis not in {"measured", "controller_markers", "nominal_sweep_bounds"}:
+            raise ValueError("Wavenumber coordinates need an explicit measured, controller-marker, or provisional sweep-bound basis")
+        if basis in {"controller_markers", "nominal_sweep_bounds"} and not self.metadata.get("provisional"):
+            raise ValueError("Controller or nominal coordinates must be explicitly marked provisional")
+        if basis == "controller_markers" and not self.metadata.get("marker_identity_basis"):
+            raise ValueError("Controller-marker coordinates require explicit marker readback provenance")
+        if not np.isfinite(values[0]).all() or not np.isfinite(values[2]).all():
             raise ValueError("Wavenumber and acquisition timestamps must be finite")
         delta = np.diff(values[0])
         if not (np.all(delta > 0) or np.all(delta < 0)):
             raise ValueError("A spectrum must be one monotonic sweep segment")
-        if not np.all(np.diff(values[3]) > 0):
+        if not np.all(np.diff(values[2]) > 0):
             raise ValueError("Acquisition timestamps must increase")
         if self.segment_id is not None and np.asarray(self.segment_id).shape != values[0].shape:
             raise ValueError("Segment IDs must match spectral samples")
@@ -207,11 +245,21 @@ class Spectrum:
 
     def ratio(self):
         self.validate()
+        if self.detector_mode != DUAL_DETECTOR_MODE:
+            raise ValueError("A single-detector ratio requires a separate buffer blank; use transmission")
         sample, ref = np.asarray(self.sample_r), np.asarray(self.reference_r)
         valid = np.isfinite(sample) & np.isfinite(ref) & (sample > 0) & (ref > 0)
         ratio = np.full(sample.shape, np.nan)
         np.divide(sample, ref, out=ratio, where=valid)
         return ratio
+
+    def normalization_signal(self):
+        """Measured CH1 magnitude, or an actual legacy simultaneous S/R ratio."""
+        self.validate()
+        if self.detector_mode == DUAL_DETECTOR_MODE:
+            return self.ratio()
+        signal = np.asarray(self.sample_r, dtype=float)
+        return np.where(np.isfinite(signal) & (signal > 0), signal, np.nan)
 
     def to_dict(self):
         return asdict(self)
@@ -303,11 +351,38 @@ def absorbance_from_ratios(ratio, reference) -> np.ndarray:
     return result
 
 
+def transmission(scan: Spectrum, background: Spectrum) -> np.ndarray:
+    """Pair CH1 sample and prior buffer blank on supported wavenumbers.
+
+    Legacy dual-detector spectra retain their ratio-of-ratios normalization.
+    A sample baseline cannot serve as the buffer blank for the experiment.
+    """
+    signal = scan.normalization_signal()
+    reference_signal = background.normalization_signal()
+    if scan.detector_mode != background.detector_mode:
+        raise ValueError("Sample and background detector modes must match")
+    if scan.metadata["wavenumber_basis"] != background.metadata["wavenumber_basis"]:
+        raise ValueError("Sample and background wavenumber bases must match; rederive both on the same supported coordinate basis")
+    if scan.detector_mode == SINGLE_DETECTOR_MODE:
+        if background.metadata.get("record_role") != "buffer_blank" or background.pump_time_s is not None:
+            raise ValueError("Single-detector normalization requires an unpumped buffer blank")
+        for key in ("acquisition_settings", "hf2li_detector_settings", "hf2li_device"):
+            if (key in scan.metadata or key in background.metadata) and not compatible_readbacks(scan.metadata.get(key), background.metadata.get(key)):
+                raise ValueError(f"Sample and buffer blank {key} must match")
+    reference = interpolate_spectrum(background, reference_signal, scan.wavenumber_cm1)
+    valid = np.isfinite(signal) & np.isfinite(reference) & (signal > 0) & (reference > 0)
+    result = np.full(signal.shape, np.nan)
+    np.divide(signal, reference, out=result, where=valid)
+    return result
+
+
 def absorbance(scan: Spectrum, background: Spectrum) -> np.ndarray:
-    """A = -log10[(S/R)/(S0/R0)], retaining invalid readings as gaps."""
-    ratio = scan.ratio()
-    reference = interpolate_spectrum(background, background.ratio(), scan.wavenumber_cm1)
-    return absorbance_from_ratios(ratio, reference)
+    """A = -log10(CH1_sample/CH1_blank), preserving legacy paired ratios."""
+    ratio = transmission(scan, background)
+    result = np.full(ratio.shape, np.nan)
+    valid = np.isfinite(ratio) & (ratio > 0)
+    result[valid] = -np.log10(ratio[valid])
+    return result
 
 
 def reconstruct(records: list[tuple[PhaseScanEvent, Spectrum]], background: Spectrum,
@@ -342,7 +417,7 @@ def reconstruct(records: list[tuple[PhaseScanEvent, Spectrum]], background: Spec
     return _reconstruct_entries(entries, [s for _, s in pumped], background, plan, cancel=cancel)
 
 
-def _reconstruct_entries(entries, metadata_spectra, background, plan, *, cancel=None):
+def _reconstruct_entries(entries, metadata_spectra, background, plan, *, cancel=None, strict_phase_gaps=False):
     finite_ages = [v[1][np.isfinite(v[1])] for v in entries]
     if not any(len(values) for values in finite_ages):
         raise ValueError("No common measured wavelength support")
@@ -381,7 +456,9 @@ def _reconstruct_entries(entries, metadata_spectra, background, plan, *, cancel=
             if len(a) < 2:
                 continue
             # Large timing holes are unsupported; never draw across a missing phase.
-            gap = max(plan.settings.phase_delay_us*1e-6 * 1.75, np.median(np.diff(np.sort(a))) * 1.75)
+            gap = plan.settings.phase_delay_us*1e-6 * 1.75
+            if not strict_phase_gaps:
+                gap = max(gap, np.median(np.diff(np.sort(a))) * 1.75)
             result = interpolate_supported(a, v, times, max_gap=gap)
             valid = np.isfinite(result)
             total[valid, column] += result[valid]
@@ -394,14 +471,27 @@ def _reconstruct_entries(entries, metadata_spectra, background, plan, *, cancel=
     stderr[valid] = np.sqrt(np.maximum(0, total2[valid] - total[valid]**2/counts[valid]) /
                             (counts[valid]-1)/counts[valid])
     bases = sorted({s.metadata.get("pump_time_basis", "unknown") for s in metadata_spectra})
-    warnings = sorted({warning for s in metadata_spectra for warning in s.metadata.get("warnings", [])})
+    wavenumber_bases = sorted({s.metadata.get("wavenumber_basis") for s in [*metadata_spectra, background]})
+    warnings = sorted({warning for s in [*metadata_spectra, background] for warning in s.metadata.get("warnings", [])})
     provisional = any(s.metadata.get("provisional", False) for s in metadata_spectra) or background.metadata.get("provisional", False)
+    single_detector = background.detector_mode == SINGLE_DETECTOR_MODE
+    normalization = "-log10(CH1_sample / prior_CH1_buffer_blank)" if single_detector else "-log10((S/R)/(S0/R0))"
+    limitations = ["Phase increment is not temporal resolution.",
+                  "No lock-in impulse-response deconvolution or unmeasured delay correction.",
+                  "Unsupported regions remain NaN; no extrapolation."]
+    if "controller_markers" in wavenumber_bases:
+        limitations.append("Wavenumber coordinates follow observed markers and verified controller readbacks; independent absolute wavelength calibration is not established.")
+    if single_detector:
+        limitations.extend(["The prior buffer blank is a sequential intensity reference; laser and detector drift are not canceled by a simultaneous reference channel.",
+                            "Standard error describes repetition scatter conditional on the saved blank; shared buffer-blank uncertainty is not propagated.",
+                            "Unpumped sample baselines remain separate from the buffer blank; output is absorbance relative to the buffer blank, not pump-induced delta absorbance."])
     return {"analysis_version": ANALYSIS_VERSION, "wavenumber_cm1": wn, "time_s": times,
+            "detector_mode": background.detector_mode, "normalization": normalization,
+            "wavenumber_bases": wavenumber_bases,
+            "background_role": background.metadata.get("record_role", "legacy_background"),
             "absorbance": mean, "repetition_count": counts, "standard_error": stderr,
             "time_basis": "native_sample_time_minus_observed_reference", "pump_reference_bases": bases,
             "display_pump_time_ms": 0.,
             "observation_window_s": [-plan.settings.pre_pump_ms/1000, plan.settings.post_pump_ms/1000],
             "provisional": provisional, "warnings": warnings,
-            "limitations": ["Phase increment is not temporal resolution.",
-                            "No lock-in impulse-response deconvolution or unmeasured delay correction.",
-                            "Unsupported regions remain NaN; no extrapolation."]}
+            "limitations": limitations}

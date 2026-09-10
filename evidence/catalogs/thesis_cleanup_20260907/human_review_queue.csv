@@ -1,0 +1,166 @@
+review_id,path,remaining_bytes,reason,decision
+R001,evidence/experiments/runs/authorized_mbco_phase_reconstruction_20260904T002152_3132654Z,871401328,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,RAW_DELETED_USER_APPROVED; DERIVED_OUTPUTS_RETAINED
+R002,evidence/experiments/runs/hf2_deferred_capacity_20260907,6228079,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,RAW_DELETED_USER_APPROVED; DOCUMENTATION_RETAINED
+R003,evidence/experiments/runs/exploratory_air_checkout_20260902T224505_935642Z,12056697,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,RAW_DELETED_USER_APPROVED; ANALYSIS_AND_DOCUMENTATION_RETAINED
+R004,evidence/experiments/runs/direct_air_reset_explicit_on_three_modes_20260903T025720_147056Z,12445822,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,RAW_DELETED_USER_APPROVED; ANALYSIS_AND_DOCUMENTATION_RETAINED
+R005,evidence/experiments/runs/direct_air_1000ma_three_modes_20260903T024905_977175Z,12198554,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,RAW_DELETED_USER_APPROVED; ANALYSIS_AND_DOCUMENTATION_RETAINED
+R006,evidence/experiments/runs/authorized_consecutive_air_pair_20260903T230900_5823500Z,16800104,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,RAW_DELETED_USER_APPROVED; ANALYSIS_AND_DOCUMENTATION_RETAINED
+R007,evidence/experiments/runs/20260707_day8_timing_pump_fire_to_q_switch_db9_pins_retry2,1329362032,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,KEEP_RAW_USER_CONFIRMED
+R008,evidence/experiments/runs/authorized_preliminary_mbco_100cm_2cmps_repeat_20260903T234012_8651278Z,1166716633,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,KEEP_FOR_NOW_USER_CONFIRMED
+R009,evidence/experiments/runs/single_detector_ftir_20260906T203723_580408Z,1110154093,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,KEEP_ENTIRE_PACKAGE_USER_CONFIRMED
+R010,evidence/experiments/runs/air_scan_post_alignment_repeat_20260903T214445_6204197Z,6445215,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,RAW_DELETED_USER_APPROVED; ANALYSIS_AND_DOCUMENTATION_RETAINED
+R011,evidence/experiments/runs/air_scan_detector_orientation_retest_20260903T214018_1110992Z,6321139,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,RAW_DELETED_USER_APPROVED; ANALYSIS_AND_DOCUMENTATION_RETAINED
+R012,evidence/experiments/runs/authorized_air_scan_after_detector_recovery_20260903T213002_3743882Z,5910893,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,RAW_DELETED_USER_APPROVED; ANALYSIS_AND_DOCUMENTATION_RETAINED
+R013,evidence/experiments/runs/mircat_sweep_20260903T003520_142287Z,897849514,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R014,evidence/experiments/runs/mircat_sweep_20260903T020532_909748Z,897606881,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R015,evidence/experiments/runs/mircat_sweep_20260903T003041_531945Z,897495150,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R016,evidence/experiments/runs/mircat_sweep_20260903T023336_016356Z,897457840,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R017,evidence/experiments/runs/direct_air_external_pulse_tec_settle_20260903T024327_956949Z,896332056,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R018,evidence/experiments/runs/direct_air_after_powercycle_20260903T023954_119062Z,896316612,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R019,evidence/experiments/runs/direct_air_repeat_20260903T023625_729904Z,896211107,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R020,evidence/experiments/runs/hf2_1842k_verification_20260907,580092503,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R021,evidence/experiments/runs/authorized_preliminary_mbco_100cm_scan_20260903T232625_9651341Z,231824243,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R022,evidence/experiments/runs/single_rearm_ordered_ddg_qualification_20260904T021008_3633770Z,80486249,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R023,evidence/experiments/runs/consecutive_ddg_probe_gate_qualification_20260904T020222_2599500Z,77914085,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R024,evidence/experiments/runs/single_rearm_ddg_qualification_20260904T020735_1948699Z,76929701,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R025,evidence/experiments/runs/20260727_144626_polystyrene_side_spectrum,68100285,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R026,evidence/experiments/runs/fixed_1850_three_modes_retest_20260903T185413_4414657Z,67836560,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R027,evidence/experiments/runs/fixed_1850_three_modes_20260903T175753_281072Z,67634262,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R028,evidence/experiments/runs/20260727_135909_water_vapor_side_spectrum_final_retake,58354048,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R029,evidence/experiments/runs/20260727_135249_water_vapor_side_spectrum,54937309,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R030,evidence/experiments/runs/20260727_135757_water_vapor_side_spectrum_retake_complete,54247180,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R031,evidence/experiments/runs/20260727_135522_water_vapor_side_spectrum_retake,54019518,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R032,evidence/experiments/runs/authorized_mbco_phase_qualification_pair_20260904T000245_9725934Z,52098171,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R033,evidence/experiments/runs/20260727_132516_mircat_dio_mapping_gui_opposite,31187448,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R034,evidence/experiments/runs/20260727_132330_mircat_dio_mapping_gui,31130532,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R035,evidence/experiments/runs/consecutive_ddg_sweep_qualification_20260904T010332_2383400Z,28306147,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R036,evidence/experiments/runs/consecutive_ddg_pumped_transition_qualification_20260904T011845_7268738Z,21280080,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R037,evidence/experiments/runs/single_rearm_prompt_ddg_qualification_20260904T021220_5897745Z,19184380,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R038,evidence/experiments/runs/consecutive_ddg_production_path_qualification_20260904T011033_8226044Z,12380721,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R039,evidence/experiments/runs/consecutive_ddg_fast_timing_qualification_20260904T011446_8616440Z,12232924,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R040,evidence/experiments/runs/single_sweep_recovery_qualification_20260904T020501_7329946Z,9198654,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R041,evidence/experiments/logs,3259679,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R042,evidence/experiments/runs/Phase Scan,2369582,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R043,evidence/experiments/runs/offline_etalon_phase_reanalysis_v2_20260903T230619_5930905Z,1197312,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R044,evidence/experiments/runs/offline_etalon_phase_reanalysis_20260903T230414_3082045Z,1196972,Thesis inclusion of retained operational measurements is not established; preserve source data until reviewed.,PENDING
+R045,evidence/experiments/runs/high_sensitivity_phase_coverage_qualification_20260904T030350_8378840Z,255382,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R046,evidence/experiments/runs/detector_power_cycle_confirmation_20260903T212437_0377633Z,249673,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R047,evidence/experiments/runs/20260710T205217335293Z_timing_calibration_e100ae1a,233126,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R048,evidence/experiments/runs/logs,229785,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R049,evidence/experiments/runs/mircat_gui_crash_fix_20260903T000404_244227Z,146272,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R050,evidence/experiments/runs/direct_air_external_pulse_20260903T024207_749523Z,127122,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R051,evidence/experiments/runs/side_spectrum_daq_probe,93884,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R052,evidence/experiments/runs/mircat_sweep_ui_validation_20260902T235235_385170Z,92950,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R053,evidence/experiments/runs/mircat_scan_feedback_validation_20260903T000001_356505Z,86708,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R054,evidence/experiments/runs/mircat_sweep_20260903T000141_198237Z,77082,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R055,evidence/experiments/runs/mircat_sweep_20260903T000501_193871Z,77027,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R056,evidence/experiments/runs/mircat_sweep_20260903T000615_006057Z,77026,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R057,evidence/experiments/runs/mircat_sweep_20260902T235457_288595Z,76861,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R058,evidence/experiments/runs/20260831_175811_mircat_detector_alignment_ui,76854,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R059,evidence/experiments/runs/20260831_103014_mircat_detector_alignment_ui,76847,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R060,evidence/experiments/runs/20260831_182112_mircat_detector_alignment_ui,76828,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R061,evidence/experiments/runs/20260831_192404_mircat_detector_alignment_ui,76825,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R062,evidence/experiments/runs/20260831_102814_mircat_detector_alignment_ui,76818,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R063,evidence/experiments/runs/20260831_103306_mircat_detector_alignment_ui,76815,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R064,evidence/experiments/runs/20260831_103810_mircat_detector_alignment_ui,76802,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R065,evidence/experiments/runs/air_scan_20260902T234406_925881Z,75658,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R066,evidence/experiments/runs/20260624_mircat_detector_alignment,72768,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R067,evidence/experiments/runs/air_scan_ui_validation_20260902T234213_553349Z,62064,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R068,evidence/experiments/runs/20260701_124106_mircat_detector_alignment_ui,50232,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R069,evidence/experiments/runs/20260624_day7_workflow_interface,49417,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R070,evidence/experiments/runs/20260707_day7_workflow_interface,49127,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R071,evidence/experiments/runs/20260701_t6602_chb_signal_verification,48162,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R072,evidence/experiments/runs/20260727_135103_water_vapor_side_spectrum,47355,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R073,evidence/experiments/runs/20260727_135722_water_vapor_side_spectrum_retake_complete,44537,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R074,evidence/experiments/runs/20260701_122052_mircat_detector_alignment_ui,44106,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R075,evidence/experiments/runs/20260701_121522_mircat_detector_alignment_ui,43757,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R076,evidence/experiments/runs/20260727_132220_mircat_dio_mapping_gui,43668,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R077,evidence/experiments/runs/20260831_111108_mircat_detector_alignment_ui,42524,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R078,evidence/experiments/runs/20260720_day7_workflow_interface,41634,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R079,evidence/experiments/runs/20260720_myoglobin_co_validation,38863,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R080,evidence/experiments/runs/20260707_myoglobin_co_validation,38837,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R081,evidence/experiments/runs/20260701_polystyrene_validation,38631,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R082,evidence/experiments/runs/exploratory_mbco_readiness_20260902T224148_508839Z,38426,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R083,evidence/experiments/runs/20260906_ndyag_ui,31186,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R084,evidence/experiments/runs/20260717_t6602_ui,29987,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R085,evidence/experiments/runs/20260707_day8_timing_pump_fire_to_q_switch_db9_pins_retry1,27393,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R086,evidence/experiments/runs/20260717_171915_mircat_sweep_scan,27067,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R087,evidence/experiments/runs/20260717_172130_mircat_sweep_scan,27067,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R088,evidence/experiments/runs/20260717_172341_mircat_sweep_scan,27067,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R089,evidence/experiments/runs/20260717_172518_mircat_sweep_scan,27067,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R090,evidence/experiments/runs/20260821_ndyag_ui,27000,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R091,evidence/experiments/runs/20260826_ndyag_ui,27000,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R092,evidence/experiments/runs/20260901_ndyag_ui,26999,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R093,evidence/experiments/runs/20260819_ndyag_ui,26998,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R094,evidence/experiments/runs/20260820_ndyag_ui,26998,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R095,evidence/experiments/runs/20260701_133457_mircat_detector_alignment_ui,25917,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R096,evidence/experiments/runs/20260717_173328_mircat_sweep_scan,24695,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R097,evidence/experiments/runs/20260906_workflow_state_machine,24660,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R098,evidence/experiments/runs/20260907_workflow_state_machine,24660,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R099,evidence/experiments/runs/20260717_171529_mircat_sweep_scan,24649,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R100,evidence/experiments/runs/20260717_172732_mircat_sweep_scan,24649,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R101,evidence/experiments/runs/20260717_workflow_state_machine,23132,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R102,evidence/experiments/runs/20260720_workflow_state_machine,23132,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R103,evidence/experiments/runs/20260722_workflow_state_machine,23132,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R104,evidence/experiments/runs/20260727_workflow_state_machine,23042,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R105,evidence/experiments/runs/20260903_workflow_state_machine,22800,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R106,evidence/experiments/runs/20260831_workflow_state_machine,22798,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R107,evidence/experiments/runs/20260902_workflow_state_machine,22798,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R108,evidence/experiments/runs/20260901_workflow_state_machine,22786,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R109,evidence/experiments/runs/20260819_workflow_state_machine,22764,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R110,evidence/experiments/runs/20260702_ndyag_ui,21760,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R111,evidence/experiments/runs/20260701_ndyag_ui,21759,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R112,evidence/experiments/runs/20260710_ndyag_ui,21665,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R113,evidence/experiments/runs/20260714_ndyag_ui,21665,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R114,evidence/experiments/runs/20260707_ndyag_ui,21654,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R115,evidence/experiments/runs/day8_prehardware_audit,20980,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R116,evidence/experiments/runs/20260717_142039_mircat_sweep_scan,20811,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R117,evidence/experiments/runs/20260717_163717_mircat_sweep_scan,20711,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R118,evidence/experiments/runs/20260717_164111_mircat_sweep_scan,20711,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R119,evidence/experiments/runs/20260717_143305_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R120,evidence/experiments/runs/20260717_143547_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R121,evidence/experiments/runs/20260717_143753_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R122,evidence/experiments/runs/20260717_144557_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R123,evidence/experiments/runs/20260717_144845_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R124,evidence/experiments/runs/20260717_153740_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R125,evidence/experiments/runs/20260717_163436_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R126,evidence/experiments/runs/20260717_165703_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R127,evidence/experiments/runs/20260717_170405_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R128,evidence/experiments/runs/20260717_171256_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R129,evidence/experiments/runs/20260717_173537_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R130,evidence/experiments/runs/20260717_173815_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R131,evidence/experiments/runs/20260717_174044_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R132,evidence/experiments/runs/20260717_174245_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R133,evidence/experiments/runs/20260717_181141_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R134,evidence/experiments/runs/20260717_181236_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R135,evidence/experiments/runs/20260717_181341_mircat_sweep_scan,20640,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R136,evidence/experiments/runs/20260717_142635_mircat_sweep_scan,20639,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R137,evidence/experiments/runs/20260717_143017_mircat_sweep_scan,20639,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R138,evidence/experiments/runs/20260717_164849_mircat_sweep_scan,20639,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R139,evidence/experiments/runs/20260707_day8_timing_pump_fire_to_q_switch_db9_pins,19912,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R140,evidence/experiments/runs/20260707_day8_timing_calibration,19772,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R141,evidence/experiments/runs/20260701_130350_mircat_detector_alignment_ui,19685,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R142,evidence/experiments/runs/20260701_130825_mircat_detector_alignment_ui,19685,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R143,evidence/experiments/runs/20260701_123901_mircat_detector_alignment_ui,19683,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R144,evidence/experiments/runs/20260701_123202_mircat_detector_alignment_ui,18469,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R145,evidence/experiments/runs/20260624_t6602_ui,15178,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R146,evidence/experiments/runs/configured_workflows,13041,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R147,evidence/experiments/runs/hf2li_max_range_20260903T000839_573415Z,12975,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R148,evidence/experiments/runs/hf2li_2v_range_20260903T000908_565521Z,12970,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R149,evidence/experiments/runs/20260717_163542_mircat_sweep_scan,9645,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R150,evidence/experiments/runs/20260727_t6602_ui,9455,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R151,evidence/experiments/runs/20260707_t6602_ui,7589,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R152,evidence/experiments/runs/20260701_145159_polystyrene_fast_sweep,6382,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R153,evidence/experiments/runs/20260701_144940_polystyrene_fast_sweep,6279,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R154,evidence/experiments/runs/20260701_polystyrene_fast_sweep,6251,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R155,evidence/experiments/runs/red_alignment_20260903T213818_1499545Z,4834,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R156,evidence/experiments/runs/red_alignment_20260903T214327_0261109Z,4834,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R157,evidence/experiments/runs/red_alignment_20260903T182514_301325Z,4833,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R158,evidence/experiments/runs/All Stop,4623,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R159,evidence/experiments/runs/20260707_arduino_mux_diagnostic,3030,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R160,evidence/experiments/runs/mircat_ui_script_comparison_20260903T020924_868381Z,2980,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R161,evidence/experiments/runs/mircat_scan_readonly_diagnostic_20260902T235828_832340Z,1274,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R162,evidence/experiments/runs/mircat_explicit_gate_fix_20260903T004047_383503Z,753,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R163,evidence/experiments/runs/mircat_external_mode_checks_20260903T022515_644760Z,440,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R164,evidence/catalogs,183,"Small operational logs, settings, scripts or results; thesis relevance uncertain, retained pending review.",PENDING
+R165,campaigns/instrument_readiness_001/phases/HF-01,2386793846,"Review remaining rejected/superseded response and lower-rate tests individually: some support model or rate-boundary claims; accepted native data must remain. This size is the whole package, not a proposed deletion amount.",PENDING

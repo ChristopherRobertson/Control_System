@@ -1,5 +1,6 @@
 """Hardware-free finite-block lifecycle, retention, and scientific reconstruction."""
 from dataclasses import replace
+import csv
 import json
 
 import numpy as np
@@ -20,10 +21,12 @@ def spectrum(event, background=False):
     wn = np.array([2000., 1999., 1998.])
     age = (event.phase_delay_us or 0) * 1e-6 + np.array([0., .001, .002])
     absorption = np.zeros(3) if background else (2000 - wn) * .01 + age * 20
-    return Spectrum(wn, 2 * 10 ** -absorption, np.ones(3), 10 + age,
+    blank_r = np.array([2., 3., 4.])
+    return Spectrum(wn, blank_r * 10 ** -absorption, None, 10 + age,
                     10 if event.pump_enabled else None,
                     {"optical_valid": True, "wavenumber_basis": "measured",
-                     "pump_time_basis": "measured"})
+                     "pump_time_basis": "measured", "detector_mode": "single_ch1_buffer_blank",
+                     "detector_input": "HF2LI CH1 SIG IN +"})
 
 
 class Acquirer:
@@ -97,11 +100,16 @@ def test_preflight_all_blocks_then_acquire_then_close_then_single_save(tmp_path,
     assert payload["native"]["blocks"][0]["ticks"].dtype == np.uint64
     actual = result["reconstruction"]
     np.testing.assert_allclose(actual["time_s"][[0, -1]], [-.001, .005])
-    # Ordinary sample/reference/background normalization retains its sign and scale.
+    # Sequential CH1/blank normalization retains sign and scale for a non-flat blank.
     expected = (2000 - actual["wavenumber_cm1"])[None, :] * .01 + actual["time_s"][:, None] * 20
     valid = np.isfinite(actual["absorbance"])
     np.testing.assert_allclose(actual["absorbance"][valid], expected[valid], atol=1e-12)
     assert json.loads((result["path"] / "result.json").read_text())["status"] == "COMPLETE"
+    assert payload["records"][0]["spectrum"]["metadata"]["record_role"] == "unpumped_sample_baseline"
+    assert payload["native"]["background"]["spectrum"]["metadata"]["record_role"] == "buffer_blank"
+    assert all(record["spectrum"]["reference_r"] is None for record in payload["records"])
+    assert actual["background_source"] == str(runner.background.path)
+    assert len(actual["sample_baseline_record_ids"]) == 1
 
 
 def assert_closed(acquirer):
@@ -153,6 +161,17 @@ def test_safe_state_failure_never_enables_background(tmp_path):
     assert json.loads(next(tmp_path.rglob("result.json")).read_text())["status"] == "FAILED_SAFE_STATE_UNVERIFIED"
 
 
+def test_observed_pump_event_cannot_become_buffer_blank(tmp_path):
+    def unexpected_pump(records, cancel):
+        records[0][1].pump_time_s = 10.
+        return records
+    runner = PhaseScanRunner(lambda: Acquirer(background=True, mutate=unexpected_pump))
+    with pytest.raises(RuntimeError, match="Buffer blank must be unpumped"):
+        runner.execute("background", tmp_path, plan())
+    assert runner.background is None
+    assert load_native(next(tmp_path.rglob("acquisition.npz")))["records"]
+
+
 @pytest.mark.parametrize("mutation", [lambda records: records[:-1],
                                        lambda records: records + records[-1:],
                                        lambda records: list(reversed(records))])
@@ -173,12 +192,32 @@ def test_background_compatibility_and_readback_gate(tmp_path):
     assert runner.background_matches(replace(plan().settings, phase_delay_us=250, repetitions=2))
     assert not runner.background_matches(replace(plan().settings, mircat_internal_repetition_rate_hz=2_001_000))
     assert not runner.background_matches(replace(plan().settings, mircat_internal_pulse_width_ns=140))
+    assert not runner.background_matches(replace(plan().settings, scan_speed_cm1_s=2000))
+    assert not runner.background_matches(replace(plan().settings, start_wavenumber_cm1=1998, stop_wavenumber_cm1=2000))
     acquirer = Acquirer(readback={"current_ma": 999, "rate": 20000})
     runner.acquirer_factory = lambda: acquirer
     with pytest.raises(RuntimeError, match="Instrument settings changed"):
         runner.execute("run", tmp_path, plan())
     assert runner.background is None
     assert "capture" not in acquirer.calls
+
+
+def test_single_detector_blank_and_test_exports_keep_intensity_and_transmission_distinct(tmp_path):
+    runner = background_runner(tmp_path)
+    blank_path = runner.background.path.parents[1]
+    with (blank_path / "processed" / "background.csv").open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [float(row["buffer_blank_CH1_R_V"]) for row in rows] == [2., 3., 4.]
+    assert all(row["reference_R_V"] == "" and row["transmission_ratio"] == "" for row in rows)
+    raw_blank = load_native(runner.background.path)
+    assert raw_blank["records"][0]["spectrum"]["metadata"]["record_role"] == "buffer_blank"
+    runner.acquirer_factory = Acquirer
+    result = runner.execute("test", tmp_path, plan())
+    with (result["path"] / "processed" / "test.csv").open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    np.testing.assert_allclose([float(row["transmission_ratio"]) for row in rows], 10 ** -result["absorbance"])
+    assert all(row["record_role"] == "unpumped_sample_test" for row in rows)
+    assert all(row["background_source"] == str(runner.background.path) for row in rows)
 
 
 def test_later_block_fault_retains_completed_and_partial_blocks(tmp_path):

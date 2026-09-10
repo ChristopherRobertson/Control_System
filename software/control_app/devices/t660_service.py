@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, Callable, TextIO
 import math
 import socket
 import time
@@ -227,7 +227,9 @@ class T660Service:
 
     def preload_frame_table(self, frames: list[dict[str, Any]], *,
                             predivider: int = 600_000,
-                            input_frequency_hz: float = 2_000_000.0) -> dict[str, Any]:
+                            input_frequency_hz: float = 2_000_000.0,
+                            progress: Callable[[int, int], None] | None = None,
+                            cancel_check: Callable[[], None] | None = None) -> dict[str, Any]:
         """Load a bounded finite table with trigger input disabled throughout.
 
         Frame entries contain a complete ``channels`` mapping, using the same
@@ -235,6 +237,9 @@ class T660Service:
         staging commands are used while storing frames. A single acquisition
         needs an inert second frame because the hardware requires FIRST < LAST.
         No software-trigger/per-record programming fallback is provided.
+        Progress counts acknowledged physical frames, including an inert
+        terminator. Cancellation is checked between whole command lines while
+        the input remains inhibited; the caller owns safe cleanup/restoration.
         """
         if not frames:
             raise T660ConfigurationError("frame table must contain at least one acquisition")
@@ -263,6 +268,10 @@ class T660Service:
         if len(table) == 1:
             table.append({"channels": {ch: {**table[0]["channels"][ch], "enabled": False}
                                          for ch in "ABCD"}, "inert_terminator": True})
+        if cancel_check is not None:
+            cancel_check()
+        if progress is not None:
+            progress(0, len(table))
         self.set_trigger_source("OFF")
         self.command("STOP", expect_response=False)
         self.command("TFRame:STOp", expect_response=False)
@@ -278,20 +287,35 @@ class T660Service:
             self.command(f"TIME:RELTo{CHANNEL_EDGES[channel][0]} 0", expect_response=False)
         for stage in ("ACTIVE", "NEXT", "QUEUE"):
             self.configure_train(count=0, stage=stage)
+        # STORE preserves pending settings: Manual F5, section 5.4.4 (p. 28),
+        # changes only TIME:QUEue2 between successive STORE commands. The
+        # Programming Guide (p. 92) says: "Saves the pending configuration to
+        # the specified frame." Initialize every field on the first frame;
+        # retain exact acknowledged command values only within this call.
+        previous_pending: dict[tuple[str, str], str] = {}
         for index, frame in enumerate(table):
-            commands = []
+            if cancel_check is not None:
+                cancel_check()
+            pending: dict[tuple[str, str], str] = {}
             for channel in "ABCD":
                 settings = frame["channels"][channel]
                 rising, falling = CHANNEL_EDGES[channel]
-                commands.append(f":TIME:QUEue{rising} {settings['delay']}")
-                commands.append(f":TIME:QUEue{falling} {settings['width']}")
-                commands.append(f":CHANnel:QUEue:MODe {channel}, {'ON' if settings['enabled'] else 'OFF'}")
+                pending[channel, "delay"] = f":TIME:QUEue{rising} {settings['delay']}"
+                pending[channel, "width"] = f":TIME:QUEue{falling} {settings['width']}"
+                pending[channel, "enabled"] = f":CHANnel:QUEue:MODe {channel}, {'ON' if settings['enabled'] else 'OFF'}"
                 polarity = _normalize_polarity(settings["polarity"], field="polarity")
-                commands.append(f":CHANnel:QUEue:POLarity {channel}, {polarity}")
+                pending[channel, "polarity"] = f":CHANnel:QUEue:POLarity {channel}, {polarity}"
                 termination = _normalize_channel_termination(settings["termination"])
-                commands.append(f":CHANnel:QUEue:TERMination {channel}, {termination}")
+                pending[channel, "termination"] = f":CHANnel:QUEue:TERMination {channel}, {termination}"
+            commands = [command for field, command in pending.items()
+                        if previous_pending.get(field) != command]
             commands.append(f":TFRame:STORe {index}")
             self.command_sequence(commands)
+            previous_pending = pending
+            if progress is not None:
+                progress(index+1, len(table))
+            if cancel_check is not None:
+                cancel_check()
         self.command("TFRame:LOOP:FIRST 0", expect_response=False)
         self.command(f"TFRame:LOOP:LAST {len(table)-1}", expect_response=False)
         self.command("TFRame:LOOP:CouNT 0", expect_response=False)

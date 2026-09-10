@@ -32,10 +32,10 @@ class PhaseScanSettings:
     probe_pulse_width_ns: float = 150.0
     mircat_internal_repetition_rate_hz: float = 2_100_000.0
     mircat_internal_pulse_width_ns: float = 142.0
-    start_wavenumber_cm1: float = 1950.0
-    stop_wavenumber_cm1: float = 1940.0
+    start_wavenumber_cm1: float = 2000.0
+    stop_wavenumber_cm1: float = 1900.0
     scan_speed_cm1_s: float = 10_000.0
-    phase_delay_us: float = 5.0
+    phase_delay_us: float = 50.0
     rest_period_s: float = 0.300
     repetitions: int = 1
     pre_pump_ms: float = 1.0
@@ -142,9 +142,19 @@ class PhaseScanPlan:
     def to_dict(self) -> dict[str, Any]:
         """Compact, versioned plan; a baseline is never a zero-delay pump shot."""
         return {
-            "schema_version": "4.0",
+            "schema_version": "5.0",
             "method": "phase_delayed_single_scan",
             "status": "PLANNING_ONLY",
+            "detector_mode": "single_ch1_buffer_blank",
+            "normalization": {
+                "detector_input": "HF2LI CH1 SIG IN +",
+                "background": "separate_unpumped_buffer_blank_scan_before_sample_run",
+                "matching": "same_scan_bounds_direction_speed_probe_and_HF2LI_settings",
+                "transmission": "CH1_sample_R / interpolated_CH1_buffer_blank_R",
+                "absorbance": "-log10(transmission)",
+                "blank_included_in_total_scans": False,
+                "sample_baseline": "retained_separately_not_used_as_buffer_blank",
+            },
             "settings": asdict(self.settings),
             "derived": {
                 "scan_duration_s": self.scan_duration_s,
@@ -203,6 +213,7 @@ class PhaseScanPlan:
                 "The higher MIRcat internal rate is not the optical-opportunity rate or HF2LI reference.",
                 "Duration excludes initialization, return, settling, and additional sample recovery.",
                 "QCL/current, acquisition/filter settings, and calibration require an instrument preset.",
+                "Sequential buffer-blank normalization cannot remove source or detector drift between acquisitions.",
                 PHASE_SCAN_EXECUTION_BLOCKER,
             ],
         }

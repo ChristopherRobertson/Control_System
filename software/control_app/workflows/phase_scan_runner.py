@@ -6,13 +6,12 @@ from pathlib import Path
 from threading import Event, Lock
 from typing import Protocol
 import csv
-import math
 
 import numpy as np
 
 from control_app.workflows.phase_scan import PhaseScanEvent, PhaseScanPlan, PhaseScanSettings
 from control_app.workflows.phase_scan_data import (
-    ScanStore, Spectrum, absorbance, acquisition_settings, reconstruct, save_native,
+    ScanStore, Spectrum, absorbance, acquisition_settings, compatible_readbacks, reconstruct, save_native, transmission,
 )
 
 OPTICAL_ADAPTER_BLOCKER = (
@@ -28,8 +27,9 @@ PUBLICATION_WARNING = (
 class ScanAcquirer(Protocol):
     """Preflight all blocks, acquire preloaded sequences, and retain partial data.
 
-    capture_block arms LabOne before starting the timing table and reads after
-    completion. No disk writes occur there. close is idempotent and attempts
+    capture_block arms LabOne before starting the timing table and drains native
+    records during acquisition and at completion. No disk writes occur there.
+    close is idempotent and attempts
     every safe-state action even if an earlier action fails.
     """
     def prepare(self, settings: PhaseScanSettings, store: ScanStore, cancel: Event) -> dict: ...
@@ -127,9 +127,21 @@ class PhaseScanRunner:
             self._check()
             for index, block in enumerate(blocks):
                 self._check()
-                progress(f"Acquiring finite block {index + 1}/{len(blocks)}; data retained in LabOne…")
+                progress(f"Acquiring finite block {index + 1}/{len(blocks)}; draining native data into host memory…")
                 native, captured = acquirer.capture_block(block, self.cancel)
                 native_blocks.append(native)
+                for event, spectrum in captured:
+                    role = ("buffer_blank" if kind == "background" else
+                            "unpumped_sample_test" if kind == "test" else
+                            "pumped_sample" if event.pump_enabled else "unpumped_sample_baseline")
+                    spectrum.metadata = {**spectrum.metadata, "record_role": role,
+                                         "acquisition_id": store.id,
+                                         "acquisition_settings": acquisition_settings(plan.settings),
+                                         **{key: readback[key] for key in
+                                            ("hf2li_detector_settings", "hf2li_device") if key in readback},
+                                         "record_id": f"{store.id}/scan_{event.scan_index:07d}"}
+                    if background is not None and kind != "background":
+                        spectrum.metadata["background_source"] = str(background.path)
                 records.extend(captured)
                 self._check()
             close_acquirer()
@@ -165,9 +177,11 @@ class PhaseScanRunner:
                         spectrum.validate()
                     if kind == "background":
                         spectrum = records[0][1]
-                        if np.isfinite(spectrum.ratio()).sum() < 2:
+                        if spectrum.pump_time_s is not None:
+                            raise ValueError("Buffer blank must be unpumped; an observed pump event invalidates the blank")
+                        if np.isfinite(spectrum.normalization_signal()).sum() < 2:
                             raise ValueError("Background has fewer than two valid detector samples; no valid I0 reference")
-                        save_scan_csv(store.path / "processed" / "background.csv", spectrum, spectrum.ratio(),
+                        save_scan_csv(store.path / "processed" / "background.csv", spectrum, spectrum.normalization_signal(),
                                       background=True, run_quality_status=RUN_CLASSIFICATION, publication_eligible=False)
                         candidate = Background(spectrum, native, acquisition_settings(plan.settings), readback, raw_path)
                         result = {"kind": kind, "path": store.path, "background": candidate}
@@ -182,6 +196,7 @@ class PhaseScanRunner:
                         if kind == "test":
                             spectrum = records[0][1]
                             save_scan_csv(store.path / "processed" / "test.csv", spectrum, values,
+                                          transmission_values=transmission(spectrum, background.spectrum),
                                           run_quality_status=RUN_CLASSIFICATION, publication_eligible=False)
                             result = {"kind": kind, "path": store.path, "spectrum": spectrum, "absorbance": values,
                                       "run_classification": RUN_CLASSIFICATION, "publication_eligible": False,
@@ -192,7 +207,11 @@ class PhaseScanRunner:
                             progress("Reconstructing the complete nominal dataset using measured pump times…")
                             reconstruction = reconstruct(records, background.spectrum, plan, cancel=self._check)
                             reconstruction.update({"completion_status": "COMPLETE", "publication_eligible": False,
-                                                   "run_classification": RUN_CLASSIFICATION})
+                                                   "run_classification": RUN_CLASSIFICATION,
+                                                   "background_source": str(background.path),
+                                                   "background_acquisition_id": background.spectrum.metadata.get("acquisition_id"),
+                                                   "sample_baseline_record_ids": [s.metadata["record_id"] for e, s in records
+                                                                                  if not e.pump_enabled]})
                             reconstruction["warnings"] = sorted(set(reconstruction.get("warnings", []) + [PUBLICATION_WARNING]))
                             reconstruction["limitations"] = list(reconstruction.get("limitations", [])) + [PUBLICATION_WARNING]
                             if not np.isfinite(reconstruction["absorbance"]).any():
@@ -228,17 +247,6 @@ class PhaseScanRunner:
         return result
 
 
-def compatible_readbacks(left, right):
-    """Compare acquisition settings without rejecting harmless float readback rounding."""
-    if isinstance(left, dict) and isinstance(right, dict):
-        return left.keys() == right.keys() and all(compatible_readbacks(left[k], right[k]) for k in left)
-    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
-        return len(left) == len(right) and all(compatible_readbacks(a, b) for a, b in zip(left, right))
-    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
-        return math.isclose(left, right, rel_tol=1e-6, abs_tol=1e-12)
-    return left == right
-
-
 def save_reconstruction_csv(path, reconstruction):
     path.parent.mkdir(parents=True, exist_ok=True)
     quality = reconstruction.get("completion_status", "UNKNOWN")
@@ -246,24 +254,34 @@ def save_reconstruction_csv(path, reconstruction):
     with path.open("x", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["wavenumber_cm-1", "time_after_pump_s", "absorbance", "standard_error",
-                         "repetition_count", "run_quality_status", "publication_eligible"])
+                         "repetition_count", "run_quality_status", "publication_eligible",
+                         "detector_mode", "background_source"])
         for row, time_s in enumerate(reconstruction["time_s"]):
             for column, wn in enumerate(reconstruction["wavenumber_cm1"]):
                 writer.writerow([wn, time_s, reconstruction["absorbance"][row, column],
                                  reconstruction["standard_error"][row, column],
-                                 reconstruction["repetition_count"][row, column], quality, eligible])
+                                 reconstruction["repetition_count"][row, column], quality, eligible,
+                                 reconstruction.get("detector_mode", "dual_detector"),
+                                 reconstruction.get("background_source", "")])
 
 
 def save_scan_csv(path, spectrum, values, *, background=False,
-                  run_quality_status="COMPLETE", publication_eligible=True):
+                  run_quality_status="COMPLETE", publication_eligible=True, transmission_values=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     ages = np.full(len(values), np.nan) if spectrum.pump_time_s is None else np.asarray(spectrum.sample_time_s)-spectrum.pump_time_s
     with path.open("x", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["wavenumber_cm-1", "background_S0_R0" if background else "absorbance",
+        single_detector = spectrum.reference_r is None
+        value_label = ("buffer_blank_CH1_R_V" if single_detector else "background_S0_R0") if background else "absorbance"
+        writer.writerow(["wavenumber_cm-1", value_label,
                          "reference_relative_time_s", "sample_R_V", "reference_R_V", "wavenumber_basis",
-                         "pump_time_basis", "run_quality_status", "publication_eligible"])
-        for wn, value, age, sample, reference in zip(spectrum.wavenumber_cm1, values, ages, spectrum.sample_r, spectrum.reference_r):
+                         "pump_time_basis", "run_quality_status", "publication_eligible",
+                         "transmission_ratio", "detector_mode", "record_role", "background_source"])
+        references = [None] * len(values) if single_detector else spectrum.reference_r
+        ratios = [None] * len(values) if transmission_values is None else transmission_values
+        for wn, value, age, sample, reference, ratio in zip(spectrum.wavenumber_cm1, values, ages, spectrum.sample_r, references, ratios):
             writer.writerow([wn, value, age, sample, reference, spectrum.metadata.get("wavenumber_basis"),
                              spectrum.metadata.get("pump_time_basis", "unpumped"),
-                             run_quality_status, publication_eligible])
+                             run_quality_status, publication_eligible, ratio,
+                             spectrum.metadata.get("detector_mode", "dual_detector"),
+                             spectrum.metadata.get("record_role", ""), spectrum.metadata.get("background_source", "")])
