@@ -6,33 +6,113 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
-def test_seven_tab_gui_shell_instantiates_without_hardware():
+@pytest.mark.parametrize("discovery_case", ("installed", "empty", "optional_pair"))
+def test_seven_tab_gui_shell_instantiates_without_hardware(monkeypatch, tmp_path, discovery_case):
     pytest.importorskip("PySide6")
-    from PySide6.QtWidgets import QApplication
+    from importlib import import_module
+    from PySide6.QtCore import Signal
+    from PySide6.QtWidgets import QApplication, QWidget
 
+    from control_app.measurement_host import ModuleDescriptor, TabHandle
+    from control_app.measurement_host.ownership import HardwareCoordinator
+    from control_app.measurement_host.registry import DiscoveryResult
     from control_app.ui.contracts import blocked_handler
-    from control_app.ui.main_window import ControlSystemMainWindow
+    from control_app.ui import main_window
+
+    hardware_attempts = []
+
+    def reject_hardware(*args, **kwargs):
+        # Registration isolates optional errors, so also retain attempts and
+        # assert outside construction that none was silently caught there.
+        hardware_attempts.append((args, kwargs))
+        raise AssertionError("Shell construction must not construct or acquire hardware")
+
+    for module_name, class_name in (
+        ("mircat_service", "MircatService"), ("hf2li_service", "HF2LIService"),
+        ("picoscope_service", "PicoScopeService"), ("t660_service", "T660Service"),
+        ("ell15_iris_service", "ELL15IrisService"),
+    ):
+        service = getattr(import_module(f"control_app.devices.{module_name}"), class_name)
+        monkeypatch.setattr(service, "__init__", reject_hardware)
+    monkeypatch.setattr(main_window, "installed_device_factories", reject_hardware)
+    coordinator = HardwareCoordinator(tmp_path / "smoke_instrument.lock")
+    monkeypatch.setattr(coordinator, "acquire", reject_hardware)
+    handler = blocked_handler("automated smoke test; no hardware")
+    handler.coordinator = coordinator
+
+    if discovery_case != "installed":
+        class OptionalWidget(QWidget):
+            state_changed = Signal(bool)
+
+        def create_pair(context):
+            pair = []
+            for mode in ("single", "dual"):
+                scoped = context.for_mode(mode)
+                widget = OptionalWidget()
+                pair.append(TabHandle(
+                    scoped.instance_id, f"Smoke Optional {mode}", widget,
+                    lambda: False, lambda: (), lambda reason: None,
+                    lambda path: None, lambda change: None, widget.state_changed,
+                ))
+            return pair
+
+        descriptors = (() if discovery_case == "empty" else (
+            ModuleDescriptor(1, "smoke_optional_measurement", 10, create_pair),
+        ))
+        monkeypatch.setattr(main_window, "discover_modules", lambda: DiscoveryResult(descriptors, ()))
 
     app = QApplication.instance() or QApplication([])
-    window = ControlSystemMainWindow(blocked_handler("automated smoke test; no hardware"), persist_settings=False)
-    assert window.windowTitle() == "IR Spectroscope Control System"
-    assert window.tabs.count() == 7
-    assert window.save_location.objectName() == "save_location"
-    assert [window.tabs.tabText(index) for index in range(window.tabs.count())] == [
-        "Phase Scan",
-        "Dual-Detector Phase Scan",
-        "MIRcat",
-        "T660-1",
-        "Nd:YAG",
-        "OPO Iris",
-        "Plotter",
-    ]
-    assert not hasattr(window, "experiment_builder_widget")
-    assert not hasattr(window, "workflow_selector_widget")
-    assert window.iris_widget.current_diameter_label.text() == "-- mm"
-    assert window.iris_widget.target_diameter.objectName() == "iris_target_diameter"
-    window.deleteLater()
-    app.processEvents()
+    window = main_window.ControlSystemMainWindow(handler, persist_settings=False)
+    try:
+        app.processEvents()
+        assert window.windowTitle() == "IR Spectroscope Control System"
+        assert window.save_location.objectName() == "save_location"
+        handles = window.measurement_lifecycle.handles
+        assert [handle.instance_id for handle in handles[:2]] == ["phase_scan:single", "phase_scan:dual"]
+        assert handles[0].widget is window.phase_scan_widget
+        assert handles[1].widget is window.dual_detector_phase_scan_widget
+        legacy_tabs = [
+            ("Phase Scan", window.phase_scan_widget),
+            ("Dual-Detector Phase Scan", window.dual_detector_phase_scan_widget),
+            ("MIRcat", window.mircat_widget),
+            ("T660-1", window.t660_widget),
+            ("Nd:YAG", window.ndyag_widget),
+            ("OPO Iris", window.iris_widget),
+            ("Plotter", window.scan_plotter_widget),
+        ]
+        # Accepted optional pairs are inserted after the two phase tabs. Use
+        # their actual handles, since invalid optional pairs may be excluded.
+        expected_tabs = [(handle.title, handle.widget) for handle in handles] + legacy_tabs[2:]
+        assert window.tabs.count() == len(expected_tabs)
+        for index, (title, widget) in enumerate(expected_tabs):
+            assert window.tabs.tabText(index) == title
+            assert window.tabs.widget(index) is widget
+            assert window.tab_selector.itemText(index) == title
+        assert window.tab_selector.count() == len(expected_tabs)
+        legacy_indices = [window.tabs.indexOf(widget) for _, widget in legacy_tabs]
+        assert legacy_indices == sorted(set(legacy_indices))
+        assert [window.tabs.tabText(index) for index in legacy_indices] == [title for title, _ in legacy_tabs]
+        window.tab_selector.setCurrentIndex(window.tabs.count() - 1)
+        assert window.tabs.currentWidget() is window.scan_plotter_widget
+        window.tabs.setCurrentIndex(0)
+        assert window.tab_selector.currentIndex() == 0
+        if discovery_case != "installed":
+            assert window.registration_issues == ()
+            assert window.tabs.count() == (7 if discovery_case == "empty" else 9)
+            assert [handle.instance_id for handle in handles[2:]] == (
+                [] if discovery_case == "empty" else [
+                    "smoke_optional_measurement:single", "smoke_optional_measurement:dual",
+                ])
+        assert not hasattr(window, "experiment_builder_widget")
+        assert not hasattr(window, "workflow_selector_widget")
+        assert window.iris_widget.current_diameter_label.text() == "-- mm"
+        assert window.iris_widget.target_diameter.objectName() == "iris_target_diameter"
+        app.processEvents()
+        assert hardware_attempts == []
+        assert not coordinator.lock_path.exists()
+    finally:
+        window.deleteLater()
+        app.processEvents()
 
 
 def test_iris_tab_refreshes_and_applies_direct_entry_asynchronously():
