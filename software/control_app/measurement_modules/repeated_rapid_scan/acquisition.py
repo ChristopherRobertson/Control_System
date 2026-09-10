@@ -220,15 +220,18 @@ def _validate_mircat_internal_pulse(pulse, limits, current_limits, *, external_r
     if not all(math.isfinite(value) and value > 0 for value in (max_rate, max_width, vendor_duty)):
         raise ValueError("MIRcat connected pulse limits must be finite positive values")
     maximum = min(.30, vendor_duty/100.)
-    if not all(math.isfinite(value) and value > 0 for value in (rate, width, current, maximum)):
+    if not all(math.isfinite(value) and value > 0 for value in (rate, width, maximum)):
         raise ValueError("MIRcat internal pulse settings/limits must be finite positive values")
+    minimum_current, maximum_current = map(float, current_limits)
+    if not all(math.isfinite(value) for value in (current, minimum_current, maximum_current)) or not minimum_current <= current <= maximum_current:
+        raise ValueError("MIRcat current must be finite and within the connected inclusive current limits")
     external_duty = validate_probe_optical_pulse_pair(external_rate_hz, width) if external_rate_hz is not None else None
     if external_duty is not None and external_duty > maximum:
         raise ValueError(f"MIRcat emitted optical duty cycle {external_duty:.9g} exceeds the connected device limit {maximum:.9g}")
     duty = validate_mircat_pulse_pair(rate, width)
     if duty > maximum:
         raise ValueError(f"MIRcat internal optical duty cycle {duty:.9g} exceeds {maximum:.9g}; repetition rate times pulse width must be at most 30% and any lower device limit")
-    if rate > max_rate or width > max_width or not current_limits[0] <= current <= current_limits[1]:
+    if rate > max_rate or width > max_width:
         raise ValueError("Selected MIRcat internal pulse settings exceed its connected readback limits")
     if external_rate_hz is not None and rate <= external_rate_hz:
         raise ValueError("MIRcat internal repetition rate must exceed the separate external T660 probe trigger rate")
@@ -552,8 +555,12 @@ class InstalledDevicesAcquirer:
         qcl.turn_emission_off()
         qcl.tune_to_wavenumber(start, qcl=qcl_id)
         self._wait(qcl.is_tuned, worker, self.config.get("tune_timeout_s", 45.), "MIRcat tuning")
-        qcl.set_external_sweep_trigger_params(start_cm1=start, stop_cm1=stop,
+        trigger_readback = qcl.set_external_sweep_trigger_params(start_cm1=start, stop_cm1=stop,
             wavelength_trigger_interval_cm1=self.config["marker_interval_cm1"], external_process_trigger=True)
+        raw["readbacks"]["mircat_trigger"] = {"requested": {"pulse_mode": 2, "process_trigger_mode": 2},
+                                                "actual": trigger_readback}
+        if get(trigger_readback, "pulse_mode") != 2 or get(trigger_readback, "process_trigger_mode") != 2:
+            raise RuntimeError("MIRcat trigger readback did not retain external pulse mode 2 and external process-trigger mode 2; emission remains off")
         qcl.set_wavelength_trigger_pulse_width_us(self.config["marker_width_us"])
         # Check the actual emitted-cadence/SDK-width pair immediately before
         # opening emission, never substituting the electrical TTL high time.

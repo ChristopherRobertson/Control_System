@@ -232,7 +232,7 @@ def test_rrs_installed_capture_upload_acknowledgements_and_native_continuity(tmp
         def turn_emission_off(self): pass
         def tune_to_wavenumber(self, *args, **kwargs): assert kwargs["qcl"] == 1
         def is_tuned(self): return True
-        def set_external_sweep_trigger_params(self, **kwargs): pass
+        def set_external_sweep_trigger_params(self, **kwargs): return {"pulse_mode": 2, "process_trigger_mode": 2}
         def set_wavelength_trigger_pulse_width_us(self, value): pass
         def start_emission(self): pass
         def cancel_manual_tune(self): pass
@@ -456,6 +456,8 @@ class InstalledTransport:
         self.train_starts = 0
         self.qcl_calls, self.pulse_writes = [], []
         self.vendor_duty_percent = 50.
+        self.current_limits = (1., 1000.)
+        self.actual_current_override = None
         self.vendor_first_limits = None
         self.vendor_limit_reads = 0
         self.frequency_readback_offset_hz = 0.
@@ -585,15 +587,22 @@ class InstalledTransport:
                 limits = self.vendor_first_limits if self.vendor_first_limits is not None and self.vendor_limit_reads == 1 else [3e6, 500., self.vendor_duty_percent]
                 if isinstance(limits, Exception): raise limits
                 put(limits, args[1:])
-            elif key == 'GetQCLMinPulsedCurrent': put([1], args[1:])
-            elif key == 'GetQCLMaxPulsedCurrent': put([1000], args[1:])
+            elif key == 'GetQCLMinPulsedCurrent': put([int(self.current_limits[0])], args[1:])
+            elif key == 'GetQCLMaxPulsedCurrent': put([int(self.current_limits[1])], args[1:])
             elif key == 'SetQCLParams':
                 self.pulse = [val(arg) for arg in args[1:]]
                 self.pulse_writes.append(tuple(self.pulse))
                 if self.fault == 'rounded_pulse_above_limit' and len(self.pulse_writes) == 1:
                     self.pulse[1] = 121.
+                if self.actual_current_override is not None and len(self.pulse_writes) == 1:
+                    self.pulse[2] = self.actual_current_override
             elif key == 'GetWlTrigParams': put(self.trigger)
-            elif key == 'SetWlTrigParams': self.trigger = [val(arg) for arg in args]
+            elif key == 'SetWlTrigParams':
+                requested = [val(arg) for arg in args]
+                if requested[:2] != [2, 2] or self.fault != 'ignored_trigger_modes':
+                    self.trigger = requested
+                if requested[:2] == [2, 2] and self.fault in ('coerced_pulse_mode', 'coerced_process_mode'):
+                    self.trigger[0 if self.fault == 'coerced_pulse_mode' else 1] = 1
             elif key == 'GetWlTrigPulseWidth': put([self.marker_width])
             elif key == 'SetWlTrigPulseWidth': self.marker_width = val(args[0])
             elif key == 'StartSweepScan': self.sweep = [val(arg) for arg in args[:5]]
@@ -1072,3 +1081,54 @@ def test_rrs_after_recipe_duty_uses_actual_dds_readback_within_timing_tolerance(
             restored = acquirer.restore(worker)
             ctx.ownership.release(operation.ownership, safe_verified=restored['safe_verified'], preservation_verified=True)
     assert restored['safe_verified'] and coordinator.snapshot()['state'] == 'free'
+
+
+@pytest.mark.parametrize('fault', ['ignored_trigger_modes', 'coerced_pulse_mode', 'coerced_process_mode'])
+def test_rrs_actual_trigger_modes_retained_and_verified_before_emission(tmp_path, monkeypatch, fault):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker, fault)
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(RuntimeError, match='trigger readback'):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    retained = runner.last_result['raw_movies'][0]['readbacks']['mircat_trigger']
+    assert retained['requested'] == {'pulse_mode': 2, 'process_trigger_mode': 2}
+    assert (retained['actual']['pulse_mode'], retained['actual']['process_trigger_mode']) != (2, 2)
+    assert 'MIRcatSDK_TurnEmissionOn' not in transport.calls
+    assert transport.train_starts == 0
+    assert load_run(runner.last_result['output_path']).record['raw_movies'][0]['readbacks']['mircat_trigger'] == retained
+    assert runner.last_result['restoration']['safe_verified'] and coordinator.snapshot()['state'] == 'free'
+
+
+def test_rrs_original_allowed_zero_current_restored_after_positive_measurement(tmp_path, monkeypatch):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker)
+    transport.current_limits = (0, 1000)
+    transport.pulse[2] = 0.
+    initial = installed_plan('single').settings
+    plan = build_plan(replace(initial, manual_overrides={**initial.manual_overrides, 'mircat_current_ma': 600.}))
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    with ctx.hardware_scope(operation):
+        result = RepeatedRapidScanRunner(ctx).run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert result['status'] == 'complete'
+    assert transport.pulse_writes[0][2] == 600. and transport.pulse_writes[-1][2] == 0.
+    assert result['restoration']['mircat']['before']['pulse']['current_ma'] == 0.
+    assert result['restoration']['mircat']['after']['pulse']['current_ma'] == 0.
+    assert result['restoration']['safe_verified'] and coordinator.snapshot()['state'] == 'free'
+    assert not transport.emission and not transport.armed
+
+
+@pytest.mark.parametrize('actual_current', [-1., 0., 1001.])
+def test_rrs_actual_current_outside_sdk_inclusive_bounds_rejects_before_arm(tmp_path, monkeypatch, actual_current):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker)
+    transport.actual_current_override = actual_current
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(ValueError, match='inclusive current limits'):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert runner.last_result['readbacks']['mircat_pulse']['current_ma'] == actual_current
+    assert not any(name in transport.calls for name in ('MIRcatSDK_ArmLaser', 'MIRcatSDK_TurnEmissionOn'))
+    assert runner.last_result['restoration']['safe_verified'] and coordinator.snapshot()['state'] == 'free'
