@@ -8,7 +8,7 @@ import math
 import re
 from typing import Any, Mapping
 
-from .settings import CONDITION_PROFILES, EXPERIMENT_ID, SCHEMA_VERSION, Position, Settings
+from .settings import EXPERIMENT_ID, SCHEMA_VERSION, Position, Settings
 from .timing import TimingError, TimingProgram, compile_timing
 
 
@@ -53,7 +53,13 @@ class Plan:
 
     @property
     def ready(self) -> bool:
-        return not self.validation_errors and not self.readiness_items
+        """Input-valid and eligible to start the owned connection/resolution step."""
+        return not self.validation_errors
+
+    @property
+    def operational_ready(self) -> bool:
+        """Required operational settings are resolved before acquisition begins."""
+        return self.ready and not self.readiness_items
 
     @property
     def mode(self) -> str:
@@ -89,7 +95,8 @@ class Plan:
                 row = block.to_dict()
             block_rows.append(row)
         return {"schema_version": self.schema_version, "experiment_id": self.experiment_id,
-                "mode": self.mode, "instance_id": self.instance_id, "ready": self.ready, "settings": self.settings.to_dict(),
+                "mode": self.mode, "instance_id": self.instance_id, "ready": self.ready,
+                "operational_ready": self.operational_ready, "settings": self.settings.to_dict(),
                 "resolved": deepcopy(self.resolved), "blocks": block_rows,
                 "validation_errors": list(self.validation_errors), "readiness_items": list(self.readiness_items),
                 "warnings": list(self.warnings), "estimates": deepcopy(self.estimates),
@@ -140,8 +147,6 @@ def _validate(s: Settings) -> list[str]:
     errors = []
     if s.mode not in {"single", "dual"}:
         errors.append("Detector mode must be single or dual")
-    if s.condition_profile not in CONDITION_PROFILES:
-        errors.append("Select an available protein/temperature condition profile")
     if not isinstance(s.pump_enabled, bool):
         errors.append("Pump enable must be boolean")
     for name in ("pre_observation_s", "post_observation_s", "chunk_duration_s", "memory_limit_mb", "storage_limit_mb", "tune_timeout_s"):
@@ -153,9 +158,13 @@ def _validate(s: Settings) -> list[str]:
     if not _integer(s.event_budget, 0):
         errors.append("event_budget must be a finite nonnegative integer")
     for name in ("sample_rate_sps", "reference_rate_sps", "sample_timeconstant_s", "reference_timeconstant_s",
-                 "minimum_event_interval_s", "wavenumber_tolerance_cm1", "temperature_k", "reset_observation_s"):
+                 "minimum_event_interval_s", "wavenumber_tolerance_cm1", "reset_observation_s", "probe_rate_hz",
+                 "probe_width_ns", "pump_fire_width_s", "pump_q_switch_width_s"):
         if getattr(s, name) is not None and not _positive(getattr(s, name)):
             errors.append(f"{name} must be positive or Automatic")
+    for name in ("pump_fire_delay_s", "pump_q_switch_delay_s"):
+        if getattr(s, name) is not None and not _positive(getattr(s, name), zero=True):
+            errors.append(f"{name} must be nonnegative or Automatic")
     for name in ("baseline_drift_fraction", "baseline_cv_limit", "reset_tolerance_fraction"):
         if not _positive(getattr(s, name)) or getattr(s, name) >= 1:
             errors.append(f"{name} must lie strictly between zero and one")
@@ -165,8 +174,6 @@ def _validate(s: Settings) -> list[str]:
             errors.append(f"{name} must be an integer from 1 to 8 or Automatic")
     if s.retention_strategy not in {"continuous_to_disk", "bounded_memory"}:
         errors.append("Select continuous_to_disk or bounded_memory retention; ring-buffer overwrite is unsupported")
-    if not errors and s.chunk_duration_s > s.pre_observation_s + s.post_observation_s:
-        errors.append("Retrieval chunk duration exceeds the requested complete record")
     for name in ("baseline_window_s", "integration_window_s"):
         window = getattr(s, name)
         if window is not None:
@@ -180,26 +187,27 @@ def _validate(s: Settings) -> list[str]:
             errors.append("Every position must contain a finite positive wavenumber in cm^-1")
         if pos.label not in {"band", "off_band", "control"}:
             errors.append("Position label must be band, off_band, or control")
+    if not s.positions:
+        errors.append("Enter at least one wavenumber in cm^-1")
     if not errors:
         total = len(s.positions) * s.technical_repetitions * s.events_per_position * int(s.pump_enabled)
         if total > s.event_budget:
             errors.append(f"Requested {total} pump events exceed the explicitly authorized finite budget {s.event_budget}")
         if len(s.positions) * s.technical_repetitions * s.events_per_position > 10000:
-            errors.append("More than 10000 separately reviewed capture blocks exceeds this planner's bounded schedule")
-        if s.condition_profile.startswith("cryo") and total > 1:
-            errors.append("Cryogenic no-repeat rule: an explicitly established fresh equivalent state requires a separate operation; no installed automatic state-establishment adapter is available")
+            errors.append("Maximum 10000 capture blocks")
     return errors
 
 
 def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[str, Any] | None = None,
-               evidence: Mapping[str, Any] | None = None, *, purpose: str = "measurement") -> Plan:
-    """Resolve an editable plan without discovery, device imports or hardware I/O.
+               evidence: Mapping[str, Any] | None = None, *, purpose: str = "measurement",
+               live_readbacks: Mapping[str, Any] | None = None) -> Plan:
+    """Plan raw/relative acquisition without opening hardware or requiring files.
 
-    ``configuration['fixed_wavenumber_kinetics']`` supplies installed method
-    capabilities; ``evidence['operating_profile']`` supplies accepted settings.
-    A promoted bundle loader validates instrument provenance before supplying
-    this mapping. Sample selection is a separate versioned exchange record.
-    Unresolved readiness does not prevent saving or inspecting a plan.
+    Each None override resolves independently. The precedence is explicit user
+    override, current installed readback, optional profile, then configured value.
+    Input-valid plans can start the connection step; operational_ready is checked
+    after the runner supplies current readbacks under exclusive ownership.
+    Material, temperature and historical selection fields are metadata only.
     """
     s = Settings.from_dict(settings)
     if purpose not in {"measurement", "preliminary", "blank"}:
@@ -209,220 +217,211 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
                                    technical_repetitions=1 if purpose == "preliminary" else s.technical_repetitions,
                                    events_per_position=1 if purpose == "preliminary" else s.events_per_position)
                             if preparation else s)
-    config, evidence = deepcopy(dict(configuration or {})), deepcopy(dict(evidence or {}))
-    errors, ready, warnings = _validate(acquisition_settings), [], []
-    local = config.get(EXPERIMENT_ID, {})
-    profile = evidence.get("operating_profile", {})
-    resolved = _merge(local, profile)
-    resolved["acquisition_purpose"] = purpose
-    resolved["units"] = {"time": "s", "wavenumber": "cm^-1", "sampling": "samples/s", "temperature": "K"}
-    resolved["actual_readbacks_required"] = ["MIRcat Tuned and actual position", "HF2LI rates/filter/order/ranges/lock",
-                                               "T660 table/predivider/clock/finite count", "retained marker and detector support"]
-    if not profile.get("record_id") or profile.get("qualification_kind") not in {"measured", "simulation"}:
-        ready.append("Load an applicable measured operating profile; defaults and literature examples do not authorize a recipe")
-    simulation = profile.get("qualification_kind") == "simulation"
-    if simulation:
-        warnings.append("SIMULATION ONLY: synthetic profile values and records provide no installed-system or sample readiness evidence")
-    if profile.get("condition_profile") != s.condition_profile:
-        ready.append("Operating profile protein/temperature condition does not match settings")
-    if profile.get("condition_id") != s.condition_id:
-        ready.append("Operating profile condition identity does not match settings")
-    for name in ("condition_id", "sample_id", "preparation_id", "cell_id", "position_id", "temperature_id"):
-        if not getattr(s, name):
-            ready.append(f"Enter the {name.replace('_', ' ')}")
-    if s.temperature_k is None:
-        warnings.append("Sample temperature is unentered: a condition label alone does not establish actual temperature or a temperature-dependent claim")
-    if s.condition_profile.startswith("cryo"):
-        if s.temperature_k is None:
-            ready.append("Cryogenic observation requires an entered measured temperature in kelvin from the retained condition record")
-        temperature_qualified = (_positive(profile.get("temperature_uncertainty_k"), zero=True) or
-            (profile.get("temperature_status") in {"measured", "condition_source_measured"} and
-             bool(profile.get("temperature_record_id"))))
-        if not temperature_qualified:
-            ready.append("Cryogenic temperature needs explicit profile uncertainty in kelvin or a measured condition-source status tied to the retained temperature record; no automatic sensor is assumed")
-    if not s.positions:
-        ready.append("Select at least one measured band or off-band position; nominal literature centers are not selected positions")
-    required_records = ["topology_record_id", "acquisition_response_record_id", "temperature_record_id", "configuration_id"]
-    if s.pump_enabled and not preparation:
-        required_records.append("dose_record_id")
-    for name in required_records:
-        if not resolved.get(name):
-            ready.append(f"Applicable {name.replace('_', ' ')} is unresolved")
-    if s.pump_enabled and not preparation and not s.dark_control_record_id:
-        ready.append("Load an applicable dark-control record")
-    if s.pump_enabled and not preparation and not s.artifact_control_record_id:
-        ready.append("Load applicable no-pump/off-band artifact controls")
-    # An accepted sample spectral-selection exchange can come from any producer;
-    # it is intentionally not treated as promoted instrument calibration.
-    selection_issues = []
-    selection = _selection_projection(evidence.get("sample_selection", {}), selection_issues)
-    for p in s.positions if not preparation else ():
-        if not p.selection_record_id:
-            ready.append(f"Position {p.wavenumber_cm1:g} cm^-1 needs its accepted measured selection record ID")
-    if selection and not preparation:
-        if selection.get("accepted") is not True:
-            ready.append("Sample spectral-selection record has not been accepted")
-        for field in ("sample_id", "condition_id", "preparation_id", "cell_id"):
-            if selection.get(field) != getattr(s, field):
-                ready.append(f"Sample spectral-selection {field} does not match")
-        if not selection.get("schema_version") or not selection.get("record_id"):
-            ready.append("Sample spectral-selection exchange needs a schema version and stable record ID")
-        selected_rows = selection.get("positions", [])
-        for p in s.positions:
-            if p.selection_record_id != selection.get("record_id") or not any(
-                    _positive(row.get("wavenumber_cm1")) and math.isclose(row["wavenumber_cm1"], p.wavenumber_cm1, abs_tol=1e-9, rel_tol=0)
-                    for row in selected_rows):
-                ready.append(f"Measured selection does not cover position {p.wavenumber_cm1:g} cm^-1")
-    elif s.positions and not preparation:
-        ready.append("Load the versioned measured sample spectral-selection record for the ordered positions")
-    if not preparation:
-        ready.extend(selection_issues)
-    if "mbco" in s.condition_profile and s.positions and not preparation:
-        bands = [p for p in s.positions if p.label == "band"]
-        if bands and bands[0].band_assignment.upper().replace("₁", "1") != "A1":
-            ready.append("MbCO discovery starts at a measured A1 band; A0/A3 are conditional extensions")
-        quantified = set(selection.get("quantified_extensions", ()))
-        for p in bands:
-            if p.band_assignment.upper() in {"A0", "A3"} and p.band_assignment.upper() not in quantified:
-                ready.append(f"MbCO {p.band_assignment} extension needs measured spectral separation and pump-signal quantification")
-    # Detector settings resolve independently; throughput includes every enabled
-    # demodulator stream, including the separate retained digital marker stream.
+    config = deepcopy(dict(configuration or {}))
+    evidence = deepcopy(dict(evidence or {}))
+    local = deepcopy(dict(config.get(EXPERIMENT_ID, {})))
+    profile = deepcopy(dict(evidence.get("operating_profile", {})))
+    live = deepcopy(dict(live_readbacks or {}))
+    resolved = _merge(_merge(local, profile), live)
+    sources = {}
+
+    def source_for(path):
+        for name, record in (("installed_readback", live), ("optional_profile", profile), ("configured", local)):
+            value = record
+            for key in path.split("."):
+                value = value.get(key) if isinstance(value, Mapping) else None
+            if value is not None:
+                return name
+        return "unresolved"
+
+    errors, pending, warnings = _validate(acquisition_settings), [], []
+    pumped = acquisition_settings.pump_enabled
     roles = ("sample", "reference") if s.mode == "dual" else ("sample",)
+    resolved["acquisition_purpose"] = purpose
+    resolved["acquisition_class"] = "raw_relative"
+    resolved["units"] = {"time": "s", "wavenumber": "cm^-1", "sampling": "samples/s"}
+    resolved["actual_readbacks_required"] = ["MIRcat actual position and Tuned", "HF2LI rates/filter/order/ranges/lock",
+        "T660 probe clock and finite timing readback", "native detector and electrical marker support"]
+    if resolved.get("qualification_kind") == "simulation":
+        warnings.append("SIMULATION ONLY: synthetic device settings and observations provide no installed measurement evidence")
+
     for role in roles:
-        role_record = deepcopy(dict(resolved.get(role, {})))
+        selected = deepcopy(dict(resolved.get(role, {})))
         for setting_name, key in ((f"{role}_rate_sps", "rate_sps"), (f"{role}_timeconstant_s", "timeconstant_s"),
                                   (f"{role}_filter_order", "order")):
-            if getattr(s, setting_name) is not None:
-                role_record[key] = getattr(s, setting_name)
-        resolved[role] = role_record
+            override = getattr(s, setting_name)
+            if override is not None:
+                selected[key] = override
+            sources[f"{role}.{key}"] = "user_override" if override is not None else source_for(f"{role}.{key}")
+        resolved[role] = selected
         for key in ("rate_sps", "timeconstant_s"):
-            if not _positive(role_record.get(key)):
-                ready.append(f"Resolve measured {role} HF2LI {key}")
-        if not _integer(role_record.get("order")) or role_record.get("order", 0) > 8:
-            ready.append(f"Resolve supported {role} HF2LI filter order")
-        if not _integer(role_record.get("demodulator_index"), 0) or not _integer(role_record.get("input_index"), 0):
-            ready.append(f"Resolve maintained {role} demodulator and signal-input roles")
-        choices = local.get("supported", {}).get(role, {})
+            if not _positive(selected.get(key)):
+                pending.append(f"Read current {role} HF2LI {key} when connecting")
+        if not _integer(selected.get("order")) or selected.get("order", 0) > 8:
+            pending.append(f"Read a supported {role} HF2LI filter order when connecting")
+        if not _integer(selected.get("demodulator_index"), 0) or not _integer(selected.get("input_index"), 0):
+            pending.append(f"Resolve installed {role} demodulator and input roles when connecting")
+        choices = resolved.get("supported", {}).get(role, {})
         for key in ("rate_sps", "timeconstant_s", "order"):
-            if choices.get(key) and role_record.get(key) not in choices[key]:
-                errors.append(f"Requested {role} {key} is unsupported by the supplied installed capabilities")
-        # Overrides are permitted only inside the measured response envelope.
-        accepted = profile.get(role, {})
-        for key in ("rate_sps", "timeconstant_s", "order"):
-            if role_record.get(key) != accepted.get(key) and not _within_envelope(role_record.get(key), resolved.get("validity_envelope", {}).get(f"{role}.{key}")):
-                ready.append(f"{role} {key} override lacks applicable measured acquisition-response evidence")
-    if s.mode == "dual" and resolved.get("sample", {}).get("demodulator_index") == resolved.get("reference", {}).get("demodulator_index"):
-        ready.append("Dual detectors require distinct demodulator roles")
-    if s.mode == "dual" and resolved.get("sample", {}).get("input_index") == resolved.get("reference", {}).get("input_index"):
-        ready.append("Dual detectors require distinct sample and reference signal inputs")
-    for name in ("settling_s", "timing_rate_sps", "tune_tolerance_cm1"):
-        if not _positive(resolved.get(name), zero=name == "settling_s"):
-            ready.append(f"Resolve characterized {name}")
+            supported = choices.get(key)
+            if supported is None and key == "rate_sps":
+                supported = resolved.get(f"{role}_supported_rates_sps")
+            if supported and selected.get(key) is not None and selected[key] not in supported:
+                errors.append(f"Requested {role} {key} is unsupported by the connected capabilities")
+    if s.mode == "dual":
+        for key in ("demodulator_index", "input_index"):
+            a, b = (resolved.get(role, {}).get(key) for role in ("sample", "reference"))
+            if a is not None and b is not None and a == b:
+                errors.append(f"Dual detectors require distinct sample/reference {key} roles")
+
+    # Timing and input limits are device/runtime constraints, not qualifications.
+    resolved.setdefault("pump_marker_bit", 16)  # Maintained Surelite Fixed Sync wiring.
+    resolved.setdefault("maximum_aggregate_rate_sps", 700000.)  # HF2 aggregate manufacturer bound.
+    sources["pump_marker_bit"] = source_for("pump_marker_bit") if source_for("pump_marker_bit") != "unresolved" else "maintained_wiring_DIO16"
+    for name in ("timing_rate_sps", "tune_tolerance_cm1"):
+        if not _positive(resolved.get(name)):
+            pending.append(f"Resolve installed {name} when connecting")
+        sources[name] = source_for(name)
     if s.wavenumber_tolerance_cm1 is not None:
-        if not _within_envelope(s.wavenumber_tolerance_cm1, resolved.get("validity_envelope", {}).get("tune_tolerance_cm1")) and s.wavenumber_tolerance_cm1 != profile.get("tune_tolerance_cm1"):
-            ready.append("Wavenumber tolerance override exceeds its measured validity envelope")
         resolved["tune_tolerance_cm1"] = s.wavenumber_tolerance_cm1
-    if not _integer(resolved.get("timing_demodulator_index"), 0):
-        ready.append("Resolve an independently enabled timing demodulator stream")
-    elif resolved.get("timing_demodulator_index") in [resolved.get(r, {}).get("demodulator_index") for r in roles]:
-        ready.append("Timing stream must have a distinct demodulator role")
-    if resolved.get("pump_marker_bit") != 16:
-        ready.append("Installed pump electrical marker is Surelite Fixed Sync on HF2LI DIO16; qualify any changed topology")
-    if not _positive(resolved.get("pump_marker_min_width_s")):
-        ready.append("Resolve the measured minimum electrical pump-marker width")
-    elif _positive(resolved.get("timing_rate_sps")) and resolved["pump_marker_min_width_s"] * resolved["timing_rate_sps"] < 2:
-        ready.append("Timing stream cannot qualify two samples across the shortest measured pump marker")
-    for section in ("probe_recipe", "mircat", "hf2li"):
-        if not resolved.get(section):
-            ready.append(f"Resolve the complete applicable {section} configuration")
-    if resolved.get("probe_recipe"):
-        probe_channels = resolved["probe_recipe"].get("channels", {})
-        if set(probe_channels) != set("ABCD") or probe_channels.get("D", {}).get("enabled") is not False:
-            ready.append("Probe recipe must configure A/B/C/D and leave disconnected channel D OFF")
-        elif not all({"enabled", "delay", "width", "polarity", "termination"} <= set(probe_channels[ch]) for ch in "ABCD"):
-            ready.append("Probe recipe must explicitly specify every channel's enable/delay/width/polarity/termination")
+        sources["tune_tolerance_cm1"] = "user_override"
+        pending = [item for item in pending if "tune_tolerance_cm1" not in item]
+    timing_index = resolved.get("timing_demodulator_index")
+    if not _integer(timing_index, 0):
+        pending.append("Resolve the installed native timing demodulator when connecting")
+    elif timing_index in [resolved.get(role, {}).get("demodulator_index") for role in roles]:
+        errors.append("Timing and detector streams require distinct demodulator roles")
+    if not _integer(resolved.get("pump_marker_bit"), 0) or resolved.get("pump_marker_bit", 0) > 31:
+        errors.append("Native HF2LI pump marker must be a DIO bit in 0..31")
+    marker_width = resolved.get("pump_marker_min_width_s")
+    if pumped and _positive(marker_width) and _positive(resolved.get("timing_rate_sps")) and marker_width * resolved["timing_rate_sps"] < 2:
+        warnings.append("Electrical pump-marker width is shorter than two timing samples; retain the observed count and flag unresolved marker support")
+    elif pumped and not _positive(marker_width):
+        warnings.append("Electrical marker width is unqualified; retain measured electrical events without an optical-arrival claim")
+
+    # Settling uses an available current value or an explicitly identified filter
+    # estimate. It never creates an IRF or a claim of measured time resolution.
+    detector_response = [resolved.get(role, {}) for role in roles]
+    if not _positive(resolved.get("settling_s"), zero=True):
+        if all(_positive(row.get("timeconstant_s")) and _integer(row.get("order")) for row in detector_response):
+            resolved["settling_s"] = 5 * max(row["order"] * row["timeconstant_s"] for row in detector_response)
+            sources["settling_s"] = "engineering_estimate_5_times_filter_order_times_timeconstant"
+            resolved["settling_basis"] = "Five filter-order time constants; engineering settling allowance, not measured IRF"
+        else:
+            pending.append("Derive settling from the selected connected HF2LI response")
+    else:
+        sources["settling_s"] = source_for("settling_s")
+    if any(getattr(s, f"{role}_{field}") is not None for role in roles for field in ("timeconstant_s", "filter_order")):
+        if all(_positive(row.get("timeconstant_s")) and _integer(row.get("order")) for row in detector_response):
+            minimum_settling = 5 * max(row["order"] * row["timeconstant_s"] for row in detector_response)
+            if _positive(resolved.get("settling_s"), zero=True) and resolved["settling_s"] < minimum_settling:
+                resolved["settling_s"] = minimum_settling
+                sources["settling_s"] = "engineering_estimate_updated_for_selected_filter"
+                resolved["settling_basis"] = "At least five selected filter-order time constants; engineering allowance, not measured IRF"
+
+    probe = deepcopy(dict(resolved.get("probe_recipe", {})))
+    mircat = deepcopy(dict(resolved.get("mircat", {})))
+    timing_values = deepcopy(dict(resolved.get("timing", {})))
+    if s.probe_rate_hz is not None:
+        # This single carrier choice coherently updates connected recipients.
+        probe.setdefault("clock", {})["frequency"] = f"{s.probe_rate_hz:.12g}Hz"
+        probe["predivider"] = 1
+        mircat["pulse_rate_hz"] = s.probe_rate_hz
+        timing_values["input_frequency_hz"] = s.probe_rate_hz
+        resolved.setdefault("hf2li", {}).setdefault("pll", {})["freqcenter_hz"] = s.probe_rate_hz
+        sources["probe_rate_hz"] = "user_override"
+    else:
+        sources["probe_rate_hz"] = source_for("probe_recipe.clock.frequency")
+    if s.probe_width_ns is not None:
+        mircat["pulse_width_ns"] = s.probe_width_ns
+        sources["mircat.pulse_width_ns"] = "user_override"
+    else:
+        sources["mircat.pulse_width_ns"] = source_for("mircat.pulse_width_ns")
+    for setting_name, key in (("pump_fire_delay_s", "fire_delay_s"), ("pump_q_switch_delay_s", "q_switch_delay_s"),
+                              ("pump_fire_width_s", "fire_width_s"), ("pump_q_switch_width_s", "q_switch_width_s")):
+        value = getattr(s, setting_name)
+        if value is not None:
+            timing_values[key] = value
+        sources[f"timing.{key}"] = "user_override" if value is not None else source_for(f"timing.{key}")
+    resolved.update(probe_recipe=probe, mircat=mircat, timing=timing_values)
+    if not probe:
+        pending.append("Read the installed T660-1 probe timing settings when connecting")
+    else:
+        channels = probe.get("channels", {})
+        if set(channels) != set("ABCD") or not all({"enabled", "delay", "width", "polarity", "termination"} <= set(channels[ch]) for ch in "ABCD"):
+            pending.append("Resolve complete T660-1 channel enable/delay/width/polarity/termination readbacks")
+        elif channels["D"]["enabled"] is not False:
+            errors.append("Disconnected T660-1 channel D must remain OFF")
         else:
             from control_app.devices.t660_service import T660Service
             try:
-                T660Service.validate_recipe_section("t660_1", resolved["probe_recipe"])
+                T660Service.validate_recipe_section("t660_1", probe)
             except (ValueError, RuntimeError) as exc:
                 errors.append(f"Probe recipe is unsupported: {exc}")
-        if any(probe_channels.get(ch, {}).get("enabled") is not True for ch in "ABC"):
-            ready.append("Stationary probe recipe must enable the maintained A reference, B MIRcat probe and C frame-input roles")
-        frequency = _frequency_hz(resolved["probe_recipe"].get("clock", {}).get("frequency"))
-        divider = resolved["probe_recipe"].get("predivider", 1)
-        timing_rate = resolved.get("timing", {}).get("input_frequency_hz")
+        frequency = _frequency_hz(probe.get("clock", {}).get("frequency"))
+        divider = probe.get("predivider", 1)
         if frequency is None or not _integer(divider, 0):
-            ready.append("Resolve explicit T660-1 synthesizer frequency and probe predivider")
-        elif _positive(timing_rate) and not math.isclose(frequency / max(1, divider), timing_rate, rel_tol=1e-9, abs_tol=1e-9):
-            errors.append("Probe carrier from T660-1 synthesizer/predivider differs from the selected T660-2 frame-input frequency")
-    if resolved.get("mircat"):
-        for key in ("qcl", "pulse_width_ns", "pulse_rate_hz"):
-            if not _positive(resolved["mircat"].get(key)):
-                ready.append(f"Resolve explicit MIRcat {key}")
-    if resolved.get("hf2li") and (not resolved["hf2li"].get("signal_inputs") or not resolved["hf2li"].get("pll")):
-        ready.append("Resolve independently characterized HF2LI signal-input loading/ranges and PLL settings")
-    if not resolved.get("optical_time_zero_record_id"):
-        warnings.append("Optical time zero is unresolved: retain electrical pump epoch; do not claim sample optical arrival or nanosecond kinetics")
-    warnings.extend(("Sequential fixed positions are acquired in explicit order and are not a simultaneous spectrum",
-                     "Fixed-point traces establish apparent local amplitude/recovery, not full band area or a microscopic pathway",
-                     "Technical repetitions from one preparation are not independent biological preparations"))
-    total_events = len(s.positions) * s.technical_repetitions * s.events_per_position if not errors and s.pump_enabled and not preparation else 0
-    interval = s.minimum_event_interval_s if s.minimum_event_interval_s is not None else resolved.get("minimum_event_interval_s")
-    if total_events > 1:
-        if not _positive(interval):
-            ready.append("Later events require a measured minimum accepted sample interval, independent of probe carrier rate")
-        elif interval < 0.1:
-            errors.append("Accepted event interval would exceed the pump manufacturer's 10 Hz maximum")
-        if not resolved.get("reset_record_id") and not s.condition_profile.startswith("cryo"):
-            ready.append("Later equivalent events require an applicable measured recovery/reset record")
-        if s.minimum_event_interval_s is not None and _positive(profile.get("minimum_event_interval_s")) and interval < profile["minimum_event_interval_s"]:
-            ready.append("Requested cadence is faster than the measured accepted recovery/reset interval")
+            pending.append("Read the T660-1 synthesizer frequency and predivider when connecting")
+        elif pumped and _positive(timing_values.get("input_frequency_hz")) and not math.isclose(frequency / max(1, divider), timing_values["input_frequency_hz"], rel_tol=1e-9, abs_tol=1e-9):
+            errors.append("Probe carrier from T660-1 frequency/predivider differs from the T660-2 frame-input frequency")
+    for key in ("qcl", "pulse_width_ns", "pulse_rate_hz"):
+        if not _positive(mircat.get(key)):
+            pending.append(f"Read the current MIRcat {key} when connecting")
+    if not resolved.get("hf2li", {}).get("signal_inputs") or not resolved.get("hf2li", {}).get("pll"):
+        pending.append("Read the installed HF2LI signal-input and reference-lock settings when connecting")
+
+    timing = None
+    if pumped:
+        fields = ("input_frequency_hz", "fire_delay_s", "q_switch_delay_s", "fire_width_s", "q_switch_width_s",
+                  "fire_polarity", "q_switch_polarity", "termination")
+        missing = [key for key in fields if key not in timing_values]
+        if missing:
+            pending.append("Read installed pump timing settings when connecting: " + ", ".join(missing))
+        elif not errors:
+            try:
+                options = {key: timing_values[key] for key in fields}
+                options.update({key: timing_values[key] for key in ("frame_capacity", "edge_quantum_s") if key in timing_values})
+                timing = compile_timing(pre_observation_s=s.pre_observation_s, post_observation_s=s.post_observation_s,
+                                        pump_enabled=True, **options)
+            except (TimingError, TypeError, ValueError) as exc:
+                errors.append(f"Timing compilation: {exc}")
+    interval = s.minimum_event_interval_s
+    if interval is None:
+        interval = resolved.get("minimum_event_interval_s")
+        sources["minimum_event_interval_s"] = source_for("minimum_event_interval_s")
+    else:
+        sources["minimum_event_interval_s"] = "user_override"
+    if not _positive(interval):
+        interval = max(.1, s.pre_observation_s + s.post_observation_s) if not errors else .1
+        sources["minimum_event_interval_s"] = "observation_duration_with_10Hz_source_bound"
+    total_events = len(s.positions) * s.technical_repetitions * s.events_per_position if pumped and not errors else 0
+    if total_events > 1 and interval < .1:
+        errors.append("Requested event interval exceeds the pump manufacturer's 10 Hz maximum")
     resolved["minimum_event_interval_s"] = interval
     resolved["baseline_window_s"] = list(s.baseline_window_s) if s.baseline_window_s else [-s.pre_observation_s, 0.0]
     resolved["integration_window_s"] = list(s.integration_window_s) if s.integration_window_s else [0.0, s.post_observation_s]
-    resolved["baseline_drift_fraction"] = s.baseline_drift_fraction
-    resolved["baseline_cv_limit"] = s.baseline_cv_limit
-    resolved["reset_tolerance_fraction"] = s.reset_tolerance_fraction
     for key in ("baseline_drift_fraction", "baseline_cv_limit", "reset_tolerance_fraction"):
-        if getattr(s, key) != profile.get(key) and not _within_envelope(getattr(s, key), profile.get("validity_envelope", {}).get(key)):
-            ready.append(f"Selected {key} is a proposal without an applicable measured/justified condition-profile criterion")
-    timing = None
-    timing_fields = ("input_frequency_hz", "fire_delay_s", "q_switch_delay_s", "fire_width_s", "q_switch_width_s",
-                     "fire_polarity", "q_switch_polarity", "termination")
-    timing_values = resolved.get("timing", {})
-    missing_timing_fields = [name for name in timing_fields if name not in profile.get("timing", {})]
-    if missing_timing_fields:
-        ready.append("Resolve explicit measured operating-profile timing fields: " + ", ".join(missing_timing_fields))
-    elif not errors:
-        try:
-            options = {key: timing_values[key] for key in timing_fields}
-            for key in ("frame_capacity", "edge_quantum_s"):
-                if key in timing_values:
-                    options[key] = timing_values[key]
-            timing = compile_timing(pre_observation_s=s.pre_observation_s, post_observation_s=s.post_observation_s,
-                                    pump_enabled=acquisition_settings.pump_enabled, **options)
-        except (TimingError, TypeError, ValueError) as exc:
-            errors.append(f"Timing compilation: {exc}")
+        resolved[key] = getattr(s, key)
+        sources[key] = "user_diagnostic_setting"
+    resolved["value_sources"] = sources
+    if not resolved.get("acquisition_response"):
+        warnings.append("No measured acquisition response loaded: retain raw/relative traces and leave qualified recovery fits unresolved")
+    if not resolved.get("optical_time_zero_record_id"):
+        warnings.append("Electrical pump time is distinct from independently measured optical arrival")
+    warnings.append("Ordered fixed positions are sequential time traces, not a simultaneous spectrum")
+
     blocks = []
     if not errors:
         for rep in range(acquisition_settings.technical_repetitions):
             for position_index, position in enumerate(s.positions):
                 for event in range(acquisition_settings.events_per_position):
                     idx = len(blocks)
-                    pumped = acquisition_settings.pump_enabled
-                    # The runner first verifies stationary native observations
-                    # with the event engine inhibited. The preloaded all-OFF
-                    # frame then protects the event start; both intervals are
-                    # acquired without restarting the HF2LI subscription.
                     duration = s.pre_observation_s + (timing.duration_s if timing and pumped else s.post_observation_s)
                     selected_pre = s.pre_observation_s + timing.selected_pre_observation_s if timing and pumped else s.pre_observation_s
                     selected_post = timing.selected_post_observation_s if timing and pumped else s.post_observation_s
                     blocks.append(CaptureBlock(idx, position_index, position.wavenumber_cm1, position.label, rep, event,
-                        int(pumped), duration, selected_pre, selected_post,
-                        bool(idx and acquisition_settings.pump_enabled), timing, float(interval or 0),
-                        s.fresh_state_record_ids[idx - 1] if idx and idx - 1 < len(s.fresh_state_record_ids) else ""))
-    estimates = _estimates(s, resolved, blocks, ready, errors) if not _validate(s) else {
+                        int(pumped), duration, selected_pre, selected_post, False, timing, float(interval), ""))
+    estimates = _estimates(s, resolved, blocks, pending, errors) if not _validate(acquisition_settings) else {
         "basis": "Correct invalid requested settings before resource estimation", "wall_clock_s": None,
         "capture_s": None, "storage_bytes": None, "peak_memory_bytes": None}
     selected = {"positions_cm1": [p.wavenumber_cm1 for p in s.positions], "ordered": True,
@@ -430,16 +429,9 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
                 "pre_observation_s": blocks[0].pre_observation_s if blocks else None,
                 "post_observation_s": blocks[0].post_observation_s if blocks else None,
                 "detectors": {role: deepcopy(resolved.get(role, {})) for role in roles},
-                "minimum_event_interval_s": interval,
-                "finite_timing": timing.to_dict() if timing else None}
-    return Plan(s, resolved, tuple(blocks), tuple(dict.fromkeys(errors)), tuple(dict.fromkeys(ready)),
-                tuple(warnings), estimates, s.to_dict(), selected, {}, evidence)
-
-
-def _within_envelope(value: Any, envelope: Any) -> bool:
-    if isinstance(envelope, Mapping) and _positive(value):
-        return envelope.get("minimum", -math.inf) <= value <= envelope.get("maximum", math.inf)
-    return isinstance(envelope, (list, tuple)) and value in envelope
+                "minimum_event_interval_s": interval, "finite_timing": timing.to_dict() if timing else None}
+    return Plan(s, resolved, tuple(blocks), tuple(dict.fromkeys(errors)), tuple(dict.fromkeys(pending)),
+                tuple(warnings), estimates, s.to_dict(), selected, {"installed_readbacks": live} if live else {}, evidence)
 
 
 def _frequency_hz(value: Any) -> float | None:
@@ -452,33 +444,14 @@ def _frequency_hz(value: Any) -> float | None:
     return result if _positive(result) else None
 
 
-def _selection_projection(source: Mapping[str, Any], readiness: list[str]) -> dict[str, Any]:
-    """Consume the frozen host exchange without changing retained source data."""
-    if not source or source.get("record_kind") != "sample_spectral_selection":
-        return dict(source)
-    from control_app.measurement_host.interchange import sample_selection_from_dict
-    try:
-        selection = sample_selection_from_dict(source)
-    except (ValueError, TypeError) as exc:
-        readiness.append(f"Invalid host sample-selection exchange: {exc}")
-        return {}
-    condition = dict(selection.condition)
-    return {"record_id": selection.selection_id, "schema_version": selection.schema_version,
-            "accepted": selection.disposition == "accepted", "sample_id": selection.sample_id,
-            "condition_id": selection.condition_id, "preparation_id": condition.get("preparation_id"),
-            "cell_id": condition.get("cell_id"),
-            "positions": [{"wavenumber_cm1": window.center_cm1} for window in selection.windows if window.center_cm1 is not None],
-            "quantified_extensions": condition.get("quantified_extensions", [])}
-
-
 def _estimates(s: Settings, r: dict, blocks: list[CaptureBlock], ready: list[str], errors: list[str]) -> dict:
     roles = ("sample", "reference") if s.mode == "dual" else ("sample",)
     rates = [r.get(role, {}).get("rate_sps") for role in roles] + [r.get("timing_rate_sps")]
     capture = sum(b.duration_s for b in blocks)
-    estimate: dict[str, Any] = {"basis": "Selected device-clock captures; explicit per-block upload/tune/settle/reset plus preliminary/control, restoration, saving and analysis allowances; manual handling unbounded",
+    estimate: dict[str, Any] = {"basis": "Selected device-clock captures plus upload, tuning, settling, requested event intervals, restoration, saving and analysis; manual handling excluded",
             "capture_s": capture, "continuous_per_block": True, "retention_strategy": s.retention_strategy,
             "gap_policy": "Retain timestamp gaps and inter-block dead time; never silently interpolate, overwrite or reset the original pump epoch",
-            "manual_actions": ["Load sample/cell or matched blank when prompted", "Establish documented fresh state where requested; no installed position/temperature automation is assumed"],
+            "manual_actions": ["Place the sample and reference as appropriate for the selected detector mode"],
             "wall_clock_s": None, "storage_bytes": None, "peak_memory_bytes": None}
     if not all(_positive(v) for v in rates):
         return estimate
@@ -493,8 +466,10 @@ def _estimates(s: Settings, r: dict, blocks: list[CaptureBlock], ready: list[str
     # This is storage budgeting, not a compression promise or a device limit.
     bytes_per_second = aggregate * 64
     largest_capture = max((b.duration_s for b in blocks), default=0)
-    preliminary = (s.pre_observation_s + s.post_observation_s) * len(s.positions)
-    controls = preliminary if s.mode == "single" else 0.0
+    # Blank/preliminary work is an explicit operation with its own blocks. It is
+    # not a prerequisite silently added to a raw/relative capture estimate.
+    preliminary = 0.0
+    controls = 0.0
     storage = math.ceil(bytes_per_second * (capture + preliminary + controls) * 1.25 + 1_048_576)
     retained_seconds = largest_capture if s.retention_strategy == "bounded_memory" else min(s.chunk_duration_s * 3, largest_capture)
     peak_memory = math.ceil(bytes_per_second * retained_seconds * 3 + 1_048_576)
@@ -514,8 +489,7 @@ def _estimates(s: Settings, r: dict, blocks: list[CaptureBlock], ready: list[str
         errors.append("Full native/control retention exceeds the declared storage budget; shorten the explicit plan or increase the budget")
     if _positive(s.memory_limit_mb) and peak_memory > s.memory_limit_mb * 1024**2:
         errors.append("Planned native retrieval/analysis exceeds the declared memory budget; select bounded chunks or increase the explicit budget")
-    if s.retention_strategy == "continuous_to_disk" and not r.get("continuous_poll_lossless_qualified", False):
-        ready.append("Continuous native streaming needs qualified poll-loss/backpressure behavior and explicit timestamp gap detection")
+    estimate["streaming_loss_policy"] = "Monitor native timestamps and receiver loss indicators; preserve and flag gaps without interpolation"
     interval = r.get("minimum_event_interval_s") or 0
     reset = sum(max(0.0, interval - b.post_observation_s) for b in blocks[:-1] if b.event_count)
     allowances = r.get("overhead_estimates_s", {})

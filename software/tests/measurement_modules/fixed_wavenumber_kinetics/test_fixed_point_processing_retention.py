@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from control_app.measurement_modules.fixed_wavenumber_kinetics.persistence import (
-    NativeChunkWriter, RecordCompatibilityError, export_stroboscopic_handoff,
+    NativeChunkWriter, RecordCompatibilityError, export_stroboscopic_handoff, export_analysis_csv,
     load_run, load_analysis_inputs, read_native_chunk, recover_native_references, save_run,
 )
 from control_app.measurement_modules.fixed_wavenumber_kinetics.processing import (
@@ -59,20 +59,21 @@ def test_fixed_storage_failure_retains_previous_and_partial_chunk(tmp_path, monk
     assert len(list((tmp_path / "native").glob("*.pending"))) == 1
 
 
-def test_fixed_run_schema_mode_condition_and_hash_diagnostics(tmp_path):
+def test_fixed_run_schema_mode_and_inert_metadata_diagnostics(tmp_path):
     data = record()
     path = save_run(data, tmp_path)
     assert load_run(path, mode="dual", condition_id="room-a")["mode"] == "dual"
     with pytest.raises(RecordCompatibilityError, match="detector mode"):
         load_run(path, mode="single")
-    with pytest.raises(RecordCompatibilityError, match="condition_id"):
-        load_run(path, condition_id="cryo")
+    assert load_run(path, condition_id="different annotation")["condition_id"] == "room-a"
     with pytest.raises(FileExistsError):
         save_run(data, tmp_path)
     changed = {**data, "settings": {**data["settings"], "diagnostic_hash": "changed"}}
     assert compatible_record(data, changed)[0]
     changed["settings"]["sample_id"] = "other"
-    assert "sample_id" in "; ".join(compatible_record(data, changed)[1])
+    assert compatible_record(data, changed)[0]
+    changed["settings"]["sample_rate_sps"] = 200
+    assert "sample_rate_sps" in "; ".join(compatible_record(data, changed)[1])
 
 
 def test_fixed_matched_ticks_missing_reference_and_clipping_unlock():
@@ -107,7 +108,12 @@ def test_fixed_single_blank_and_stationarity_controls():
     assert not baseline_statistics(t, 2 + .05 * t)["stationary"]
     data = stream(np.arange(len(t)), stationary)
     missing = normalize_trace(data, mode="single", time_s=t)
-    assert "missing_compatible_sequential_blank" in missing["quality_flags"]
+    assert not missing["quality_flags"]
+    assert missing["normalization_kind"] == "observed_sample_baseline"
+    assert np.isnan(missing["reference"]).all()
+    assert missing["q0"] is None
+    assert missing["s0"] == pytest.approx(np.mean(stationary))
+    np.testing.assert_allclose(missing["ratio"], stationary / np.mean(stationary))
     valid = normalize_trace(data, mode="single", blank_mean=4, time_s=t)
     assert valid["baseline"]["stationary"]
     assert abs(np.nanmean(valid["delta_absorbance"])) < 1e-5
@@ -194,6 +200,9 @@ def test_fixed_analysis_cancellation_and_standalone_file_handoff(tmp_path):
     assert exported["record_kind"] == "fixed_point_discovery_handoff"
     assert exported["source_run_id"] == "discovery-1"
     assert "nanosecond" in exported["claim_limit"]
+    assert "requires" not in exported
+    assert exported["interpretation_considerations"]
+    assert "accepted" not in " ".join(exported["interpretation_considerations"])
 
 
 def test_fixed_aggregation_uses_explicit_equivalence_and_preserves_dose_order():
@@ -264,7 +273,7 @@ def test_fixed_parent_sources_roundtrip_exact_native_and_no_fallback(tmp_path):
     assert load_analysis_inputs(record("single")) == {"blank": None, "preliminary": None}
 
 
-def test_fixed_parent_mode_condition_and_missing_native_are_explicit(tmp_path):
+def test_fixed_parent_mode_and_missing_native_are_explicit_but_metadata_is_inert(tmp_path):
     parent_dir = tmp_path / "parent"
     with NativeChunkWriter(parent_dir) as writer:
         ref = writer.append({"sample": stream([1, 2], [1, 1])})
@@ -275,8 +284,7 @@ def test_fixed_parent_mode_condition_and_missing_native_are_explicit(tmp_path):
         load_analysis_inputs(current)
     current["mode"] = "dual"
     current["condition_id"] = "different-condition"
-    with pytest.raises(RecordCompatibilityError, match="condition_id"):
-        load_analysis_inputs(current)
+    assert load_analysis_inputs(current)["preliminary"]["condition_id"] == "room-a"
     current["condition_id"] = "room-a"
     # Preserve the intentionally incomplete source as its own failed fixture;
     # no native data are deleted to produce this test.
@@ -293,6 +301,8 @@ def test_fixed_fresh_state_acceptance_preserves_blank_recipe_compatibility():
                     "fresh_state_record": {"record_id": "accepted-fresh-state-1", "accepted_by": "Named reviewer"}}}
     assert compatible_record(blank_plan, sample_plan)[0]
     sample_plan["resolved"]["configuration_id"] = "geometry-b"
+    assert compatible_record(blank_plan, sample_plan)[0]
+    sample_plan["resolved"]["sample"] = {"input_index": 1}
     assert not compatible_record(blank_plan, sample_plan)[0]
 
 
@@ -319,3 +329,97 @@ def test_fixed_saved_single_run_reanalysis_uses_original_saved_parents(tmp_path)
     original = pumped["analysis"]["events"][0]
     for quantity in ("sample", "ratio", "delta_absorbance"):
         np.testing.assert_array_equal(recomputed["events"][0][quantity], original[quantity])
+
+
+def _ordinary_raw_record(mode="single"):
+    ticks = np.arange(500, dtype=np.uint64) + np.uint64(2**63 + 700)
+    time = (np.arange(500) - 100) / 100
+    sample_values = 2 + .1 * np.exp(-np.maximum(time, 0) / .5) * (time > 0)
+    chunk = {"clockbase_hz": 100, "sample": stream(ticks, sample_values), "event_index": 0}
+    if mode == "dual":
+        chunk["reference"] = stream(ticks, np.ones(500))
+    return {"experiment_id": "fixed_wavenumber_kinetics", "mode": mode, "schema_version": "1.0",
+            "kind": "measurement", "settings": {"sample_rate_sps": 100, "pre_observation_s": 1},
+            "native_chunks": [chunk], "events": [{"event_index": 0, "position_index": 0, "position_cm1": 1930,
+                "expected_pump_count": 1, "pump_timestamps": [int(ticks[100])], "original_pump_timestamp": int(ticks[100]),
+                "clockbase_hz": 100, "baseline": {"mean": 2., "std": 0., "count": 100, "stationary": True}}]}
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_fixed_raw_relative_processing_requires_no_profile_or_response_and_annotations_are_inert(mode):
+    from copy import deepcopy
+    raw = _ordinary_raw_record(mode)
+    initial = analyze_run(raw)
+    event = initial["events"][0]
+    assert not initial["quality_flags"]
+    assert np.isfinite(event["ratio"]).all()
+    assert np.isfinite(event["delta_absorbance"]).all()
+    assert event["recovery_fit"]["status"] == "unresolved_response"
+    assert "tau_s" not in event["recovery_fit"]
+    annotated = deepcopy(raw)
+    annotated["settings"].update(condition_profile="arbitrary-temperature-note", condition_id="optional",
+        temperature_k=77, temperature_id="annotation", sample_label="any material", sample_id="optional sample",
+        preparation_id="optional preparation", notes="A free text note")
+    annotated["condition_id"] = "different annotation"
+    annotated["acquisition_response"] = {"timeconstant_s": 1e-9, "measured": False, "record_id": "example-only"}
+    assert compatible_record(raw, annotated)[0]
+    result = analyze_run(annotated)
+    for quantity in ("sample", "ratio", "delta_absorbance"):
+        np.testing.assert_array_equal(result["events"][0][quantity], event[quantity])
+    assert result["events"][0]["recovery_fit"]["status"] == "unresolved_response"
+    assert not result["quality_flags"]
+
+
+def test_fixed_observed_blank_normalizes_without_qualification_or_metadata_match():
+    raw = _ordinary_raw_record("single")
+    blank = {**_ordinary_raw_record("single"), "kind": "blank", "status": "complete", "condition_id": "any note"}
+    blank["settings"] = {**blank["settings"], "temperature_k": 290, "material": "buffer note", "sample_id": "optional"}
+    blank["events"][0]["baseline"] = {"mean": 4., "std": 0., "count": 100, "stationary": True}
+    result = analyze_run(raw, blank=blank)
+    assert not result["quality_flags"]
+    event = result["events"][0]
+    assert event["normalization_kind"] == "measured_sequential_blank"
+    np.testing.assert_array_equal(event["ratio"], event["sample"] / 4)
+    assert event["q0"] == .5
+    assert event["recovery_fit"]["status"] == "unresolved_response"
+
+
+def test_fixed_parent_without_condition_annotation_still_loads_exact_native(tmp_path):
+    native = stream([1, 2], [1.23456789, 2.34567891])
+    with NativeChunkWriter(tmp_path / "parent") as writer:
+        ref = writer.append({"sample": native})
+    parent = {"experiment_id": "fixed_wavenumber_kinetics", "schema_version": 1, "mode": "single",
+              "run_id": "plain-parent", "kind": "blank", "status": "complete", "native_chunks": [ref]}
+    save_run(parent, tmp_path / "parent")
+    current = {"experiment_id": "fixed_wavenumber_kinetics", "schema_version": 1, "mode": "single",
+               "analysis_inputs": {"blank": {"run_id": "plain-parent", "native_path": str(tmp_path / "parent")}}}
+    loaded = load_analysis_inputs(current)["blank"]
+    actual = read_native_chunk(loaded["run_directory"], loaded["native_chunks"][0])
+    assert actual["sample"]["x"].tobytes() == native["x"].tobytes()
+
+
+def test_fixed_optional_annotation_changes_do_not_hide_actual_data_incompatibility(tmp_path):
+    raw = _ordinary_raw_record("single")
+    changed = {**raw, "settings": {**raw["settings"], "temperature_k": 77, "sample_rate_sps": 200}}
+    assert not compatible_record(raw, changed)[0]
+    with pytest.raises(RecordCompatibilityError, match="mode mismatch"):
+        save_run({**raw, "plan": {"mode": "dual"}}, tmp_path)
+
+
+def test_fixed_saved_and_csv_labels_distinguish_raw_blank_and_sample_relative_signal(tmp_path):
+    import csv
+    raw = _ordinary_raw_record("single")
+    raw["analysis"] = analyze_run(raw)
+    path = export_analysis_csv(raw, tmp_path / "relative.csv")
+    with path.open(newline="", encoding="utf-8") as stream:
+        first = next(csv.DictReader(stream))
+    assert first["normalization_kind"] == "observed_sample_baseline"
+    assert "S/S0" in first["ratio_label"]
+    assert first["delta_absorbance_label"] == "Relative log signal -log10(S/S0)"
+    blank = {**raw, "kind": "blank"}
+    event = analyze_run(blank)["events"][0]
+    assert event["normalization_kind"] == "raw_blank"
+    assert np.isnan(event["ratio"]).all()
+    assert "no sample ratio" in event["ratio_label"]
+    flags = aggregate_events([{**raw["analysis"]["events"][0], "equivalent_state": True, "quality_flags": ["gap"]}])
+    assert flags["excluded"][0]["reason"] == "Quality flags; shown individually"

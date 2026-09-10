@@ -14,7 +14,7 @@ import numpy as np
 
 from .persistence import EXPERIMENT_ID, SCHEMA_VERSION, iter_native_chunks, validate_record
 
-ANALYSIS_VERSION = "fixed-point-analysis-1.0"
+ANALYSIS_VERSION = "fixed-point-analysis-1.1"
 CLAIM_LIMITS = (
     "Sequential positions are individual fixed-point observations, not a simultaneous spectrum.",
     "A fixed-point amplitude is not full band area and does not establish a microscopic pathway.",
@@ -41,22 +41,51 @@ def _mapping(value):
 
 
 def compatibility_projection(value) -> dict:
-    """Explicit scientific/configuration values; diagnostics are not match gates."""
+    """Compare data-producing settings, never optional descriptive metadata.
+
+    Temperature, material/sample labels, evidence IDs and qualification status
+    remain in the saved record. They do not invalidate observed raw baselines.
+    Optional response models affect only an explicitly requested kinetic fit.
+    """
     source = _mapping(value)
     source = source.get("plan", source)
-
-    def clean(item):
+    settings = source.get("settings", {})
+    resolved = source.get("resolved", {})
+    result = {key: source[key] for key in ("experiment_id", "mode", "schema_version") if key in source}
+    if result.get("schema_version") == 1:
+        result["schema_version"] = SCHEMA_VERSION
+    result["settings"] = {key: settings[key] for key in (
+        "mode", "sample_rate_sps", "reference_rate_sps", "sample_timeconstant_s", "reference_timeconstant_s",
+        "sample_filter_order", "reference_filter_order") if key in settings}
+    if "positions" in settings:
+        result["settings"]["positions_cm1"] = [
+            position.get("wavenumber_cm1", position.get("position_cm1")) if isinstance(position, Mapping) else position
+            for position in settings["positions"]]
+    # These are actual selected acquisition settings. Keeping the projection
+    # explicit prevents new annotation/evidence fields from becoming gates.
+    result["resolved"] = {key: resolved[key] for key in (
+        "sample", "reference", "hf2li", "probe_recipe", "mircat", "timing_demodulator_index",
+        "timing_rate_sps", "pump_marker_bit") if key in resolved}
+    for role in ("sample", "reference"):
+        if role in result["resolved"]:
+            result["resolved"][role] = {key: resolved[role][key] for key in (
+                "demodulator_index", "input_index", "rate_sps", "timeconstant_s", "order",
+                "range_v", "gain", "ac", "impedance_50ohm", "differential") if key in resolved[role]}
+    def without_annotations(item):
         if isinstance(item, Mapping):
-            return {k: clean(v) for k, v in item.items()
-                    if not any(word in k.lower() for word in ("hash", "checksum", "digest"))
-                    and k not in ("created_utc", "run_id", "save_root", "output_directory", "acquisition_purpose",
-                                  "fresh_state_record", "fresh_state_record_id", "fresh_state_record_ids")}
-        if isinstance(item, (tuple, list)):
-            return [clean(v) for v in item]
+            return {key: without_annotations(value) for key, value in item.items()
+                    if key not in ("record_id", "configuration_id", "qualification_kind", "measured", "promoted",
+                                   "accepted", "accepted_by", "condition_id", "condition_profile", "temperature_id",
+                                   "temperature_k", "temperature_K", "material", "protein", "sample_id", "sample_label",
+                                   "preparation_id", "cell_id", "position_id", "notes", "description", "label",
+                                   "value_sources", "actual_readbacks_required")
+                    and not key.endswith(("_record_id", "_record_ids"))
+                    and not any(word in key.lower() for word in ("hash", "checksum", "digest"))}
+        if isinstance(item, (list, tuple)):
+            return [without_annotations(value) for value in item]
         return item
-
-    return clean({key: source[key] for key in ("experiment_id", "mode", "schema_version", "settings", "resolved")
-                  if key in source})
+    result["resolved"] = without_annotations(result["resolved"])
+    return result
 
 
 def compatible_record(record, plan) -> tuple[bool, tuple[str, ...]]:
@@ -202,6 +231,45 @@ def normalize_trace(sample, reference=None, *, mode="dual", time_s=None, baselin
                     maximum_relative_drift=0.01, tolerance_ticks=0) -> dict:
     if mode not in ("single", "dual"):
         raise ValueError("Unknown detector mode")
+    if mode == "single" and not (blank_mean is not None and np.isfinite(blank_mean) and blank_mean > 0):
+        # A sequential blank is optional for ordinary raw/relative work. Use
+        # only an observed sample baseline; do not populate a fictitious R or B.
+        timestamps = np.asarray(sample.get("timestamp", sample.get("timestamps", ())))
+        signal = _stream_values(sample)
+        valid = _valid_stream(sample, len(signal)) & np.isfinite(signal) & (signal > 0)
+        baseline = baseline_statistics(time_s, np.where(valid, signal, np.nan), window_s=baseline_window_s,
+                                       maximum_relative_drift=maximum_relative_drift) if time_s is not None else {}
+        s0 = q0
+        s0_variance = q0_variance
+        if s0 is None and baseline.get("stationary"):
+            s0 = baseline["mean"]
+            s0_variance = baseline["standard_error"] ** 2
+        relative = np.full(len(signal), np.nan)
+        quality = []
+        if s0 is not None and np.isfinite(s0) and s0 > 0:
+            relative[valid] = signal[valid] / s0
+        else:
+            quality.append("missing_observed_sample_baseline")
+        if baseline and not baseline.get("stationary"):
+            quality.append("nonstationary_baseline")
+        variance = np.full(len(signal), np.nan)
+        if sample_variance is not None and s0 is not None and s0 > 0:
+            supplied = np.broadcast_to(np.asarray(sample_variance, float), signal.shape)
+            supported = valid & np.isfinite(supplied) & (supplied >= 0)
+            variance[supported] = supplied[supported] / s0 ** 2 + signal[supported] ** 2 * s0_variance / s0 ** 4
+        with np.errstate(divide="ignore", invalid="ignore"):
+            delta = -np.log10(relative)
+            delta_variance = variance / (relative ** 2 * math.log(10) ** 2)
+        return {"timestamp": timestamps.copy(), "sample": signal, "reference": np.full(len(signal), np.nan),
+                "valid": valid, "ratio": relative, "relative_signal": relative,
+                "ratio_label": "Baseline-relative signal S/S0 (observed sample baseline)",
+                "normalization_kind": "observed_sample_baseline", "q0": None, "s0": s0,
+                "q0_variance": None, "s0_variance": s0_variance, "baseline": baseline,
+                "delta_absorbance": delta, "delta_absorbance_label": "Relative log signal -log10(S/S0)",
+                "absolute_absorbance": None, "background_factor": None, "background_record_id": None,
+                "ratio_variance": variance, "delta_absorbance_variance": delta_variance,
+                "quality_flags": quality, "analysis_notes": ["No sequential blank selected; Q=S/R and absolute absorbance are unavailable."],
+                "uncertainty_inputs": {"sample_variance": sample_variance, "sample_baseline_variance": s0_variance}}
     if mode == "dual":
         result = align_detectors(sample, reference, tolerance_ticks=tolerance_ticks)
     else:
@@ -251,6 +319,9 @@ def normalize_trace(sample, reference=None, *, mode="dual", time_s=None, baselin
             absolute = np.full(len(s), np.nan)
             absolute[valid] = -np.log10(ratio[valid] / background_factor)
     result.update(ratio=ratio, ratio_label="Reference-normalized signal Q = S/R" if mode == "dual" else "Sequential-blank-normalized signal Q",
+                  normalization_kind="matched_reference" if mode == "dual" else "measured_sequential_blank",
+                  relative_signal=ratio / q0 if q0 is not None and q0 > 0 else np.full(len(s), np.nan),
+                  delta_absorbance_label="Delta absorbance -log10(Q/Q0)",
                   delta_absorbance=delta, absolute_absorbance=absolute, background_factor=background_factor,
                   background_record_id=background_record_id, q0=q0, q0_variance=q0_variance, baseline=baseline,
                   ratio_variance=variance, delta_absorbance_variance=da_variance, uncertainty_inputs=covariance_inputs)
@@ -404,7 +475,7 @@ def aggregate_events(events) -> dict:
         elif not event.get("equivalent_state", False):
             excluded.append({"event_index": event.get("event_index"), "reason": "Equivalent-state reset not established"})
         elif event.get("quality_flags"):
-            excluded.append({"event_index": event.get("event_index"), "reason": "Quality flags require individual review"})
+            excluded.append({"event_index": event.get("event_index"), "reason": "Quality flags; shown individually"})
         else:
             eligible.append(event)
     groups = {}
@@ -478,7 +549,8 @@ def analyze_run(record, preliminary=None, blank=None, cancel=None, *, max_points
             flags.extend(f"preliminary incompatible: {reason}" for reason in reasons)
     blank_compatible = blank is not None and compatible_record(blank, record)[0]
     if mode == "single" and record.get("kind") != "blank" and not blank_compatible:
-        flags.append("missing_compatible_sequential_blank")
+        if blank is not None:
+            flags.append("incompatible_sequential_blank_acquisition_settings")
         blank = None
     if mode == "dual":
         blank = None
@@ -586,13 +658,14 @@ def analyze_run(record, preliminary=None, blank=None, cancel=None, *, max_points
                                          maximum_relative_drift=settings.get("baseline_drift_fraction", 0.01))
             normalized = {"sample": arrays["sample"], "reference": arrays["reference"], "ratio": np.full(len(time), np.nan),
                           "delta_absorbance": np.full(len(time), np.nan), "absolute_absorbance": None,
+                          "normalization_kind": "raw_blank", "ratio_label": "Blank detector signal; no sample ratio",
+                          "delta_absorbance_label": "Blank-only record; no sample-relative log signal",
                           "baseline": native_baseline or stats, "quality_flags": [] if stats["stationary"] else ["nonstationary_baseline"]}
         else:
             background = record.get("background_balance", {})
             if "positions" in background:
                 background = next((value for value in background["positions"] if value.get("position_cm1") == meta.get("position_cm1")), {})
             background_applicable = (background.get("measured") and background.get("mode") == mode
-                                     and background.get("condition_id") == record.get("condition_id", settings.get("condition_id"))
                                      and background.get("position_cm1") == meta.get("position_cm1"))
             pre_support = sample["valid"] & (time >= window[0]) & (time <= window[1])
             uncertainty = {}
@@ -613,7 +686,7 @@ def analyze_run(record, preliminary=None, blank=None, cancel=None, *, max_points
                                          maximum_relative_drift=settings.get("baseline_drift_fraction", 0.01), **uncertainty)
             normalized["uncertainty_inputs"]["detector_covariance_source"] = "Matched pre-pump actual observations in the disclosed bounded analysis subset"
             if background and not background_applicable:
-                normalized["quality_flags"].append("incompatible_measured_background_balance")
+                normalized.setdefault("analysis_notes", []).append("Supplied background factor does not support absolute absorbance at this detector mode/position; raw and relative data are unchanged.")
             if native_baseline:
                 normalized["baseline"] = {**normalized["baseline"], **native_baseline, "native_streaming_statistics": True}
                 if native_baseline.get("stationary"):

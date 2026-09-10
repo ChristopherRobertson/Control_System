@@ -89,10 +89,12 @@ def test_timing_quantization_and_documented_limits():
         recipe(fire_delay_s=.01, q_switch_delay_s=.001)
 
 
-def test_default_plan_is_editable_unready_and_hardware_free():
+def test_default_plan_requires_a_position_but_no_files_and_is_hardware_free():
     p = build_plan(Settings())
-    assert not p.ready and not p.validation_errors
-    assert any("measured operating profile" in item for item in p.readiness_items)
+    assert not p.ready and any("wavenumber" in issue for issue in p.validation_errors)
+    p = build_plan(Settings(positions=(Position(1944.2),)))
+    assert p.ready and not p.operational_ready
+    assert all("profile" not in item and "record" not in item for item in p.readiness_items)
     assert p.actual == {} and p.timing is None
     assert Settings.from_dict(json.loads(json.dumps(Settings().to_dict()))) == Settings()
 
@@ -108,25 +110,26 @@ def test_complete_synthetic_plan_roundtrip_modes_are_independent():
     assert dual.ready, dual.readiness_items
     assert dual.estimates["aggregate_rate_sps"] > p.estimates["aggregate_rate_sps"]
     assert dual.estimates["sequential_blank_s"] == 0
-    assert p.estimates["sequential_blank_s"] > 0
+    assert p.estimates["sequential_blank_s"] == 0
+    assert dual.operational_ready and p.operational_ready
     dual.resolved["sample"]["rate_sps"] = 1
     assert p.resolved["sample"]["rate_sps"] == 200
     assert evidence["operating_profile"]["sample"]["rate_sps"] == 200
 
 
-def test_budget_cadence_reset_and_cryo_no_repeat():
+def test_finite_budget_cadence_and_material_independent_event_count():
     s, evidence = profile_case()
     repeat = replace(s, technical_repetitions=2)
     assert "exceed" in " ".join(build_plan(repeat, evidence=evidence).validation_errors)
     repeat = replace(repeat, event_budget=2)
     p = build_plan(repeat, evidence=evidence)
     assert p.ready and p.total_pump_events == 2
-    assert not p.blocks[0].reset_required and p.blocks[1].reset_required
+    assert not any(block.reset_required for block in p.blocks)
     evidence["operating_profile"].pop("reset_record_id")
-    assert any("reset record" in issue for issue in build_plan(repeat, evidence=evidence).readiness_items)
+    assert build_plan(repeat, evidence=evidence).operational_ready
     assert "10 Hz" in " ".join(build_plan(replace(repeat, minimum_event_interval_s=.05), evidence=evidence).validation_errors)
     cryo = replace(repeat, condition_profile="cryo_hrp_co")
-    assert "Cryogenic no-repeat" in " ".join(build_plan(cryo, evidence=evidence).validation_errors)
+    assert build_plan(cryo, evidence=evidence).operational_ready
 
 
 def test_missing_reference_and_aggregate_capacity_are_distinct_errors():
@@ -156,17 +159,19 @@ def test_preparation_standalone_no_selection_no_pump_and_blank_complete_order():
     s = replace(s, technical_repetitions=2, events_per_position=2, event_budget=4,
                 positions=(replace(s.positions[0], selection_record_id=""),), dark_control_record_id="", artifact_control_record_id="")
     evidence.pop("sample_selection")
-    assert not build_plan(s, evidence=evidence).ready
+    assert build_plan(s, evidence=evidence).operational_ready
+    # Pump outputs are irrelevant to raw unpumped preparation.
+    evidence["operating_profile"].pop("timing")
     preliminary = build_plan(s, evidence=evidence, purpose="preliminary")
     blank = build_plan(s, evidence=evidence, purpose="blank")
-    assert preliminary.ready, preliminary.readiness_items
+    assert preliminary.operational_ready, preliminary.readiness_items
     assert len(preliminary.blocks) == 1 and preliminary.total_pump_events == 0
-    assert blank.ready and len(blank.blocks) == 4 and blank.total_pump_events == 0
+    assert blank.operational_ready and len(blank.blocks) == 4 and blank.total_pump_events == 0
     assert blank.settings == s and preliminary.settings == s
-    assert all(not f["channels"]["A"]["enabled"] for b in blank.blocks for f in b.timing.frames)
+    assert all(b.timing is None for b in blank.blocks)
 
 
-def test_host_native_sample_exchange_and_missing_condition_identifiers():
+def test_optional_host_sample_exchange_is_retained_but_never_gates_raw_capture():
     s, evidence = profile_case()
     native = {"schema_version": 1, "record_kind": "sample_spectral_selection", "disposition": "accepted",
               "selection_id": "selection-example", "sample_id": s.sample_id, "condition_id": s.condition_id,
@@ -177,24 +182,26 @@ def test_host_native_sample_exchange_and_missing_condition_identifiers():
     evidence["sample_selection"] = native
     assert build_plan(s, evidence=evidence).ready
     native["condition"].pop("cell_id")
-    assert any("cell_id" in v for v in build_plan(s, evidence=evidence).readiness_items)
+    p = build_plan(s, evidence=evidence)
+    assert p.operational_ready
+    assert p.evidence_records["sample_selection"] == native
 
 
-def test_mb_a1_first_and_extensions_require_quantification():
+def test_band_assignments_and_legacy_material_labels_do_not_control_acquisition():
     s, evidence = profile_case()
     s = replace(s, condition_profile="rt_mbco", positions=(replace(s.positions[0], band_assignment="A0"),))
     evidence["operating_profile"]["condition_profile"] = s.condition_profile
     p = build_plan(s, evidence=evidence)
-    assert any("starts at" in v for v in p.readiness_items)
-    assert any("extension" in v for v in p.readiness_items)
+    assert p.operational_ready and not p.readiness_items
 
 
-def test_cryo_fresh_state_ids_do_not_invent_automatic_repositioning():
+def test_legacy_temperature_and_fresh_state_metadata_never_limit_event_count():
     s, evidence = profile_case()
     s = replace(s, condition_profile="cryo_hrp_co", technical_repetitions=2, event_budget=2,
                 fresh_state_record_ids=("declared-fresh-state",))
     p = build_plan(s, evidence=evidence)
-    assert any("separate operation" in v for v in p.validation_errors)
+    assert p.operational_ready and p.total_pump_events == 2
+    assert p.settings.fresh_state_record_ids == ("declared-fresh-state",)
 
 
 def test_probe_frequency_must_equal_actual_frame_input_carrier():
@@ -204,12 +211,12 @@ def test_probe_frequency_must_equal_actual_frame_input_carrier():
     assert any("frame-input frequency" in v for v in p.validation_errors)
 
 
-def test_selected_threshold_needs_condition_evidence_and_estimate_includes_prearm_capture():
+def test_diagnostic_thresholds_are_editable_and_estimates_include_prearm_capture():
     s, evidence = profile_case()
     p = build_plan(s, evidence=evidence)
     assert p.blocks[0].duration_s == s.pre_observation_s + p.timing.duration_s
     assert p.blocks[0].pre_observation_s == s.pre_observation_s + p.timing.selected_pre_observation_s
-    assert any("proposal" in v for v in build_plan(replace(s, baseline_drift_fraction=.2), evidence=evidence).readiness_items)
+    assert build_plan(replace(s, baseline_drift_fraction=.2), evidence=evidence).operational_ready
 
 
 def test_oversized_repeated_frame_tables_stay_saveable_without_duplicate_allocation():
@@ -233,32 +240,86 @@ def test_unrelated_checksum_changes_never_gate_planning():
 
 
 @pytest.mark.parametrize("field", ["fire_polarity", "q_switch_polarity", "termination"])
-def test_operating_profile_must_explicitly_qualify_pump_polarity_and_loading(field):
+def test_actual_runtime_polarity_and_loading_required_only_for_pumped_capture(field):
     s, evidence = profile_case()
-    # A capability/configuration value does not silently become measured recipe evidence.
-    configuration = {"fixed_wavenumber_kinetics": deepcopy(evidence["operating_profile"])}
     evidence["operating_profile"]["timing"].pop(field)
-    p = build_plan(s, configuration, evidence)
-    assert not p.ready and p.timing is None
+    live = evidence["operating_profile"]
+    p = build_plan(s, live_readbacks=live)
+    assert p.ready and not p.operational_ready and p.timing is None
     assert any(field in issue for issue in p.readiness_items)
+    assert build_plan(replace(s, pump_enabled=False), live_readbacks=live).operational_ready
 
 
-def test_missing_temperature_limits_claims_and_cryo_requires_retained_qualification():
+def test_temperature_is_optional_metadata_without_temperature_specific_warnings_or_gates():
     s, evidence = profile_case()
-    assert any("temperature is unentered" in issue for issue in build_plan(s, evidence=evidence).warnings)
-    s = replace(s, condition_profile="cryo_hrp_co")
-    evidence["operating_profile"]["condition_profile"] = s.condition_profile
-    p = build_plan(s, evidence=evidence)
-    assert not p.ready
-    assert any("entered measured temperature" in issue for issue in p.readiness_items)
-    s = replace(s, temperature_k=77.0)
-    p = build_plan(s, evidence=evidence)
-    assert any("explicit profile uncertainty" in issue for issue in p.readiness_items)
-    evidence["operating_profile"]["temperature_uncertainty_k"] = .1  # Synthetic fixture only.
-    assert build_plan(s, evidence=evidence).ready
-    evidence["operating_profile"].pop("temperature_uncertainty_k")
-    evidence["operating_profile"]["temperature_status"] = "condition_source_measured"
-    assert build_plan(s, evidence=evidence).ready
+    for value in (None, 77.0, 295.0):
+        p = build_plan(replace(s, condition_profile="arbitrary-label", temperature_k=value), evidence=evidence)
+        assert p.operational_ready
+        assert all("temperature" not in issue.lower() for issue in (*p.readiness_items, *p.warnings))
+
+
+def test_live_readbacks_enable_raw_capture_without_any_promoted_or_sample_evidence():
+    _, evidence = profile_case()
+    runtime_keys = {"sample", "reference", "probe_recipe", "mircat", "hf2li", "timing", "timing_rate_sps",
+                    "timing_demodulator_index", "tune_tolerance_cm1"}
+    live = {key: value for key, value in evidence["operating_profile"].items() if key in runtime_keys}
+    settings = Settings(positions=(Position(1944.2),), sample_label="ordinary sample")
+    p = build_plan(settings, live_readbacks=live)
+    assert p.ready and p.operational_ready, p.readiness_items
+    assert p.evidence_records == {}
+    assert p.actual["installed_readbacks"] == live
+    assert "acquisition_response" not in p.resolved
+    assert p.resolved["settling_s"] == 5*live["sample"]["order"]*live["sample"]["timeconstant_s"]
+    assert "engineering_estimate" in p.resolved["value_sources"]["settling_s"]
+    assert any("fits unresolved" in warning for warning in p.warnings)
+
+
+@pytest.mark.parametrize("override,field,value", [
+    ("sample_rate_sps", "rate_sps", 333.),
+    ("sample_timeconstant_s", "timeconstant_s", .005),
+    ("sample_filter_order", "order", 5),
+])
+def test_one_exact_override_does_not_freeze_other_automatic_fields(override, field, value):
+    s, evidence = profile_case("dual")
+    s = replace(s, **{override: value})
+    previous = deepcopy(evidence["operating_profile"])
+    live = deepcopy(previous)
+    live["sample"].update(rate_sps=500., timeconstant_s=.02, order=3)
+    live["reference"].update(rate_sps=400., timeconstant_s=.03, order=4)
+    p = build_plan(s, {"fixed_wavenumber_kinetics": previous}, evidence, live_readbacks=live)
+    assert p.operational_ready, p.readiness_items
+    for key in ("rate_sps", "timeconstant_s", "order"):
+        assert p.resolved["sample"][key] == (value if key == field else live["sample"][key])
+        assert p.resolved["reference"][key] == live["reference"][key]
+    assert p.resolved["value_sources"][f"sample.{field}"] == "user_override"
+    assert p.resolved["value_sources"]["reference.rate_sps"] == "installed_readback"
+
+
+def test_probe_and_pump_overrides_change_only_explicit_fields_and_required_carrier_recipients():
+    s, evidence = profile_case()
+    live = deepcopy(evidence["operating_profile"])
+    s = replace(s, probe_width_ns=50., probe_rate_hz=2000., pump_q_switch_width_s=.0002)
+    p = build_plan(s, live_readbacks=live)
+    assert p.operational_ready, p.readiness_items
+    assert p.resolved["mircat"]["pulse_width_ns"] == 50.
+    assert p.resolved["mircat"]["pulse_rate_hz"] == 2000.
+    assert p.resolved["probe_recipe"]["clock"]["frequency"] == "2000Hz"
+    assert p.resolved["probe_recipe"]["channels"] == live["probe_recipe"]["channels"]
+    assert p.resolved["timing"]["q_switch_width_s"] == .0002
+    assert p.resolved["timing"]["fire_width_s"] == live["timing"]["fire_width_s"]
+    assert p.resolved["timing"]["input_frequency_hz"] == 2000.
+    assert p.resolved["hf2li"]["pll"]["freqcenter_hz"] == 2000.
+    assert live["timing"]["q_switch_width_s"] == .0001
+
+
+def test_no_pump_ignores_unrelated_pump_input_clock_and_runtime_stream_qualification():
+    s, evidence = profile_case()
+    live = deepcopy(evidence["operating_profile"])
+    live["timing"] = {"input_frequency_hz": 9999.}
+    live.pop("continuous_poll_lossless_qualified")
+    p = build_plan(replace(s, pump_enabled=False), live_readbacks=live)
+    assert p.operational_ready and p.timing is None
+    assert p.total_pump_events == 0
 
 
 @pytest.mark.parametrize("updates", [{"pre_observation_s": float("nan")}, {"event_budget": True},

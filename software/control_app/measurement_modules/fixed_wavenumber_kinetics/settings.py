@@ -1,7 +1,8 @@
-"""Hardware-free scientific inputs for the two fixed-point measurement modes.
+"""Hardware-free inputs for material-independent fixed-point time traces.
 
-Defaults are editable planning proposals, never established operating values.
-Recipe fields default to None and must be resolved from an applicable record.
+None means Automatic for each individual instrument override. Live readbacks
+resolve those choices when the owned operation connects; metadata never grants
+or denies ordinary raw/relative acquisition.
 """
 from __future__ import annotations
 
@@ -10,12 +11,9 @@ from typing import Any, Mapping
 
 EXPERIMENT_ID = "fixed_wavenumber_kinetics"
 SCHEMA_VERSION = "1.0"
-CONDITION_PROFILES = {
-    "rt_hrp_co": {"protein": "HRP–CO", "temperature_regime": "room_temperature", "purpose": "local discovery and selected-band long recovery"},
-    "rt_mbco": {"protein": "MbCO", "temperature_regime": "room_temperature", "purpose": "A1-first discovery; A0/A3 require measured quantification"},
-    "cryo_hrp_co": {"protein": "HRP–CO", "temperature_regime": "cryogenic", "purpose": "one-event observation unless a fresh equivalent state is established"},
-    "cryo_mbco": {"protein": "MbCO", "temperature_regime": "cryogenic", "purpose": "A1-first one-event observation; no assumed reset"},
-}
+# Kept as a compatibility export for saved plans. The acquisition engine has no
+# material or temperature profiles, and never branches on these metadata fields.
+CONDITION_PROFILES = {"": {"purpose": "Fixed-wavenumber time trace"}}
 
 
 @dataclass(frozen=True)
@@ -43,7 +41,8 @@ class Position:
 @dataclass(frozen=True)
 class Settings:
     mode: str = "single"
-    condition_profile: str = "rt_hrp_co"
+    condition_profile: str = ""
+    sample_label: str = ""
     condition_id: str = ""
     sample_id: str = ""
     preparation_id: str = ""
@@ -71,6 +70,12 @@ class Settings:
     reference_timeconstant_s: float | None = None
     sample_filter_order: int | None = None
     reference_filter_order: int | None = None
+    probe_rate_hz: float | None = None
+    probe_width_ns: float | None = None
+    pump_fire_delay_s: float | None = None
+    pump_q_switch_delay_s: float | None = None
+    pump_fire_width_s: float | None = None
+    pump_q_switch_width_s: float | None = None
     retention_strategy: str = "continuous_to_disk"
     chunk_duration_s: float = 1.0
     memory_limit_mb: float = 256.0

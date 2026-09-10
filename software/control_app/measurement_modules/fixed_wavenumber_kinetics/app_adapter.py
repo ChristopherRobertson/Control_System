@@ -7,7 +7,6 @@ import json
 from threading import Event
 
 from control_app.measurement_host.presentation import ScientificSelections
-from control_app.measurement_host.interchange import sample_selection_from_dict
 
 from .settings import Settings
 from .planner import build_plan
@@ -25,10 +24,17 @@ class FixedPointAdapter:
         self.preview_callback = lambda payload: None
         self._profile_error = ""
         self.local_selection = None
-        self.previous_pumped_record = context.preferences.value("previous_pumped_state")
+        self.live_readbacks = {}
 
     def read_settings(self):
         return self.editor.values()
+
+    def read_operation_settings(self, kind):
+        if kind in ("capabilities", "load_blank", "export_handoff"):
+            return {"experiment_id": "fixed_wavenumber_kinetics", "schema_version": 1,
+                    "record_kind": "fixed_point_plan", "settings": Settings(mode=self.context.mode).to_dict(),
+                    "execution": self.editor._execution}
+        return self.read_settings()
 
     def apply_settings(self, settings):
         self._validate_envelope(settings)
@@ -41,8 +47,6 @@ class FixedPointAdapter:
         if data["settings"].get("mode") != self.context.mode:
             raise ValueError("Detector mode differs from this tab")
         Settings.from_dict(data["settings"])
-        if data.get("sample_selection"):
-            sample_selection_from_dict(data["sample_selection"])
 
     def load_profile(self, bundle_id):
         """Only the host promotion-validating loader establishes instrument authority."""
@@ -73,64 +77,45 @@ class FixedPointAdapter:
         settings = Settings.from_dict(envelope["settings"])
         configuration = self.context.configuration()
         evidence = deepcopy(self.evidence)
+        live = deepcopy(self.live_readbacks)
         if envelope.get("execution") == "simulation":
             from .simulation import simulation_profile
             simulation = simulation_profile(self.context.mode, condition_id=settings.condition_id,
                                             condition_profile=settings.condition_profile)
-            configuration = simulation["configuration"]
-            evidence = simulation["evidence"]
-        elif envelope.get("bundle_id") != (self.bundle_record or {}).get("bundle_id"):
-            evidence = {}
-        selection = envelope.get("sample_selection")
-        if selection:
-            record = sample_selection_from_dict(selection)
-            if purpose == "measurement" or (record.sample_id == settings.sample_id and record.condition_id == settings.condition_id):
-                evidence["sample_selection"] = record.to_dict()
-        elif self.local_selection:
-            evidence["sample_selection"] = deepcopy(self.local_selection)
-        if envelope.get("fresh_state_record"):
-            evidence.setdefault("operating_profile", {})["fresh_state_record"] = deepcopy(envelope["fresh_state_record"])
-        return build_plan(settings, configuration, evidence, purpose=purpose)
+            configuration, evidence = simulation["configuration"], simulation["evidence"]
+            live = {}
+        return build_plan(settings, configuration, evidence, purpose=purpose, live_readbacks=live)
 
     def validate_plan(self, plan):
         return tuple(getattr(plan, "validation_errors", ()))
 
     def summarize_plan(self, plan):
-        data = plan.to_dict()
-        s = plan.settings
-        lines = [f"{s.condition_profile} · {self.context.mode} detector mode",
-                 f"{len(s.positions)} ordered measured positions · {s.technical_repetitions} technical repetition(s)",
-                 f"Observation: {s.pre_observation_s:g} s before / {s.post_observation_s:g} s after each event",
-                 f"Finite authorized pump budget: {s.event_budget}. Sequential positions are separate observations."]
-        lines.append(f"Programmed pump events: {plan.total_pump_events}")
-        for key in ("wall_clock_s", "storage_bytes", "peak_memory_bytes"):
-            value = plan.estimates.get(key)
-            lines.append(f"{key.replace('_', ' ')}: {value if value is not None else 'unresolved'}")
-        lines.append(plan.estimates.get("basis", ""))
-        resolved = data.get("resolved", {})
-        if resolved:
-            for role in ("sample", "reference") if s.mode == "dual" else ("sample",):
-                detector = resolved.get(role, {})
-                lines.append(f"{role.title()}: demod {detector.get('demodulator_index', '?')}, "
-                    f"{detector.get('rate_sps', '?')} Sa/s, filter {detector.get('order', '?')}, "
-                    f"τ={detector.get('timeconstant_s', '?')} s")
-            lines.append(f"Characterized settling {resolved.get('settling_s', '?')} s; accepted event interval "
-                         f"{resolved.get('minimum_event_interval_s', '?')} s. Probe carrier is independent.")
-        if plan.readiness_items:
-            lines.append("Readiness items:\n" + "\n".join(str(item) for item in plan.readiness_items))
-        lines.append("Direct HF2LI response limits temporal claims; a fixed point does not measure full band area or identify a microscopic pathway.")
-        return "\n".join(lines)
+        s, resolved = plan.settings, plan.resolved
+        def format_value(value, unit):
+            return f"{value:g} {unit}" if isinstance(value, (float, int)) else "Check device"
+        detector = resolved.get("sample", {})
+        detector_text = format_value(detector.get("rate_sps"), "Sa/s")
+        if s.mode == "dual":
+            detector_text += " / " + format_value(resolved.get("reference", {}).get("rate_sps"), "Sa/s")
+        rows = [("Observation", f"{s.pre_observation_s:g} s before + {s.post_observation_s:g} s recovery"),
+                ("Sequence", f"{len(s.positions)} position(s) · {plan.total_pump_events} pump event(s)"),
+                ("Duration", format_value(plan.estimates.get("wall_clock_s"), "s")),
+                ("Detector rate", detector_text),
+                ("Filter", format_value(detector.get("timeconstant_s"), "s") +
+                    (f" · order {detector['order']}" if detector.get("order") is not None else ""))]
+        size = plan.estimates.get("storage_bytes")
+        rows.append(("Storage", f"{size/1024**2:.1f} MiB" if isinstance(size, (float, int)) else "Check device"))
+        return rows
 
     def selected_records(self):
-        selected = self.read_settings().get("sample_selection") or self.evidence.get("sample_selection")
-        samples = [deepcopy(record) for record in (selected or self.local_selection, self.read_settings().get("fresh_state_record")) if record]
+        selected = self.editor.sample_selection
         return ScientificSelections(
             calibration_records=(deepcopy(self.bundle_record),) if self.bundle_record else (),
-            sample_records=tuple(samples),
+            sample_records=(deepcopy(selected),) if selected else (),
         )
 
     def hardware_required(self, kind, settings):
-        return settings.get("execution", "connected") == "connected"
+        return kind in ("capabilities", "blank", "preliminary", "measurement") and settings.get("execution", "connected") == "connected"
 
     def _run(self, snapshot, worker, kind):
         from .runner import Runner
@@ -149,7 +134,7 @@ class FixedPointAdapter:
                     payload = {**payload, "remaining_s": max(0., estimate-payload["elapsed_s"]),
                                "basis": "whole guided-plan stage allowances; manual handling excluded"}
             if payload.get("remaining_s") is not None:
-                message += f" · remaining ~{payload['remaining_s']:.1f} s ({payload.get('basis', 'planned stages')})"
+                message += f" · ~{payload['remaining_s']:.1f} s remaining"
             worker.notify(worker.message.emit, message)
             if "total" in payload:
                 completed, total = float(payload.get("completed", 0)), float(payload["total"])
@@ -163,14 +148,9 @@ class FixedPointAdapter:
         try:
             result = Runner(self.context).run(snapshot.operation, snapshot.plan, kind=kind,
                         cancel=worker.cancel_event, progress=progress,
-                        blank=deepcopy(self.blank), preliminary=snapshot.preliminary)
+                        blank=self._compatible_parent(self.blank, snapshot.plan),
+                        preliminary=self._compatible_parent(snapshot.preliminary, snapshot.plan))
             self.last_record = result
-            if any(event.get("commanded_event_number") for event in result.get("events", [])):
-                self.previous_pumped_record = {"settings": deepcopy(result["settings"]),
-                    "resolved": deepcopy(result["plan"]["resolved"]),
-                    "events": [{key: deepcopy(event.get(key)) for key in ("position_cm1", "baseline", "reset", "commanded_event_number")}
-                               for event in result["events"]], "run_id": result["run_id"]}
-                self.context.preferences.setValue("previous_pumped_state", self.previous_pumped_record)
             if result.get("status") == "stopped":
                 raise InterruptedError("Acquisition stopped")
             if result.get("status") not in ("complete", "completed"):
@@ -179,6 +159,12 @@ class FixedPointAdapter:
             return result
         finally:
             self.active_cancel = None
+
+    def _compatible_parent(self, record, plan):
+        from .processing import compatible_record
+        if record and record.get("status") in ("complete", "completed") and compatible_record(record, plan)[0]:
+            return deepcopy(record)
+        return None
 
     def run_preliminary(self, snapshot, worker):
         return self._run(snapshot, worker, "preliminary")
@@ -190,58 +176,28 @@ class FixedPointAdapter:
         return self._run(snapshot, worker, "blank")
 
     def summarize_preliminary(self, result):
-        analysis = result.get("analysis", {})
-        lines = ["Review the retained unpumped fixed-point signal, baseline statistics and quality flags before Start."]
-        for event in analysis.get("events", []):
-            baseline = event.get("baseline", {})
-            mean, cv, drift = (baseline.get(k) for k in ("mean", "cv", "drift_fraction"))
-            lines.append(f"{event.get('wavenumber_cm1', '')} cm⁻¹ · mean {mean:.6g} · CV {cv:.3g} · fractional drift {drift:.3g} · "
-                         f"{'stationary' if baseline.get('stationary') else 'not stationary'}"
-                         if all(isinstance(v, (float, int)) for v in (mean, cv, drift)) else str(baseline))
-            if len(lines) >= 4:
-                lines.append("Additional positions and full statistics are available in the retained event views.")
-                break
-        lines.extend(str(x) for x in analysis.get("quality_flags", []))
-        return "\n".join(lines)
+        events = result.get("analysis", {}).get("events", [])
+        if not events:
+            return "Sample retained"
+        baseline = events[0].get("baseline", {})
+        mean = baseline.get("mean")
+        return f"Sample mean {mean:.5g}" if isinstance(mean, (float, int)) else "Sample retained"
 
-    def validate_review(self, preliminary, plan):
-        from .processing import compatible_record
-        errors = list(compatible_record(preliminary, plan)[1])
-        if self.instrument_changes:
-            errors.extend(self.instrument_changes)
-        if preliminary.get("status") not in ("completed", "complete"):
-            errors.append("The preliminary record did not complete successfully")
-        if preliminary.get("kind") not in ("preliminary", None):
-            errors.append("An unpumped sample preliminary record is required")
-        if self.context.mode == "single":
-            if self.blank is None:
-                errors.append("Acquire or load the complete compatible buffer blank first")
-            else:
-                errors.extend(compatible_record(self.blank, plan)[1])
-        for event in preliminary.get("analysis", {}).get("events", []):
-            baseline = event.get("baseline", {})
-            if baseline.get("stationary") is False:
-                errors.append("Preliminary baseline is not stationary")
-        previous = self.previous_pumped_record
-        current = plan.settings.to_dict()
-        identity = ("sample_id", "preparation_id", "cell_id", "condition_id", "position_id")
-        fresh = plan.resolved.get("fresh_state_record", {})
-        fresh_applies = fresh.get("accepted") is True and all(fresh.get(k) == current.get(k) for k in identity)
-        if previous and not fresh_applies and not current["condition_profile"].startswith("cryo") and all(
-                previous["settings"].get(k) == current.get(k) for k in identity):
-            if not plan.resolved.get("reset_record_id"):
-                errors.append("Another event on this sample state requires applicable measured reset-equivalence evidence")
-            old_by_position = {event["position_cm1"]: event for event in previous["events"] if event.get("commanded_event_number")}
-            for event in preliminary.get("analysis", {}).get("events", []):
-                old = old_by_position.get(event.get("wavenumber_cm1"))
-                if old and not (old.get("reset") or {}).get("accepted"):
-                    mean = event.get("baseline", {}).get("mean")
-                    initial = (old.get("baseline") or {}).get("mean")
-                    if mean is None or not initial or abs(mean/initial-1) > current["reset_tolerance_fraction"]:
-                        errors.append("This sample has not returned to its retained pre-pump baseline; continue recovery or establish an equivalent fresh state")
-        if preliminary.get("analysis", {}).get("quality_flags"):
-            errors.extend(str(flag) for flag in preliminary["analysis"]["quality_flags"])
-        return tuple(dict.fromkeys(errors))
+    def validate_preliminary(self, preliminary, plan):
+        # Every measurement contains its own observed pre-pump baseline. Optional
+        # parent data are reused only when they match the physical acquisition.
+        return ()
+
+    def validate_operation(self, kind, plan, preliminary):
+        if kind in ("capabilities", "load_blank", "export_handoff"):
+            return ()
+        return self.validate_plan(plan)
+
+    def run_capabilities(self, snapshot, worker):
+        from .runner import Runner
+        return Runner(self.context).discover(snapshot.operation, Settings.from_dict(snapshot.settings["settings"]),
+            cancel=worker.cancel_event, progress=lambda payload: worker.notify(worker.message.emit,
+                payload if isinstance(payload, str) else payload.get("message", payload.get("stage", "Checking device"))))
 
     def request_abort(self, reason):
         if self.active_cancel is not None:

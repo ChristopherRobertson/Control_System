@@ -171,6 +171,11 @@ def iter_native_chunks(record: Mapping[str, Any], base_directory: str | Path | N
 
 def validate_record(record: Mapping[str, Any], *, mode: str | None = None,
                     condition_id: str | None = None) -> None:
+    """Validate structural/native mode compatibility; annotations are inert.
+
+    ``condition_id`` remains accepted for callers of earlier versions, but an
+    optional condition/temperature/material label is never an operational gate.
+    """
     if record.get("experiment_id") != EXPERIMENT_ID:
         raise RecordCompatibilityError("Incompatible experiment_id")
     if record.get("schema_version") not in (SCHEMA_VERSION, 1):
@@ -180,10 +185,12 @@ def validate_record(record: Mapping[str, Any], *, mode: str | None = None,
         raise RecordCompatibilityError("Incompatible detector mode")
     if "instance_id" in record and record["instance_id"] != f"{EXPERIMENT_ID}:{actual_mode}":
         raise RecordCompatibilityError("Incompatible instance_id")
-    settings = record.get("settings", record.get("plan", {}).get("settings", {}))
-    actual_condition = record.get("condition_id", settings.get("condition_id", settings.get("condition", {}).get("condition_id")))
-    if condition_id is not None and condition_id != actual_condition:
-        raise RecordCompatibilityError("Incompatible condition_id")
+    plan = record.get("plan", {})
+    if isinstance(plan, Mapping):
+        if "mode" in plan and plan["mode"] != actual_mode:
+            raise RecordCompatibilityError("Run/plan detector mode mismatch")
+        if "experiment_id" in plan and plan["experiment_id"] != EXPERIMENT_ID:
+            raise RecordCompatibilityError("Run/plan experiment_id mismatch")
 
 
 def save_run(record: Mapping[str, Any], path: str | Path) -> Path:
@@ -220,8 +227,6 @@ def load_analysis_inputs(record: Mapping[str, Any]) -> dict[str, dict | None]:
     references = record.get("analysis_inputs", {})
     if not isinstance(references, Mapping):
         raise RecordCompatibilityError("analysis_inputs must be an explicit parent-reference mapping")
-    settings = record.get("settings", record.get("plan", {}).get("settings", {}))
-    condition = record.get("condition_id", settings.get("condition_id"))
     result = {"blank": None, "preliminary": None}
     for kind in result:
         reference = references.get(kind)
@@ -230,20 +235,18 @@ def load_analysis_inputs(record: Mapping[str, Any]) -> dict[str, dict | None]:
         if (not isinstance(reference, Mapping) or not reference.get("run_id")
                 or not isinstance(reference.get("native_path"), (str, os.PathLike)) or not reference.get("native_path")):
             raise RecordCompatibilityError(f"{kind} parent needs an explicit run_id and native_path")
-        if not condition:
-            raise RecordCompatibilityError("The current run needs a condition_id to resolve compatible analysis parents")
         path = Path(reference["native_path"])
         if not path.is_absolute():
             if not record.get("run_directory"):
                 raise RecordCompatibilityError(f"Relative {kind} parent needs the current run_directory")
             path = Path(record["run_directory"]) / path
         try:
-            parent = load_run(path, mode=record["mode"], condition_id=condition)
+            parent = load_run(path, mode=record["mode"])
         except (OSError, ValueError, TypeError) as exc:
             raise RecordCompatibilityError(f"Cannot load explicit {kind} parent {path}: {exc}") from exc
         if parent.get("run_id") != reference["run_id"]:
             raise RecordCompatibilityError(f"{kind} parent run_id differs from the recorded source")
-        for identity in ("experiment_id", "mode", "condition_id"):
+        for identity in ("experiment_id", "mode"):
             if identity in reference and reference[identity] != parent.get(identity):
                 raise RecordCompatibilityError(f"{kind} parent {identity} differs from its recorded source reference")
         if "schema_version" in reference and reference["schema_version"] not in (SCHEMA_VERSION, 1):
@@ -300,9 +303,12 @@ def export_stroboscopic_handoff(record: Mapping[str, Any], path: str | Path,
         "condition": record.get("plan", {}).get("settings", record.get("settings", {})),
         "suggested_time_window_s": list(selected_times_s),
         "observed_events": record.get("events", []),
-        "measured_acquisition_response": record.get("measured_response"),
-        "requires": ["compatible accepted sample selection", "measured optical time zero and complete IRF",
-                     "accepted equivalent-state reset before each repeated event"],
+        "measured_acquisition_response": record.get("measured_response", record.get("acquisition_response")),
+        "interpretation_considerations": [
+            "Optional measured acquisition response and optical time-zero observations can bound temporal claims.",
+            "Observed baseline/recovery behavior can inform whether repeated events represent equivalent sample states.",
+            "Optional sample spectral observations can help interpret the selected fixed point.",
+        ],
         "claim_limit": "Direct HF2LI fixed-point data do not establish nanosecond kinetics. Open this evidence alongside an existing stroboscopic data product; no other experiment package is required.",
     })
 
@@ -313,13 +319,15 @@ def export_analysis_csv(record: Mapping[str, Any], path: str | Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("w", newline="", encoding="utf-8") as stream:
         fields = ["event_index", "position_cm1", "time_s", "sample", "reference", "ratio", "delta_absorbance", "absolute_absorbance"]
+        label_fields = ["normalization_kind", "ratio_label", "delta_absorbance_label"]
         writer = csv.writer(stream)
-        writer.writerow(fields)
+        writer.writerow([*fields, *label_fields])
         for event in record.get("analysis", {}).get("events", ()):
             for i, moment in enumerate(event.get("time_s", ())):
                 row = [event.get("event_index"), event.get("position_cm1"), moment]
                 for name in fields[3:]:
                     value = event.get(name)
                     row.append("" if value is None else value[i])
+                row.extend(event.get(name, "") for name in label_fields)
                 writer.writerow(row)
     return target

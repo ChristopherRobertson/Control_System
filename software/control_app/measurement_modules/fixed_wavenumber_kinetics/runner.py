@@ -20,6 +20,7 @@ class Moments:
         self.first = self.last = None
 
     def add(self, t, values, clock):
+        from .processing import time_from_ticks
         t, values = np.asarray(t), np.asarray(values, dtype=float)
         valid = np.isfinite(values)
         t, values = t[valid], values[valid]
@@ -29,7 +30,7 @@ class Moments:
             self.origin = int(t[0])
             self.first = self.origin
         self.last = int(t[-1])
-        dt = (t.astype(np.int64)-self.origin).astype(float) / clock
+        dt = time_from_ticks(t, self.origin, clock)
         self.n += len(values)
         self.st += float(dt.sum()); self.stt += float(dt @ dt)
         self.sy += float(values.sum()); self.syy += float(values @ values)
@@ -85,10 +86,73 @@ class Runner:
         self.device_factory = device_factory
         self.history_path = history_path
 
+    def discover(self, operation, settings, *, cancel=None, progress=None):
+        """Read connected settings under ownership, close and preserve the check."""
+        from .persistence import save_run
+        settings = mapping(settings)
+        check = lambda: check_cancel(cancel)
+        callback = progress or (lambda event: None)
+        record = {"experiment_id": "fixed_wavenumber_kinetics", "schema_version": 1,
+            "mode": self.context.mode, "kind": "discovery", "run_id": operation.run_id,
+            "started_utc": operation.started_utc, "settings": settings,
+            "run_directory": str(operation.output_path), "status": "running"}
+        device = None
+        error = None
+        preserved = False
+        cleanup = {"safe_verified": True, "errors": []}
+        def emit(value):
+            try:
+                callback(value)
+            except Exception as exc:
+                record.setdefault("presentation_errors", []).append(str(exc))
+        with self.context.hardware_scope(operation) if operation.hardware else nullcontext():
+            try:
+                check()
+                if self.device_factory is not None:
+                    device = self.device_factory(self.context, operation)
+                elif operation.hardware:
+                    device = InstalledDevices(self.context, operation)
+                else:
+                    from .simulation import SimulatedDevices
+                    device = SimulatedDevices(self.context, operation)
+                emit({"stage": "configuration", "message": "Reading current connected instrument settings"})
+                device.connect(check, prepare=False)
+                profile = device.discover_operating_profile(settings, check, emit, probe_capabilities=False)
+                record["live_readbacks"] = profile
+                record["status"] = "complete"
+            except Exception as exc:
+                error = exc
+                record["status"] = "stopped" if isinstance(exc, AcquisitionStopped) else "failed"
+                record["error"] = str(exc)
+            finally:
+                if device is not None:
+                    try:
+                        cleanup = device.cleanup()
+                    except Exception as exc:
+                        cleanup = {"safe_verified": False, "errors": [str(exc)]}
+                record["restoration"] = cleanup
+                if not cleanup["safe_verified"]:
+                    record["status"] = "cleanup_failed"
+                    error = RuntimeError("Device-check cleanup failed: " + "; ".join(cleanup["errors"]))
+                try:
+                    save_run(record, Path(operation.output_path)/"run.json")
+                    preserved = True
+                except Exception as exc:
+                    record["storage_error"] = str(exc)
+                    error = RuntimeError("Device-check preservation failed: " + str(exc))
+                finally:
+                    self.last_record = record
+                    if operation.hardware:
+                        self.context.ownership.release(operation.ownership, safe_verified=cleanup["safe_verified"],
+                            preservation_verified=preserved, detail=record.get("error", record["status"]))
+        if error is not None:
+            raise error
+        return record["live_readbacks"]
+
     def run(self, operation, plan, *, kind="measurement", cancel=None,
             progress=None, blank=None, preliminary=None):
         from .persistence import NativeChunkWriter, save_run
-        from .processing import analyze_run, time_from_ticks
+        from .processing import analyze_run, time_from_ticks, compatible_record
         progress = progress or (lambda event: None)
         check = lambda: check_cancel(cancel)
         started = time.monotonic()
@@ -122,7 +186,6 @@ class Runner:
         writer = None
         preservation = False
         cleanup = {"safe_verified": True, "errors": [], "actions": []}
-        history = None
         def emit(event):
             event.setdefault("elapsed_s", time.monotonic()-started)
             event.setdefault("basis", "Planned acquisition plus measured settling, device upload, restoration and processing")
@@ -139,21 +202,10 @@ class Runner:
                 check()
                 if kind not in {"blank", "preliminary", "measurement"}:
                     raise ValueError("Unknown acquisition kind")
-                if not plan.get("ready", False):
-                    raise RuntimeError("Plan readiness unresolved: " + "; ".join(map(str, plan.get("readiness_items", []))))
+                if plan.get("validation_errors"):
+                    raise RuntimeError("Invalid requested plan: " + "; ".join(map(str, plan["validation_errors"])))
                 if settings["mode"] != self.context.mode:
                     raise ValueError("Plan detector mode mismatch")
-                if operation.hardware and resolved.get("qualification_kind") == "simulation":
-                    raise RuntimeError("Synthetic operating profile cannot authorize connected devices")
-                if kind == "measurement" and settings.get("pump_enabled", True) and (operation.hardware or settings["condition_profile"].startswith("cryo")):
-                    from .state_history import StateHistory
-                    if operation.hardware:
-                        self.context.ownership.assert_owner(operation.ownership)
-                    history_path = self.history_path
-                    if not operation.hardware and history_path is None:
-                        history_path = Path(operation.save_root) / "measurements" / "fixed_wavenumber_kinetics" / "simulation_state_history.jsonl"
-                    history = StateHistory(history_path)
-                    record["state_history_check"] = history.check(settings, resolved)
                 if self.device_factory:
                     device = self.device_factory(self.context, operation)
                 elif operation.hardware:
@@ -163,9 +215,34 @@ class Runner:
                     device = SimulatedDevices(self.context, operation)
                 emit({"stage": "configuration", "message": "Connecting operation-owned devices"})
                 device.connect(check)
+                live = device.discover_operating_profile(settings, check, emit)
+                record["live_readbacks"] = live
+                from .planner import build_plan
+                runtime_plan = build_plan(settings, mapping(operation.configuration), purpose=kind, live_readbacks=live)
+                if not runtime_plan.operational_ready:
+                    raise RuntimeError("Instrument settings unresolved: " + "; ".join((*runtime_plan.validation_errors, *runtime_plan.readiness_items)))
+                plan = runtime_plan.to_dict()
+                resolved = dict(plan["resolved"])
                 device.configure(resolved, check)
+                resolved = device.resolved
+                plan["resolved"] = resolved
+                record["plan"] = plan
+                record["acquisition_response"] = resolved.get("acquisition_response", {})
+                record["background_balance"] = resolved.get("background_balance") or {}
                 record["readbacks"] = device.readbacks
                 record["initial_states"] = device.before
+                for name, parent in (("blank", blank), ("preliminary", preliminary)):
+                    if parent is None:
+                        continue
+                    compatible, reasons = compatible_record(parent, record)
+                    if not compatible:
+                        record.setdefault("optional_record_notes", []).append(
+                            f"Ignored {name} after actual instrument readback: " + "; ".join(reasons))
+                        record["analysis_inputs"].pop(name, None)
+                        if name == "blank":
+                            blank = None
+                        else:
+                            preliminary = None
                 blocks = list(plan["blocks"])
                 delivered = 0
                 last_pump = None
@@ -177,8 +254,6 @@ class Runner:
                     pumped = kind == "measurement" and settings.get("pump_enabled", True) and int(block.get("event_count", 1)) > 0
                     if pumped and delivered >= int(settings["event_budget"]):
                         raise RuntimeError("Finite pump budget exhausted; no automatic retry")
-                    if pumped and delivered and settings["condition_profile"].startswith("cryo"):
-                        raise RuntimeError("Cryogenic state requires a new explicitly established equivalent-state operation")
                     if pumped and operation.hardware:
                         health = device.read_health()
                         record.setdefault("health_readbacks", []).append(health)
@@ -198,7 +273,7 @@ class Runner:
                     program = mapping(block["timing"]) if block.get("timing") else None
                     if pumped:
                         if not program or program.get("expected_pump_count") != 1:
-                            raise RuntimeError("Each reset-gated block must compile exactly one finite event")
+                            raise RuntimeError("Each acquisition block must compile exactly one finite event")
                         event["timing_upload"] = device.upload(program, check, emit)
                     emit({"stage": "tuning/settling", "message": f"Tuning {event['position_cm1']:g} cm^-1", "completed": block_index, "total": len(blocks)})
                     event["tuning"] = device.tune(event["position_cm1"], settings, check, emit)
@@ -360,10 +435,6 @@ class Runner:
                     if pumped:
                         check()
                         # Budget is consumed at dispatch even if observed sync later goes missing.
-                        if history is not None:
-                            if operation.hardware:
-                                self.context.ownership.assert_owner(operation.ownership)
-                            event["state_dispatch_intent"] = history.consume(settings, resolved, operation, event)
                         delivered += 1
                         event["commanded_event_number"] = delivered
                         device.start_event(program)
@@ -397,8 +468,8 @@ class Runner:
                         "support": "Retained requested final recovery window, at the same wavenumber and unchanged detector response"}
                     device.stop_stream()
                     previous_block_last_tick = event.get("last_native_timestamp")
-                    if pumped and block_index < len(blocks)-1 and not event["reset"]["accepted"]:
-                        raise RuntimeError("Measured recovery/reset criterion failed; later pump events inhibited")
+                    if pumped and not event["reset"]["accepted"]:
+                        event.setdefault("quality_flags", []).append("incomplete_observed_recovery")
                 record["status"] = "complete"
             except AcquisitionStopped:
                 record["status"] = "stopped"
@@ -446,16 +517,6 @@ class Runner:
                     record["cleanup_error"] = "; ".join(cleanup["errors"])
                 elif record.get("native_preservation_error") or writer is None:
                     record["status"] = "preservation_failed"
-                if history is not None and any(event.get("state_dispatch_intent") for event in record["events"]):
-                    try:
-                        if operation.hardware:
-                            self.context.ownership.assert_owner(operation.ownership)
-                        history.outcome(operation, record)
-                    except Exception as exc:
-                        record["state_history_error"] = str(exc)
-                        record["native_preservation_error"] = "Required consumed-state outcome preservation failed: " + str(exc)
-                        if cleanup["safe_verified"]:
-                            record["status"] = "preservation_failed"
                 try:
                     if writer is not None:
                         writer.close()

@@ -88,10 +88,21 @@ class SimulatedDevices:
         self.position = 0.
         self.off_band = False
 
-    def connect(self, check):
+    def connect(self, check, *, prepare=True):
         check()
         if self.faults.get("connect_failure"):
             raise RuntimeError("Injected connection failure")
+
+    def discover_operating_profile(self, settings, check, progress, *, probe_capabilities=False):
+        from .adapters import mapping
+        check()
+        profile = simulation_profile(self.context.mode)["configuration"]["fixed_wavenumber_kinetics"]
+        profile.update(mapping(self.operation.configuration).get("fixed_wavenumber_kinetics", {}))
+        profile["source_kind"] = "simulation"
+        profile["source"] = "Explicit synthetic devices; no connected measurements"
+        return profile
+
+    read_operating_settings = discover_operating_profile
 
     def configure(self, resolved, check):
         check()

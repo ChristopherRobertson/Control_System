@@ -1,7 +1,7 @@
 """Deterministic finite T660-2 programs for stationary, continuous records.
 
 The probe carrier is separate. Each program authorizes at most one pump; the
-next program requires the runner's measured reset check. No host clock defines
+runner executes the requested finite sequence and cadence. No host clock defines
 a pump edge. Manufacturer bounds: T660 Manual F5 pp. 6, 8, 10, 24–28 (10 ps,
 3600 s delay+width, 32-bit predivider, 8192 frames). The service uses an extra
 1 us frame-end margin; these programs satisfy that service contract.

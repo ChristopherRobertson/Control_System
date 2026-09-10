@@ -47,6 +47,18 @@ def test_fixed_point_native_finite_count_original_large_epoch_and_analysis(tmp_p
     assert "analysis" in record
 
 
+def test_fixed_point_streaming_baseline_moments_preserve_uint64_epoch():
+    from control_app.measurement_modules.fixed_wavenumber_kinetics.runner import Moments
+    origin = 2**63 + 12345
+    ticks = np.array([origin + n*100 for n in range(5)], dtype=np.uint64)
+    moments = Moments()
+    moments.add(ticks, np.array([1., 1.01, 1.02, 1.03, 1.04]), 1000.)
+    summary = moments.summary(1000., drift_limit=.1)
+    assert summary["slope_per_s"] == pytest.approx(.1)
+    assert summary["duration_s"] == pytest.approx(.4)
+    assert moments.origin == origin
+
+
 @pytest.mark.parametrize("fault, phrase", [
     ({"baseline_drift_per_s": 1.}, "baseline"),
     ({"missing_reference": True}, "baseline"),
@@ -75,13 +87,14 @@ def test_fixed_point_no_pump_controls(tmp_path, kind):
     assert result["events"][0]["pump_timestamps"] == []
 
 
-def test_fixed_point_reset_failure_inhibits_later_event(tmp_path):
+def test_fixed_point_incomplete_recovery_is_retained_without_equivalence_claim(tmp_path):
     runner, op, plan, devices = scenario(tmp_path, faults={"recovery_tau_s": 1000., "amplitude": .05},
         settings={"technical_repetitions": 2, "event_budget": 2})
     result = runner.run(op, plan)
-    assert devices[0].dispatched == 1
-    assert result["status"] == "failed"
-    assert "reset criterion" in result["error"]
+    assert devices[0].dispatched == 2
+    assert result["status"] == "complete", result.get("error")
+    assert not result["events"][0]["reset"]["accepted"]
+    assert not result["events"][1]["equivalent_state"]
 
 
 def test_fixed_point_known_recovery_allows_second_finite_event(tmp_path):

@@ -10,6 +10,7 @@ from dataclasses import asdict, is_dataclass
 import math
 import re
 import time
+from datetime import datetime, timezone
 from typing import Mapping
 
 import numpy as np
@@ -21,10 +22,16 @@ class AcquisitionStopped(RuntimeError):
 
 def mapping(value):
     if hasattr(value, "to_dict"):
-        return value.to_dict()
+        value = value.to_dict()
     if is_dataclass(value):
-        return asdict(value)
-    return dict(value)
+        value = asdict(value)
+    def detach(item):
+        if isinstance(item, Mapping):
+            return {str(key): detach(child) for key, child in item.items()}
+        if isinstance(item, (tuple, list)):
+            return [detach(child) for child in item]
+        return item
+    return detach(value)
 
 
 def check_cancel(cancel):
@@ -50,6 +57,20 @@ def _query_value(queries, key):
     return row["response"]
 
 
+def _channel_settings(row, *, enabled):
+    polarity = str(_query_value(row, "polarity")).upper()
+    termination = str(_query_value(row, "termination")).upper()
+    if polarity not in {"POS", "POSITIVE", "+", "NEG", "NEGATIVE", "-"}:
+        raise RuntimeError(f"Unrecognized T660 channel polarity {polarity!r}")
+    if termination not in {"ON", "1", "50", "50OHM", "OFF", "0", "LOWZ"}:
+        raise RuntimeError(f"Unrecognized T660 channel termination {termination!r}")
+    return {"enabled": enabled,
+        "delay": f"{_physical_number(_query_value(row, 'delay_edge')):.12g}s",
+        "width": f"{_physical_number(_query_value(row, 'width_edge')):.12g}s",
+        "polarity": "negative" if polarity in {"NEG", "NEGATIVE", "-"} else "positive",
+        "termination": "50OHM" if termination in {"ON", "1", "50", "50OHM"} else "LOWZ"}
+
+
 class InstalledDevices:
     """One operation's fresh services; caller holds host scope through close."""
 
@@ -61,7 +82,8 @@ class InstalledDevices:
         self.streaming = False
         self.readbacks = {}
 
-    def connect(self, check):
+    def connect(self, check, *, prepare=True):
+        self.prepared = prepare
         for name in ("t660_2", "t660_1", "mircat", "hf2li"):
             check()
             service = self.context.devices.create(name, self.operation)
@@ -76,13 +98,15 @@ class InstalledDevices:
                     raise RuntimeError(f"{name} 10 MHz clock connector role differs from maintained topology")
                 if name == "t660_1" and _query_value(queries, "clock_lock_status").upper() != "LOCKED":
                     raise RuntimeError("T660-1 is not locked to installed T660-2 10 MHz clock")
-                service.set_trigger_source("OFF")
-                service.force_eod()
-                for channel in "ABCD":
-                    service.disable_channel(channel)
+                if prepare:
+                    service.set_trigger_source("OFF")
+                    service.force_eod()
+                    for channel in "ABCD":
+                        service.disable_channel(channel)
             elif name == "mircat":
                 self.before[name] = service.read_state().to_dict()
-                service.turn_emission_off()
+                if prepare:
+                    service.turn_emission_off()
             else:
                 from control_app.devices.hf2li_service import HF2LIPreset
                 self.snapshot_preset = HF2LIPreset("fixed_point_restoration", {
@@ -91,13 +115,114 @@ class InstalledDevices:
                 if self.before[name].get("read_errors"):
                     raise RuntimeError("Cannot preserve HF2LI configuration: incomplete initial readback")
 
+    def discover_operating_profile(self, settings, check, progress, *, probe_capabilities=False):
+        """Derive a runnable selection from current installed readbacks.
+
+        Only the optional capability probe temporarily configures HF2LI nodes;
+        the service restores them. No calibration file or sample approval is
+        needed. Observed device settings do not imply calibrated time zero/IRF.
+        """
+        settings = mapping(settings)
+        check()
+        hf, mircat = self.services["hf2li"], self.services["mircat"]
+        nodes = self.before["hf2li"]["nodes"]
+        def node(path):
+            return nodes[f"/{hf.device_id}/{path}"]["value"]
+        source = f"Connected readbacks {datetime.now(timezone.utc).isoformat()}"
+        profile = {"source_kind": "connected_readbacks", "source": source,
+            "record_id": f"device-readbacks-{self.operation.run_id}",
+            "sources": {}, "readbacks": deepcopy(self.before),
+            "maximum_aggregate_rate_sps": 700000., "timing_demodulator_index": 2,
+            "pump_marker_bit": 16, "pump_marker_qualification": "installed Surelite Fixed Sync electrical DIO16; optical arrival unresolved",
+            "continuous_poll_lossless_qualified": False,
+            "acquisition_response": {}, "supported": {},
+            "overhead_estimates_s": {"configuration": 5., "upload_per_frame": .05,
+                "tune_per_position": 2., "restoration": 3., "saving": 1., "analysis": 1.}}
+        profiles = {}
+        if probe_capabilities:
+            progress({"stage": "configuration", "message": "Reading accepted HF2LI detector capabilities"})
+            method = hf.discover_dual_phase_scan_capabilities if self.context.mode == "dual" else hf.discover_phase_scan_capabilities
+            capabilities = method()
+            check()
+            profiles = {"sample": capabilities.get("sample", capabilities)}
+            if self.context.mode == "dual":
+                profiles["reference"] = capabilities["reference"]
+            profile["capabilities"] = capabilities
+        for role, index, input_index in (("sample", 0, 0), ("reference", 3, 1)):
+            if role == "reference" and self.context.mode != "dual":
+                continue
+            current = {"demodulator_index": index, "input_index": input_index,
+                "rate_sps": float(node(f"demods/{index}/rate")),
+                "timeconstant_s": float(node(f"demods/{index}/timeconstant")),
+                "order": int(node(f"demods/{index}/order"))}
+            cap = profiles.get(role, {})
+            profile[role] = current
+            if cap:
+                profile["supported"][role] = {"rate_sps": list(cap["rates_sps"]),
+                    "order": list(cap["orders"]),
+                    "timeconstant_s": list(cap.get("timeconstants_by_order", {}).get(current["order"], []))}
+            profile["sources"][role] = source
+        profile["timing_rate_sps"] = float(node("demods/2/rate"))
+        profile["clockbase_hz"] = hf.get_clockbase()
+        probe_before = self.before["t660_1"]
+        probe_frequency = _physical_number(_query_value(probe_before["queries"], "synth_frequency"))
+        profile["probe_recipe"] = {"stop_first": True, "trigger_source": "OFF", "predivider": 1,
+            "gate_mode": 0, "burst_enabled": False, "clock": {"frequency": f"{probe_frequency:.12g}Hz", "shots": 0},
+            "channels": {c: _channel_settings(probe_before["channels"][c], enabled=c != "D") for c in "ABCD"}}
+        profile["timing"] = {"input_frequency_hz": probe_frequency}
+        try:
+            pump = self.before["t660_2"]["channels"]
+            fire, qswitch = _channel_settings(pump["A"], enabled=False), _channel_settings(pump["B"], enabled=False)
+            profile["timing"].update(fire_delay_s=_physical_number(fire["delay"]),
+                q_switch_delay_s=_physical_number(qswitch["delay"]), fire_width_s=_physical_number(fire["width"]),
+                q_switch_width_s=_physical_number(qswitch["width"]), fire_polarity=fire["polarity"],
+                q_switch_polarity=qswitch["polarity"], termination=fire["termination"])
+        except (RuntimeError, KeyError, TypeError) as exc:
+            profile["pump_readback_error"] = str(exc)
+        profile["hf2li"] = {"signal_inputs": {}, "pll": {"index": 0, "enable": True,
+            "adcselect": 4, "freqcenter_hz": probe_frequency, "harmonic": 1,
+            "order": int(node("plls/0/order")), "adcthreshold": int(node("plls/0/adcthreshold"))}}
+        for role, index in (("sample", 0), ("reference", 1)):
+            if role == "reference" and self.context.mode != "dual":
+                continue
+            profile["hf2li"]["signal_inputs"][role] = {"index": index,
+                "ac": bool(node(f"sigins/{index}/ac")), "impedance_50ohm": bool(node(f"sigins/{index}/imp50")),
+                "differential": bool(node(f"sigins/{index}/diff")), "range_v": float(node(f"sigins/{index}/range"))}
+        qcl = int(mircat.get_active_qcl())
+        if qcl < 1:
+            qcl = 1
+        profile["qcl_ranges"] = [mircat.get_qcl_tuning_range(i) for i in range(1, mircat.get_num_installed_qcls()+1)]
+        position = settings.get("positions", [{}])[0].get("wavenumber_cm1") if settings.get("positions") else None
+        if position is not None:
+            covering = [r["qcl"] for r in profile["qcl_ranges"] if r["min_cm1"] <= float(position) <= r["max_cm1"]]
+            if not covering:
+                raise RuntimeError("Selected wavenumber lies outside all installed MIRcat QCL ranges")
+            qcl = qcl if qcl in covering else covering[0]
+        profile["mircat"] = {"qcl": qcl, "pulse_rate_hz": probe_frequency,
+            "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
+        profile["mircat_readback"] = {"qcl": qcl, "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
+            "pulse_width_ns": mircat.get_qcl_pulse_width(qcl), "pulse_limits": mircat.get_qcl_pulse_limits(qcl)}
+        profile["settling_s"] = max(10*p["timeconstant_s"]*p["order"] for p in (profile[r] for r in ("sample", "reference") if r in profile))
+        profile["settling_basis"] = "Conservative 10 × filter order × live time constant; estimated filter settling, not measured acquisition response"
+        # The SDK returns single precision cm^-1; report an operational check
+        # tolerance, never wavelength calibration accuracy.
+        profile["tune_tolerance_cm1"] = max(.001, abs(float(position or 2000.))*2e-6)
+        profile["tune_tolerance_basis"] = "Operational SDK setpoint/readback comparison; optical calibration not asserted"
+        profile["sources"].update(probe_recipe=source, mircat=source, timing=source, hf2li=source)
+        profile["warnings"] = ["Optical time zero and acquisition response are uncalibrated unless optional records are supplied",
+            "Pump sync observability is determined from retained DIO observations; fine timestamps do not establish optical resolution"]
+        check()
+        return profile
+
+    read_operating_settings = discover_operating_profile
+
     def configure(self, resolved, check):
         self.resolved = deepcopy(dict(resolved))
         check()
         hf = self.services["hf2li"]
         hf_profile = self.resolved.get("hf2li", {})
         if not hf_profile.get("signal_inputs") or not hf_profile.get("pll"):
-            raise RuntimeError("Qualified HF2LI input loading/ranges and PLL profile are required")
+            raise RuntimeError("HF2LI input loading/ranges and PLL device settings are missing")
         hf.configure_signal_inputs(hf_profile["signal_inputs"])
         hf.configure_pll(hf_profile["pll"])
         detector_profiles = [self.resolved["sample"]]
@@ -126,15 +251,20 @@ class InstalledDevices:
             for field, node in (("rate_sps", "rate"), ("order", "order"),
                                 ("timeconstant_s", "timeconstant"), ("input_index", "adcselect")):
                 value = nodes[f"/{hf.device_id}/demods/{profile['demodulator_index']}/{node}"]["value"]
-                if not math.isclose(float(value), float(profile[field]), rel_tol=1e-7, abs_tol=1e-12):
-                    raise RuntimeError(f"HF2LI {field} differs from selected supported value: {value}")
+                if field in {"input_index", "order"} and int(value) != int(profile[field]):
+                    raise RuntimeError(f"HF2LI {field} differs from the requested value: {value}")
+                if not math.isfinite(float(value)) or (field in {"rate_sps", "timeconstant_s"} and float(value) <= 0):
+                    raise RuntimeError(f"Invalid actual HF2LI {field}: {value}")
+                profile.setdefault("requested", {})[field] = profile[field]
+                profile[field] = value
         rates = [float(nodes[f"/{hf.device_id}/demods/{i}/rate"]["value"])
             for i in range(6) if nodes[f"/{hf.device_id}/demods/{i}/enable"]["value"]]
         if sum(rates) > 700000:
             raise RuntimeError("HF2LI enabled aggregate throughput exceeds 700 kSa/s")
         timing_actual = nodes[f"/{hf.device_id}/demods/{timing_index}/rate"]["value"]
-        if not math.isclose(timing_actual, self.resolved["timing_rate_sps"], rel_tol=1e-7):
-            raise RuntimeError("Timing stream rate differs from qualified marker-capture rate")
+        if not math.isfinite(timing_actual) or timing_actual <= 0:
+            raise RuntimeError("Timing stream rate readback is invalid")
+        self.resolved["timing_rate_sps"] = timing_actual
         self.clockbase_hz = hf.get_clockbase()
         recipe = deepcopy(self.resolved["probe_recipe"])
         recipe.update(trigger_source="OFF", stop_first=True)
@@ -157,7 +287,7 @@ class InstalledDevices:
         queries = probe_state["queries"]
         expected_rate = _physical_number(recipe["clock"]["frequency"])
         if not math.isclose(_physical_number(_query_value(queries, "synth_frequency")), expected_rate, rel_tol=1e-7):
-            raise RuntimeError("T660-1 probe frequency readback differs from qualified selection")
+            raise RuntimeError("T660-1 probe frequency readback differs from selected setting")
         if int(_query_value(queries, "predivider")) != int(recipe.get("predivider", 1)):
             raise RuntimeError("T660-1 probe predivider readback differs")
         for channel, selected in recipe["channels"].items():
@@ -169,6 +299,8 @@ class InstalledDevices:
                 if not math.isclose(_physical_number(_query_value(channel_state, field)), _physical_number(selected[setting]), rel_tol=1e-7, abs_tol=5e-12):
                     raise RuntimeError(f"T660-1 {channel} {setting} readback differs")
         self.readbacks["health"] = self.read_health()
+        self.resolved["settling_s"] = max(float(self.resolved.get("settling_s", 0.)),
+            max(10*p["timeconstant_s"]*p["order"] for p in detector_profiles))
         check()
 
     def read_health(self):
@@ -180,6 +312,23 @@ class InstalledDevices:
     def tune(self, wavenumber_cm1, settings, check, progress):
         mircat = self.services["mircat"]
         mircat.turn_emission_off()
+        qcl = int(self.resolved["mircat"]["qcl"])
+        ranges = self.resolved.get("qcl_ranges", ())
+        if ranges:
+            available = [int(r["qcl"]) for r in ranges if r["min_cm1"] <= wavenumber_cm1 <= r["max_cm1"]]
+            if not available:
+                raise RuntimeError("Selected wavenumber lies outside installed QCL coverage")
+            qcl = qcl if qcl in available else available[0]
+        if qcl != int(self.resolved["mircat"]["qcl"]):
+            saved = self.before.setdefault("mircat_extra_pulses", {})
+            if str(qcl) not in saved:
+                saved[str(qcl)] = {"qcl": qcl, "pulse_rate_hz": mircat.get_qcl_pulse_rate(qcl),
+                    "pulse_width_ns": mircat.get_qcl_pulse_width(qcl)}
+            selected_pulse = {**self.resolved["mircat"], "qcl": qcl}
+            actual_pulse = mircat.set_qcl_pulse_params(**selected_pulse)
+            for field in ("pulse_rate_hz", "pulse_width_ns"):
+                if not math.isclose(actual_pulse[field], selected_pulse[field], rel_tol=1e-6):
+                    raise RuntimeError(f"QCL {qcl} actual pulse settings differ")
         mircat.set_external_trigger_params(wavenumber_cm1=wavenumber_cm1)
         if not mircat.is_interlock_set() or not mircat.is_key_switch_set():
             raise RuntimeError("MIRcat interlock or key switch is not ready")
@@ -190,23 +339,23 @@ class InstalledDevices:
             if time.monotonic() >= deadline:
                 raise RuntimeError("MIRcat TEC readiness timeout")
             time.sleep(.05)
-        mircat.tune_to_wavenumber(wavenumber_cm1, qcl=int(self.resolved["mircat"]["qcl"]))
+        mircat.tune_to_wavenumber(wavenumber_cm1, qcl=qcl)
         while not mircat.is_tuned():
             check()
             if time.monotonic() >= deadline:
                 raise RuntimeError("MIRcat actual Tuned timeout")
             time.sleep(.05)
-        mircat.turn_emission_on(approved_laser_safety_condition=True)
+        mircat.start_emission()
         actual = mircat.get_actual_wavelength()
         if (actual.get("units") != "cm^-1" or not actual.get("light_valid") or
                 abs(actual["value"] - wavenumber_cm1) > self.resolved["tune_tolerance_cm1"]):
-            raise RuntimeError(f"MIRcat actual wavenumber is not within the measured tolerance: {actual}")
+            raise RuntimeError(f"MIRcat actual wavenumber is not within the operational readback tolerance: {actual}")
         settling_end = time.monotonic() + float(self.resolved["settling_s"])
         while time.monotonic() < settling_end:
             check()
-            progress({"stage": "tuning/settling", "message": "Waiting measured detector/HF2LI settling"})
+            progress({"stage": "tuning/settling", "message": "Waiting selected detector/HF2LI settling interval"})
             time.sleep(min(.05, max(0, settling_end-time.monotonic())))
-        return {"requested_cm1": wavenumber_cm1, "actual": actual, "tuned": mircat.is_tuned(),
+        return {"requested_cm1": wavenumber_cm1, "actual": actual, "qcl": qcl, "tuned": mircat.is_tuned(),
                 "settling_s": self.resolved["settling_s"]}
 
     def upload(self, program, check, progress):
@@ -265,6 +414,11 @@ class InstalledDevices:
             except Exception as exc:
                 errors.append(f"{label}: {exc}")
                 actions.append({"action": label, "ok": False, "error": str(exc)})
+        if not getattr(self, "prepared", True):
+            for name, service in reversed(list(self.services.items())):
+                attempt(f"{name} close read-only session", getattr(service, "deinitialize" if name == "mircat" else "close"))
+            return {"safe_verified": not errors, "errors": errors, "actions": actions,
+                "preservation_errors": [], "restoration_policy": "Inspect settings without acquisition/configuration changes; normal MIRcat session close may disable an existing red alignment pointer"}
         for name in ("t660_2", "t660_1"):
             service = self.services.get(name)
             if service:
@@ -275,7 +429,20 @@ class InstalledDevices:
                 attempt(f"{name} force EOD", service.force_eod)
                 for channel in "ABCD":
                     attempt(f"{name} {channel} OFF", lambda s=service, c=channel: s.disable_channel(c))
-                def verify(s=service):
+                def restore_timing(s=service, key=name):
+                    before = self.before[key]
+                    recipe = {"stop_first": True, "trigger_source": "OFF", "force_eod": True,
+                        "predivider": int(_physical_number(_query_value(before["queries"], "predivider"))),
+                        "clock": {"frequency": f"{_physical_number(_query_value(before['queries'], 'synth_frequency')):.12g}Hz"},
+                        "channels": {c: _channel_settings(before["channels"][c], enabled=False) for c in "ABCD"}}
+                    if key == "t660_2":
+                        recipe["frames_engine"] = False
+                    # A finite table's terminal frame changes ACTIVE delays.
+                    # Restore the user's readback values with all outputs OFF,
+                    # so the next automatic run cannot inherit terminal zeros.
+                    return s.apply_recipe(recipe)
+                attempt(f"{name} inactive timing restoration", restore_timing)
+                def verify(s=service, key=name):
                     state = s.read_active_settings()
                     q = state["queries"]["trigger_source"]
                     if not q.get("ok") or q.get("response", "").upper() != "OFF":
@@ -284,6 +451,19 @@ class InstalledDevices:
                         enabled = channel["enabled"]
                         if not enabled.get("ok") or str(enabled.get("response")).upper() not in {"0", "OFF"}:
                             raise RuntimeError("Channel OFF not verified")
+                    for field in ("synth_frequency", "predivider"):
+                        expected = _physical_number(_query_value(self.before[key]["queries"], field))
+                        observed = _physical_number(_query_value(state["queries"], field))
+                        if not math.isclose(expected, observed, rel_tol=1e-7):
+                            raise RuntimeError(f"{field} restoration mismatch")
+                    for channel in "ABCD":
+                        expected = _channel_settings(self.before[key]["channels"][channel], enabled=False)
+                        observed = _channel_settings(state["channels"][channel], enabled=False)
+                        for field in ("delay", "width"):
+                            if not math.isclose(_physical_number(expected[field]), _physical_number(observed[field]), rel_tol=1e-6, abs_tol=1e-11):
+                                raise RuntimeError(f"{channel} {field} restoration mismatch")
+                        if any(expected[field] != observed[field] for field in ("polarity", "termination")):
+                            raise RuntimeError(f"{channel} polarity/termination restoration mismatch")
                     return state
                 attempt(f"{name} safe readback", verify)
         mircat = self.services.get("mircat")
@@ -293,6 +473,8 @@ class InstalledDevices:
             attempt("MIRcat stop scan", mircat.stop_scan_if_needed)
             if self.before.get("mircat_pulse"):
                 attempt("MIRcat pulse restoration", lambda: mircat.set_qcl_pulse_params(**self.before["mircat_pulse"]))
+            for key, pulse in self.before.get("mircat_extra_pulses", {}).items():
+                attempt(f"MIRcat QCL {key} pulse restoration", lambda saved=pulse: mircat.set_qcl_pulse_params(**saved))
             if self.before.get("mircat_trigger"):
                 old = self.before["mircat_trigger"]
                 allowed = ("pulse_mode", "process_trigger_mode", "start", "stop", "interval", "units", "dwell_us", "after_off_us")
@@ -331,4 +513,4 @@ class InstalledDevices:
             attempt(f"{name} close", getattr(service, "deinitialize" if name == "mircat" else "close"))
         return {"safe_verified": not errors, "errors": errors, "actions": actions,
             "preservation_errors": preservation_errors,
-            "restoration_policy": "Restore HF2LI and MIRcat pulse configuration; T660 outputs disabled and MIRcat emission off/disarmed"}
+            "restoration_policy": "Restore HF2LI, MIRcat pulse and inactive T660 channel timing configuration; T660 outputs disabled and MIRcat emission off/disarmed"}
