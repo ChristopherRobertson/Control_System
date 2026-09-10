@@ -8,7 +8,7 @@ import pytest
 
 from control_app.measurement_host import ContextFactory
 from control_app.measurement_host.ownership import HardwareCoordinator, OwnershipError
-from control_app.measurement_modules.microsecond_stroboscopy.acquisition import InstalledAcquirer
+from control_app.measurement_modules.microsecond_stroboscopy.acquisition import InstalledAcquirer, SimulatedAcquirer
 from control_app.measurement_modules.microsecond_stroboscopy.runner import run_acquisition, AcquisitionFailure
 from control_app.measurement_modules.microsecond_stroboscopy.settings import default_settings, SpectralPoint
 from control_app.measurement_modules.microsecond_stroboscopy.planner import build_plan
@@ -18,14 +18,15 @@ from control_app.devices.t660_service import _seconds_value
 def inputs(mode="dual"):
     s=default_settings(mode)
     return replace(s,spectral_points=(SpectralPoint(1945.),),delays_us=(-500.,1000.),averages=1,
-        operating_basis="Injected nonbiological fixture",promoted_bundle_ids=("fixture",),
+        operating_basis="Injected nonbiological fixture",promoted_bundle_ids=(),
+        manual_overrides=tuple("response."+key for key in s.response.__dataclass_fields__)+("timing.event_interval_s","reset.recovery_wait_s"),
         response=replace(s.response,sample_rate_sps=10_000.,reference_rate_sps=10_000.,timing_rate_sps=100_000.,
-                         integration_aperture_s=.001,qualified=True,qualification_id="response-fixture"),
+                         integration_aperture_s=.001,qualified=False,qualification_id=""),
         timing=replace(s.timing,event_interval_s=.1),
-        reset=replace(s.reset,recovery_wait_s=.001,verification_duration_s=.002,equivalent_state_verified=True,
-                      equivalence_record_id="reset-fixture"),
-        controls=replace(s.controls,baseline_duration_s=.002,preliminary_duration_s=.002,dark_record_id="dark",artifact_record_ids=("artifact",)),
-        identity=replace(s.identity,sample_selection_id="sample-selection"))
+        reset=replace(s.reset,recovery_wait_s=.001,verification_duration_s=.002,equivalent_state_verified=False,
+                      equivalence_record_id=""),
+        controls=replace(s.controls,baseline_duration_s=.002,preliminary_duration_s=.002,dark_record_id="",artifact_record_ids=()),
+        identity=replace(s.identity,sample_selection_id=""))
 
 
 def profile():
@@ -48,6 +49,9 @@ class Bus:
         self.created=[]; self.pump_count=0; self.fail_close=False; self.overload=0
         self.drop_pump=False; self.bad_reference=False
         self.accumulation=0.
+        self.negative_sample=False;self.nonfinite_sample=False;self.reference_locked=True;self.health_unknown=False
+        self.actual_sample_rate=None;self.interlock=True
+        self.phase_shift=0.;self.initial_sinc=True
 
 
 class Timer:
@@ -103,12 +107,14 @@ class Timer:
 class Laser:
     def __init__(self,bus):
         self.bus=bus;self.emission=False;self.armed=False;self.wave=1945.;self.rate=1e6;self.width=100.;self.current=100.
+        bus.laser=self;self.initialized=False;self.deinitialized=False;self.scanning=False
         self.trigger={"pulse_mode":0,"process_trigger_mode":0,"start":1945.,"stop":1945.,"interval":0.,"units":1,"dwell_us":0,"after_off_us":0}
-    def initialize(self):pass
-    def deinitialize(self):pass
-    def read_state(self):return {"armed":self.armed,"emission_on":self.emission}
+    def initialize(self):self.initialized=True
+    def deinitialize(self):self.deinitialized=True
+    def read_state(self):return {"armed":self.armed,"emission_on":self.emission,
+        "scan_in_progress":self.scanning,"scan_active":self.scanning,"scan_paused":False,"scan_waiting_process_trigger":False}
     def get_wavelength_trigger_params(self):return deepcopy(self.trigger)
-    def stop_scan_if_needed(self):return 0
+    def stop_scan_if_needed(self):self.scanning=False;return 0
     def turn_emission_off(self):self.emission=False
     def get_num_installed_qcls(self):return 1
     def get_qcl_tuning_range(self,qcl):return {"qcl":qcl,"min_cm1":1900.,"max_cm1":2000.}
@@ -116,7 +122,7 @@ class Laser:
     def get_qcl_pulse_width(self,qcl):return self.width
     def get_qcl_current(self,qcl):return self.current
     def get_qcl_current_limits(self,qcl):return 0.,500.
-    def is_interlock_set(self):return True
+    def is_interlock_set(self):return self.bus.interlock
     def is_key_switch_set(self):return True
     def get_system_error_word(self):return 0
     def is_tuned(self):return True
@@ -133,14 +139,24 @@ class Laser:
         return deepcopy(self.trigger)
     def set_wavelength_trigger_params(self,**kwargs):self.trigger.update(kwargs);return deepcopy(self.trigger)
     def tune_to_wavenumber(self,wavenumber_cm1,*,qcl):self.wave=wavenumber_cm1
-    def turn_emission_on(self,**kwargs):self.emission=True
+    def start_emission(self):self.emission=True
     def get_actual_wavelength(self):return {"value":self.wave,"units":"cm^-1","light_valid":self.emission}
     def is_emission_on(self):return self.emission
 
 
 class HF:
     device_id="devfixture"
-    def __init__(self,bus):self.bus=bus;self.nodes={};self.demods=[]
+    def __init__(self,bus):
+        self.bus=bus;self.nodes={};self.demods=[]
+        for index in range(6):
+            for key,value in {"enable":0,"adcselect":int(index==3),"oscselect":0,"harmonic":1,"order":1,
+                              "timeconstant":8e-6,"rate":100_000. if index==2 else 10_000.,"trigger":0,"phaseshift":self.bus.phase_shift,"sinc":int(self.bus.initial_sinc)}.items():
+                self._set_node("setDouble",f"/{self.device_id}/demods/{index}/{key}",value)
+        for index in (0,1):
+            for key,value in {"ac":0,"imp50":0,"diff":0,"range":1.}.items():
+                self._set_node("setDouble",f"/{self.device_id}/sigins/{index}/{key}",value)
+        for key,value in {"enable":0,"adcselect":4,"freqcenter":1e6,"harmonic":1,"order":1,"adcthreshold":0}.items():
+            self._set_node("setDouble",f"/{self.device_id}/plls/0/{key}",value)
     def connect(self):pass
     def close(self):pass
     def sync(self):pass
@@ -151,11 +167,21 @@ class HF:
     def export_settings_snapshot(self,**kwargs):return {"nodes":deepcopy(self.nodes),"read_errors":{},"device_id":self.device_id}
     def reload_settings_snapshot(self,snapshot):self.nodes=deepcopy(snapshot["nodes"])
     def compare_settings_snapshots(self,before,after):return {"match":before["nodes"]==after["nodes"]}
+    def read_acquisition_health(self,**kwargs):
+        return {"schema_version":"hf2li-acquisition-health/1","reference_locked":None if self.bus.health_unknown else self.bus.reference_locked,
+            "clock_locked":True,"overload":bool(self.bus.overload),"external_clock_selected":True,
+            "external_reference_locked":None,"read_errors":{"unavailable_fixture_node":"unavailable"} if self.bus.health_unknown else {},"nodes":{}}
     def apply_preset(self,preset):
+        for key,value in preset.settings.get("pll",{}).items():
+            if key=="index":continue
+            node={"freqcenter_hz":"freqcenter"}.get(key,key)
+            self._set_node("setDouble",f"/{self.device_id}/plls/0/{node}",int(value) if isinstance(value,bool) else value)
         for d in preset.settings["demodulators"]:
             for key,value in d.items():
                 if key=="index":continue
                 node={"timeconstant_s":"timeconstant","rate_sps":"rate"}.get(key,key)
+                if d["index"]==0 and node=="rate" and self.bus.actual_sample_rate is not None:
+                    value=self.bus.actual_sample_rate
                 self._set_node("setDouble",f"/{self.device_id}/demods/{d['index']}/{node}",int(value) if isinstance(value,bool) else value)
         for entry in preset.settings["signal_inputs"].values():
             for key,value in entry.items():
@@ -178,12 +204,14 @@ class HF:
                 dio[(times>=self.bus.pump)&(times<self.bus.pump+30e-6)] = 1<<17
             x=np.full(len(times),.6 if index==0 else 1.)
             if index==0 and self.bus.pump_count:x*=1-self.bus.accumulation
+            if index==0 and self.bus.negative_sample:x*=-1
+            if index==0 and self.bus.nonfinite_sample:x[0]=np.nan
             if index==3 and self.bus.bad_reference:x[:]=0
             output[path+"/sample"]={"timestamp":np.rint(times*1e6).astype(np.uint64),"x":x,"y":np.zeros(len(times)),"dio":dio}
         return {"data":output,"duration_s":duration_s}
 
 
-def setup(tmp_path,mode="dual",*,installed=False):
+def setup(tmp_path,mode="dual",*,installed=False,runtime=None,lifecycle=None):
     coordinator=HardwareCoordinator(tmp_path/"owner.lock")
     bus=Bus()
     factories={}
@@ -193,26 +221,19 @@ def setup(tmp_path,mode="dual",*,installed=False):
                 bus.created.append(_name)
                 return Timer(_name,bus) if _name.startswith("t660") else Laser(bus) if _name=="mircat" else HF(bus)
             factories[name]=create
-    factory=ContextFactory(configuration_provider=lambda:{"devices":{}},real_device_factories=factories,
-        save_root_provider=lambda:tmp_path,ownership=coordinator,
-        promoted_bundle_loader=lambda identifier:{"status":"PROMOTED","bundle_id":identifier,"microsecond_stroboscopy":profile()})
+    def no_promotion_lookup(identifier):raise AssertionError("Acquisition must not require a promotion lookup")
+    configuration={"devices":{}}
+    if runtime is not None:configuration["microsecond_stroboscopy"]=runtime
+    factory=ContextFactory(configuration_provider=lambda:configuration,real_device_factories=factories,
+        save_root_provider=lambda:tmp_path,ownership=coordinator,promoted_bundle_loader=no_promotion_lookup,lifecycle=lifecycle)
     context=factory.for_experiment("microsecond_stroboscopy").for_mode(mode)
     return context,coordinator,bus,factory
 
 
-def sample_selection(s):
-    from control_app.measurement_host.interchange import SampleSpectralSelection,SourceRecord,SpectralWindow
-    return SampleSpectralSelection(selection_id=s.identity.sample_selection_id,sample_id=s.identity.sample_id,
-        producer_instance_id="microsecond_stroboscopy:single",condition_id=s.identity.condition_id,
-        condition={"profile_id":s.condition_profile_id},windows=(SpectralWindow(1944.,1946.,1945.,.01,"accepted fixture band"),),
-        source=SourceRecord("sample-native-fixture","fixture/accepted-sample.json","2026-09-09T00:00:00Z","fixture/1"),
-        accepted_by="Named fixture reviewer",accepted_utc="2026-09-09T00:00:00Z").to_dict()
-
-
-def execute(context,s,kind,*,hardware=False,sample_records=None,**kwargs):
-    if sample_records is None:
-        sample_records=(sample_selection(s),) if hardware else ()
+def execute(context,s,kind,*,hardware=False,sample_records=(),**kwargs):
     operation=context.begin_operation(s.to_dict(),hardware=hardware,sample_records=sample_records)
+    if not hardware:
+        kwargs.setdefault("acquirer_factory",SimulatedAcquirer)
     return run_acquisition(context,operation,build_plan(s),kind=kind,**kwargs)
 
 
@@ -319,16 +340,15 @@ def test_us_storage_failure_after_pump_keeps_fault_and_in_memory_native(tmp_path
     assert coordinator.snapshot()["state"]=="fault"
 
 
-def test_us_unrecovered_state_stops_next_equivalent_event(tmp_path,monkeypatch):
+def test_us_nonrecovery_is_retained_without_blocking_requested_events(tmp_path,monkeypatch):
     monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
     context,_,bus,_=setup(tmp_path,installed=True)
     s=inputs();preliminary=execute(context,s,"preliminary",hardware=True)
     bus.accumulation=.1
-    with pytest.raises(AcquisitionFailure) as failure:
-        execute(context,s,"run",hardware=True,preliminary=preliminary)
-    assert bus.pump_count==1
-    assert "not recovered" in str(failure.value)
-    assert any("unrecovered" in b["flags"] for b in failure.value.record["native_blocks"])
+    record=execute(context,s,"run",hardware=True,preliminary=preliminary)
+    assert bus.pump_count==2
+    assert record["disposition"]=="complete"
+    assert any("reset_nonrecovery" in b["flags"] for b in record["native_blocks"] if b["kind"]=="pumped")
 
 
 def test_us_normal_abort_during_pumped_block_returns_stopped_result(tmp_path,monkeypatch):
@@ -343,45 +363,209 @@ def test_us_normal_abort_during_pumped_block_returns_stopped_result(tmp_path,mon
     assert sum(b["kind"]=="pumped" for b in record["native_blocks"])==1
 
 
-def test_us_complete_flag_cannot_hide_missing_blank_delay(tmp_path):
+def test_us_incompatible_optional_blank_is_ignored_and_raw_run_continues(tmp_path):
     context,_,_,_=setup(tmp_path,"single")
     s=inputs("single")
     blank=execute(context,s,"blank")
-    blank["native_blocks"]=[b for b in blank["native_blocks"] if not (b["kind"]=="blank_control" and b["delay_s"]>0)]
-    with pytest.raises(AcquisitionFailure,match="missing compatible declared delay"):
-        execute(context,s,"preliminary",blank=blank)
+    blank["settings"]["mode"]="dual"
+    blank["requested_settings"]["mode"]="dual"
+    record=execute(context,s,"run",blank=blank)
+    assert record["disposition"]=="complete"
+    assert "blank_record" not in record
+    assert record["unused_optional_records"]
 
 
-@pytest.mark.parametrize("change,message",[
-    ("missing","exactly one retained accepted sample selection"),
-    ("selection_id","exactly one retained accepted sample selection"),
-    ("sample_id","sample_id differs"),
-    ("condition_id","condition_id differs"),
-    ("outside","outside accepted sample spectral windows"),
-    ("duplicate","exactly one retained accepted sample selection"),
-    ("rejected","Only accepted sample_spectral_selection"),
-])
-def test_us_real_sample_record_preflight_rejects_missing_or_incompatible(tmp_path,change,message):
+def test_us_single_real_run_needs_no_blank_preliminary_or_scientific_approvals(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,coordinator,bus,_=setup(tmp_path,"single",installed=True)
+    s=inputs("single")
+    s=replace(s,condition_profile_id="77K-Mb-G-F",identity=replace(s.identity,measured_temperature_k=None,
+              temperature_uncertainty_k=None,temperature_record_id="",sample_selection_id=""))
+    record=execute(context,s,"run",hardware=True,sample_records=())
+    assert record["disposition"]=="complete"
+    assert bus.pump_count==2 and coordinator.snapshot()["state"]=="free"
+    pumped=[b for b in record["native_blocks"] if b["kind"]=="pumped"]
+    assert all(b["optical_origin_s"] is None and b["electrical_origin_s"] is not None for b in pumped)
+    assert all(b["delay_basis"]=="electrical_relative" and "unresolved_optical_origin" in b["flags"] for b in pumped)
+    assert all("aperture_start_s" in b and "actual_delay_s" in b for b in pumped)
+
+
+def test_us_compatible_records_survive_temperature_and_annotation_changes(tmp_path):
+    context,_,_,_=setup(tmp_path,"single")
+    s=inputs("single")
+    blank=execute(context,s,"blank")
+    preliminary=execute(context,s,"preliminary",blank=blank)
+    changed=replace(s,identity=replace(s.identity,temperature_record_id="later annotation",measured_temperature_k=77.,sample_selection_id="optional-id"),
+                    operating_basis="updated note",condition_profile_id="77K-Mb-G-F")
+    record=execute(context,changed,"run",blank=blank,preliminary=preliminary)
+    assert record["blank_record"]["run_id"]==blank["run_id"]
+    assert record["preliminary"]["run_id"]==preliminary["run_id"]
+    assert record["disposition"]=="complete"
+    baseline=next(block for block in record["native_blocks"] if block["kind"]=="baseline")
+    assert baseline["preliminary_baseline_comparison"]["acquisition_gate"] is False
+
+
+@pytest.mark.parametrize("failure,message",[("overload","ADC clipping"),("reference_locked","loss of reference"),("interlock","interlock"),("nonfinite_sample","incomplete")])
+def test_us_actual_hardware_failures_still_stop_and_restore(tmp_path,monkeypatch,failure,message):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
     context,coordinator,bus,_=setup(tmp_path,installed=True)
-    s=inputs();selection=sample_selection(s)
-    records=[selection]
-    if change=="missing":records=[]
-    elif change=="duplicate":records=[selection,deepcopy(selection)]
-    elif change=="outside":selection["windows"]=[{"lower_cm1":1940.,"upper_cm1":1941.}]
-    elif change=="rejected":selection["disposition"]="rejected"
-    else:selection[change]="another-identity"
+    setattr(bus,failure,False if failure in ("reference_locked","interlock") else True)
     with pytest.raises(AcquisitionFailure,match=message) as failed:
-        execute(context,s,"preliminary",hardware=True,sample_records=records)
-    assert not bus.created
+        execute(context,inputs(),"run",hardware=True)
+    assert bus.pump_count==0
     assert failed.value.record["native_path"]
     assert coordinator.snapshot()["state"]=="free"
 
 
-def test_us_real_sample_window_validation_allows_explicit_off_band(tmp_path,monkeypatch):
+def test_us_negative_x_and_unknown_health_remain_native_without_fabrication(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,_,bus,_=setup(tmp_path,installed=True)
+    bus.negative_sample=True;bus.health_unknown=True
+    record=execute(context,inputs(),"run",hardware=True)
+    assert record["disposition"]=="complete"
+    assert all(np.all(b["sample"]["x"]<0) for b in record["native_blocks"])
+    assert any(b.get("health_observations") and "health_status_unknown" in b["flags"] for b in record["native_blocks"])
+
+
+def test_us_device_rounding_is_retained_as_actual_supported_response(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,_,bus,_=setup(tmp_path,installed=True)
+    bus.actual_sample_rate=5000.
+    record=execute(context,inputs(),"run",hardware=True)
+    assert record["requested_settings"]["response"]["sample_rate_sps"]==10000.
+    assert record["actual_settings"]["response"]["sample_rate_sps"]==5000.
+    assert record["settings"]["response"]["sample_rate_sps"]==5000.
+    assert record["disposition"]=="complete"
+
+
+def test_us_no_implicit_simulation_fallback(tmp_path):
+    context,_,_,_=setup(tmp_path,"single")
+    s=inputs("single")
+    operation=context.begin_operation(s.to_dict(),hardware=False)
+    with pytest.raises(AcquisitionFailure,match="developer simulation must be explicitly injected"):
+        run_acquisition(context,operation,build_plan(s),kind="run")
+
+
+def test_us_hardware_phase_change_omits_optional_blank_without_gating_run(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,_,bus,_=setup(tmp_path,"single",installed=True)
+    s=inputs("single")
+    blank=execute(context,s,"blank",hardware=True)
+    bus.phase_shift=90.
+    record=execute(context,s,"run",hardware=True,blank=blank)
+    assert record["disposition"]=="complete" and "blank_record" not in record
+    assert any("phaseshift" in item["reason"] for item in record["unused_optional_records"])
+
+
+def test_us_sinc_is_explicitly_disabled_and_original_value_restored(tmp_path,monkeypatch):
     monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
     context,_,_,_=setup(tmp_path,installed=True)
-    s=inputs()
-    s=replace(s,spectral_points=(*s.spectral_points,SpectralPoint(1960.,"outside accepted band","off_band")))
-    record=execute(context,s,"preliminary",hardware=True)
+    record=execute(context,inputs(),"preliminary",hardware=True)
+    path="/devfixture/demods/0/sinc"
+    assert record["readbacks"]["hf2li"]["nodes"][path]["value"]==0
+    assert record["restoration"]["original"]["hf2li"]["nodes"][path]["value"]==1
+    assert record["restoration"]["verification"]["HF2LI restored verified"]["nodes"][path]["value"]==1
+
+
+def test_us_throwing_start_lifecycle_cannot_strand_ownership(tmp_path):
+    class Lifecycle:
+        def notify_state(self,instance,busy,state):
+            raise RuntimeError("injected lifecycle callback failure")
+    context,coordinator,bus,_=setup(tmp_path,installed=True,lifecycle=Lifecycle())
+    with pytest.raises(AcquisitionFailure,match="lifecycle callback failure") as failed:
+        execute(context,inputs(),"run",hardware=True)
+    assert not bus.created
+    assert coordinator.snapshot()["state"]=="free"
+    assert failed.value.record["restoration"]["safe_verified"]
+    assert failed.value.record["native_path"]
+
+
+def test_us_throwing_cosmetic_progress_cannot_skip_cleanup_or_saving(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,coordinator,_,_=setup(tmp_path,installed=True)
+    def broken(message):raise RuntimeError("closed progress widget")
+    record=execute(context,inputs(),"run",hardware=True,progress=broken)
     assert record["disposition"]=="complete"
-    assert record["operation"]["sample_records"][0]["selection_id"]==s.identity.sample_selection_id
+    assert record["restoration"]["safe_verified"] and record["native_path"]
+    assert record["notification_errors"]
+    assert coordinator.snapshot()["state"]=="free"
+
+
+def test_us_small_preliminary_uses_its_own_budget_before_and_after_connection(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    s=inputs()
+    preliminary_memory=build_plan(s,kind="preliminary").budget.memory_bytes
+    s=replace(s,budget=replace(s.budget,maximum_memory_bytes=preliminary_memory*2))
+    assert any("memory budget" in error for error in build_plan(s,kind="run").readiness.errors)
+    assert not build_plan(s,kind="preliminary").readiness.errors
+    record=execute(context,s,"preliminary",hardware=True)
+    assert record["disposition"]=="complete" and bus.pump_count==0
+    assert coordinator.snapshot()["state"]=="free"
+
+
+def _initialize_active_laser(laser):
+    laser.initialized=True
+    laser.armed=laser.emission=laser.scanning=True
+
+
+def test_us_cleanup_disarms_originally_armed_laser_and_verifies_physical_state(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    monkeypatch.setattr(Laser,"initialize",_initialize_active_laser)
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    record=execute(context,inputs(),"preliminary",hardware=True)
+    restoration=record["restoration"]
+    assert restoration["original"]["mircat"]["state"]["armed"] is True
+    final=restoration["verification"]["MIRcat final state"]
+    assert all(value is False for value in final.values())
+    assert restoration["safe_verified"] and bus.laser.deinitialized
+    assert coordinator.snapshot()["state"]=="free"
+
+
+@pytest.mark.parametrize("interruption",["snapshot_failure","cancel"])
+def test_us_partial_laser_preparation_without_snapshot_still_closes_physically(tmp_path,monkeypatch,interruption):
+    monkeypatch.setattr(Laser,"initialize",_initialize_active_laser)
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    if interruption=="snapshot_failure":
+        def fail_snapshot(self):raise RuntimeError("trigger snapshot unavailable")
+        monkeypatch.setattr(Laser,"get_wavelength_trigger_params",fail_snapshot)
+        with pytest.raises(AcquisitionFailure,match="trigger snapshot unavailable") as failed:
+            execute(context,inputs(),"preliminary",hardware=True)
+        record=failed.value.record
+    else:
+        record=execute(context,inputs(),"preliminary",hardware=True,
+            cancel=lambda:bool(getattr(bus,"laser",None) and bus.laser.initialized))
+        assert record["disposition"]=="interrupted"
+    restoration=record["restoration"]
+    assert "mircat" not in restoration["original"]
+    assert restoration["safe_verified"] and bus.laser.deinitialized
+    assert all(value is False for value in restoration["verification"]["MIRcat final state"].values())
+    assert record["native_path"] and coordinator.snapshot()["state"]=="free"
+
+
+@pytest.mark.parametrize("command,field",[("disarm","armed"),("turn_emission_off","emission_on"),("stop_scan_if_needed","scan_in_progress")])
+def test_us_unclosed_laser_readback_prevents_safe_release_even_after_cancel(tmp_path,monkeypatch,command,field):
+    monkeypatch.setattr(Laser,"initialize",_initialize_active_laser)
+    monkeypatch.setattr(Laser,command,lambda self:None)
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    with pytest.raises(AcquisitionFailure,match="not verified OFF") as failed:
+        execute(context,inputs(),"preliminary",hardware=True,
+            cancel=lambda:bool(getattr(bus,"laser",None) and bus.laser.initialized))
+    record=failed.value.record
+    assert record["disposition"]=="cleanup_failed"
+    assert record["restoration"]["verification"]["MIRcat final state"][field] is True
+    assert not record["restoration"]["safe_verified"] and bus.laser.deinitialized
+    assert record["native_path"] and coordinator.snapshot()["state"]=="fault"
+
+
+def test_us_reference_copy_memory_failure_releases_unused_operation(tmp_path,monkeypatch):
+    from control_app.measurement_modules.microsecond_stroboscopy import runner
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    s=inputs()
+    operation=context.begin_operation(s.to_dict(),hardware=True)
+    def fail_copy(record):raise MemoryError("retained reference allocation failed")
+    monkeypatch.setattr(runner,"deepcopy",fail_copy)
+    with pytest.raises(MemoryError,match="retained reference allocation failed"):
+        run_acquisition(context,operation,build_plan(s),kind="run",preliminary={"native_blocks":[]})
+    assert not bus.created
+    assert coordinator.snapshot()["state"]=="free"

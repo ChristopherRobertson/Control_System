@@ -1,4 +1,4 @@
-"""Module-owned science/review callbacks for the frozen host presentation API.
+"""Module-owned acquisition callbacks for the compact host presentation API.
 
 Only explicit worker operations construct devices. Compatibility compares named
 scientific values, never digests, run UUIDs, or discovery timestamps.
@@ -51,10 +51,12 @@ def compatibility_mismatches(expected, actual, prefix=""):
 
 
 class MicrosecondScientificAdapter:
-    def __init__(self, context, settings_widget, *, runner=None):
+    def __init__(self, context, settings_widget, *, runner=None, hardware=True):
         self.context, self.settings_widget = context, settings_widget
         self.runner = runner
+        self._hardware = bool(hardware)
         self.blank = None
+        self.retained_preliminary = None
         self.last_record = None
         self.capabilities = None
         self.qualification = None
@@ -63,11 +65,16 @@ class MicrosecondScientificAdapter:
         self.instrument_changes = []
         self._instrument_original = {}
         self._instrument_actual = {}
-        self._condition_profile_id = settings_widget._base["condition_profile_id"]
         self._active_worker = None
 
     def read_settings(self):
         return self.settings_widget.read_settings()
+
+    def read_operation_settings(self, kind):
+        # Capability checks and storage rescue remain available while an
+        # acquisition text field is temporarily incomplete or invalid.
+        return {"experiment_id": "microsecond_stroboscopy", "mode": self.context.mode,
+                "operation_kind": str(kind)}
 
     def apply_settings(self, settings):
         self.settings_widget.apply_settings(plain(settings))
@@ -78,37 +85,15 @@ class MicrosecondScientificAdapter:
         requested = StroboscopySettings.from_dict(setting_values(settings))
         if requested.mode != self.context.mode:
             raise ValueError("Plan detector mode differs from this tab")
-        self._condition_profile_id = requested.condition_profile_id
         return build_plan(requested, capabilities=self.capabilities, qualification=self.qualification)
 
     def validate_plan(self, plan):
-        from control_app.measurement_host.interchange import sample_selection_from_dict
         readiness = plain(getattr(plan, "readiness", {}))
-        errors = list(readiness.get("errors", ())) if isinstance(readiness, dict) else []
-        settings = plan.settings
-        if self.sample_records:
-            matching = [plain(record) for record in self.sample_records
-                        if isinstance(plain(record), Mapping)
-                        and plain(record).get("selection_id") == settings.identity.sample_selection_id]
-            if len(matching) != 1:
-                errors.append("The named sample_selection_id must select exactly one retained accepted sample spectral selection.")
-            else:
-                try:
-                    selection = sample_selection_from_dict(matching[0])
-                except (ValueError, TypeError) as exc:
-                    errors.append(f"Selected sample spectral record is invalid: {exc}")
-                else:
-                    if selection.sample_id != settings.identity.sample_id:
-                        errors.append("Selected sample spectral record sample_id differs from the entered sample.")
-                    if selection.condition_id != settings.identity.condition_id:
-                        errors.append("Selected sample spectral record condition_id differs from the entered condition.")
-                    outside = [point.wavenumber_cm1 for point in settings.spectral_points
-                               if point.role == "band" and not any(window.lower_cm1 <= point.wavenumber_cm1 <= window.upper_cm1
-                                                                   for window in selection.windows)]
-                    if outside:
-                        errors.append("Band coordinates outside accepted sample windows (cm⁻¹): " + ", ".join(f"{value:g}" for value in outside))
-        elif settings.execution_mode == "hardware":
-            errors.append("Load the retained accepted sample spectral selection; a sample_selection_id alone is not a record.")
+        # Capacity applies to each action's own acquisition. A large Sample
+        # request must not disable a small unpumped preliminary measurement.
+        issues = readiness.get("issues", ()) if isinstance(readiness, dict) else ()
+        errors = [issue["message"] for issue in issues if issue.get("severity") == "error"
+                  and issue.get("code") not in ("memory_budget", "storage_budget")]
         return tuple(errors)
 
     def summarize_plan(self, plan):
@@ -118,41 +103,33 @@ class MicrosecondScientificAdapter:
         count = len(settings.get("spectral_points", ()))
         delays = settings.get("delays_us", ())
         averages = settings.get("averages", 1)
-        rows = [f"{count} wavenumbers × {len(delays)} delays × {averages} averages",
-                "Complete delay/reset series at each wavenumber before tuning onward."]
-        if delays:
-            rows.append(f"Requested coverage {min(delays):g} to {max(delays):g} µs; grid spacing is not the response resolution.")
-        rows.append(f"Budget: {budget.get('event_count', 0):,} pump events; "
-                    f"{budget.get('total_block_count', 0):,} blocks; {budget.get('total_frame_count', 0):,} timing frames.")
-        rows.append(f"Wall clock {budget.get('wall_clock_s', 0):,.1f} s; "
-                    f"upload {budget.get('upload_s', 0):,.1f} s; recovery {budget.get('recovery_s', 0):,.1f} s.")
-        rows.append(f"Memory {budget.get('memory_bytes', 0)/1024**2:,.1f} MiB; "
-                    f"native storage {budget.get('storage_bytes', 0)/1024**2:,.1f} MiB.")
-        rows.append(str(budget.get("estimate_basis", "")))
-        readiness = plain(getattr(plan, "readiness", {}))
-        if isinstance(readiness, dict):
-            for name in ("warnings", "blockers", "missing", "commissioning_items"):
-                items = readiness.get(name, ())
-                if items:
-                    rows.append(name.replace("_", " ").capitalize() + ": " + "; ".join(map(str, items)))
-        elif isinstance(readiness, (list, tuple)):
-            rows.extend(map(str, readiness))
-        return "\n".join(rows)
+        response = settings["response"]
+        return (
+            ("Acquisition", f"{count} wavenumbers × {len(delays)} delays × {averages}"),
+            ("Delay range", f"{min(delays):g} – {max(delays):g} µs" if delays else "—"),
+            ("HF2 response", f"Order {response['hf2_order']} · {response['hf2_time_constant_s'] * 1e6:g} µs"),
+            ("Sample rate", f"{response['sample_rate_sps'] / 1000:g} kSa/s"),
+            ("Estimated time", f"{budget.get('wall_clock_s', 0):,.1f} s"),
+            ("Estimated memory", f"{budget.get('memory_bytes', 0)/1024**3:,.2f} / {settings['budget']['maximum_memory_bytes']/1024**3:g} GiB limit"),
+            ("Native storage", f"{budget.get('storage_bytes', 0)/1024**2:,.1f} MiB"),
+            ("Delay reference", "Electrical Variable Sync"),
+        )
 
     def selected_records(self):
         return ScientificSelections(calibration_records=deepcopy(self.calibration_records),
                                     sample_records=deepcopy(self.sample_records))
 
     def hardware_required(self, kind, settings):
-        return settings.get("execution_mode", "simulation") == "hardware"
+        # Loading an old simulation plan must never silently select a simulator.
+        # Offline acquisition requires explicit developer construction/injection.
+        return self._hardware and kind not in ("retry_native_save", "retry_preservation")
 
-    def compatibility(self, plan):
+    def compatibility(self, plan, *, kind=None):
+        from .planner import acquisition_signature
         return {
             "experiment_id": "microsecond_stroboscopy",
             "mode": self.context.mode,
-            "settings": setting_values(plan.settings),
-            "calibrations": [plain(record) for record in self.calibration_records],
-            "sample_selections": [plain(record) for record in self.sample_records],
+            "settings": acquisition_signature(plan.settings, kind=kind),
             "instrument_state": deepcopy(self._instrument_actual),
         }
 
@@ -169,10 +146,6 @@ class MicrosecondScientificAdapter:
         status = record.get("status", record.get("disposition"))
         if status not in ("completed", "complete", "accepted"):
             errors.append(f"Selected record is {status!r}; completed acquisition is required.")
-        if record.get("analysis_error") or record.get("analysis_status") == "interrupted":
-            errors.append("Selected record has incomplete analysis; complete scientific review is unavailable.")
-        if record.get("restoration", {}).get("safe_verified") is not True:
-            errors.append("Selected record does not verify instrument restoration.")
         if record.get("errors"):
             errors.append("Selected record retains unresolved acquisition errors: " + "; ".join(map(str, record["errors"])))
         if kind in ("blank", "preliminary") and plan is not None:
@@ -180,21 +153,24 @@ class MicrosecondScientificAdapter:
             valid_waves = {point.get("wavenumber_cm1") for point in points if point.get("valid")}
             needed_waves = {point.wavenumber_cm1 for point in plan.settings.spectral_points}
             if not needed_waves.issubset(valid_waves):
-                errors.append("Selected record lacks valid native review support at every declared wavenumber.")
-            if kind == "blank":
-                schedule = {(float(block["wavenumber_cm1"]), round(float(block.get("delay_s", 0)) * 1e6, 9), block.get("average_index"))
-                            for block in record.get("native_blocks", ()) if block.get("kind") == "blank_control" and block.get("completed_utc")
-                            and block.get("sample") and not block.get("flags")}
-                expected_schedule = {(wave, round(delay, 9), average) for wave in needed_waves
-                                     for delay in plan.settings.delays_us for average in range(plan.settings.averages)}
-                if not expected_schedule.issubset(schedule):
-                    errors.append("Sequential blank is missing declared delay/average control blocks.")
-        expected = self.compatibility(plan)
+                errors.append("Selected record lacks valid native support at the requested wavenumbers.")
+        expected = self.compatibility(plan, kind=kind)
         actual = record.get("compatibility")
         if actual is None:
-            errors.append("Selected record lacks explicit baseline/review compatibility provenance.")
-        else:
-            actual = deepcopy(actual)
+            # Native v1 records retain full settings even when they predate the
+            # compact panel's explicit compatibility entry.
+            from .planner import acquisition_signature
+            try:
+                actual = {"experiment_id": record["experiment_id"], "mode": record["mode"],
+                          "settings": acquisition_signature(record["settings"], kind=kind), "instrument_state": {}}
+            except (KeyError, TypeError, ValueError) as exc:
+                errors.append(f"Selected record lacks acquisition settings: {exc}")
+        if actual is not None:
+            from .planner import acquisition_signature
+            actual = {key: deepcopy(value) for key, value in actual.items()
+                      if key in ("experiment_id", "mode", "settings", "instrument_state")}
+            if "settings" in actual:
+                actual["settings"] = acquisition_signature(actual["settings"], kind=kind)
             actual.setdefault("instrument_state", {})
             # The event's explicit previous value supplies the previously
             # unobserved state of records retained before that first event.
@@ -203,26 +179,71 @@ class MicrosecondScientificAdapter:
             errors.extend(compatibility_mismatches(expected, actual))
         return errors
 
-    def validate_review(self, preliminary, plan):
-        errors = self.validate_record(preliminary, plan, kind="preliminary")
-        if self.context.mode == "single":
-            errors.extend("Blank: " + text for text in self.validate_record(self.blank, plan, kind="blank"))
-        return errors
+    def validate_preliminary(self, preliminary, plan):
+        # Each run measures its own unpumped baseline. Compatible earlier data
+        # are optional; absent or stale data never become an approval gate.
+        return ()
 
-    def summarize_preliminary(self, result):
-        label = "simultaneous sample/reference Q₀" if self.context.mode == "dual" else "sample with sequential blank"
-        return (f"Review unpumped {label}; record {result.get('run_id', 'retained')}. "
-                "Check measured support, detector flags, sample identity, and spectrum before explicit Start. "
-                "Physical sample/reference loading is an operator action.")
+    def validate_operation(self, kind, plan, preliminary):
+        if kind in ("save_plan", "load_plan", "load_run", "export", "retry_preservation", "retry_native_save", "check_capabilities"):
+            if kind != "check_capabilities":
+                return ()
+        if self._hardware:
+            required = {"hf2li"} if kind == "check_capabilities" else {"hf2li", "mircat", "t660_1", "t660_2"}
+            if kind in ("save_plan", "load_plan", "load_run", "export", "retry_preservation", "retry_native_save"):
+                return ()
+            missing = required - set(self.context.devices.available(hardware=True))
+            if missing:
+                return ("Device service unavailable: " + ", ".join(sorted(missing)),)
+        if kind in ("blank", "preliminary", "measurement", "run") and plan is not None:
+            from .planner import build_plan
+            scoped = build_plan(plan.settings, capabilities=self.capabilities, qualification=self.qualification,
+                                kind="run" if kind == "measurement" else kind)
+            return scoped.readiness.errors
+        return ()
+
+    def reusable(self, record, plan, *, kind):
+        try:
+            return record if isinstance(record, dict) and not self.validate_record(record, plan, kind=kind) else None
+        except (ValueError, TypeError, KeyError, AttributeError):
+            # A malformed optional old reference cannot strand a newly owned
+            # acquisition before the runner establishes cleanup/preservation.
+            return None
+
+    def reuse_records(self, record, plan=None):
+        """Retain acquired or loaded candidates; compatibility is checked at use."""
+        if not isinstance(record, dict):
+            return
+        if record.get("kind") == "blank":
+            self.blank = record
+        elif record.get("kind") == "preliminary":
+            self.retained_preliminary = record
+        if isinstance(record.get("blank"), dict):
+            self.blank = record["blank"]
+        elif isinstance(record.get("blank_record"), dict):
+            self.blank = record["blank_record"]
+        if isinstance(record.get("preliminary"), dict):
+            self.retained_preliminary = record["preliminary"]
 
     def _execute(self, snapshot, worker, kind):
-        from .runner import run_acquisition
-        from .persistence import save_run
-        from .processing import process_run
         self._active_worker = worker
         self.last_record = None
-        compatibility = self.compatibility(snapshot.plan)
-        blank = deepcopy(self.blank)
+        try:
+            from .runner import run_acquisition
+            from .persistence import save_run
+            from .processing import process_run
+            compatibility = self.compatibility(snapshot.plan, kind=kind)
+            blank = self.reusable(self.blank, snapshot.plan, kind="blank")
+            preliminary = self.reusable(snapshot.preliminary, snapshot.plan, kind="preliminary")
+            if preliminary is None:
+                preliminary = self.reusable(self.retained_preliminary, snapshot.plan, kind="preliminary")
+        except Exception:
+            # No device or new native data exists before runner dispatch.
+            self._active_worker = None
+            if snapshot.operation.hardware:
+                self.context.ownership.release(snapshot.operation.ownership, safe_verified=True,
+                    preservation_verified=True, detail="Adapter setup failed before device access")
+            raise
 
         def progress(message):
             worker.message.emit(message)
@@ -233,17 +254,20 @@ class MicrosecondScientificAdapter:
                 worker.progress.emit(0, 0)
 
         def preserve(record):
+            from .planner import acquisition_signature
             record["compatibility"] = deepcopy(compatibility)
+            if record.get("settings"):
+                record["compatibility"]["settings"] = acquisition_signature(record["settings"], kind=kind)
             self.last_record = record
             if record.get("disposition", record.get("status")) in ("complete", "completed") and not worker.cancel_event.is_set():
-                worker.message.emit("Analysis: response-aware reconstruction and coverage; preserving native data.")
+                worker.message.emit("Reconstructing measurements…")
                 try:
                     record["processing"] = process_run(record, check_cancelled=worker.check_cancelled)
                 except InterruptedError:
                     record["analysis_status"] = "interrupted"
                 except Exception as exc:
                     record["analysis_error"] = f"{type(exc).__name__}: {exc}"
-            worker.message.emit("Saving native, rejected, interrupted and restoration records.")
+            worker.message.emit("Saving native data…")
             path = save_run(snapshot.operation.output_path, record)
             record["native_path"] = str(path)
             return path
@@ -252,9 +276,10 @@ class MicrosecondScientificAdapter:
             record = (self.runner or run_acquisition)(
                 self.context, snapshot.operation, snapshot.plan, kind=kind,
                 cancel=worker.cancel_event.is_set, progress=progress,
-                preserve=preserve, preliminary=deepcopy(snapshot.preliminary), blank=blank,
+                preserve=preserve, preliminary=preliminary, blank=blank,
             )
             self.last_record = record
+            self.reuse_records(record)
             if record.get("analysis_error"):
                 raise RuntimeError("Native data saved; analysis failed: " + record["analysis_error"])
             if worker.cancel_event.is_set() or record.get("status", record.get("disposition")) in ("interrupted", "cancelled", "stopped"):
@@ -288,13 +313,14 @@ class MicrosecondScientificAdapter:
 
     def load_run(self, path):
         from .persistence import load_run
-        record = load_run(path, mode=self.context.mode, condition_id=self._condition_profile_id)
+        record = load_run(path, mode=self.context.mode)
         if "processing" not in record:
             from .processing import process_run
             try:
                 record["processing"] = process_run(record, fit_models=False)
             except Exception as exc:
                 record["analysis_error"] = f"{type(exc).__name__}: {exc}"
+        self.reuse_records(record)
         return record
 
     def export_run(self, path, result):
@@ -312,7 +338,8 @@ class MicrosecondScientificAdapter:
                                  for key, value in point.items()})
 
     def new_run(self):
-        self.blank = self.last_record = None
+        # Preserve compatible acquired/loaded reference candidates across runs.
+        self.last_record = None
 
     def instrument_state_changed(self, change):
         for item in change.changes:
@@ -321,7 +348,7 @@ class MicrosecondScientificAdapter:
             self._instrument_actual[key] = item.new_value
         self.instrument_changes = [
             f"Instrument {key}: record {previous!r}; current {self._instrument_actual[key]!r}; "
-            "recheck instruments and reacquire preliminary."
+            "retained reference data will be rechecked."
             for key, previous in self._instrument_original.items() if self._instrument_actual[key] != previous
         ]
 

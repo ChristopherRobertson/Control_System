@@ -1,10 +1,8 @@
-"""Real host presentation integration, isolated settings and explicit review."""
+"""Compact host workspace: automatic settings, independent sessions and native data."""
 from copy import deepcopy
-from dataclasses import replace
-import importlib
-import os
+from functools import partial
+from uuid import uuid4
 import time
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -23,61 +21,77 @@ def qt_app(monkeypatch):
 def context(tmp_path):
     from control_app.measurement_host import ContextFactory
     from control_app.measurement_host.ownership import HardwareCoordinator
-    preferences = {}
-    return ContextFactory(save_root_provider=lambda: tmp_path,
-                          preference_backend=preferences,
-                          ownership=HardwareCoordinator(tmp_path / "instrument.lock")).for_experiment("microsecond_stroboscopy")
+    return ContextFactory(save_root_provider=lambda: tmp_path, preference_backend={},
+        ownership=HardwareCoordinator(tmp_path / "instrument.lock")).for_experiment("microsecond_stroboscopy")
 
 
 def wait_for(app, panel):
-    deadline = time.monotonic() + 20
+    deadline = time.monotonic() + 30
     while panel.command_running():
         app.processEvents()
         if time.monotonic() > deadline:
-            pytest.fail("Worker did not finish")
+            pytest.fail("Worker did not finish: " + panel.status.text())
         time.sleep(.005)
     app.processEvents()
 
 
+def simulated_panel(context, mode):
+    from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
+    from control_app.measurement_modules.microsecond_stroboscopy.runner import run_acquisition
+    from control_app.measurement_modules.microsecond_stroboscopy.acquisition import SimulatedAcquirer
+    return MicrosecondPanel(context.for_mode(mode), hardware=False,
+        runner=partial(run_acquisition, acquirer_factory=SimulatedAcquirer))
+
+
+def small_plan(panel):
+    settings = panel.adapter.read_settings()
+    settings["spectral_points"] = settings["spectral_points"][1:2]
+    settings["delays_us"] = [-100., 100., 1000.]
+    settings["averages"] = 1
+    panel.adapter.apply_settings(settings)
+
+
 def record_for(panel, kind="preliminary"):
-    blocks = []
-    points = []
-    for point in panel.plan.settings.spectral_points:
-        stream = {"timestamp_s": np.array([0., 1e-6]), "x": np.ones(2)}
-        blocks.append({"wavenumber_cm1": point.wavenumber_cm1, "kind": kind, "sample": stream,
-                       "completed_utc": "2026-09-10T00:00:00Z"})
-        points.append({"wavenumber_cm1": point.wavenumber_cm1, "valid": True, "value": 1.0})
-        if kind == "blank":
-            for delay in panel.plan.settings.delays_us:
-                for average in range(panel.plan.settings.averages):
-                    blocks.append({"wavenumber_cm1": point.wavenumber_cm1, "kind": "blank_control", "sample": stream,
-                                   "delay_s": delay*1e-6, "average_index": average,
-                                   "completed_utc": "2026-09-10T00:00:00Z"})
+    points = [{"wavenumber_cm1": point.wavenumber_cm1, "valid": True, "value": 1.0,
+               "raw_sample_x": 1.0} for point in panel.plan.settings.spectral_points]
     return {"schema_version": 1, "experiment_id": "microsecond_stroboscopy", "mode": panel.context.mode,
-            "kind": kind, "status": "complete", "disposition": "complete", "run_id": "native-test-run",
-            "settings": panel.plan.settings.to_dict(), "native_blocks": blocks,
-            "compatibility": panel.adapter.compatibility(panel.plan),
+            "kind": kind, "status": "complete", "disposition": "complete", "run_id": str(uuid4()),
+            "settings": panel.plan.settings.to_dict(), "native_blocks": [],
+            "compatibility": panel.adapter.compatibility(panel.plan, kind=kind),
             "restoration": {"safe_verified": True}, "processing": {"points": points, "maps": {}}}
 
 
-def test_us_registration_creates_exact_two_independent_hardware_free_tabs(qt_app, context):
+def test_us_registration_creates_exact_two_compact_independent_hardware_free_tabs(qt_app, context):
     from control_app.measurement_modules.microsecond_stroboscopy.registration import DESCRIPTOR, create_tabs
+    from control_app.measurement_host.presentation import CompactMeasurementPanel
+    from PySide6.QtWidgets import QCheckBox
     tabs = create_tabs(context)
     assert DESCRIPTOR.experiment_id == "microsecond_stroboscopy"
     assert [(tab.instance_id, tab.title) for tab in tabs] == [
         ("microsecond_stroboscopy:single", "Microsecond Stroboscopy"),
         ("microsecond_stroboscopy:dual", "Dual-Detector Microsecond Stroboscopy")]
     single, dual = [tab.widget for tab in tabs]
-    assert single.plan is not None and dual.plan is not None
     assert single.adapter is not dual.adapter and single.settings_widget is not dual.settings_widget
     single.settings_widget._controls["averages"][0].setValue(1)
     assert single.plan.settings.averages == 1 and dual.plan.settings.averages == 2
-    assert single.context.preferences.namespace == "measurements/microsecond_stroboscopy/single/v1/"
-    assert dual.context.preferences.namespace == "measurements/microsecond_stroboscopy/dual/v1/"
-    assert not single.preliminary_button.isEnabled()
-    assert dual.preliminary_button.isEnabled()
-    for tab in tabs:
-        tab.widget.deleteLater()
+    for panel in (single, dual):
+        assert isinstance(panel, CompactMeasurementPanel)
+        assert panel.plan is not None and not panel.command_running()
+        assert not panel.findChildren(QCheckBox) and not hasattr(panel, "review")
+        assert "execution_mode" not in panel.settings_widget._controls
+        assert not any("temperature" in field or "qualification" in field for field in panel.settings_widget._controls)
+        assert panel.adapter.read_settings()["execution_mode"] == "hardware"
+        assert not panel.advanced_button.isChecked() and panel.advanced_content.isHidden()
+        assert not panel.start_button.isEnabled()
+        assert "Device service unavailable" in panel.validation.text()
+        assert panel.settings_widget.delays.cursorPosition() == 0
+        panel.resize(1100,780)
+        panel.show()
+        qt_app.processEvents()
+        assert panel.width() == 1100 and panel.height() == 780
+        assert panel.splitter.sizes()[0] < 400
+        panel.close()
+        panel.deleteLater()
 
 
 def test_us_actual_host_discovery_preserves_reserved_phase_scan_pair(qt_app, tmp_path):
@@ -95,127 +109,139 @@ def test_us_actual_host_discovery_preserves_reserved_phase_scan_pair(qt_app, tmp
         handle.widget.deleteLater()
 
 
-def test_us_hardware_start_requires_readiness_even_with_checked_review(qt_app, context):
-    from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
-    from control_app.measurement_host.interchange import SampleSpectralSelection, SourceRecord, SpectralWindow
-    panel = MicrosecondPanel(context.for_mode("dual"))
-    settings = panel.adapter.read_settings()
-    settings["identity"]["sample_selection_id"] = "review-selection"
-    panel.adapter.sample_records = (SampleSpectralSelection(
-        selection_id="review-selection", sample_id=settings["identity"]["sample_id"],
-        producer_instance_id="microsecond_stroboscopy:single",
-        source=SourceRecord("review-source", "native/review.json", "2026-09-10T00:00:00Z", "1"),
-        condition_id=settings["identity"]["condition_id"], condition={},
-        windows=(SpectralWindow(1944., 1946.),), accepted_by="Test reviewer",
-        accepted_utc="2026-09-10T01:00:00Z").to_dict(),)
-    panel.adapter.apply_settings(settings)
-    panel.settings_widget._controls["execution_mode"][0].setCurrentText("hardware")
-    panel.preliminary = record_for(panel)
-    panel.review.setChecked(True)
-    assert panel.plan is not None and panel.plan.readiness.blockers
-    assert not panel.start_button.isEnabled()
-    with pytest.raises(ValueError, match="readiness"):
-        panel.begin("measurement")
-    assert not panel.review.isChecked()
-    assert not panel.command_running()
+def test_us_advanced_overrides_are_independent_and_roundtrip_microseconds(qt_app, context):
+    panel = simulated_panel(context, "dual")
+    controls = panel.settings_widget
+    path = "response.hf2_time_constant_s"
+    assert not controls._controls[path][0].isEnabled()
+    controls.override_modes[path].setCurrentText("Override")
+    controls._controls[path][0].setValue(12.)
+    assert controls.read_settings()["response"]["hf2_time_constant_s"] == pytest.approx(12e-6)
+    assert controls.read_settings()["manual_overrides"] == [path]
+    assert controls.override_modes["response.sample_rate_sps"].currentText() == "Auto"
+    controls.override_modes["response.sample_rate_sps"].setCurrentText("Override")
+    controls.override_modes[path].setCurrentText("Auto")
+    assert controls.read_settings()["manual_overrides"] == ["response.sample_rate_sps"]
+    assert controls._controls["response.sample_rate_sps"][0].isEnabled()
+    controls.restore_automatic()
+    assert not controls.read_settings()["manual_overrides"]
     panel.deleteLater()
 
 
-def test_us_capability_check_selects_supported_nonmanual_choices_and_preserves_editable_override(qt_app, context):
+def test_us_first_show_checks_capabilities_once_through_shared_owned_operation(qt_app, tmp_path, monkeypatch):
+    from control_app.measurement_host import ContextFactory
+    from control_app.measurement_host.ownership import HardwareCoordinator
+    from control_app.measurement_modules.microsecond_stroboscopy import runner
     from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
-    panel = MicrosecondPanel(context.for_mode("dual"))
-    manual = panel.settings_widget._controls["response.hf2_time_constant_s"][0]
-    manual.setValue(12.0)  # Display µs; intentionally absent from the discovered menu.
-    capabilities = {"verified": True, "timing_rate_sps": 200000.,
+    calls=[]
+    def no_factory(*args, **kwargs):
+        pytest.fail("Rendering constructed a physical device")
+    context=ContextFactory(save_root_provider=lambda:tmp_path, preference_backend={},
+        ownership=HardwareCoordinator(tmp_path / "capabilities.lock"),
+        real_device_factories={"hf2li": no_factory}).for_experiment("microsecond_stroboscopy").for_mode("dual")
+    def discover(context,operation,**kwargs):
+        assert operation.hardware and context.ownership.snapshot()["state"] == "owned"
+        calls.append(operation)
+        context.ownership.release(operation.ownership,safe_verified=True,preservation_verified=True)
+        return {"capabilities":{"verified":False}}
+    monkeypatch.setattr(runner,"discover_capabilities",discover)
+    panel=MicrosecondPanel(context)
+    panel.settings_widget.delays.setText("unfinished edit")
+    assert panel.plan is None
+    assert calls == []
+    panel.show();qt_app.processEvents();wait_for(qt_app,panel)
+    assert len(calls)==1, panel.status.text()
+    panel.hide();panel.show();qt_app.processEvents()
+    assert len(calls)==1
+    panel.close();panel.deleteLater()
+
+
+def test_us_capability_resolution_keeps_independent_manual_override(qt_app, context):
+    panel = simulated_panel(context, "dual")
+    fields = panel.settings_widget
+    fields.override_modes["response.hf2_time_constant_s"].setCurrentText("Override")
+    fields._controls["response.hf2_time_constant_s"][0].setValue(20.)
+    panel.adapter.capabilities = {"verified": True, "timing_rate_sps": 200000., "enabled_streams": [0,2,3],
         "sample": {"orders": [1], "rates_sps": [100000.], "timeconstants_by_order": {1: [10e-6, 20e-6]}},
         "reference": {"orders": [2], "rates_sps": [100000.], "timeconstants_by_order": {2: [20e-6]}}}
-    panel._launch(lambda worker: {"capabilities": capabilities}, "check_capabilities")
-    wait_for(qt_app, panel)
-    values = panel.adapter.read_settings()["response"]
-    assert values["sample_rate_sps"] == values["reference_rate_sps"] == 100000.
-    assert values["reference_order"] == 2
-    assert values["reference_time_constant_s"] == pytest.approx(20e-6)
-    assert values["timing_rate_sps"] == 200000.
-    assert values["hf2_time_constant_s"] == pytest.approx(12e-6)
-    assert manual.isEnabled() and not panel.start_button.isEnabled()
-    assert any("time constant" in error for error in panel.plan.readiness.blockers)
-    assert "Supported choices applied" in panel.status.text()
-    assert "Manual overrides retained and editable" in panel.status.text()
-    panel.deleteLater()
-
-
-def test_us_compatibility_change_restore_explains_mismatch_without_granting_review(qt_app, context):
-    from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
-    panel = MicrosecondPanel(context.for_mode("single"))
-    panel.adapter.blank = record_for(panel, "blank")
-    panel.preliminary = record_for(panel)
-    panel._update_controls()
-    panel.review.setChecked(True)
-    assert panel.start_button.isEnabled()
-    field = panel.settings_widget._controls["identity.cell_id"][0]
-    original = field.text()
-    field.setText("cell-two")
-    assert not panel.review.isChecked() and not panel.start_button.isEnabled()
-    assert "identity.cell_id" in panel.review_summary.text()
-    assert panel.preliminary is not None
-    field.setText(original)
-    assert "identity.cell_id" not in panel.review_summary.text()
-    assert panel.review.isEnabled() and not panel.review.isChecked()
-    panel.deleteLater()
-
-
-def test_us_instrument_restore_clears_stale_error_but_needs_review(qt_app, context):
-    from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
-    panel = MicrosecondPanel(context.for_mode("dual"))
-    panel.preliminary = record_for(panel)
-    panel.review.setChecked(True)
-    change = lambda old, new: SimpleNamespace(changes=[SimpleNamespace(device_id="hf2li", configuration_key="range", previous_value=old, new_value=new)])
-    panel.instrument_state_changed(change(1., 2.))
-    assert "hf2li.range" in panel.review_summary.text()
-    panel.instrument_state_changed(change(2., 1.))
-    assert "hf2li.range" not in panel.review_summary.text()
-    assert not panel.review.isChecked()
+    panel.refresh_plan()
+    assert panel.plan is not None, panel.validation.text()
+    response = panel.plan.settings.response
+    assert response.hf2_time_constant_s == pytest.approx(20e-6)
+    assert response.sample_rate_sps == response.reference_rate_sps == 100000.
+    assert response.reference_order == 2
+    assert fields._controls["response.reference_time_constant_s"][0].value() == pytest.approx(20.)
+    assert fields.manual_override_fields == {"response.hf2_time_constant_s"}
     panel.deleteLater()
 
 
 def test_us_plan_roundtrip_modes_and_scoped_new_run(qt_app, context, tmp_path):
-    from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
-    single, dual = [MicrosecondPanel(context.for_mode(mode)) for mode in ("single", "dual")]
+    single, dual = [simulated_panel(context, mode) for mode in ("single", "dual")]
     path = tmp_path / "single-plan.json"
-    single.save_plan(path)
-    wait_for(qt_app, single)
-    single.settings_widget._controls["averages"][0].setValue(3)
-    single.load_plan(path)
-    wait_for(qt_app, single)
+    single.save_plan(path);wait_for(qt_app,single)
+    single.settings_widget._controls["averages"][0].setValue(1)
+    single.load_plan(path);wait_for(qt_app,single)
     assert single.plan.settings.averages == 2
-    dual.load_plan(path)
-    wait_for(qt_app, dual)
+    dual.load_plan(path);wait_for(qt_app,dual)
     assert "mode" in dual.status.text().lower()
     dual.preliminary = record_for(dual)
-    single.adapter.blank = record_for(single, "blank")
-    single.preliminary = record_for(single)
+    blank=single.adapter.blank=record_for(single,"blank")
+    single.preliminary=record_for(single)
     single.new_run()
-    assert single.adapter.blank is None and single.preliminary is None
+    assert single.adapter.blank is blank and single.preliminary is None
     assert dual.preliminary is not None and path.exists()
-    single.deleteLater(); dual.deleteLater()
+    single.deleteLater();dual.deleteLater()
 
 
-def test_us_saved_blank_complete_compatible_and_rejected_in_other_mode(qt_app, context, tmp_path):
-    from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
+def test_us_loaded_blank_is_reusable_without_manual_approval(qt_app, context, tmp_path):
     from control_app.measurement_modules.microsecond_stroboscopy.persistence import save_run
-    panel = MicrosecondPanel(context.for_mode("single"))
-    record = record_for(panel, "blank")
+    panel=simulated_panel(context,"single")
+    record=record_for(panel,"blank")
     save_run(tmp_path / "blank", record)
-    panel.load_blank(tmp_path / "blank")
-    wait_for(qt_app, panel)
-    assert panel.adapter.blank is not None and panel.preliminary_button.isEnabled()
-    record["status"] = record["disposition"] = "interrupted"
-    save_run(tmp_path / "partial", record)
-    panel.load_blank(tmp_path / "partial")
-    wait_for(qt_app, panel)
-    assert "interrupted" in panel.status.text()
-    assert panel.adapter.blank["disposition"] == "complete"
+    panel.load_run(tmp_path / "blank");wait_for(qt_app,panel)
+    assert panel.adapter.reusable(panel.adapter.blank,panel.plan,kind="blank") is not None
+    assert panel.start_button.isEnabled()
+    assert panel.views.record is not None
     panel.deleteLater()
+
+
+def test_us_single_acquires_without_external_blank_or_preliminary(qt_app, context):
+    panel=simulated_panel(context,"single")
+    small_plan(panel)
+    assert panel.start_button.isEnabled() and panel.adapter.blank is None
+    panel.begin("measurement");wait_for(qt_app,panel)
+    assert panel.result is not None, panel.status.text()
+    assert panel.result["disposition"] == "complete"
+    assert panel.result["restoration"]["safe_verified"] and panel.result["native_path"]
+    assert "absolute_absorbance" not in panel.result.get("processing",{}).get("maps",{})
+    panel.deleteLater()
+
+
+def test_us_dual_preliminary_and_abort_keep_native_and_allow_new_run(qt_app, context):
+    panel=simulated_panel(context,"dual")
+    small_plan(panel)
+    panel.begin("preliminary");wait_for(qt_app,panel)
+    assert panel.preliminary is not None, panel.status.text()
+    assert panel.adapter.blank is None and panel.start_button.isEnabled()
+    panel.begin("measurement");panel.request_abort("Operator stop");wait_for(qt_app,panel)
+    assert "Acquisition stopped" in panel.status.text(),panel.status.text()
+    assert panel.adapter.last_record is not None
+    assert panel.adapter.last_record["restoration"]["safe_verified"]
+    panel.new_run()
+    assert panel.preliminary is None and panel.result is None
+    panel.deleteLater()
+
+
+def test_us_native_plot_retains_negative_signed_x(qt_app):
+    from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondViews
+    views=MicrosecondViews()
+    record={"kind":"preliminary","mode":"single","processing":{"maps":{},"points":[
+        {"wavenumber_cm1":1945.,"value":float("nan"),"valid":False,"raw_sample_x":-0.4}]}}
+    views.set_record(record)
+    axis=views.plots[0].figure.axes[0]
+    assert axis.get_ylabel()=="Sample X"
+    assert axis.lines[0].get_ydata()[0] == pytest.approx(-.4)
+    views.deleteLater()
 
 
 def test_us_numeric_nonuniform_slices_and_gap_preservation(qt_app):
@@ -263,61 +289,10 @@ def test_us_kinetic_fit_prediction_residuals_and_uncertainty_are_visible(qt_app)
     views.deleteLater()
 
 
-def test_us_simulated_full_single_guided_workflow(qt_app, context):
-    from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
-    panel = MicrosecondPanel(context.for_mode("single"))
-    settings = panel.adapter.read_settings()
-    settings["spectral_points"] = settings["spectral_points"][1:2]
-    settings["delays_us"] = [-100., 100., 1000.]
-    settings["averages"] = 1
-    panel.adapter.apply_settings(settings)
-    panel.begin("blank")
-    wait_for(qt_app, panel)
-    assert panel.adapter.blank is not None, panel.status.text()
-    panel.begin("preliminary")
-    wait_for(qt_app, panel)
-    assert panel.preliminary is not None, panel.status.text()
-    assert not panel.start_button.isEnabled()
-    panel.review.setChecked(True)
-    assert panel.start_button.isEnabled()
-    panel.begin("measurement")
-    wait_for(qt_app, panel)
-    assert panel.result is not None, panel.status.text()
-    assert panel.result["disposition"] == "complete"
-    assert panel.result["restoration"]["safe_verified"]
-    assert panel.result["native_path"]
-    panel.deleteLater()
-
-
-def test_us_simulated_dual_preliminary_and_owned_abort(qt_app, context):
-    from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
-    panel = MicrosecondPanel(context.for_mode("dual"))
-    settings = panel.adapter.read_settings()
-    settings["spectral_points"] = settings["spectral_points"][1:2]
-    settings["delays_us"] = [-100., 100., 1000.]
-    settings["averages"] = 1
-    panel.adapter.apply_settings(settings)
-    panel.begin("preliminary")
-    wait_for(qt_app, panel)
-    assert panel.preliminary is not None, panel.status.text()
-    assert panel.adapter.blank is None
-    panel.review.setChecked(True)
-    panel.begin("measurement")
-    panel.request_abort("Operator stop")
-    wait_for(qt_app, panel)
-    assert "Acquisition stopped" in panel.status.text(), panel.status.text()
-    assert panel.adapter.last_record is not None
-    assert panel.adapter.last_record["restoration"]["safe_verified"]
-    assert not panel.close_blockers()
-    panel.new_run()
-    assert panel.preliminary is None and panel.result is None
-    panel.deleteLater()
-
-
 def test_us_storage_failure_retains_native_until_retry_without_clearing_host_fault(qt_app, context, tmp_path, monkeypatch):
     from control_app.measurement_modules.microsecond_stroboscopy.widgets import MicrosecondPanel
     from control_app.measurement_modules.microsecond_stroboscopy import persistence
-    panel = MicrosecondPanel(context.for_mode("single"))
+    panel = simulated_panel(context, "single")
     settings = panel.adapter.read_settings()
     settings["spectral_points"] = settings["spectral_points"][1:2]
     settings["delays_us"] = [-100., 100.]

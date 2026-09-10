@@ -1,4 +1,4 @@
-"""Retained sample selection validation and conservative offline native loading."""
+"""Automatic reference reuse, live defaults and conservative native loading."""
 from copy import deepcopy
 from dataclasses import replace
 from types import SimpleNamespace
@@ -30,7 +30,7 @@ def adapter_plan(hardware=False):
     return adapter, build_plan(settings)
 
 
-def test_us_selected_accepted_window_allows_off_band_outside_without_altering_grid():
+def test_us_optional_selection_metadata_does_not_alter_or_gate_manual_grid():
     adapter, plan = adapter_plan(True)
     adapter.sample_records = (accepted_selection(plan.settings),)
     before = plan.settings.to_dict()
@@ -38,34 +38,103 @@ def test_us_selected_accepted_window_allows_off_band_outside_without_altering_gr
     assert plan.settings.to_dict() == before
 
 
-@pytest.mark.parametrize("field,value,expected", [
-    ("sample_id", "different-sample", "sample_id"),
-    ("condition_id", "different-condition", "condition_id"),
-    ("selection_id", "different-selection", "exactly one"),
-    ("disposition", "rejected", "invalid"),
+@pytest.mark.parametrize("field,value", [
+    ("sample_id", "different-sample"),
+    ("condition_id", "different-condition"),
+    ("selection_id", "different-selection"),
+    ("disposition", "rejected"),
 ])
-def test_us_selection_rejects_named_record_incompatibility(field, value, expected):
+def test_us_optional_selection_never_becomes_an_acquisition_gate(field, value):
     adapter, plan = adapter_plan()
     record = accepted_selection(plan.settings)
     record[field] = value
     adapter.sample_records = (record,)
-    assert any(expected in error for error in adapter.validate_plan(plan))
+    assert not adapter.validate_plan(plan)
 
 
-def test_us_selection_rejects_duplicate_ids_and_unaccepted_band_coordinates():
+def test_us_raw_grid_requires_no_accepted_selection():
     adapter, plan = adapter_plan()
     record = accepted_selection(plan.settings)
     adapter.sample_records = (record, deepcopy(record))
-    assert any("exactly one" in error for error in adapter.validate_plan(plan))
+    assert not adapter.validate_plan(plan)
     adapter.sample_records = (record,)
     changed = replace(plan.settings, spectral_points=plan.settings.spectral_points + (SpectralPoint(1947., "A1", "band"),))
-    assert any("1947" in error for error in adapter.validate_plan(build_plan(changed)))
+    assert not adapter.validate_plan(build_plan(changed))
 
 
-def test_us_hardware_requires_retained_selection_but_examples_remain_plannable():
+def test_us_live_default_does_not_follow_historical_simulation_plan():
     adapter, plan = adapter_plan(True)
-    assert any("alone is not a record" in error for error in adapter.validate_plan(plan))
+    assert not adapter.validate_plan(plan)
+    assert adapter.hardware_required("measurement", {"execution_mode": "simulation"})
+    assert adapter.validate_preliminary(None, plan) == ()
     assert not adapter.validate_plan(build_plan(replace(plan.settings, execution_mode="simulation")))
+
+
+def compatible_record(adapter, plan, kind="preliminary"):
+    return {"experiment_id": "microsecond_stroboscopy", "mode": "dual", "kind": kind,
+            "status": "completed", "settings": plan.settings.to_dict(),
+            "compatibility": adapter.compatibility(plan),
+            "processing": {"points": [{"wavenumber_cm1": point.wavenumber_cm1, "valid": True}
+                                      for point in plan.settings.spectral_points]}}
+
+
+def test_us_reference_reuse_ignores_metadata_but_respects_response_and_coverage():
+    adapter, plan = adapter_plan()
+    record = compatible_record(adapter, plan)
+    changed = replace(plan.settings, condition_profile_id="historical-note",
+                      identity=replace(plan.settings.identity, sample_id="relabeled", measured_temperature_k=77.))
+    assert adapter.reusable(record, build_plan(changed), kind="preliminary") is record
+    changed = replace(plan.settings, response=replace(plan.settings.response, sample_rate_sps=1000.),
+                      manual_overrides=("response.sample_rate_sps",))
+    assert adapter.reusable(record, build_plan(changed), kind="preliminary") is None
+    record["processing"]["points"].pop()
+    assert adapter.reusable(record, plan, kind="preliminary") is None
+
+
+def test_us_loaded_reference_retained_across_new_run_and_isolated_by_adapter():
+    adapter, plan = adapter_plan()
+    other, _ = adapter_plan()
+    record = compatible_record(adapter, plan)
+    adapter.reuse_records(record)
+    adapter.new_run()
+    assert adapter.retained_preliminary is record
+    assert other.retained_preliminary is None
+    assert adapter.validate_preliminary({"status": "failed"}, plan) == ()
+    malformed = compatible_record(adapter, plan)
+    malformed["compatibility"]["settings"] = {"bad_old_record": object()}
+    assert adapter.reusable(malformed, plan, kind="preliminary") is None
+
+
+def test_us_missing_installed_factory_is_concrete_action_prerequisite():
+    adapter, plan = adapter_plan()
+    adapter.context.devices = SimpleNamespace(available=lambda **_: ("hf2li", "t660_1", "t660_2"))
+    assert adapter.validate_operation("check_capabilities", plan, None) == ()
+    assert adapter.validate_operation("measurement", plan, None) == ("Device service unavailable: mircat",)
+
+
+def test_us_adapter_setup_failure_releases_before_device_access(monkeypatch):
+    adapter, plan = adapter_plan()
+    released = []
+    adapter.context.ownership = SimpleNamespace(release=lambda token, **outcomes: released.append((token, outcomes)))
+    snapshot = SimpleNamespace(plan=plan, preliminary=None,
+                               operation=SimpleNamespace(hardware=True, ownership="owned-token"))
+    def broken(*_, **__):
+        raise ValueError("Malformed optional compatibility")
+    monkeypatch.setattr(adapter, "compatibility", broken)
+    with pytest.raises(ValueError, match="Malformed"):
+        adapter._execute(snapshot, object(), "run")
+    assert adapter._active_worker is None
+    assert released[0][0] == "owned-token"
+    assert released[0][1]["safe_verified"] and released[0][1]["preservation_verified"]
+
+
+def test_us_capacity_is_action_specific_so_large_sample_does_not_gate_preliminary():
+    adapter, plan = adapter_plan()
+    limited = build_plan(replace(plan.settings, budget=replace(plan.settings.budget, maximum_memory_bytes=200 * 1024**2)))
+    adapter.context.devices = SimpleNamespace(available=lambda **_: ("hf2li", "mircat", "t660_1", "t660_2"))
+    assert not adapter.validate_plan(limited)
+    assert not adapter.validate_operation("preliminary", limited, None)
+    assert any("memory" in error for error in adapter.validate_operation("measurement", limited, None))
 
 
 @pytest.mark.parametrize("analysis_fails", [False, True])

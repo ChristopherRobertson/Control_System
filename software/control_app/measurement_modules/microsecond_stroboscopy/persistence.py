@@ -88,9 +88,8 @@ def _validate(record, mode=None, condition_id=None, kind=None):
         raise ValueError("Incompatible detector mode")
     if kind and record.get("record_kind") != kind:
         raise ValueError(f"Expected {kind} record")
-    actual = record.get("settings", {}).get("condition_profile_id")
-    if condition_id and actual != condition_id:
-        raise ValueError(f"Incompatible condition profile: {actual!r}, expected {condition_id!r}")
+    # condition_id remains accepted for older callers; historical condition
+    # metadata does not determine whether a native record can be opened.
 
 
 def save_run(path: str | Path, record: dict) -> Path:

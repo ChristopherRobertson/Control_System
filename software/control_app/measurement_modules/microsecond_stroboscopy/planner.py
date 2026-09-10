@@ -6,7 +6,7 @@ import math
 from typing import Any, Mapping
 
 from .settings import (CONDITION_PROFILES, EXPERIMENT_ID, SETTINGS_VERSION,
-                       StroboscopySettings)
+                       StroboscopySettings, ResponseSettings, TimingSettings)
 from .timing import TimingProgram, compile_timing
 
 PLAN_SCHEMA_VERSION = 1
@@ -14,11 +14,7 @@ PLAN_SCHEMA_VERSION = 1
 
 @dataclass(frozen=True)
 class Qualification:
-    """Detached applicable profile from a host-validated promoted bundle.
-
-    Parsing this type does not promote a bundle. The application must obtain the
-    source through ``MeasurementContext.promoted_bundle`` before real operation.
-    """
+    """Detached optional historical profile; ordinary acquisition needs none."""
     data: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -123,6 +119,7 @@ class DurationBudget:
     reset_verification_s: float = 0.0
     post_run_verification_s: float = 0.0
     acquisition_guard_s: float = 0.0
+    protocol_s: float = 0.0
     upload_s: float = 0.0
     retrieval_s: float = 0.0
     restoration_s: float = 0.0
@@ -138,7 +135,7 @@ class DurationBudget:
     memory_bytes: int = 0
     storage_bytes: int = 0
     wall_clock_s: float = 0.0
-    estimate_basis: str = "EXAMPLE ONLY conservative non-overlap estimate; includes raw/assembled streams and cumulative retention; replace with measured tuning, reset, transfer and upload durations"
+    estimate_basis: str = "Provisional non-overlap estimate with maintained T660 command delays, native subscription overhead and cumulative retention; transport, integrity checks, tuning and saving durations vary"
     open_ended_actions: tuple[str, ...] = ()
 
     @property
@@ -165,7 +162,7 @@ class StroboscopyPlan:
     readiness: Readiness
     values: Mapping[str, Mapping[str, Any]]
     condition_profile: Mapping[str, Any]
-    observable: str = "Continuous-probe HF2LI envelope; aperture-average relative to calibrated optical arrival"
+    observable: str = "Continuous-probe HF2LI envelope; aperture average referenced to observed electrical Variable Sync, with optical correction only when measured"
     plan_schema_version: int = PLAN_SCHEMA_VERSION
     experiment_id: str = EXPERIMENT_ID
 
@@ -206,30 +203,174 @@ def _payload(value: Qualification | InstalledCapabilities | Mapping | None) -> d
     return {} if value is None else value.to_dict() if hasattr(value, "to_dict") else dict(value)
 
 
+def resolve_settings(settings: StroboscopySettings | Mapping[str, Any],
+                     capabilities: InstalledCapabilities | Mapping[str, Any] | None = None) -> StroboscopySettings:
+    """Derive dependent settings from the delay grid and actual installed menus.
+
+    Every dotted path in ``manual_overrides`` is independently preserved. Without
+    connected menus, numerical values remain provisional requests, never invented
+    capability observations. The acquisition adapter validates actual readbacks.
+    """
+    if not isinstance(settings, StroboscopySettings):
+        settings = StroboscopySettings.from_dict(settings)
+    if not settings.delays_us or any(not _number(v) for v in settings.delays_us):
+        return settings
+    data, caps = settings.to_dict(), _payload(capabilities)
+    manual = set(settings.manual_overrides)
+    for path in manual:
+        section, separator, field_name = path.partition(".")
+        if not separator or section not in ("response", "timing", "reset", "controls", "budget") or field_name not in data[section]:
+            raise ValueError(f"Unknown Advanced override {path!r}")
+    def automatic(section: str, name: str, value: Any) -> None:
+        if f"{section}.{name}" not in manual:
+            data[section][name] = value
+    automatic("reset", "method", "passive_recovery")
+    actual = caps.get("actual_values", {})
+    timing_readbacks = caps.get("timing_settings", {})
+    for section, defaults, names in (
+        ("response", ResponseSettings(), ("hf2_order", "hf2_time_constant_s", "reference_order", "reference_time_constant_s",
+          "sample_rate_sps", "reference_rate_sps", "timing_rate_sps",
+          "detector_latency_s", "reference_latency_s", "jitter_s", "time_zero_s", "reference_alignment_uncertainty_s")),
+        ("timing", TimingSettings(), ("probe_rate_hz", "probe_width_ns", "reference_width_ns", "frame_input_width_ns",
+          "probe_delay_ns", "fire_to_q_us", "fire_width_us", "q_switch_width_us", "command_guard_us")),
+    ):
+        for name in names:
+            value = actual.get(f"{section}.{name}", timing_readbacks.get(name) if section == "timing" else None)
+            automatic(section, name, value if value is not None else getattr(defaults, name))
+    gaps = [b-a for a,b in zip(sorted(set(settings.delays_us)), sorted(set(settings.delays_us))[1:]) if b>a]
+    step_s = min(gaps) * 1e-6 if gaps else max(abs(settings.delays_us[0])*1e-6, 25e-6)
+    target_tc = max(.8e-6, step_s/4)
+    desired_aperture = max(step_s/2, 1e-6)
+    r = data["response"]
+    roles = (("sample", "hf2_order", "hf2_time_constant_s", "sample_rate_sps"),)
+    if settings.mode == "dual":
+        roles += (("reference", "reference_order", "reference_time_constant_s", "reference_rate_sps"),)
+    for role, order_field, tc_field, rate_field in roles:
+        profile = _detector_capabilities(caps, role) if caps.get("verified") else {}
+        orders = tuple(value for value in profile.get("orders", ()) if _integer(value, 1) and value <= 8)
+        constants = profile.get("timeconstants_by_order", {})
+        rates = tuple(value for value in profile.get("rates_sps", ()) if _number(value, minimum=0, strict=True) and value <= 231_000)
+        candidates = []
+        for order in orders:
+            if "response."+order_field in manual and order != r[order_field]:
+                continue
+            for tc in constants.get(order, constants.get(str(order), ())):
+                if not _number(tc, minimum=.8e-6):
+                    continue
+                if "response."+tc_field in manual and not math.isclose(tc, r[tc_field], rel_tol=1e-9, abs_tol=1e-15):
+                    continue
+                candidates.append((order, tc))
+        if candidates:
+            # Choose the least filtering sufficient for the requested grid; no
+            # biological lifetime or other experiment's filter default enters.
+            order, tc = min(candidates, key=lambda item: (abs(item[0]-1), abs(math.log(item[1]/target_tc))))
+            automatic("response", order_field, order)
+            automatic("response", tc_field, tc)
+        elif not caps.get("verified"):
+            automatic("response", order_field, 1)
+            automatic("response", tc_field, target_tc)
+        if rates:
+            target_rate = 3/desired_aperture
+            adequate = [rate for rate in rates if rate >= target_rate]
+            automatic("response", rate_field, min(adequate) if adequate else max(rates))
+    if caps.get("verified") and _number(caps.get("timing_rate_sps"), minimum=0, strict=True):
+        automatic("response", "timing_rate_sps", caps["timing_rate_sps"])
+    active_rates = [r["sample_rate_sps"]] + ([r["reference_rate_sps"]] if settings.mode == "dual" else [])
+    if all(_number(rate, minimum=0, strict=True) for rate in active_rates):
+        automatic("response", "integration_aperture_s", max(desired_aperture, 3/min(active_rates)))
+    t = data["timing"]
+    if all(_number(t[name], minimum=0, strict=True) for name in ("fire_to_q_us", "command_guard_us", "q_switch_width_us", "fire_width_us")) and _number(r["integration_aperture_s"], minimum=0, strict=True):
+        aperture = r["integration_aperture_s"]
+        target = max(0., max(settings.delays_us))*1e-6+t["fire_to_q_us"]*1e-6+t["command_guard_us"]*1e-6+aperture/2
+        final_edge = max(target-min(settings.delays_us)*1e-6+t["q_switch_width_us"]*1e-6,
+                         target+aperture/2)
+        automatic("timing", "event_interval_s", max(.001, math.ceil((final_edge+2e-6)/.001)*.001))
+    if _number(settings.event_spacing_s, minimum=0, strict=True) and _number(t["event_interval_s"], minimum=0, strict=True):
+        # Complete capture and next aperture geometry contribute to event
+        # spacing. Waiting is a minimum separation, never a precise edge clock.
+        span_s = (max(settings.delays_us)-min(settings.delays_us))*1e-6
+        # Budget estimates never shorten the requested physical wait. Only the
+        # programmed capture and explicit observation duration contribute here.
+        overhead = 3*t["event_interval_s"]+data["reset"]["verification_duration_s"]
+        if _number(overhead, minimum=0):
+            automatic("reset", "recovery_wait_s", max(0., settings.event_spacing_s-overhead+span_s))
+    _retain_selections(settings, data, basis="Automatic dependent choice from requested delays and installed readbacks where available")
+    return StroboscopySettings.from_dict(data)
+
+
+def acquisition_signature(settings: StroboscopySettings | Mapping[str, Any], *, kind: str | None = None) -> dict[str, Any]:
+    """Physical acquisition compatibility, excluding optional historical data.
+
+    Blank/preliminary reuse does not depend on requested event count or delays;
+    callers independently verify that the retained native coverage is adequate.
+    """
+    if isinstance(settings, Mapping) and "wavenumbers_cm1" in settings:
+        import copy
+        signature = copy.deepcopy(dict(settings))
+        if kind in ("blank", "preliminary", "baseline", "control"):
+            for key in ("delays_us", "averages", "event_spacing_s", "delay_order", "reset", "controls"):
+                signature.pop(key, None)
+            signature.get("response", {}).pop("integration_aperture_s", None)
+            signature["timing"] = {key: value for key, value in signature.get("timing", {}).items()
+                if key in ("probe_rate_hz", "probe_width_ns", "reference_width_ns", "probe_delay_ns")}
+        return signature
+    if not isinstance(settings, StroboscopySettings):
+        settings = StroboscopySettings.from_dict(settings)
+    response = asdict(settings.response)
+    response.pop("qualified", None)
+    response.pop("qualification_id", None)
+    signature = {"experiment_id": settings.experiment_id, "mode": settings.mode,
+        "wavenumbers_cm1": sorted(point.wavenumber_cm1 for point in settings.spectral_points),
+        "response": response, "timing": asdict(settings.timing)}
+    if kind not in ("blank", "preliminary", "baseline", "control"):
+        signature.update(delays_us=list(settings.delays_us), averages=settings.averages,
+            event_spacing_s=settings.event_spacing_s, delay_order=settings.delay_order,
+            reset={key: getattr(settings.reset, key) for key in ("recovery_wait_s", "verification_duration_s", "tolerance_fraction")},
+            controls={key: getattr(settings.controls, key) for key in ("baseline_duration_s", "preliminary_duration_s", "pump_blocked_averages")})
+    else:
+        # Stationary controls have no transient aperture or frame phase. Their
+        # detector filtering and native support still must match/be adequate.
+        signature["response"].pop("integration_aperture_s", None)
+        signature["timing"] = {key: value for key, value in signature["timing"].items()
+            if key in ("probe_rate_hz", "probe_width_ns", "reference_width_ns", "probe_delay_ns")}
+    return signature
+
+
+acquisition_compatibility = acquisition_signature
+
+
 def build_plan(settings: StroboscopySettings | Mapping[str, Any],
                capabilities: InstalledCapabilities | Mapping[str, Any] | None = None,
-               qualification: Qualification | Mapping[str, Any] | None = None) -> StroboscopyPlan:
+               qualification: Qualification | Mapping[str, Any] | None = None, *, kind: str = "run") -> StroboscopyPlan:
     """Return an inspectable plan even when live readiness is unavailable."""
     if not isinstance(settings, StroboscopySettings):
         settings = StroboscopySettings.from_dict(settings)
-    s, r, t = settings, settings.response, settings.timing
     cap, qual = _payload(capabilities), _payload(qualification)
     issues: list[ReadinessIssue] = []
     def issue(code: str, message: str, severity: str = "error") -> None:
         issues.append(ReadinessIssue(code, message, severity))
+    try:
+        settings = resolve_settings(settings, cap)
+    except (ValueError, TypeError, OverflowError) as exc:
+        issue("dependent_settings", str(exc))
+    s, r, t = settings, settings.response, settings.timing
+    if kind not in ("run", "blank", "preliminary"):
+        issue("operation_kind", "Operation kind must be run, blank or preliminary")
+    if kind == "blank" and s.mode == "dual":
+        issue("dual_blank", "Dual mode records its reference simultaneously; a separate full blank operation is not supported")
     if s.experiment_id != EXPERIMENT_ID or s.settings_version != SETTINGS_VERSION:
         issue("settings_identity", "Plan experiment/schema is incompatible with microsecond_stroboscopy v1")
     if s.mode not in ("single", "dual"):
         issue("detector_mode", "Detector mode must be single or dual")
     profile = CONDITION_PROFILES.get(s.condition_profile_id)
-    if not profile:
-        issue("condition_profile", "Unsupported condition profile; use RT-Mb-R-K or 77K-Mb-G-F")
     if s.execution_mode not in ("simulation", "hardware"):
         issue("execution_mode", "Execution mode must be simulation or hardware")
     if s.delay_order not in ("ascending", "descending", "alternating"):
         issue("delay_order", "Delay order must be ascending, descending or alternating")
     if not _integer(s.averages, 1):
-        issue("averages", "Averages must be a positive integer justified by preliminary SNR")
+        issue("averages", "Averages must be a positive integer")
+    if not _number(s.event_spacing_s, minimum=.1):
+        issue("event_spacing", "Requested event spacing must be finite and at least 100 ms for the installed 10 Hz pump limit")
     if not s.spectral_points or len(s.spectral_points) > 100_000:
         issue("spectral_points", "Declare between 1 and 100000 measured band/off-band spectral points")
     if any(not _number(p.wavenumber_cm1, minimum=0, strict=True) or p.role not in ("band", "off_band") for p in s.spectral_points):
@@ -282,40 +423,16 @@ def build_plan(settings: StroboscopySettings | Mapping[str, Any],
         value = getattr(s.budget, item.name)
         if not _number(value, minimum=0, strict=("bytes_per" in item.name or "maximum_" in item.name)):
             issue("budget_" + item.name, f"Budget {item.name} is invalid")
-    if not all((s.identity.sample_id, s.identity.preparation_id, s.identity.cell_id,
-                s.identity.position_id, s.identity.condition_id)):
-        issue("sample_identity", "Record sample, preparation, cell, position and condition identities", "blocker")
-    if s.identity.measured_temperature_k is not None and not _number(s.identity.measured_temperature_k, minimum=0, strict=True):
-        issue("temperature", "Measured temperature must be positive finite kelvin")
-    if s.identity.temperature_uncertainty_k is not None and not _number(s.identity.temperature_uncertainty_k, minimum=0):
-        issue("temperature_uncertainty", "Temperature uncertainty must be finite nonnegative kelvin")
-    if not qual:
-        issue("promoted_profile", "No applicable promoted instrument profile loaded; values remain EXAMPLE ONLY/offline", "blocker")
-    else:
-        _check_qualification(s, qual, issue)
+    # Historical condition, identity, calibration and review metadata never gate
+    # ordinary native/relative acquisition. Actual instrument validation remains.
     if not cap or not cap.get("verified", False):
-        issue("installed_readbacks", "Connected sample/reference/timing configuration and aggregate-rate readbacks have not been verified", "blocker")
+        issue("installed_readbacks", "Actual installed response/rate readbacks will be checked when devices are configured", "warning")
     elif numeric_values_safe(r):
         _check_capabilities(s, cap, issue)
-    if not s.identity.sample_selection_id:
-        issue("measured_spectral_selection", "Load accepted measured spectral windows for this sample/condition; nominal centers are examples", "blocker")
-    if s.controls.require_dark and not s.controls.dark_record_id:
-        issue("dark_control", "Applicable detector dark/control record is required", "blocker")
-    if not s.controls.artifact_record_ids:
-        issue("artifact_controls", "Applicable pump-only, cell/matrix and timing-artifact control records remain unverified", "blocker")
-    if not s.reset.equivalent_state_verified and not qual.get("reset_equivalence_id"):
-        issue("reset_equivalence", "Repeated events require measured equivalent-state reset; waiting alone is insufficient", "blocker")
-    if s.reset.method != "passive_recovery":
-        issue("manual_reset", "Selected reset needs a physical action between events; automatic thermal/position/replacement control is unavailable", "blocker")
-    if s.condition_profile_id == "77K-Mb-G-F":
-        if not (s.identity.temperature_record_id and s.identity.measured_temperature_k is not None
-                and s.identity.temperature_uncertainty_k is not None):
-            issue("cryogenic_temperature", "77K-Mb-G-F requires measured illuminated-sample temperature with uncertainty and record identity", "blocker")
-        if not s.identity.matrix_id or not s.identity.thermal_history_id:
-            issue("cryogenic_preparation", "Record cryogenic matrix qualification and thermal history", "blocker")
-        issue("cryogenic_disposition", "If reset fails, stop repeated events and retain an unresolvable/unrecovered disposition; do not impose full recovery", "warning")
-    if not r.qualified and not qual.get("response_calibration_id"):
-        issue("response_qualification", "HF2LI/filter, detector and integration response is unqualified; no resolved optical lifetime claim", "blocker")
+    if not r.qualified:
+        issue("response_qualification", "Optical response is not calibrated; preserve raw/relative observations without a resolved optical-lifetime claim", "warning")
+    if not qual.get("timing", {}).get("optical_latency_calibration_id"):
+        issue("optical_time_zero", "Delay is referenced to observed electrical timing; sample-plane optical arrival is not independently established", "warning")
     if s.mode == "dual" and not s.controls.background_record_id:
         issue("absolute_background", "No measured path-balance B: expose S/R and ΔA from Q/Q0, not absolute transmission/absorbance", "warning")
     if len([p for p in s.spectral_points if p.role == "band"]) < 3:
@@ -348,7 +465,7 @@ def build_plan(settings: StroboscopySettings | Mapping[str, Any],
             "actual": cap.get("actual_values", {}).get("timing.probe_rate_hz"), "basis": "T660 0.02 Hz DDS quantization"}
         values["timing.event_interval_s"] = {"requested": t.event_interval_s, "selected": first_program.frame_period_s,
             "actual": None, "basis": "integer predivider rounded upward; no optical cadence inferred"}
-        blocks = _make_blocks(s, programs)
+        blocks = _make_blocks(s, programs, kind=kind)
         elapsed, last_pump = 0.0, None
         for block in blocks:
             if block.expected_pump_events and block.timing_program:
@@ -358,7 +475,7 @@ def build_plan(settings: StroboscopySettings | Mapping[str, Any],
                     break
                 last_pump = pump_time
             elapsed += block.capture_duration_s + block.recovery_wait_s + block.reset_verification_s
-    budget = _budget(s, blocks)
+    budget = _budget(s, blocks, kind=kind)
     if blocks and budget.memory_bytes > s.budget.maximum_memory_bytes:
         issue("memory_budget", f"Declared native capture needs {budget.memory_bytes} bytes; exceeds selected memory budget")
     if blocks and budget.storage_bytes > s.budget.maximum_storage_bytes:
@@ -368,59 +485,9 @@ def build_plan(settings: StroboscopySettings | Mapping[str, Any],
 
 
 def _check_qualification(s: StroboscopySettings, q: Mapping[str, Any], issue: Any) -> None:
-    if q.get("experiment_id") != EXPERIMENT_ID:
-        issue("qualification_experiment", "Promoted profile has missing/incompatible experiment identity", "blocker")
-    modes = q.get("modes", [q.get("mode")])
-    conditions = q.get("condition_profile_ids", [q.get("condition_profile_id")])
-    if s.mode not in modes:
-        issue("qualification_mode", f"Promoted profile does not qualify detector mode {s.mode}", "blocker")
-    if s.condition_profile_id not in conditions:
-        issue("qualification_condition", f"Promoted profile does not qualify condition {s.condition_profile_id}", "blocker")
-    for field_name, message in (("profile_id", "Promoted operating profile needs a stable profile ID"),
-                                ("wiring_id", "Installed detector tee/receiver and timing topology requires qualification"),
-                                ("reset_equivalence_id", "Repeated biological events require measured reset-equivalence qualification"),
-                                ("response_calibration_id", "Measured HF2LI/detector response calibration is required")):
-        if not q.get(field_name):
-            issue(field_name, message, "blocker")
-    timing = q.get("timing", {})
-    if not timing.get("optical_latency_calibration_id") or not _number(timing.get("variable_sync_to_pump_s")):
-        issue("optical_time_zero", "Variable Sync electrical marker needs applicable sample-plane optical latency calibration; programmed edges are not optical arrival", "blocker")
-    if not q.get("hf2li", {}).get("signal_inputs") or not q.get("hf2li", {}).get("pll"):
-        issue("hf2_input_reference", "Promoted profile must qualify receiver loading/ranges and external reference lock settings", "blocker")
-    if not q.get("hf2li", {}).get("integrity_nodes"):
-        issue("integrity_nodes", "Qualified overload/clock integrity nodes are required for acquisition checks", "blocker")
-    hf2 = q.get("hf2li", {})
-    phases = hf2.get("phase_shift_deg", {})
-    phase_indices = (0, 3) if s.mode == "dual" else (0,)
-    if not hf2.get("signed_x_calibration_id") or any(not _number(phases.get(str(i), phases.get(i))) for i in phase_indices):
-        issue("signed_x_phase", "Each spectral detector needs a calibrated HF2 signed-X phase and signed_x_calibration_id", "blocker")
-    clock_readbacks = q.get("timing_clock_readbacks", {})
-    if any(not isinstance(clock_readbacks.get(name), Mapping) or not clock_readbacks[name]
-           for name in ("t660_1", "t660_2")):
-        issue("timing_clock_qualification", "Both T660 clock modes/lock states require qualified firmware readback expectations", "blocker")
-    if s.controls.require_dark:
-        dark = q.get("normalization", {}).get("dark_offsets", {})
-        for role in ("sample", "reference") if s.mode == "dual" else ("sample",):
-            entry = dark.get(role, {})
-            if not isinstance(entry, Mapping):
-                entry = {}
-            if not entry.get("record_id") or entry.get("record_id") != s.controls.dark_record_id:
-                issue("dark_record_" + role, f"Applicable measured {role} dark offset record must match selected dark control", "blocker")
-            if not _number(entry.get("offset")):
-                issue("dark_offset_" + role, f"Measured {role} dark offset is missing or nonfinite", "blocker")
-            if not _number(entry.get("standard_error"), minimum=0):
-                issue("dark_uncertainty_" + role, f"Measured {role} dark uncertainty is missing or invalid", "blocker")
-    for name in ("tune_tolerance_cm1", "settle_s", "tune_timeout_s"):
-        if not _number(q.get(name), minimum=0, strict=name != "settle_s"):
-            issue(name, f"Promoted profile must provide applicable {name}", "blocker")
-    qualified_values = q.get("valid_ranges", {})
-    for section in ("timing", "response"):
-        requested = asdict(getattr(s, section))
-        for key, bounds in qualified_values.get(section, {}).items():
-            if key in requested and isinstance(bounds, (tuple, list)) and len(bounds) == 2:
-                value = requested[key]
-                if _number(value) and not bounds[0] <= value <= bounds[1]:
-                    issue("outside_qualification_" + key, f"Manual {section}.{key}={value} is outside this profile's qualified range {bounds}; retain override but qualify before hardware use", "blocker")
+    """Historical profile metadata is informational, never an acquisition gate."""
+    if q.get("experiment_id") not in (None, EXPERIMENT_ID):
+        issue("historical_profile", "Retained profile belongs to a different historical experiment; no operating values were applied", "warning")
 
 
 def numeric_values_safe(response: Any) -> bool:
@@ -454,24 +521,24 @@ def _check_capabilities(s: StroboscopySettings, caps: Mapping[str, Any], issue: 
                         actual.get("response." + rate_field))
             if all(_close_to_any(selected, (readback,)) for selected, readback in zip((order, tc, rate), observed)):
                 continue
-            issue("capability_menu_" + role, f"Connected {role} order, time-constant and rate readback menus are incomplete, and exact selected-setting readbacks are unavailable", "blocker")
+            issue("capability_menu_" + role, f"Connected {role} order, time-constant and rate readback menus are incomplete, and exact selected-setting readbacks are unavailable", "error")
             continue
         if order not in orders:
             issue("unsupported_order_" + role, f"Requested {role} HF2 order {order} was not accepted by installed-device capability discovery")
         constants = profile.get("timeconstants_by_order", {})
         menu = constants.get(order, constants.get(str(order), ()))
         if not _close_to_any(tc, menu) and not _close_to_any(tc, (actual.get("response." + tc_field),)):
-            issue("manual_tc_" + role, f"Requested {role} time constant {tc:g} s lacks an accepted idempotent readback for order {order}; choose a supported value or explicitly validate the manual override", "blocker")
+            issue("manual_tc_" + role, f"Requested {role} time constant {tc:g} s lacks an accepted idempotent readback for order {order}; choose a supported value or explicitly validate the manual override", "error")
         if not _close_to_any(rate, profile["rates_sps"]) and not _close_to_any(rate, (actual.get("response." + rate_field),)):
-            issue("manual_rate_" + role, f"Requested {role} rate {rate:g} Sa/s is not an installed readback value; choose a supported actual rate (do not relabel its quantization)", "blocker")
+            issue("manual_rate_" + role, f"Requested {role} rate {rate:g} Sa/s is not an installed readback value; choose a supported actual rate (do not relabel its quantization)", "error")
     timing = caps.get("timing_rate_sps")
     if not _number(timing, minimum=0, strict=True):
-        issue("timing_rate_capability", "Connected timing-stream rate readback is unavailable", "blocker")
+        issue("timing_rate_capability", "Connected timing-stream rate readback is unavailable", "error")
     elif not math.isclose(r.timing_rate_sps, timing, rel_tol=1e-9, abs_tol=1e-9):
-        issue("timing_rate_selection", f"Requested timing rate {r.timing_rate_sps:g} differs from connected {timing:g} Sa/s; use the actual selected value", "blocker")
+        issue("timing_rate_selection", f"Requested timing rate {r.timing_rate_sps:g} differs from connected {timing:g} Sa/s; use the actual selected value", "error")
     expected = (0, 2, 3) if s.mode == "dual" else (0, 2)
     if tuple(sorted(caps.get("enabled_streams", ()))) != expected:
-        issue("active_streams", f"Connected active streams must be {expected}; aggregate bandwidth with additional streams is unverified", "blocker")
+        issue("active_streams", f"Connected active streams must be {expected}; aggregate bandwidth with additional streams is unverified", "error")
     maximum = caps.get("aggregate_rate_limit_sps", 700_000.)
     total = r.sample_rate_sps + r.timing_rate_sps + (r.reference_rate_sps if s.mode == "dual" else 0)
     if not _number(maximum, minimum=0, strict=True) or total > min(maximum, 700_000.):
@@ -535,6 +602,14 @@ def capabilities_from_readbacks(settings: StroboscopySettings,
     def node(index: int, name: str) -> Any:
         return nodes.get(f"/{device_id}/demods/{index}/{name}", {}).get("value")
     actual = {}
+    # The adapter retains the timing actually selected/configured during prepare.
+    # Carry it through the HF-only connected replan so Auto does not revert to a
+    # provisional nominal clock after that clock was configured differently.
+    configured_timing = readbacks.get("actual_settings", {}).get("timing", {})
+    for field_name in asdict(settings.timing):
+        value = configured_timing.get(field_name)
+        if value is not None:
+            actual["timing." + field_name] = value
     for field_name, index, suffix in (("hf2_order", 0, "order"), ("hf2_time_constant_s", 0, "timeconstant"),
         ("sample_rate_sps", 0, "rate"), ("reference_order", 3, "order"),
         ("reference_time_constant_s", 3, "timeconstant"), ("reference_rate_sps", 3, "rate"),
@@ -575,7 +650,7 @@ def _science_warnings(s: StroboscopySettings, issue: Any) -> None:
     issue("recovery_not_assumed", "Final sampled delay does not demonstrate recovery by itself; observed pre/post-state and reset criteria decide acceptance", "warning")
 
 
-def _make_blocks(s: StroboscopySettings, programs: Mapping[tuple[float, bool], TimingProgram]) -> list[AcquisitionBlock]:
+def _make_blocks(s: StroboscopySettings, programs: Mapping[tuple[float, bool], TimingProgram], *, kind: str = "run") -> list[AcquisitionBlock]:
     result: list[AcquisitionBlock] = []
     pump_index = 0
     def append(wi: int, kind: str, *, duration: float = 0, delay_index: int | None = None,
@@ -588,19 +663,22 @@ def _make_blocks(s: StroboscopySettings, programs: Mapping[tuple[float, bool], T
             point.wavenumber_cm1, point.label, point.role, delay_index, delay, average_index,
             pump_index if pumped else None, int(pumped), program.duration_s if program else duration,
             s.reset.recovery_wait_s if pumped else 0, s.reset.verification_duration_s if pumped else 0,
-            program.physical_frame_count if program else 0, program, pumped))
+            program.physical_frame_count if program else 0, program, False))
         pump_index += int(pumped)
-    # Complete sequential blank, then preliminary with explicit user review,
-    # then pump work. No implied physical sample swapping inside a wavelength.
-    if s.mode == "single":
+    # Optional blank/preliminary operations are budgeted when explicitly chosen.
+    # Normal Sample/Start covers only its own acquisition, without review gates.
+    if kind == "blank":
         for wi in range(len(s.spectral_points)):
             append(wi, "sequential_blank", duration=s.controls.baseline_duration_s)
             for average in range(s.averages):
                 for di in range(len(s.delays_us)):
                     append(wi, "blank_control", delay_index=di, average_index=average,
                            program=programs[s.delays_us[di], False])
-    for wi in range(len(s.spectral_points)):
-        append(wi, "preliminary", duration=s.controls.preliminary_duration_s)
+        return result
+    if kind == "preliminary":
+        for wi in range(len(s.spectral_points)):
+            append(wi, "preliminary", duration=s.controls.preliminary_duration_s)
+        return result
     for wi in range(len(s.spectral_points)):
         append(wi, "baseline", duration=s.controls.baseline_duration_s)
         order = sorted(range(len(s.delays_us)), key=lambda i: s.delays_us[i], reverse=s.delay_order == "descending")
@@ -620,13 +698,18 @@ def _make_blocks(s: StroboscopySettings, programs: Mapping[tuple[float, bool], T
     return result
 
 
-def _budget(s: StroboscopySettings, blocks: list[AcquisitionBlock]) -> DurationBudget:
+def _budget(s: StroboscopySettings, blocks: list[AcquisitionBlock], *, kind: str = "run") -> DurationBudget:
     if not blocks:
         return DurationBudget()
     b, r = s.budget, s.response
     sum_kind = lambda kind: sum(block.capture_duration_s for block in blocks if block.kind == kind)
-    guard_s = sum(block.physical_frame_count > 0 for block in blocks) * b.acquisition_guard_s_per_block
-    total_capture = sum(block.capture_duration_s + block.reset_verification_s for block in blocks) + guard_s
+    frame_blocks = sum(block.physical_frame_count > 0 for block in blocks)
+    observations = sum(block.physical_frame_count == 0 for block in blocks) + sum(block.reset_verification_s > 0 for block in blocks)
+    guard_s = frame_blocks * b.acquisition_guard_s_per_block
+    # HF2 subscription begins before the four arm/enable commands. The final
+    # status query and bounded polling overrun also arrive in retained polls.
+    # Count these native samples without double-counting their wall time.
+    total_capture = sum(block.capture_duration_s + block.reset_verification_s for block in blocks) + guard_s + frame_blocks*b.native_protocol_seconds_per_block
     rate = r.sample_rate_sps + r.timing_rate_sps + (r.reference_rate_sps if s.mode == "dual" else 0)
     samples = math.ceil(total_capture * rate)
     # Arrays + raw immutable preservation plus indexing/metadata allowance.
@@ -635,21 +718,20 @@ def _budget(s: StroboscopySettings, blocks: list[AcquisitionBlock]) -> DurationB
     # cannot budget only the largest block as if completed blocks were unloaded.
     memory = math.ceil(samples * b.bytes_per_native_sample * 2.5)
     frame_count = sum(block.physical_frame_count for block in blocks)
-    open_actions = ["Operator preliminary review and explicit Start have no fixed duration"]
-    if s.mode == "single":
-        open_actions.append("Load/replace complete compatible blank and sample; no installed automatic sample changer")
-    if s.reset.method != "passive_recovery":
-        open_actions.append("Physical reset and measured equivalence before each event have no fixed duration")
+    open_actions = []
+    if kind == "blank":
+        open_actions.append("Loading the optional blank is a physical action with no fixed duration")
     seconds = dict(configuration_s=b.configuration_estimate_s,
-        tuning_s=len(s.spectral_points) * b.tuning_estimate_s_per_wavenumber * (3 if s.mode == "single" else 2),
-        detector_settling_s=len(s.spectral_points) * b.detector_settling_s_per_wavenumber * (3 if s.mode == "single" else 2),
+        tuning_s=len(s.spectral_points) * b.tuning_estimate_s_per_wavenumber,
+        detector_settling_s=len(s.spectral_points) * b.detector_settling_s_per_wavenumber,
         sequential_blank_s=sum_kind("sequential_blank") + sum_kind("blank_control"), preliminary_s=sum_kind("preliminary"),
         baseline_s=sum_kind("baseline"), pump_blocked_s=sum_kind("pump_blocked"),
         pumped_capture_s=sum_kind("pumped"), recovery_s=sum(block.recovery_wait_s for block in blocks),
         reset_verification_s=sum(block.reset_verification_s for block in blocks),
         post_run_verification_s=sum_kind("post_run"), acquisition_guard_s=guard_s,
-        upload_s=frame_count * b.upload_seconds_per_frame,
-        retrieval_s=storage / b.retrieval_bytes_per_second, restoration_s=b.restoration_estimate_s * (3 if s.mode == "single" else 2),
+        protocol_s=frame_blocks*b.capture_protocol_seconds_per_block + observations*b.observation_protocol_seconds_per_block,
+        upload_s=frame_blocks*b.upload_fixed_seconds_per_block + frame_count*b.upload_seconds_per_frame,
+        retrieval_s=storage / b.retrieval_bytes_per_second, restoration_s=b.restoration_estimate_s,
         saving_s=storage / b.save_bytes_per_second, analysis_s=b.analysis_estimate_s,
         physical_actions_s=s.controls.physical_action_allowance_s)
     return DurationBudget(**seconds, event_count=sum(block.expected_pump_events for block in blocks),
@@ -669,10 +751,6 @@ def apply_qualified_recommendations(settings: StroboscopySettings, qualification
     then appears as a readiness item).
     """
     q = _payload(qualification)
-    mismatches: list[str] = []
-    _check_qualification(settings, q, lambda _c, message, _s="blocker": mismatches.append(message))
-    if mismatches:
-        raise ValueError("; ".join(mismatches))
     data = settings.to_dict()
     recommendations = q.get("operating_settings", {})
     for section, values in recommendations.items():
@@ -683,8 +761,8 @@ def apply_qualified_recommendations(settings: StroboscopySettings, qualification
                 if name not in data[section]:
                     raise ValueError(f"Unknown qualified setting {section}.{name}")
                 data[section][name] = value
-    data["operating_basis"] = f"Applicable promoted profile {q['profile_id']}; explicit manual overrides retained"
-    _retain_selections(settings, data, basis=f"Explicit recommended setting from applicable profile {q['profile_id']}")
+    data["operating_basis"] = f"Applicable promoted profile {q.get('profile_id', 'historical settings')}; explicit manual overrides retained"
+    _retain_selections(settings, data, basis=f"Explicit recommended setting from applicable profile {q.get('profile_id', 'historical settings')}")
     return StroboscopySettings.from_dict(data)
 
 

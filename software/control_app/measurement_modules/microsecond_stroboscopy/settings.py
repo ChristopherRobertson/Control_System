@@ -1,7 +1,8 @@
 """Pure, explicitly unit-bearing inputs for microsecond stroboscopy.
 
-The bundled values are EXAMPLE ONLY, useful for planning and simulation.  Neither
-constructing settings nor accepting a sample spectrum qualifies an instrument.
+Routine operation uses installed devices. Automatic choices are provisional
+until actual device readbacks are available; they never establish optical
+resolution. Historical condition/sample records are optional metadata.
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ class ConditionProfile:
     architecture_id: str
     title: str
     nominal_temperature_k: float | None
-    reset_equivalence_required: bool = True
+    reset_equivalence_required: bool = False
     branch: str = "microsecond"
 
 
@@ -46,11 +47,11 @@ class SettingSelection:
 
 @dataclass(frozen=True)
 class SampleIdentity:
-    sample_id: str = "EXAMPLE-SAMPLE"
-    preparation_id: str = "EXAMPLE-PREPARATION"
-    cell_id: str = "EXAMPLE-CELL"
-    position_id: str = "EXAMPLE-POSITION"
-    condition_id: str = "EXAMPLE-CONDITION"
+    sample_id: str = ""
+    preparation_id: str = ""
+    cell_id: str = ""
+    position_id: str = ""
+    condition_id: str = ""
     temperature_record_id: str = ""
     measured_temperature_k: float | None = None
     temperature_uncertainty_k: float | None = None
@@ -132,7 +133,7 @@ class ControlSettings:
     blank_record_id: str = ""
     background_record_id: str = ""
     physical_action_allowance_s: float = 0.0
-    require_dark: bool = True
+    require_dark: bool = False  # Historical preference; raw acquisition does not require a dark record.
 
 
 @dataclass(frozen=True)
@@ -140,30 +141,36 @@ class BudgetSettings:
     tuning_estimate_s_per_wavenumber: float = 2.0
     detector_settling_s_per_wavenumber: float = 0.05
     configuration_estimate_s: float = 3.0
+    upload_fixed_seconds_per_block: float = 1.32  # 33 fixed T660 command lines at 40 ms each
     upload_seconds_per_frame: float = 0.08
     acquisition_guard_s_per_block: float = 0.04  # retained 20 ms pre-subscribe + 20 ms final drain
+    capture_protocol_seconds_per_block: float = 0.40  # inhibit, arm, enable, status, shots, inhibit/stop
+    observation_protocol_seconds_per_block: float = 0.08  # two inhibited-clock commands before streaming
+    native_protocol_seconds_per_block: float = 0.26  # subscribed arm/enable plus status/poll overrun allowance
     retrieval_bytes_per_second: float = 2_000_000.0
     restoration_estimate_s: float = 3.0
     save_bytes_per_second: float = 20_000_000.0
     analysis_estimate_s: float = 2.0
     bytes_per_native_sample: int = 96  # retained raw polls plus assembled native streams
-    maximum_memory_bytes: int = 2 * 1024**3
+    maximum_memory_bytes: int = 8 * 1024**3  # declared retention limit, not an assertion of available RAM
     maximum_storage_bytes: int = 20 * 1024**3
 
 
 @dataclass(frozen=True)
 class StroboscopySettings:
     mode: str = "single"
-    condition_profile_id: str = "RT-Mb-R-K"
+    condition_profile_id: str = ""  # Optional historical metadata, never an operating mode.
     spectral_points: tuple[SpectralPoint, ...] = field(default_factory=lambda: (
-        SpectralPoint(1940.0, "EXAMPLE lower off-band", "off_band"),
-        SpectralPoint(1944.0, "EXAMPLE local band"),
-        SpectralPoint(1945.0, "EXAMPLE local band"),
-        SpectralPoint(1946.0, "EXAMPLE local band"),
-        SpectralPoint(1950.0, "EXAMPLE upper off-band", "off_band"),
+        SpectralPoint(1940.0, "Lower off-band", "off_band"),
+        SpectralPoint(1944.0, "Local band"),
+        SpectralPoint(1945.0, "Local band"),
+        SpectralPoint(1946.0, "Local band"),
+        SpectralPoint(1950.0, "Upper off-band", "off_band"),
     ))
     delays_us: tuple[float, ...] = (-100.0, 0.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0)
     averages: int = 2
+    event_spacing_s: float = 1.0
+    manual_overrides: tuple[str, ...] = ()
     response: ResponseSettings = field(default_factory=ResponseSettings)
     timing: TimingSettings = field(default_factory=TimingSettings)
     identity: SampleIdentity = field(default_factory=SampleIdentity)
@@ -171,8 +178,8 @@ class StroboscopySettings:
     controls: ControlSettings = field(default_factory=ControlSettings)
     budget: BudgetSettings = field(default_factory=BudgetSettings)
     delay_order: str = "alternating"  # ascending, descending, alternating
-    execution_mode: str = "simulation"
-    operating_basis: str = "EXAMPLE ONLY — offline planning; no promoted operating settings"
+    execution_mode: str = "hardware"  # Simulation is an explicit developer injection, never a normal UI mode.
+    operating_basis: str = "Automatic installed-device settings; actual readbacks retained; optical response not assumed"
     promoted_bundle_ids: tuple[str, ...] = ()
     calibration_ids: tuple[str, ...] = ()
     value_selections: tuple[SettingSelection, ...] = ()
@@ -184,12 +191,12 @@ class StroboscopySettings:
         return f"{EXPERIMENT_ID}:{self.mode}"
 
     @property
-    def condition_profile(self) -> ConditionProfile:
-        return CONDITION_PROFILES[self.condition_profile_id]
+    def condition_profile(self) -> ConditionProfile | None:
+        return CONDITION_PROFILES.get(self.condition_profile_id)
 
     @property
     def architecture_id(self) -> str:
-        return self.condition_profile.architecture_id
+        return self.condition_profile.architecture_id if self.condition_profile else ""
 
     def to_dict(self) -> dict[str, Any]:
         # JSON-compatible lists, detached on every call, no mutable sessions.
@@ -217,7 +224,7 @@ class StroboscopySettings:
         if "value_selections" in data:
             data["value_selections"] = tuple(p if isinstance(p, SettingSelection) else SettingSelection(**p)
                                               for p in data["value_selections"])
-        for name in ("delays_us", "promoted_bundle_ids", "calibration_ids"):
+        for name in ("delays_us", "promoted_bundle_ids", "calibration_ids", "manual_overrides"):
             if name in data:
                 data[name] = tuple(data[name])
         return cls(**data)

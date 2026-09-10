@@ -1,7 +1,7 @@
 """Owned, stationary-wavenumber acquisition using the installed device services.
 
 HF2LI poll timestamps are retained in their original clock domain. DIO17 is an
-electrical Variable Sync observation; a promoted latency calibration can locate
+electrical Variable Sync observation; an optional latency calibration can locate
 an estimated sample pump arrival, but never turns it into an optical observation.
 No host timer schedules an optical edge and no biological event is retried.
 """
@@ -100,6 +100,9 @@ class InstalledAcquirer:
         self.context, self.operation = context, operation
         self.settings, self.profile = data(settings), deepcopy(profile)
         self.profile.update(self.profile.get("timing", {}))
+        # A historical checkbox is not a measured response calibration.
+        self.settings["response"]["qualified"]=False
+        self.settings["response"]["qualification_id"]=""
         self.cancel, self.progress = cancel, progress
         self.devices, self.original, self.readbacks = {}, {}, {}
         self.log = StringIO()
@@ -190,8 +193,6 @@ class InstalledAcquirer:
             if serial and str(serial) not in [part.strip() for part in identity.split(",")]:
                 raise AcquisitionIntegrityError(f"Unexpected {name} identity: {identity}")
             self._snapshot_timer(unit)
-            for field, expected in self.profile.get("timing_clock_readbacks",{}).get(name,{}).items():
-                _equal(str(expected),_response(self.original[name]["readback"]["queries"],field),name+" "+field)
             unit.set_trigger_source("OFF")
             unit.command("STOP", expect_response=False)
             for channel in "ABCD":
@@ -212,6 +213,7 @@ class InstalledAcquirer:
 
         laser = self._create("mircat")
         laser.initialize()
+        self.check()
         self.original["mircat"] = {"state": data(laser.read_state()),
             "trigger": laser.get_wavelength_trigger_params(), "qcls": []}
         laser.stop_scan_if_needed()
@@ -228,22 +230,21 @@ class InstalledAcquirer:
         hf.connect()
         from control_app.devices.hf2li_service import HF2LIPreset
         self.preset = HF2LIPreset("microsecond-stroboscopy-owned-snapshot", {
-            "demodulators": [{"index": i} for i in range(6)]})
+            "demodulators": [{"index": i,"sinc":False,"phaseshift":0.} for i in range(6)]})
         original = hf.export_settings_snapshot(preset=self.preset)
         if original.get("read_errors"):
             raise AcquisitionIntegrityError(f"Cannot preserve HF2LI settings: {original['read_errors']}")
         self.original["hf2li"] = original
-        config = deepcopy(self.profile["hf2li"])
+        config = self._hf_configuration(original,program)
         phases = config.get("phase_shift_deg",{})
         for index in (0,3) if self.settings["mode"]=="dual" else (0,):
             path = f"/{hf.device_id}/demods/{index}/phaseshift"
             original["nodes"][path] = {"type":"double","value":hf._get_node("double",path)}
             phase = phases.get(str(index),phases.get(index))
-            if phase is None:
-                raise AcquisitionIntegrityError(f"Qualified signed-X phase is missing for demodulator {index}")
-            hf._set_node("setDouble",path,phase)
-            hf.sync()
-            _equal(phase,hf._get_node("double",path),"HF2LI signed-X phase")
+            if phase is not None:
+                hf._set_node("setDouble",path,phase)
+                hf.sync()
+                _equal(phase,hf._get_node("double",path),"HF2LI selected phase")
         response = self.settings["response"]
         demods = []
         active = {0, 2, 3} if self.settings["mode"] == "dual" else {0, 2}
@@ -252,12 +253,13 @@ class InstalledAcquirer:
             if index in active:
                 role = "reference" if index == 3 else "sample"
                 demod.update(adcselect=1 if index == 3 else 0, oscselect=0, harmonic=1,
+                    sinc=False,
                     order=response["reference_order"] if index == 3 else response["hf2_order"],
                     timeconstant_s=response["reference_time_constant_s"] if index == 3 else response["hf2_time_constant_s"],
                     rate_sps=response["timing_rate_sps"] if index == 2 else response[role+"_rate_sps"])
             demods.append(demod)
         config["demodulators"] = demods
-        hf.apply_preset(HF2LIPreset("microsecond-stroboscopy-qualified", config))
+        hf.apply_preset(HF2LIPreset("microsecond-stroboscopy-installed", config))
         actual = hf.export_settings_snapshot(preset=self.preset)
         for path in original["nodes"]:
             if path.endswith("/phaseshift"):
@@ -266,12 +268,19 @@ class InstalledAcquirer:
             raise AcquisitionIntegrityError("HF2LI configuration readback failed")
         for entry in demods:
             for key, node in (("enable", "enable"), ("adcselect", "adcselect"), ("oscselect", "oscselect"),
-                ("order", "order"), ("harmonic", "harmonic"), ("trigger", "trigger"),
+                ("order", "order"), ("harmonic", "harmonic"), ("trigger", "trigger"), ("sinc","sinc"),
                 ("timeconstant_s", "timeconstant"), ("rate_sps", "rate")):
                 if key in entry:
                     selected = int(entry[key]) if key == "enable" else entry[key]
                     item = actual.get("nodes", {}).get(f"/{hf.device_id}/demods/{entry['index']}/{node}", {})
-                    _equal(selected, item.get("value"), f"HF2LI demod {entry['index']} {node}")
+                    value=item.get("value")
+                    if key in ("timeconstant_s","rate_sps","order") and entry["enable"]:
+                        if not isinstance(value,(int,float)) or not math.isfinite(value) or value<=0:
+                            raise AcquisitionIntegrityError(f"Invalid actual HF2LI demod {entry['index']} {node}: {value!r}")
+                        if key=="order" and (int(value)!=value or not 1<=value<=8):
+                            raise AcquisitionIntegrityError("HF2LI actual filter order is outside supported bounds")
+                    else:
+                        _equal(selected,value,f"HF2LI demod {entry['index']} {node}")
         for entry in config.get("signal_inputs", {}).values():
             for key, node in (("ac", "ac"), ("impedance_50ohm", "imp50"), ("differential", "diff"), ("range_v", "range")):
                 if key in entry:
@@ -283,9 +292,48 @@ class InstalledAcquirer:
         self.readbacks["hf2li"] = actual
         self.readbacks["hf2li_device"] = hf.device_id
         self.readbacks["signed_x_calibration_id"] = config.get("signed_x_calibration_id")
+        self.readbacks["hf2li_requested"]=deepcopy(config)
+        response_fields={0:{"order":"hf2_order","timeconstant":"hf2_time_constant_s","rate":"sample_rate_sps"},
+                         3:{"order":"reference_order","timeconstant":"reference_time_constant_s","rate":"reference_rate_sps"},
+                         2:{"rate":"timing_rate_sps"}}
+        for index,fields in response_fields.items():
+            if index not in active:
+                continue
+            for node,field in fields.items():
+                self.settings["response"][field]=actual["nodes"][f"/{hf.device_id}/demods/{index}/{node}"]["value"]
+        self.settings["timing"]["probe_rate_hz"]=program.input_frequency_hz
+        self.readbacks["actual_settings"]=deepcopy(self.settings)
+        self._wait_for(lambda:math.isclose(hf.get_oscillator_frequency(0),program.input_frequency_hz,rel_tol=.001),
+                       10.,"HF2LI did not follow the active DIO0 reference")
         self._input_integrity()
         self.check()
         return self.readbacks
+
+    def _hf_configuration(self, snapshot, program):
+        """Preserve installed receiver settings; configure the wired DIO0 PLL."""
+        hf=self.devices["hf2li"]
+        config=deepcopy(self.profile.get("hf2li",{}))
+        nodes=snapshot["nodes"]
+        def observed(path):
+            if path not in nodes:
+                raise AcquisitionIntegrityError(f"Required connected configuration readback missing: {path}")
+            return nodes[path]["value"]
+        if not config.get("signal_inputs"):
+            config["signal_inputs"]={}
+            for index,role in ((0,"sample"),(1,"reference")):
+                config["signal_inputs"][role]={"index":index,
+                    **{key:observed(f"/{hf.device_id}/sigins/{index}/{node}") for key,node in
+                       (("ac","ac"),("impedance_50ohm","imp50"),("differential","diff"),("range_v","range"))}}
+        # The maintained wiring sends T660-1 A to DIO0; HF2 adcselect 4 is
+        # its digital external-reference input. This is a device configuration,
+        # not a claim about optical pulse timing or sample state.
+        pll={"index":0,"enable":True,"adcselect":4,"harmonic":1,
+             "order":observed(f"/{hf.device_id}/plls/0/order"),
+             "adcthreshold":observed(f"/{hf.device_id}/plls/0/adcthreshold")}
+        pll.update(config.get("pll",{}))
+        pll["freqcenter_hz"]=program.input_frequency_hz
+        config["pll"]=pll
+        return config
 
     def _laser_integrity(self, require_tuned=True):
         laser = self.devices["mircat"]
@@ -300,11 +348,19 @@ class InstalledAcquirer:
         rate = float(str(expected).lower().removesuffix("hz"))
         if not math.isclose(hf.get_oscillator_frequency(0), rate, rel_tol=.001):
             raise AcquisitionIntegrityError("HF2LI lost external reference lock")
-        # These monitored nodes must be specified by an applicable installed
-        # profile. Missing readback is a failure, never a fabricated good flag.
-        for monitor in self.profile["hf2li"].get("integrity_nodes", []):
-            actual = hf._get_node(monitor["type"], monitor["path"].replace("{device}", hf.device_id))
-            _equal(monitor["expected"], actual, monitor["path"])
+        health=hf.read_acquisition_health(reference_pll=0,input_indices=(0,1) if self.settings["mode"]=="dual" else (0,))
+        self.readbacks.setdefault("health_observations",[]).append(deepcopy(health))
+        if self.current_block is not None:
+            self.current_block.setdefault("health_observations",[]).append(deepcopy(health))
+        if health.get("overload") is True:
+            raise AcquisitionIntegrityError("HF2LI signal input ADC clipping / overload")
+        if health.get("reference_locked") is False or health.get("clock_locked") is False:
+            raise AcquisitionIntegrityError("HF2LI reported loss of reference or internal clock lock")
+        unknown=[key for key in ("reference_locked","clock_locked","overload") if health.get(key) is None]
+        if unknown and self.current_block is not None:
+            flag="health_status_unknown"
+            if flag not in self.current_block.setdefault("flags",[]):
+                self.current_block["flags"].append(flag)
 
     def tune(self, wavenumber):
         self.check()
@@ -341,9 +397,9 @@ class InstalledAcquirer:
         self._wait_for(laser.is_tuned, self.profile.get("tune_timeout_s", 45), "MIRcat tune timeout")
         self._laser_integrity()
         self.check()
-        laser.turn_emission_on(approved_laser_safety_condition=True)
+        laser.start_emission()
         probe.enable_channel("B")
-        self.wait(self.profile.get("settle_s", 0), "Settling: qualified optical and detector response")
+        self.wait(self.profile.get("settle_s", 0), "Settling: requested optical and detector interval")
         actual = laser.get_actual_wavelength()
         if actual.get("units") != "cm^-1" or not actual.get("light_valid") or abs(actual["value"]-wavenumber) > self.profile["tune_tolerance_cm1"]:
             raise AcquisitionIntegrityError(f"MIRcat actual wavenumber/light-valid mismatch: {actual}")
@@ -454,21 +510,20 @@ class InstalledAcquirer:
                 raise AcquisitionIntegrityError(f"{role} native timestamps/values are incomplete or nonmonotonic")
             if "flags" in stream and np.any(np.asarray(stream["flags"])!=0):
                 block["flags"].append("stream_status_nonzero")
-                raise AcquisitionIntegrityError(f"{role} native stream reported nonzero status flags; qualified interpretation required")
             if np.any(np.diff(ts)>1.6/rate):
                 block["flags"].append("incomplete")
                 raise AcquisitionIntegrityError(f"{role} native data contain a missing-sample gap")
             if block.get("program") and ts[-1]-ts[0]<block["program"]["capture_duration_s"]-1/rate:
                 block["flags"].append("incomplete")
                 raise AcquisitionIntegrityError(f"{role} native stream does not span the declared finite block")
-            if block["kind"]=="pumped" and block.get("optical_origin_s") is not None:
+            if block["kind"]=="pumped" and block.get("integration_origin_s") is not None:
                 shift = self.settings["response"]["reference_latency_s"]-self.settings["response"]["detector_latency_s"] if role=="reference" else 0
                 start,stop = block["aperture_start_s"]+shift,block["aperture_stop_s"]+shift
                 if ts[0]>start or ts[-1]<stop or np.sum((ts>=start)&(ts<=stop))<2:
-                    block["flags"].append("incomplete")
-                    raise AcquisitionIntegrityError(f"{role} does not cover the complete selected integration aperture")
+                    block["flags"].append("insufficient_aperture_support")
+                    continue
                 if role=="sample":
-                    block["actual_delay_s"] = float(np.mean(ts[(ts>=start)&(ts<=stop)])-block["optical_origin_s"])
+                    block["actual_delay_s"] = float(np.mean(ts[(ts>=start)&(ts<=stop)])-block["integration_origin_s"])
 
     def _assign_timing(self, block):
         edges = electrical_edges(block["timing"])
@@ -482,14 +537,22 @@ class InstalledAcquirer:
         block["optical_origin_s"] = None
         block["timing_origin_source"] = "unresolved"
         if pumped:
+            electrical=float(edges[0])
+            block["electrical_origin_s"]=electrical
             latency = self.profile.get("variable_sync_to_pump_s")
-            if latency is None or not self.profile.get("optical_latency_calibration_id"):
-                block["flags"].append("unresolved_time_zero")
-                return
-            origin = float(edges[0]+latency)
-            block["optical_origin_s"] = origin
-            block["timing_origin_source"] = "electrical Variable Sync plus promoted optical latency calibration"
-            block["optical_latency_calibration_id"] = self.profile["optical_latency_calibration_id"]
+            valid_latency=isinstance(latency,(int,float)) and math.isfinite(latency) and bool(self.profile.get("optical_latency_calibration_id"))
+            if valid_latency:
+                origin = electrical+latency
+                block["optical_origin_s"] = origin
+                block["timing_origin_source"] = "electrical Variable Sync plus selected optical latency calibration"
+                block["optical_latency_calibration_id"] = self.profile["optical_latency_calibration_id"]
+                block["delay_basis"]="calibrated_optical_origin"
+            else:
+                origin=electrical
+                block["timing_origin_source"]="observed electrical Variable Sync; absolute optical origin unresolved"
+                block["delay_basis"]="electrical_relative"
+                block["flags"].append("unresolved_optical_origin")
+            block["integration_origin_s"]=origin
             center = origin + block["delay_s"]
             aperture = self.settings["response"]["integration_aperture_s"]
             block["aperture_start_s"], block["aperture_stop_s"] = center-aperture/2, center+aperture/2
@@ -502,7 +565,11 @@ class InstalledAcquirer:
 
     def close(self):
         errors, restored = [], {}
-        self.progress("Restoration: inhibit outputs, restore preserved settings, verify readbacks")
+        notification_errors=[]
+        try:
+            self.progress("Restoration: inhibit outputs, restore preserved settings, verify readbacks")
+        except Exception as exc:
+            notification_errors.append(str(exc))
         def attempt(label, callback):
             try:
                 restored[label] = callback()
@@ -525,15 +592,24 @@ class InstalledAcquirer:
         if laser:
             attempt("MIRcat emission OFF", laser.turn_emission_off)
             attempt("MIRcat scan stop", laser.stop_scan_if_needed)
+            # Physical closure applies even to a service that failed before its
+            # original settings snapshot. Deinitializing the SDK is not disarm.
+            attempt("MIRcat disarm", laser.disarm)
             if "mircat" in self.original:
                 original = self.original["mircat"]
                 for selected in original["qcls"]:
                     attempt("MIRcat QCL restore "+str(selected["qcl"]), lambda s=selected: laser.set_qcl_pulse_params(**s))
                 fields = ("pulse_mode", "process_trigger_mode", "start", "stop", "interval", "units", "dwell_us", "after_off_us")
                 attempt("MIRcat trigger restore", lambda: laser.set_wavelength_trigger_params(**{k:original["trigger"][k] for k in fields}))
-                if not original["state"].get("armed"):
-                    attempt("MIRcat disarm", laser.disarm)
-            attempt("MIRcat safe verified", lambda: _equal(False, laser.is_emission_on(), "MIRcat emission"))
+            def verify_laser_safe():
+                state=data(laser.read_state())
+                restored["MIRcat final state"]=state
+                for field in ("armed","emission_on","scan_in_progress","scan_active",
+                              "scan_paused","scan_waiting_process_trigger"):
+                    if state.get(field) is not False:
+                        raise AcquisitionIntegrityError(f"MIRcat final {field} is not verified OFF: {state.get(field)!r}")
+                return state
+            attempt("MIRcat safe verified", verify_laser_safe)
         hf = self.devices.get("hf2li")
         if hf:
             attempt("HF2LI stop", hf.stop_acquisition)
@@ -564,7 +640,8 @@ class InstalledAcquirer:
         for name, device in self.devices.items():
             attempt(name+" close", device.deinitialize if name == "mircat" else device.close)
         return {"safe_verified": not errors, "settings_restored": not errors,
-            "errors": errors, "original": self.original, "verification": restored, "command_log": self.log.getvalue()}
+            "errors": errors, "notification_errors":notification_errors,
+            "original": self.original, "verification": restored, "command_log": self.log.getvalue()}
 
 
 class SimulatedAcquirer:

@@ -413,6 +413,13 @@ def process_run(record, *, check_cancelled=lambda: None, fit_models=True):
                                      stop+response.reference_latency_s-response.detector_latency_s)
         if record.get("mode") == "dual" and reference is None:
             reference = {"timestamp_s": [], "x": []}
+        raw_means = {}
+        for role, native in (("sample", sample), ("reference", reference)):
+            if native is not None:
+                for quadrature in ("x", "y"):
+                    values = np.asarray(native.get(quadrature, ()), float)
+                    finite = values[np.isfinite(values)]
+                    raw_means[f"raw_{role}_{quadrature}"] = float(np.mean(finite)) if len(finite) else math.nan
         variances={}
         for role,stream in (("sample",sample),("reference",reference)):
             dark=dark_offsets.get(role)
@@ -431,6 +438,7 @@ def process_run(record, *, check_cancelled=lambda: None, fit_models=True):
              reference_latency_s=response.reference_latency_s, tolerance_s=tolerance,
              background_factor=background if background_id else None,
              sample_offset_variance=variances["sample"],reference_offset_variance=variances["reference"])
+        result.update(raw_means)
         selected_delay = float(block.get("delay_s", 0))
         actual_delay = float(block.get("actual_delay_s",selected_delay))
         program_events=block.get("program",{}).get("events",[])
@@ -440,15 +448,18 @@ def process_run(record, *, check_cancelled=lambda: None, fit_models=True):
                       map_delay_s=map_delay,background_record_id=background_id,
                       dark_record_ids={role:entry.get("record_id") for role,entry in dark_offsets.items()},
                       kind=block.get("kind", record.get("kind", "run")), order=i)
-        origin = block.get("optical_origin_s")
+        optical_origin = block.get("optical_origin_s")
+        origin = optical_origin if optical_origin is not None else block.get("electrical_origin_s")
+        result["time_origin"] = "optical" if optical_origin is not None else "electrical"
         sample_times = np.asarray(sample.get("timestamp_s",[]))[result["valid_sample_indices"]]
         if origin is not None and len(sample_times):
             actual_delay=float(np.mean(sample_times)-float(origin))
             result["delay_s"]=actual_delay
         result["native_aperture_offsets_s"] = tuple((sample_times-float(origin)-actual_delay).tolist()) if origin is not None else None
         result["flags"] += list(block.get("flags", block.get("quality_flags", [])))
-        invalid = {"clipping", "overload", "unlock", "lost_lock", "trigger_count_mismatch", "incomplete", "unresolved_time_zero",
-                   "electrical_event_count_mismatch", "timestamp_gap", "timestamp_order", "missing_aperture_support"}
+        invalid = {"clipping", "overload", "unlock", "lost_lock", "trigger_count_mismatch", "incomplete",
+                   "electrical_event_count_mismatch", "timestamp_gap", "timestamp_order", "missing_aperture_support",
+                   "insufficient_aperture_support"}
         result["valid"] = not invalid.intersection(result["flags"]) and np.isfinite(result["value"])
         points.append(result)
         if result["kind"] in ("baseline", "pump_off", "preliminary", "reset", "unpumped") and result["valid"]:
@@ -467,6 +478,13 @@ def process_run(record, *, check_cancelled=lambda: None, fit_models=True):
                 blank_by_wave.setdefault(point["wavenumber_cm1"], []).append(point)
     for point in points:
         options = baselines.get(point["wavenumber_cm1"], [])
+        options = [b for b in options if not {"reset_nonrecovery", "initial_state_mismatch"}.intersection(b.get("flags", ()))]
+        initial = [b for b in options if b.get("kind") in ("baseline", "unpumped")]
+        preliminary_options = [b for b in options if b.get("kind") == "preliminary"]
+        # Each run's initial unpumped state defines its own change. Later
+        # recovery checks and older preliminary data remain diagnostics rather
+        # than shifting that reference when the state drifts or fails to recover.
+        options = initial or preliminary_options or options
         if options and point["valid"]:
             q0 = float(np.mean([b["value"] for b in options]))
             se0 = math.sqrt(sum(b["standard_error"]**2 for b in options))/len(options)
@@ -508,6 +526,10 @@ def process_run(record, *, check_cancelled=lambda: None, fit_models=True):
         check_cancelled()
         fitted_points = [p for p in scientific if p["wavenumber_cm1"]==nu and p["valid"]]
         fit_kernel = response
+        optical_origin_unresolved = any(p["time_origin"] != "optical" for p in fitted_points)
+        reset_nonrecovery = any("reset_nonrecovery" in p["flags"] for p in fitted_points)
+        if optical_origin_unresolved or reset_nonrecovery:
+            fit_kernel = replace(fit_kernel, qualified=False)
         reference_response_unresolved = False
         if record.get("mode")=="dual" and (response.hf2_order!=response.reference_order or
                 response.hf2_time_constant_s!=response.reference_time_constant_s):
@@ -524,6 +546,12 @@ def process_run(record, *, check_cancelled=lambda: None, fit_models=True):
         if reference_response_unresolved:
             fit["disposition"]="unresolvable"
             fit["reason"]="Unequal sample/reference filters require applicable measured static-reference/transfer qualification; reference dynamics cannot be assigned to the sample."
+        if optical_origin_unresolved or reset_nonrecovery:
+            fit["disposition"] = "unresolvable"
+            fit["reason"] = "; ".join(reason for condition, reason in (
+                (optical_origin_unresolved, "Optical time origin is uncalibrated; relative electrical-delay measurements retained"),
+                (reset_nonrecovery, "Measured pre-pump levels did not recover within the requested event spacing"),
+            ) if condition)
         kinetics.append({"label": f"{nu:g} cm⁻¹", "wavenumber_cm1": nu, "delay_s": np.asarray(delays),
                          "actual_delay_s":actual_grid[:,j],"value": grid[:,j], "standard_error": error[:,j], "fit":fit})
     # Integrate distinct local windows only; off-band points never bridge windows.

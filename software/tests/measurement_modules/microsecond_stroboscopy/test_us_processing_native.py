@@ -30,7 +30,7 @@ def test_us_native_roundtrip_exact_unsigned_clocks_nan_and_revisions(tmp_path):
     assert loaded["native_blocks"][0]["tuple"] == (1,2)
     assert load_run(first)["disposition"] == "interrupted"
     with pytest.raises(ValueError, match="detector mode"): load_run(first,"single")
-    with pytest.raises(ValueError, match="condition"): load_run(first,"dual","RT-Mb-R-K")
+    assert load_run(first,"dual","RT-Mb-R-K")["settings"]["condition_profile_id"] == "77K-Mb-G-F"
 
 
 def test_us_native_rejects_path_escape_and_object_arrays(tmp_path):
@@ -185,6 +185,7 @@ def test_us_matched_aperture_weights_and_dark_correction_preserve_native():
     assert point["delay_s"]==pytest.approx(5e-6/3)
     assert len(point["native_aperture_offsets_s"])==3
     assert point["sample_reference_ratio"]==pytest.approx(.9)
+    assert point["raw_sample_x"] == 1.
     np.testing.assert_array_equal(s["x"],np.ones(4))
 
 
@@ -208,3 +209,53 @@ def test_us_order_drift_control_and_local_area_gaps():
     assert out["diagnostics"][0]["flagged"]
     assert out["diagnostics"][1]["kind"] == "pump_blocked_control"
     assert out["diagnostics"][1]["flagged"]
+
+
+def test_us_uncalibrated_electrical_delay_preserves_relative_measurement_and_limits_fit():
+    baseline = {"block_id": "baseline", "wavenumber_cm1": 1944., "kind": "baseline",
+                "sample": stream([0., 1e-6], [1., 1.001])}
+    pumped = {"block_id": "pumped", "wavenumber_cm1": 1944., "kind": "pumped",
+              "sample": stream([100e-6, 101e-6], [.9, .901]), "delay_s": 100e-6,
+              "electrical_origin_s": 0., "flags": ["unresolved_time_zero"]}
+    result = process_run({"mode": "single", "native_blocks": [baseline, pumped],
+                          "settings": {"response": {"qualified": True}}})
+    point = result["points"][1]
+    assert point["valid"] and np.isfinite(point["delta_absorbance"])
+    assert point["time_origin"] == "electrical"
+    assert point["delay_s"] == pytest.approx(100.5e-6)
+    assert len(point["native_aperture_offsets_s"]) == 2
+    assert result["kinetics"][0]["fit"]["disposition"] == "unresolvable"
+    assert "uncalibrated" in result["kinetics"][0]["fit"]["reason"]
+    assert not result["optical_arrival_calibrated"]
+
+
+def test_us_negative_quadratures_remain_available_without_absorbance_repair():
+    result = process_run({"mode": "single", "native_blocks": [{"block_id": "signed",
+        "wavenumber_cm1": 1944., "kind": "pumped", "sample": stream([0., 1e-6], [-1., -2.])}]})
+    point = result["points"][0]
+    assert point["raw_sample_x"] == -1.5
+    assert not point["valid"] and np.isnan(point["delta_absorbance"])
+
+
+def test_us_own_initial_baseline_excludes_old_preliminary_and_nonrecovery_from_q0():
+    blocks = [{"block_id": kind, "wavenumber_cm1": 1944., "kind": kind,
+               "sample": stream([0., 1e-6], [value, value]), "flags": flags}
+              for kind, value, flags in (("baseline", 1., []), ("reset", .8, ["reset_nonrecovery"]),
+                                         ("pumped", .9, ["reset_nonrecovery"]))]
+    result = process_run({"mode": "single", "native_blocks": blocks,
+        "preliminary": {"processing": {"points": [{"wavenumber_cm1": 1944., "kind": "preliminary",
+            "valid": True, "value": 2., "standard_error": .01, "flags": []}]}}})
+    pumped = result["points"][-1]
+    assert pumped["q0"] == 1.
+    assert pumped["delta_absorbance"] == pytest.approx(-np.log10(.9))
+    assert result["kinetics"][0]["fit"]["disposition"] == "unresolvable"
+
+
+def test_us_sparse_aperture_remains_raw_and_is_masked_in_reconstruction():
+    result = process_run({"mode": "single", "native_blocks": [{"block_id": "sparse",
+        "wavenumber_cm1": 1944., "kind": "pumped", "sample": stream([0.], [1.]),
+        "flags": ["insufficient_aperture_support"]}]})
+    point = result["points"][0]
+    assert point["raw_sample_x"] == 1.
+    assert not point["valid"] and np.isnan(point["delta_absorbance"])
+    assert result["coverage"]["missing_points"] == 1

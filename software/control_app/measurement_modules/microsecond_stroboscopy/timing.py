@@ -2,7 +2,7 @@
 
 T660-1 A/B/C provide reference/probe/frame triggers.  T660-2 A/B supply FIRE and
 Q-switch and C/D stay OFF during fixed-wavenumber acquisition.  Each biological
-event is a declared finite block, followed by an independently verified reset.
+event is a declared finite block, with the requested spacing between events.
 The clock/frame engine defines electrical edges, never host polling or sleeps.
 """
 from __future__ import annotations
@@ -65,7 +65,7 @@ class TimingProgram:
     train_spacing_s: float = 0.0
     frame_repeat_count: int = 0
     terminal_padding_frames: int = 1
-    timing_origin: str = "programmed electrical commands; requires observed marker and qualified optical latency"
+    timing_origin: str = "programmed electrical commands; observed marker establishes electrical time, with optical correction only when measured"
     observable: str = "continuous-probe HF2LI filtered envelope averaged over the declared delay aperture"
 
     @property
@@ -115,15 +115,15 @@ class TimingProgram:
 
 def compile_timing(settings: StroboscopySettings, delays_us: Iterable[float] | None = None,
                    *, pumped: bool = True) -> TimingProgram:
-    """Compile a finite one-event block; repetition requires a new reset check.
+    """Compile a finite one-event block with hardware-scheduled electrical edges.
 
-    A multi-event biological table would prevent independent reset verification,
-    so it is rejected explicitly.  The wavelength planner declares all blocks;
-    it does not silently split a continuous capture.
+    The current architecture declares independent capture blocks prospectively.
+    It does not silently split a declared continuous capture or require a
+    historical scientific approval record before ordinary raw acquisition.
     """
     supplied = tuple(float(v) for v in (settings.delays_us if delays_us is None else delays_us))
     if len(supplied) != 1:
-        raise ValueError("Compile one declared event per block; independently verify reset before the next biological pump")
+        raise ValueError("Compile one declared event per block; the planner explicitly schedules each capture and interval")
     delay_us = supplied[0]
     if not math.isfinite(delay_us):
         raise ValueError("Delay must be finite in microseconds")

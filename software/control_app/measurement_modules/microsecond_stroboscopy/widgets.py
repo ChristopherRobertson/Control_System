@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
-import csv
-import io
 import json
 import math
 from pathlib import Path
@@ -14,18 +12,18 @@ from uuid import UUID, uuid4
 import numpy as np
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPlainTextEdit, QPushButton, QSpinBox, QTabWidget,
-    QToolBox, QVBoxLayout, QWidget, QScrollArea,
+    QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout,
+    QLabel, QLineEdit, QPushButton, QSpinBox, QTabWidget,
+    QVBoxLayout, QWidget,
 )
 
 from control_app.measurement_host import TabHandle
 from control_app.measurement_host.presentation import (
-    GuidedMeasurementPanel, LinkedSliceControl, PlotPanel, StartSnapshot,
+    CompactMeasurementPanel, LinkedSliceControl, PlotPanel,
     choose_time_display,
 )
 from .scientific_adapter import MicrosecondScientificAdapter, plain
-from .settings import default_settings, information_delay_grid
+from .settings import default_settings
 
 
 def _label(key):
@@ -37,197 +35,209 @@ def _label(key):
 
 
 class MicrosecondSettingsWidget(QWidget):
+    """Essential inputs plus independent, initially automatic advanced fields."""
     changed = Signal()
 
     def __init__(self, context, parent=None):
         super().__init__(parent)
         self.context = context
-        self._controls = {}
-        self._display_scales = {}
-        try:
-            self.manual_override_fields = set(json.loads(context.preferences.value("manual_override_fields_json", "[]")))
-        except (TypeError, ValueError):
-            self.manual_override_fields = set()
+        self._controls, self.override_modes, self._display_scales = {}, {}, {}
         self._loading = False
         self._base = default_settings(context.mode).to_dict()
         stored = context.preferences.value("settings_json", "")
         if stored:
             try:
                 from .settings import StroboscopySettings
-                candidate = StroboscopySettings.from_dict(json.loads(stored))
-                if candidate.mode == context.mode:
-                    self._base = candidate.to_dict()
-            except (ValueError, TypeError):
+                saved = StroboscopySettings.from_dict(json.loads(stored))
+                if saved.mode == context.mode:
+                    self._base = saved.to_dict()
+            except (TypeError, ValueError):
                 pass
-        layout = QVBoxLayout(self)
-        note = QLabel("Wavelength-by-wavelength equivalent-time recovery.\n"
-                      "EXAMPLE ONLY settings support planning and simulation; connected operation requires applicable qualification.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        form = QFormLayout()
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        layout.addLayout(form)
-        for key in ("execution_mode", "condition_profile_id", "averages", "delay_order"):
-            self._add_control(form, key, self._base[key])
-        self.spectral = QPlainTextEdit()
-        self.spectral.setPlaceholderText("Wavenumber cm⁻¹, band label, band/off_band")
-        self.spectral.setMaximumHeight(105)
+        self._base["execution_mode"] = "hardware"
+        self.manual_override_fields = set(self._base.get("manual_overrides", ()))
+        layout = QFormLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.spectral = QLineEdit()
+        self.spectral.setObjectName("spectral_points")
+        self.spectral.setToolTip("Measured wavenumbers in cm⁻¹, separated by commas.")
         self.spectral.textChanged.connect(self._emit_changed)
-        form.addRow("Measured spectral points\ncm⁻¹, label, role", self.spectral)
+        layout.addRow("Wavenumbers (cm⁻¹)", self.spectral)
         self.delays = QLineEdit()
-        self.delays.setToolTip("Explicit nonuniform delays in µs, separated by commas. Negative delays remain negative.")
+        self.delays.setObjectName("delays_us")
+        self.delays.setToolTip("Pump–probe delays in µs, separated by commas.")
         self.delays.textChanged.connect(self._emit_changed)
-        form.addRow("Delays (µs)", self.delays)
-        grid = QPushButton("Use IRF-sized early + logarithmic later grid")
-        grid.setToolTip("Derives coverage from the entered response width and latest delay, not literature lifetimes.")
-        grid.clicked.connect(self._make_grid)
-        form.addRow(grid)
-        toolbox = QToolBox()
-        layout.addWidget(toolbox)
-        for group in ("identity", "response", "timing", "reset", "controls", "budget"):
-            page = QWidget()
-            nested = QFormLayout(page)
-            nested.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-            for key, value in self._base[group].items():
-                self._add_control(nested, f"{group}.{key}", value)
-            toolbox.addItem(page, {
-                "identity": "Sample, preparation, cell and temperature",
-                "response": "HF2LI, detector response and alignment overrides",
-                "timing": "Hardware timing recipe overrides",
-                "reset": "Recovery and equivalent-state evidence",
-                "controls": "Dark, artifact and blank controls",
-                "budget": "Duration, upload, memory and storage estimates",
-            }[group])
-        provenance = QWidget()
-        provenance_form = QFormLayout(provenance)
-        for key in ("operating_basis", "promoted_bundle_ids", "calibration_ids"):
-            self._add_control(provenance_form, key, self._base[key])
-        toolbox.addItem(provenance, "Qualification and provenance")
-        layout.addStretch()
+        layout.addRow("Delays (µs)", self.delays)
+        self._add_numeric(layout, "averages", "Averages", override=False)
+        self._add_numeric(layout, "event_spacing_s", "Event spacing", override=False, suffix=" s")
+        self.advanced_widget = QWidget()
+        advanced = QFormLayout(self.advanced_widget)
+        advanced.setContentsMargins(0, 0, 0, 0)
+        advanced.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        advanced.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        fields = [
+            ("response.hf2_order", "Sample filter order", ""),
+            ("response.hf2_time_constant_s", "Sample time constant", " µs"),
+            ("response.sample_rate_sps", "Sample rate", " Sa/s"),
+        ]
+        if context.mode == "dual":
+            fields += [("response.reference_order", "Reference filter order", ""),
+                       ("response.reference_time_constant_s", "Reference time constant", " µs"),
+                       ("response.reference_rate_sps", "Reference rate", " Sa/s")]
+        fields += [("response.integration_aperture_s", "Integration aperture", " µs"),
+                   ("response.timing_rate_sps", "Timing sample rate", " Sa/s"),
+                   ("response.detector_latency_s", "Sample latency", " µs"),
+                   ("response.jitter_s", "Timing jitter", " µs"),
+                   ("response.time_zero_s", "Time-zero offset", " µs"),
+                   ("timing.probe_rate_hz", "Probe rate", " Hz"),
+                   ("timing.probe_width_ns", "Probe pulse width", " ns"),
+                   ("timing.fire_to_q_us", "FIRE to Q-switch", " µs")]
+        if context.mode == "dual":
+            fields += [("response.reference_latency_s", "Reference latency", " µs"),
+                       ("response.reference_alignment_uncertainty_s", "Alignment uncertainty", " µs")]
+        for path, label, suffix in fields:
+            self._add_numeric(advanced, path, label, suffix=suffix)
+        self.off_band = QLineEdit()
+        self.off_band.setObjectName("off_band_wavenumbers")
+        self.off_band.textChanged.connect(self._emit_changed)
+        advanced.addRow("Off-band points (cm⁻¹)", self.off_band)
+        self.delay_order = QComboBox()
+        self.delay_order.addItems(("alternating", "ascending", "descending"))
+        self.delay_order.currentIndexChanged.connect(self._emit_changed)
+        advanced.addRow("Delay order", self.delay_order)
+        restore = QPushButton("Restore automatic settings")
+        restore.clicked.connect(self.restore_automatic)
+        advanced.addRow(restore)
         self.apply_settings(self._base)
 
-    def _add_control(self, form, path, value):
-        key = path.split(".")[-1]
-        self._display_scales[path] = 1e6 if path.startswith("response.") and key.endswith("_s") else 1.
-        options = {"execution_mode": ("simulation", "hardware"),
-                   "condition_profile_id": ("RT-Mb-R-K", "77K-Mb-G-F"),
-                   "delay_order": ("ascending", "descending", "alternating")}
-        if path in options:
-            control = QComboBox()
-            control.addItems(options[path])
-            control.currentIndexChanged.connect(lambda *_: self._mark_changed(path))
-        elif isinstance(value, bool):
-            control = QCheckBox("Evidence-backed claim" if "verified" in key or key == "qualified" else "Required")
-            control.toggled.connect(lambda *_: self._mark_changed(path))
-        elif isinstance(value, int) and abs(value) <= 2_000_000_000:
-            control = QSpinBox()
-            control.setRange(-2_000_000_000, 2_000_000_000)
-            control.valueChanged.connect(lambda *_: self._mark_changed(path))
-        elif isinstance(value, (int, float)):
-            control = QDoubleSpinBox()
-            control.setDecimals(12)
-            control.setRange(-1e15, 1e15)
-            control.setKeyboardTracking(False)
-            control.valueChanged.connect(lambda *_: self._mark_changed(path))
+    @staticmethod
+    def _get(data, path):
+        value = data
+        for part in path.split("."):
+            value = value[part]
+        return value
+
+    @staticmethod
+    def _set(data, path, value):
+        parts = path.split(".")
+        target = data
+        for part in parts[:-1]:
+            target = target[part]
+        target[parts[-1]] = value
+
+    def _add_numeric(self, layout, path, label, *, override=True, suffix=""):
+        value = self._get(self._base, path)
+        scale = 1e6 if path.startswith("response.") and path.endswith("_s") else 1.
+        self._display_scales[path] = scale
+        editor = QSpinBox() if isinstance(value, int) else QDoubleSpinBox()
+        if isinstance(editor, QDoubleSpinBox):
+            editor.setDecimals(3 if path == "event_spacing_s" else 9 if scale == 1 else 6)
+            editor.setRange(-1e12, 1e12)
         else:
-            control = QLineEdit()
-            if value is None:
-                control.setPlaceholderText("Unmeasured / unknown")
-            elif isinstance(value, (list, tuple)):
-                control.setPlaceholderText("Comma-separated stable record IDs")
-            control.textChanged.connect(lambda *_: self._mark_changed(path))
-        control.setObjectName(path)
-        self._controls[path] = (control, value)
-        label = _label(key).replace("(s)", "(µs)") if self._display_scales[path] == 1e6 else _label(key)
-        if path == "timing.event_interval_s":
-            label = "T660 frame interval (s)"
-            control.setToolTip("Interval between hardware frames inside one pump event; sample-event cadence includes independently verified recovery/reset.")
-        form.addRow(label, control)
+            editor.setRange(-1000000, 1000000)
+        editor.setKeyboardTracking(False)
+        editor.setSuffix(suffix)
+        editor.setObjectName(path)
+        editor.valueChanged.connect(lambda *_: self._field_changed(path))
+        self._controls[path] = (editor, value)
+        if not override:
+            layout.addRow(label, editor)
+            return
+        mode = QComboBox()
+        mode.addItems(("Auto", "Override"))
+        mode.setObjectName("override:" + path)
+        mode.setMaximumWidth(86)
+        mode.currentIndexChanged.connect(lambda *_: self._override_changed(path))
+        self.override_modes[path] = mode
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(4)
+        row_layout.addWidget(mode)
+        row_layout.addWidget(editor, 1)
+        layout.addRow(label, row)
 
     def _emit_changed(self, *_):
         if not self._loading:
             self.changed.emit()
 
-    def _mark_changed(self, path):
+    def _field_changed(self, path):
         if not self._loading:
-            self.manual_override_fields.add(path)
             self.changed.emit()
 
-    def _make_grid(self):
-        try:
-            from .settings import StroboscopySettings
-            settings = StroboscopySettings.from_dict(self.read_settings())
-            grid = information_delay_grid(response_width_us=settings.response.effective_sigma_s * 1e6,
-                                          recovery_limit_us=max(settings.delays_us))
-            self.delays.setText(", ".join(f"{value:.8g}" for value in grid))
-        except ValueError as exc:
-            self.delays.setToolTip(str(exc))
+    def _override_changed(self, path):
+        manual = self.override_modes[path].currentIndex() == 1
+        self._controls[path][0].setEnabled(manual)
+        if manual:
+            self.manual_override_fields.add(path)
+        else:
+            self.manual_override_fields.discard(path)
+        self._emit_changed()
+
+    def restore_automatic(self):
+        self._loading = True
+        for path, mode in self.override_modes.items():
+            mode.setCurrentIndex(0)
+            self._controls[path][0].setEnabled(False)
+        self.manual_override_fields.clear()
+        self._loading = False
+        self.changed.emit()
 
     def read_settings(self):
         data = deepcopy(self._base)
-        for path, (control, original) in self._controls.items():
-            if isinstance(control, QComboBox):
-                value = control.currentText()
-            elif isinstance(control, QCheckBox):
-                value = control.isChecked()
-            elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
-                value = control.value() / self._display_scales[path]
-                if isinstance(original, int):
-                    value = int(value)
-            elif original is None:
-                value = float(control.text()) if control.text().strip() else None
-            elif isinstance(original, (list, tuple)):
-                value = [item.strip() for item in control.text().split(",") if item.strip()]
-            else:
-                value = control.text().strip()
-            parts = path.split(".")
-            if len(parts) == 2:
-                data[parts[0]][parts[1]] = value
-            else:
-                data[path] = value
-        data["delays_us"] = [float(item.strip()) for item in self.delays.text().split(",") if item.strip()]
-        points = []
-        for row in csv.reader(io.StringIO(self.spectral.toPlainText())):
-            if not row or not row[0].strip():
+        for path, (editor, original) in self._controls.items():
+            if path in self.override_modes and path not in self.manual_override_fields:
                 continue
-            if len(row) != 3:
-                raise ValueError("Each spectral row requires: wavenumber cm⁻¹, band label, band/off_band")
-            points.append({"wavenumber_cm1": float(row[0]), "label": row[1].strip(), "role": row[2].strip()})
-        data["spectral_points"] = points
+            value = editor.value() / self._display_scales[path]
+            self._set(data, path, int(value) if isinstance(original, int) else value)
+        waves = [float(text.strip()) for text in self.spectral.text().split(",") if text.strip()]
+        off_band = {float(text.strip()) for text in self.off_band.text().split(",") if text.strip()}
+        previous = {point["wavenumber_cm1"]: point for point in self._base["spectral_points"]}
+        data["spectral_points"] = [{"wavenumber_cm1": wave,
+            "label": previous.get(wave, {}).get("label", "Local band"),
+            "role": "off_band" if wave in off_band else "band"} for wave in waves]
+        data["delays_us"] = [float(text.strip()) for text in self.delays.text().split(",") if text.strip()]
+        data["delay_order"] = self.delay_order.currentText()
+        data["manual_overrides"] = sorted(self.manual_override_fields)
         data["mode"] = self.context.mode
         return data
 
     def apply_settings(self, settings):
+        settings = plain(settings)
         if settings.get("mode", self.context.mode) != self.context.mode:
             raise ValueError("Settings belong to another detector mode")
         self._loading = True
         try:
             self._base = deepcopy(settings)
-            for path, (control, _) in self._controls.items():
-                value = settings
-                for part in path.split("."):
-                    value = value[part]
-                if isinstance(control, QComboBox):
-                    control.setCurrentText(str(value))
-                elif isinstance(control, QCheckBox):
-                    control.setChecked(bool(value))
-                elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
-                    control.setValue(value * self._display_scales[path])
-                else:
-                    control.setText(", ".join(value) if isinstance(value, (list, tuple)) else "" if value is None else str(value))
-            self.delays.setText(", ".join(str(v) for v in settings["delays_us"]))
-            stream = io.StringIO()
-            writer = csv.writer(stream)
-            for point in settings["spectral_points"]:
-                writer.writerow((point["wavenumber_cm1"], point["label"], point["role"]))
-            self.spectral.setPlainText(stream.getvalue().strip())
+            self.manual_override_fields = set(settings.get("manual_overrides", ()))
+            for path, (editor, _) in self._controls.items():
+                editor.setValue(self._get(settings, path) * self._display_scales[path])
+                if path in self.override_modes:
+                    manual = path in self.manual_override_fields
+                    self.override_modes[path].setCurrentIndex(1 if manual else 0)
+                    editor.setEnabled(manual)
+            self.spectral.setText(", ".join(f"{point['wavenumber_cm1']:g}" for point in settings["spectral_points"]))
+            self.off_band.setText(", ".join(f"{point['wavenumber_cm1']:g}" for point in settings["spectral_points"] if point.get("role") == "off_band"))
+            self.delays.setText(", ".join(f"{delay:g}" for delay in settings["delays_us"]))
+            self.delays.setCursorPosition(0)
+            self.spectral.setCursorPosition(0)
+            self.delay_order.setCurrentText(settings.get("delay_order", "alternating"))
         finally:
             self._loading = False
         self.changed.emit()
 
+    def show_selected_settings(self, settings):
+        selected = plain(settings)
+        self._loading = True
+        try:
+            for path, (editor, _) in self._controls.items():
+                if path in self.override_modes and path not in self.manual_override_fields:
+                    editor.setValue(self._get(selected, path) * self._display_scales[path])
+        finally:
+            self._loading = False
+
     def save_preferences(self):
         self.context.preferences.setValue("settings_json", json.dumps(self.read_settings(), allow_nan=False))
-        self.context.preferences.setValue("manual_override_fields_json", json.dumps(sorted(self.manual_override_fields)))
         self.context.preferences.sync()
 
 
@@ -249,22 +259,27 @@ class _ScientificPlot:
                  "absolute_absorbance": "Absolute absorbance (measured background)"}.get(owner.quantity, owner.quantity)
         unit = owner.time_display
         scale = 1 / unit.seconds_per_unit
-        time_label = f"Delay ({unit.unit}); " + ("calibrated optical estimate" if data.get("optical_arrival_calibrated") else "electrical sync; optical time zero unverified")
+        time_label = f"Delay ({unit.unit}, " + ("optical estimate)" if data.get("optical_arrival_calibrated") else "electrical sync)")
         if self.kind == "native":
             if record.get("kind") in ("blank", "preliminary"):
                 x = [point.get("wavenumber_cm1", math.nan) for point in points]
-                y = [point.get("value", math.nan) if point.get("valid", True) else math.nan for point in points]
+                normalized = [point.get("value", math.nan) if point.get("valid", True) else math.nan for point in points]
+                raw = not np.any(np.isfinite(normalized))
+                y = [point.get("raw_sample_x", math.nan) for point in points] if raw else normalized
                 axis.plot(x, y, "o-", markersize=3)
-                axis.set(xlabel="Wavenumber (cm⁻¹)", ylabel="Sample/reference Q₀" if record.get("mode") == "dual" else "Native detector signal",
-                         title="Unpumped preliminary / blank spectral review")
+                axis.set(xlabel="Wavenumber (cm⁻¹)", ylabel="Sample X" if raw else "Sample/reference Q₀" if record.get("mode") == "dual" else "Sample X",
+                         title="Unpumped spectrum")
                 axis.invert_xaxis()
             else:
                 matching = [point for point in points if not len(wn) or math.isclose(float(point.get("wavenumber_cm1", math.nan)), wn[owner.spectral_index])]
                 x = [float(point.get("actual_delay_s", point.get("delay_s", 0))) * scale for point in matching]
                 y = [point.get(owner.quantity, point.get("value", math.nan) if owner.quantity == "sample_reference_ratio" and record.get("mode") == "dual" else math.nan)
                      for point in matching]
+                if not np.any(np.isfinite(y)):
+                    y = [point.get("raw_sample_x", math.nan) for point in matching]
+                    label = "Sample X"
                 axis.scatter(x, y, s=16, label="Retained native points")
-                axis.set(xlabel=time_label, ylabel=label, title="Native points at selected wavenumber")
+                axis.set(xlabel=time_label, ylabel=label, title="Native points")
         elif self.kind == "map" and valid_map:
             if len(wn) > 1 and len(delays) > 1:
                 artist = axis.pcolormesh(wn, delays * scale, np.ma.masked_invalid(values), shading="nearest")
@@ -274,7 +289,7 @@ class _ScientificPlot:
                 axis.scatter(xx.ravel(), yy.ravel(), c=values.ravel())
             axis.axhline(delays[owner.time_index] * scale, color="white", linewidth=.7)
             axis.axvline(wn[owner.spectral_index], color="white", linewidth=.7)
-            axis.set(xlabel="Wavenumber (cm⁻¹)", ylabel=time_label, title="Local spectral map; missing support remains gaps")
+            axis.set(ylabel=f"Delay ({unit.unit})", title="Local spectral map")
             axis.invert_xaxis()
             spectrum = figure.add_subplot(212)
             spectrum.plot(wn, values[owner.time_index, :], "o-", markersize=3)
@@ -301,32 +316,37 @@ class _ScientificPlot:
             prediction = np.asarray(fit.get("prediction", []), float)
             residuals = np.asarray(fit.get("residuals", []), float)
             if fit_x.size and prediction.shape == fit_x.shape:
-                axis.plot(fit_x, prediction, "--", label="Response-convolved fitted model")
-            axis.set(ylabel=label, title="Wavelength / local-band kinetics with native uncertainty")
-            axis.legend(loc="upper left")
+                axis.plot(fit_x, prediction, "--", label="Response-convolved fit")
+            axis.set(ylabel=label, title="Kinetics")
+            axis.legend(loc="upper left", fontsize=8)
             residual_axis = figure.add_subplot(212)
             if fit_x.size and residuals.shape == fit_x.shape:
                 residual_axis.plot(fit_x, residuals, "o-", markersize=3)
                 residual_axis.axhline(0, color="black", linewidth=.7)
             else:
-                residual_axis.text(.5, .5, fit.get("reason", "No compatible identified fit"), ha="center", transform=residual_axis.transAxes)
-            residual_axis.set(xlabel=time_label, ylabel="Data − fitted model", title="Residuals on measured fit support")
+                residual_axis.text(.5, .5, "No fit available", ha="center", transform=residual_axis.transAxes)
+            residual_axis.set(xlabel=time_label, ylabel="Residual", title="Fit residuals")
         elif self.kind == "coverage" and valid_map:
             supported = np.isfinite(values).astype(float)
             xx, yy = np.meshgrid(wn, delays * scale)
             axis.scatter(xx.ravel(), yy.ravel(), c=supported.ravel(), vmin=0, vmax=1,
                          marker="s", cmap="RdYlGn", s=25)
-            axis.set(xlabel="Wavenumber (cm⁻¹)", ylabel=time_label, title="Native support: green valid, red absent/rejected")
+            axis.set(xlabel="Wavenumber (cm⁻¹)", ylabel=f"Delay ({unit.unit})", title="Native support: green valid, red absent/rejected")
             axis.invert_xaxis()
             coverage = data.get("coverage", {})
             text = "; ".join(f"{key}: {value}" for key, value in coverage.items() if isinstance(value, (str, int, float)))
             if text:
                 figure.text(.02, .015, text[:220], fontsize=8, wrap=True)
         else:
-            axis.text(.5, .5, "No supported reconstruction in this record.\nNative and rejection records remain retained.",
+            axis.text(.5, .5, "No reconstructed data",
                       transform=axis.transAxes, ha="center")
             axis.set_title(self.kind.capitalize())
-        figure.subplots_adjust(left=.13, bottom=.2, right=.85 if self.kind == "kinetics" else .92, top=.88, hspace=.9)
+        for axes in figure.axes:
+            axes.tick_params(labelsize=8)
+            axes.xaxis.label.set_size(9)
+            axes.yaxis.label.set_size(9)
+            axes.title.set_size(10)
+        figure.subplots_adjust(left=.14, bottom=.23, right=.96, top=.9, hspace=.95)
 
 
 class MicrosecondViews(QWidget):
@@ -337,6 +357,7 @@ class MicrosecondViews(QWidget):
         self.quantity = "delta_absorbance"
         self.time_display = choose_time_display([0.0, .005])
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         controls = QHBoxLayout()
         self.quantity_control = QComboBox()
         self.quantity_control.addItem("ΔAbsorbance", "delta_absorbance")
@@ -351,21 +372,26 @@ class MicrosecondViews(QWidget):
         self.spectral_control = LinkedSliceControl([0], label="Wavenumber", unit="cm⁻¹", decimals=4)
         self.time_control.index_changed.connect(self._time_changed)
         self.spectral_control.index_changed.connect(self._spectral_changed)
-        controls.addWidget(self.time_control, 1)
-        controls.addWidget(self.spectral_control, 1)
+        self.time_control.setEnabled(False)
+        self.spectral_control.setEnabled(False)
+        controls.addStretch(1)
         layout.addLayout(controls)
-        self.analysis_summary = QLabel("Load or acquire native data to inspect response-convolved fits, uncertainty and support.")
+        self.analysis_summary = QLabel()
         self.analysis_summary.setWordWrap(True)
         self.analysis_summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(self.analysis_summary)
+        self.analysis_summary.hide()
         self.tabs = QTabWidget()
         self.plots = []
         for kind, title in (("native", "Native points"), ("map", "Local spectral map"),
-                            ("kinetics", "Wavelength / band-area kinetics"), ("coverage", "Coverage")):
+                            ("kinetics", "Kinetics"), ("coverage", "Coverage")):
             panel = PlotPanel(_ScientificPlot(self, kind))
+            panel.canvas.setMinimumHeight(200)
             self.plots.append(panel)
             self.tabs.addTab(panel, title)
-        layout.addWidget(self.tabs)
+        layout.addWidget(self.tabs, 1)
+        layout.addWidget(self.time_control)
+        layout.addWidget(self.spectral_control)
+        layout.addWidget(self.analysis_summary)
 
     def set_record(self, record):
         self.record = None
@@ -378,6 +404,8 @@ class MicrosecondViews(QWidget):
         wn = list(maps.get("wavenumber_cm1", []))
         delays = list(maps.get("delay_s", maps.get("time_s", [])))
         self.time_index = self.spectral_index = 0
+        self.time_control.setEnabled(bool(delays))
+        self.spectral_control.setEnabled(bool(wn))
         if delays:
             self.time_display = choose_time_display(delays, unit="us" if max(map(abs, delays)) < .001 else "ms")
             self.time_control.input.setSuffix(f" {self.time_display.unit}")
@@ -430,8 +458,9 @@ class MicrosecondViews(QWidget):
 
     def _update_fit_summary(self):
         fit = self.selected_kinetic().get("fit", {})
+        self.analysis_summary.setVisible(bool(fit))
         if not fit:
-            self.analysis_summary.setText("No fit available on the selected native support. Missing data remain gaps.")
+            self.analysis_summary.clear()
             return
         parts = [str(fit.get("disposition", "Unresolved fit")).replace("_", " ")]
         if fit.get("reason"):
@@ -443,10 +472,7 @@ class MicrosecondViews(QWidget):
                 text += f" (local 95% CI {self.time_display.value(intervals[i][0]):.3g}–{self.time_display.value(intervals[i][1]):.3g} {self.time_display.unit})"
             parts.append(text)
         if "aicc" in fit:
-            parts.append(f"AICc {fit['aicc']:.3g}; {fit.get('criterion', '')}")
-        if "identifiability_condition" in fit:
-            parts.append(f"Identifiability condition {fit['identifiability_condition']:.3g}")
-        parts.append("Apparent recovery; molecular pathway is not assigned.")
+            parts.append(f"AICc {fit['aicc']:.3g}")
         self.analysis_summary.setText("; ".join(parts))
 
     def _redraw(self, *_):
@@ -457,221 +483,182 @@ class MicrosecondViews(QWidget):
 
     def clear(self):
         self.record = None
-        self.analysis_summary.setText("Load or acquire native data to inspect response-convolved fits, uncertainty and support.")
+        self.analysis_summary.clear()
+        self.analysis_summary.hide()
+        self.time_control.setEnabled(False)
+        self.spectral_control.setEnabled(False)
         for plot in self.plots:
             plot.clear_result()
 
 
-class MicrosecondPanel(GuidedMeasurementPanel):
-    def __init__(self, context, *, runner=None, parent=None):
+class MicrosecondPanel(CompactMeasurementPanel):
+    """Scientific actions hosted by the shared compact measurement workspace."""
+    def __init__(self, context, *, runner=None, hardware=True, parent=None):
         settings = MicrosecondSettingsWidget(context)
-        adapter = MicrosecondScientificAdapter(context, settings, runner=runner)
-        super().__init__(settings, adapter, context, parent)
-        splitter = self.layout().itemAt(0).widget()
-        summary_box = splitter.widget(1)
-        self._summary_scroll = QScrollArea()
-        self._summary_scroll.setWidgetResizable(True)
-        self._summary_container = splitter.replaceWidget(1, self._summary_scroll)
-        self._summary_scroll.setWidget(self._summary_container)
-        splitter.setMinimumHeight(220)
-        splitter.setMaximumHeight(350)
-        self.preliminary_button.setText("2 · Preliminary (pump OFF)")
-        self.start_button.setText("3 · Start pumped acquisition")
-        self.abort_button.setText("Abort acquisition")
-        self.review.setText("I reviewed the preliminary sample/reference spectrum" if context.mode == "dual"
-                            else "I reviewed the preliminary unpumped sample spectrum")
-        extra = QHBoxLayout()
-        self.blank_button = QPushButton("1 · Acquire blank sequence")
+        adapter = MicrosecondScientificAdapter(context, settings, runner=runner, hardware=hardware)
+        self._capability_check_attempted = False
+        self._clock_started = None
+        super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
+        self.summary_form.setVerticalSpacing(4)
+        self.right_layout.setSpacing(5)
+        self.preliminary_button.setText("Preliminary sample/reference" if context.mode == "dual" else "Preliminary sample")
+        self.start_button.setText("Start acquisition")
+        self.abort_button.setText("Abort")
+        self.blank_button = QPushButton("Acquire blank")
         self.load_blank_button = QPushButton("Load blank…")
-        self.blank_button.setVisible(context.mode == "single")
-        self.load_blank_button.setVisible(context.mode == "single")
-        self.check_button = QPushButton("Check devices")
-        self.supported_button = QPushButton("Apply supported choices")
-        self.bundle_button = QPushButton("Load qualification")
-        self.bundle_button.setToolTip("Load selected promoted qualification; preserve entered manual overrides.")
-        self.sample_button = QPushButton("Load spectral selection…")
-        self.retry_save_button = QPushButton("Retry native save…")
-        for button in (self.blank_button, self.load_blank_button, self.check_button, self.supported_button, self.bundle_button, self.sample_button):
-            extra.addWidget(button)
-        self.layout().insertLayout(1, extra)
-        self.blank_status = QLabel("Single: load buffer for the complete sequential blank, then load sample." if context.mode == "single"
-                                   else "Dual: load sample and matched-buffer reference simultaneously. No separate routine blank sequence.")
-        self.blank_status.setWordWrap(True)
-        self.layout().insertWidget(2, self.blank_status)
-        recovery = QHBoxLayout()
-        recovery.addWidget(self.retry_save_button)
-        self.preservation_status = QLabel()
-        self.preservation_status.setWordWrap(True)
-        recovery.addWidget(self.preservation_status, 1)
-        self.layout().insertLayout(3, recovery)
-        self.elapsed_label = QLabel("Elapsed 0 s; estimate includes preparation, controls, reset, upload, restoration and analysis.")
-        self.result_layout.addWidget(self.elapsed_label)
-        self.views = MicrosecondViews()
-        self.result_layout.addWidget(self.views, 1)
+        if context.mode == "single":
+            self.blank_actions_layout.addWidget(self.blank_button)
+            self.blank_actions_layout.addWidget(self.load_blank_button)
+        else:
+            self.blank_button.hide()
+            self.load_blank_button.hide()
         self.blank_button.clicked.connect(lambda: self._user_action(lambda: self.begin("blank")))
         self.load_blank_button.clicked.connect(self._choose_blank)
+        self.check_button = QPushButton("Check connected device")
         self.check_button.clicked.connect(lambda: self._user_action(self.check_capabilities))
-        self.supported_button.clicked.connect(lambda: self._user_action(self.apply_supported_choices))
-        self.bundle_button.clicked.connect(lambda: self._user_action(self.load_qualification))
-        self.sample_button.clicked.connect(self._choose_sample_selection)
+        self.settings_extras_layout.addWidget(self.check_button)
+        self.retry_save_button = QPushButton("Retry native save…")
+        self.retry_save_button.setVisible(False)
         self.retry_save_button.clicked.connect(self._choose_retry_native_save)
+        self.settings_extras_layout.addWidget(self.retry_save_button)
+        self.views = MicrosecondViews()
+        self.add_result_widget(self.views)
+        self.elapsed_label = QLabel()
+        self.elapsed_label.setVisible(False)
+        self.result_layout.addWidget(self.elapsed_label)
         settings.changed.connect(self.refresh_plan)
         self.result_ready.connect(self.views.set_record)
-        self.run_loaded.connect(lambda record, _: self.views.set_record(record))
+        self.run_loaded.connect(self._loaded_run)
         self.new_run_requested.connect(self.views.clear)
-        self.busy_changed.connect(lambda busy: context.lifecycle.notify_state(busy, self._active_kind or "idle"))
-        self._clock_started = None
+        self.operation_finished.connect(self._operation_finished)
+        self.busy_changed.connect(self._busy_clock)
+        self.busy_changed.connect(self.refresh_readiness)
         self._timer = QTimer(self)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self._update_clock)
-        self.busy_changed.connect(self._busy_clock)
         self.refresh_plan()
+        self.splitter.setSizes([340, 740])
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self._check_on_activation)
+
+    def _check_on_activation(self):
+        if (not self.isVisible() or self._capability_check_attempted or self.command_running()
+                or not self.adapter.hardware_required("check_capabilities", self.adapter.read_operation_settings("check_capabilities"))
+                or "hf2li" not in self.context.devices.available(hardware=True)):
+            return
+        self._capability_check_attempted = True
+        self._user_action(self.check_capabilities)
 
     def refresh_plan(self, *_):
-        if self._busy:
-            return
-        retained = self.preliminary
         super().refresh_plan()
-        self.preliminary = retained
         if self.plan is not None:
-            errors = self.adapter.validate_review(retained, self.plan) if retained else []
-            self.review_summary.setText("\n".join(errors) if errors else self.adapter.summarize_preliminary(retained) if retained else "")
-            if retained and errors:
-                self.review.setChecked(False)
+            self.settings_widget.show_selected_settings(self.plan.settings)
             try:
                 self.settings_widget.save_preferences()
-            except (ValueError, TypeError):
+            except (TypeError, ValueError):
                 pass
-        self._update_controls()
+        self.refresh_readiness()
 
-    def _update_controls(self, *_):
-        super()._update_controls()
+    def refresh_readiness(self, *_):
+        super().refresh_readiness()
         if not hasattr(self, "blank_button"):
             return
-        idle, valid = not self._busy, self.plan is not None
-        for button in (self.load_blank_button, self.check_button, self.bundle_button, self.sample_button):
-            button.setEnabled(idle)
-        self.supported_button.setEnabled(idle and self.adapter.capabilities is not None)
+        idle = not self.command_running()
+        for kind, button in (("blank", self.blank_button), ("preliminary", self.preliminary_button), ("measurement", self.start_button)):
+            issues = self.adapter.validate_operation(kind, self.plan, self.preliminary) if self.plan is not None else ("Invalid plan",)
+            button.setEnabled(idle and self.plan is not None and not issues)
+        if idle and self.plan is not None and not self.validation.text():
+            issues = self.adapter.validate_operation("measurement", self.plan, self.preliminary)
+            if issues:
+                self.validation.setText(self._brief(issues[0]))
+        self.load_blank_button.setEnabled(idle)
+        self.check_button.setEnabled(idle and (not self.adapter.hardware_required("check_capabilities", {}) or "hf2li" in self.context.devices.available(hardware=True)))
         unsaved = self._needs_native_preservation()
         self.retry_save_button.setVisible(unsaved)
-        self.preservation_status.setVisible(unsaved)
         self.retry_save_button.setEnabled(idle and unsaved)
-        self.preservation_status.setText("Native saving failed. Retained data must be saved to a writable directory before New run or closing. Instrument recovery remains a separate host action." if unsaved else "")
         self.new_run_button.setEnabled(idle and not unsaved)
-        self.blank_button.setEnabled(idle and valid)
-        blank_errors = self.adapter.validate_record(self.adapter.blank, self.plan, kind="blank") if valid and self.adapter.blank else []
-        if self.context.mode == "single":
-            self.preliminary_button.setEnabled(idle and valid and self.adapter.blank is not None and not blank_errors)
-            if self.adapter.blank is not None:
-                self.blank_status.setText("\n".join("Blank: " + error for error in blank_errors) if blank_errors
-                                          else f"Compatible sequential blank: {self.adapter.blank.get('run_id', 'loaded')}")
-            else:
-                self.blank_status.setText("Load buffer and acquire a complete sequential blank, or load a compatible saved blank.")
-        errors = self.adapter.validate_review(self.preliminary, self.plan) if valid and self.preliminary else []
-        readiness_errors = self.plan.readiness.blockers if valid and self.plan.settings.execution_mode == "hardware" else ()
-        self.review.setEnabled(idle and self.preliminary is not None and not errors)
-        self.start_button.setEnabled(idle and valid and self.preliminary is not None and self.review.isChecked() and not errors and not readiness_errors)
 
     def begin(self, kind):
-        if kind == "measurement" and self.plan is not None and self.plan.settings.execution_mode == "hardware" and not self.plan.readiness.hardware_ready:
-            self.review.setChecked(False)
-            raise ValueError("Connected acquisition readiness: " + "; ".join(self.plan.readiness.errors + self.plan.readiness.blockers))
-        if kind != "blank":
-            if kind == "preliminary" and self.context.mode == "single":
-                errors = self.adapter.validate_record(self.adapter.blank, self.plan, kind="blank")
-                if errors:
-                    raise ValueError("\n".join(errors))
-            return super().begin(kind)
-        if self._busy or self.plan is None or self.context.mode != "single":
-            raise ValueError("A valid idle single-detector plan is required for a blank")
-        self.review.setChecked(False)
-        self.preliminary = None
-        selected = self.adapter.selected_records()
-        operation = self.context.begin_operation(plan=self._host_plan, calibration_records=selected.calibration_records,
-                                                 sample_records=selected.sample_records,
-                                                 hardware=self.adapter.hardware_required(kind, self._host_plan.settings),
-                                                 purpose="complete sequential pump-off blank", cancel=self.request_abort)
-        self.snapshot = StartSnapshot(operation, "blank", deepcopy(self.plan), None)
-        snapshot = self.snapshot
-        self._launch_owned(operation, lambda worker: self.adapter.run_blank(snapshot, worker), "blank")
+        if kind == "blank":
+            if self.context.mode != "single":
+                raise ValueError("The reference detector records the simultaneous blank.")
+            return self.begin_operation("blank", self.adapter.run_blank, invalidates_preliminary=False)
+        return super().begin(kind)
 
-    def _launch_owned(self, operation, callback, kind):
-        try:
-            self._launch(callback, kind)
-        except Exception:
-            if operation.hardware and not (self.worker and self.worker.isRunning()):
-                self.context.ownership.release(operation.ownership, safe_verified=True,
-                    preservation_verified=True, detail="Worker dispatch failed before device access")
-            self._busy = False
-            self._active_kind = None
-            self._update_controls()
-            self.busy_changed.emit(False)
-            raise
-
-    def _finished(self, worker, kind, path):
-        outcome = worker.outcome
-        if outcome and outcome.state == "completed":
-            if kind == "blank":
-                self.adapter.blank = outcome.result
-            elif kind == "load_blank":
-                errors = self.adapter.validate_record(outcome.result, self.plan, kind="blank")
-                if errors:
-                    worker.outcome = type(outcome)("failed", error="\n".join(errors))
-                else:
-                    self.adapter.blank = outcome.result
-                    self.review.setChecked(False)
+    def _operation_finished(self, kind, outcome):
+        if outcome.state == "completed":
+            if kind in ("blank", "preliminary"):
+                self.adapter.reuse_records(outcome.result, self.plan)
+                self.result = outcome.result
+                self.views.set_record(outcome.result)
             elif kind == "check_capabilities":
                 self.adapter.capabilities = outcome.result.get("capabilities")
                 self.adapter.acknowledge_instrument_check()
+                self.refresh_plan()
             elif kind == "retry_native_save":
                 self.adapter.last_record = outcome.result
                 self.result = outcome.result
-        super()._finished(worker, kind, path)
-        if outcome and outcome.state == "completed" and kind in ("preliminary", "blank"):
-            self.views.set_record(outcome.result)
-        if kind == "check_capabilities":
-            if outcome and outcome.state == "completed":
-                try:
-                    self.apply_supported_choices()
-                except (ValueError, TypeError) as exc:
-                    self.refresh_plan()
-                    self.status.setText(f"Device check completed; supported choices need attention: {exc}. Manual settings remain editable.")
-            else:
-                self.refresh_plan()
-        if outcome and outcome.state != "completed" and kind in ("blank", "preliminary", "measurement") and self.adapter.last_record is not None:
+                self.views.set_record(outcome.result)
+                self.status.setText("Native data saved.")
+        elif kind in ("blank", "preliminary", "measurement") and self.adapter.last_record is not None:
             self.result = self.adapter.last_record
             self.views.set_record(self.result)
-            self._update_controls()
-        if outcome and outcome.state == "cancelled":
-            self.status.setText("Acquisition stopped. Native partial data and restoration records retained.")
-        if outcome and outcome.state == "completed" and kind == "retry_native_save":
-            self.views.set_record(outcome.result)
-            self.status.setText("Retained native data saved. Restoration and original preservation failures remain recorded; use the host's instrument recovery action before hardware work.")
+        if outcome.state == "cancelled":
+            self.status.setText("Acquisition stopped.")
+        self.refresh_readiness()
+
+    def _loaded_run(self, record, path):
+        self.adapter.reuse_records(record, self.plan)
+        self.views.set_record(record)
+        self.refresh_readiness()
+
+    def _choose_blank(self):
+        path = QFileDialog.getExistingDirectory(self, "Load blank", str(self.save_root_provider()))
+        if path:
+            self.load_blank(path)
+
+    def load_blank(self, path):
+        return self.load_run(path)
+
+    def check_capabilities(self):
+        from .runner import discover_capabilities
+        from .persistence import save_run
+        def check(snapshot, worker):
+            return discover_capabilities(self.context, snapshot.operation,
+                cancel=worker.cancel_event.is_set, progress=worker.message.emit,
+                preserve=lambda record: save_run(snapshot.operation.output_path, record))
+        return self.begin_operation("check_capabilities", check, invalidates_preliminary=False, requires_valid_plan=False)
 
     def _needs_native_preservation(self):
         record = self.adapter.last_record
         return bool(record and record.get("preservation_error") and not record.get("preservation_recovery", {}).get("saved"))
 
     def close_blockers(self):
-        reasons = super().close_blockers()
+        reasons = tuple(super().close_blockers())
         if self._needs_native_preservation():
-            reasons += ("Native data preservation failed. Use Retry native save to retain this run before closing.",)
+            reasons += ("Native data are unsaved. Retry native save before closing.",)
         return reasons
 
     def new_run(self):
         if self._needs_native_preservation():
-            raise RuntimeError("Native data remain unsaved. Use Retry native save before New run.")
-        return super().new_run()
+            raise RuntimeError("Native data remain unsaved. Retry native save before New run.")
+        result = super().new_run()
+        self._clock_started = None
+        self.elapsed_label.clear()
+        self.elapsed_label.hide()
+        return result
 
     def _choose_retry_native_save(self):
-        path = QFileDialog.getExistingDirectory(self, "Retry native save in writable directory", str(self.save_root_provider()))
+        path = QFileDialog.getExistingDirectory(self, "Retry native save", str(self.save_root_provider()))
         if path:
             self._user_action(lambda: self.retry_native_save(path))
 
     def retry_native_save(self, root):
         from .persistence import save_run
         if not self._needs_native_preservation():
-            raise ValueError("No unresolved native preservation failure is retained")
+            raise ValueError("No unsaved native data are retained.")
         record = deepcopy(self.adapter.last_record)
         recovery_id = str(uuid4())
         run_id = str(UUID(record["run_id"]))
@@ -682,95 +669,24 @@ class MicrosecondPanel(GuidedMeasurementPanel):
             "original_preservation_error": record["preservation_error"], "saved": True,
             "instrument_fault_cleared": False,
         }
-        def retry(worker):
+        def retry(snapshot, worker):
             worker.check_cancelled()
-            worker.message.emit("Saving exact retained native arrays and original restoration/preservation errors; instruments are not accessed.")
+            worker.message.emit("Saving retained native data…")
             record["native_path"] = str(save_run(destination, record))
             return record
-        self._launch(retry, "retry_native_save", destination)
-
-    def _choose_blank(self):
-        path = QFileDialog.getExistingDirectory(self, "Load complete compatible blank", str(self.save_root_provider()))
-        if path:
-            self.load_blank(path)
-
-    def load_blank(self, path):
-        self._launch(lambda _: self.adapter.load_run(path), "load_blank", path)
-
-    def check_capabilities(self):
-        from .runner import discover_capabilities
-        from .persistence import save_run
-        settings = self.adapter.read_settings()
-        operation = self.context.begin_operation(settings, hardware=self.adapter.hardware_required("check", settings),
-                                                 purpose="explicit microsecond capability check", cancel=self.request_abort)
-        self._launch_owned(operation, lambda worker: discover_capabilities(
-            self.context, operation, cancel=worker.cancel_event.is_set, progress=worker.message.emit,
-            preserve=lambda record: save_run(operation.output_path, record)), "check_capabilities")
-
-    def load_qualification(self):
-        from .settings import StroboscopySettings
-        from .planner import apply_qualified_recommendations
-        ids = self.adapter.read_settings().get("promoted_bundle_ids", [])
-        if not ids:
-            raise ValueError("Enter an applicable promoted bundle ID in Qualification and provenance.")
-        qualification = self.adapter.load_qualified_bundle(ids[0])
-        settings = StroboscopySettings.from_dict(self.adapter.read_settings())
-        recommended = apply_qualified_recommendations(settings, qualification,
-                          override_fields=tuple(self.settings_widget.manual_override_fields))
-        self.adapter.apply_settings(recommended)
-        self.refresh_plan()
-
-    def apply_supported_choices(self):
-        from .settings import StroboscopySettings
-        from .planner import select_supported_response
-        previous = StroboscopySettings.from_dict(self.adapter.read_settings())
-        settings = select_supported_response(previous, self.adapter.capabilities,
-                    preserve_fields=tuple(self.settings_widget.manual_override_fields))
-        self.adapter.apply_settings(settings)
-        self.refresh_plan()
-        before, after = plain(previous.response), plain(settings.response)
-        changes = []
-        for name, value in after.items():
-            if value == before[name]:
-                continue
-            scale = 1e6 if name.endswith("_s") else 1
-            label = _label(name).replace("(s)", "(µs)") if scale == 1e6 else _label(name)
-            changes.append(f"{label}: {before[name] * scale:g} → {value * scale:g}")
-        message = "Supported choices applied: " + "; ".join(changes) if changes else "Entered automatic settings already match supported choices."
-        overrides = sorted(name.removeprefix("response.") for name in self.settings_widget.manual_override_fields if name.startswith("response."))
-        if overrides:
-            message += " Manual overrides retained and editable: " + ", ".join(overrides) + "."
-        self.status.setText(message)
-
-    def _choose_sample_selection(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Load accepted sample spectral selection", str(self.save_root_provider()), "JSON (*.json)")
-        if path:
-            self._user_action(lambda: self.load_sample_selection(path))
-
-    def load_sample_selection(self, path):
-        from control_app.measurement_host.interchange import load_sample_selection
-        selection = load_sample_selection(path)
-        settings = self.adapter.read_settings()
-        if selection.sample_id != settings["identity"]["sample_id"]:
-            raise ValueError("Spectral selection sample ID differs from the entered sample")
-        if selection.condition_id != settings["identity"]["condition_id"]:
-            raise ValueError("Spectral selection condition ID differs from the entered condition")
-        self.adapter.sample_records = (plain(selection),)
-        settings["identity"]["sample_selection_id"] = selection.selection_id
-        self.adapter.apply_settings(settings)
-        self.refresh_plan()
+        return self.begin_operation("retry_native_save", retry, invalidates_preliminary=False, requires_valid_plan=False)
 
     def output_location_changed(self, path):
-        self.save_root_provider = lambda: Path(path)
+        super().output_location_changed(path)
 
     def instrument_state_changed(self, change):
         self.adapter.instrument_state_changed(change)
-        self.review.setChecked(False)
         self.refresh_plan()
 
     def _busy_clock(self, busy):
         if busy:
             self._clock_started = time.monotonic()
+            self.elapsed_label.setVisible(True)
             self._timer.start()
         else:
             self._timer.stop()
@@ -781,9 +697,9 @@ class MicrosecondPanel(GuidedMeasurementPanel):
             return
         elapsed = time.monotonic() - self._clock_started
         budget = plain(self.plan.budget) if self.plan is not None else {}
-        estimate = next((float(budget[key]) for key in ("total_wall_s", "total_duration_s", "total_s", "wall_clock_s") if key in budget), None)
-        remaining = f"; estimated remaining {max(0, estimate-elapsed):,.1f} s" if estimate is not None else "; remaining estimate unavailable"
-        self.elapsed_label.setText(f"Elapsed {elapsed:,.1f} s{remaining}. Basis: plan preparation, controls, tuning, recovery, upload, retrieval, restoration, saving and analysis.")
+        estimate = budget.get("wall_clock_s")
+        remaining = f" · est. remaining {max(0, float(estimate)-elapsed):,.1f} s" if estimate is not None else ""
+        self.elapsed_label.setText(f"Elapsed {elapsed:,.1f} s{remaining}")
 
 
 def make_handle(context, *, title):
