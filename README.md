@@ -75,7 +75,7 @@ dual-detector tabs, for nineteen tabs in total. Restart an already-running UI
 after updating the checkout so it discovers the installed packages. Hidden
 measurement pages do not change the existing Phase Scan pages' layout size.
 The twelve new pages use compact scientific inputs and calculated settings with
-independent Advanced overrides. Their operator workflow uses installed devices,
+independent overrides displayed in a framed group. Their operator workflow uses installed devices,
 is temperature-naive, and has no procedural review or approval controls. Actual
 device faults, incompatible data, ownership, cancellation, restoration and native
 preservation remain enforced. Simulated transports remain available to tests;

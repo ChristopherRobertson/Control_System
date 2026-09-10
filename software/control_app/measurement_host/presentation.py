@@ -210,7 +210,7 @@ try:
     from PySide6.QtWidgets import (
         QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
         QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter,
-        QToolButton, QVBoxLayout, QWidget,
+        QVBoxLayout, QWidget,
     )
 except ImportError:  # Optional UI dependencies must not block module discovery.
     QWidget = None
@@ -753,9 +753,9 @@ if QWidget is not None:
         Constructor: (settings_widget, adapter, context, parent=None,
         *, advanced_widget=None). No hardware access occurs during construction.
         Essential settings belong in settings_widget; controls with derived
-        defaults belong in set_advanced_widget(). The disclosure starts collapsed
-        and only shows or hides those controls. Each field's Auto/value selection
-        independently determines its override. Connect settings signals to
+        defaults belong in set_advanced_widget(). These controls remain visible
+        in the framed advanced_content/advanced_group. Each field's Auto/value
+        selection independently determines its override. Connect settings signals to
         refresh_plan(). There is no review widget or acknowledgement state.
 
         Stable extension layouts: control_layout/settings_layout,
@@ -775,7 +775,6 @@ if QWidget is not None:
         outcome_ready = Signal(object)
         operation_finished = Signal(str, object)
         new_run_requested = Signal()
-        advanced_toggled = Signal(bool)
 
         def __init__(self, settings_widget: QWidget, adapter: CompactScientificAdapter,
                      context: MeasurementContext, parent=None, *, advanced_widget=None):
@@ -803,19 +802,9 @@ if QWidget is not None:
             self.settings_layout.addWidget(settings_widget)
             self.settings_extras_layout = QVBoxLayout()
             self.settings_layout.addLayout(self.settings_extras_layout)
-            self.advanced_button = QToolButton()
-            self.advanced_button.setText("Advanced overrides")
-            self.advanced_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-            self.advanced_button.setArrowType(Qt.ArrowType.RightArrow)
-            self.advanced_button.setCheckable(True)
-            self.advanced_content = QWidget()
+            self.advanced_content = self.advanced_group = QGroupBox("Advanced overrides")
             self.advanced_layout = QVBoxLayout(self.advanced_content)
-            self.advanced_layout.setContentsMargins(0, 0, 0, 0)
-            self.settings_layout.addWidget(self.advanced_button)
             self.settings_layout.addWidget(self.advanced_content)
-            self.advanced_button.hide()
-            self.advanced_content.hide()
-            self.advanced_button.toggled.connect(self._advanced_changed)
 
             self.validation = QLabel()
             self.validation.setWordWrap(True)
@@ -923,13 +912,7 @@ if QWidget is not None:
 
         def set_advanced_widget(self, widget):
             self.advanced_layout.addWidget(widget)
-            self.advanced_button.show()
-            self.advanced_content.setVisible(self.advanced_button.isChecked())
-
-        def _advanced_changed(self, expanded):
-            self.advanced_content.setVisible(expanded)
-            self.advanced_button.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
-            self.advanced_toggled.emit(expanded)
+            widget.show()
 
         def add_action(self, text, callback, *, section="actions", requires_plan=True):
             layouts = {"actions": self.action_layout, "blank": self.blank_actions_layout,
@@ -1003,7 +986,6 @@ if QWidget is not None:
         def _update_controls(self, *_):
             idle, valid = not self._busy, self.plan is not None
             self.settings_widget.setEnabled(idle)
-            self.advanced_button.setEnabled(idle)
             self.advanced_content.setEnabled(idle)
             self.preliminary_button.setEnabled(idle and valid)
             self.start_button.setEnabled(idle and valid and not self._preliminary_issues)

@@ -93,8 +93,9 @@ def test_all_six_delivered_modules_install_together_without_hardware(monkeypatch
             assert isinstance(widget, CompactMeasurementPanel)
             assert not hasattr(widget, "review")
             assert not hasattr(widget, "review_checkbox")
-            assert not widget.advanced_button.isChecked()
-            assert widget.advanced_content.isHidden()
+            assert not hasattr(widget, "advanced_button")
+            assert not widget.advanced_content.isHidden()
+            assert not widget.advanced_content.isCheckable()
             # Operator pages default to installed instruments. Test simulators
             # remain explicit backend fixtures, never an accidental UI default.
             settings = adapter.read_settings()

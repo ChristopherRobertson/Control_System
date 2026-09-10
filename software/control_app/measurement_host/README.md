@@ -211,8 +211,8 @@ New pages use `CompactMeasurementPanel(settings_widget, adapter, context,
 parent=None, *, advanced_widget=None)` from `presentation.py`, implementing
 `CompactScientificAdapter`. Essential scientific inputs occupy the left column;
 concise derived-setting rows and the primary plot occupy the right. Independently
-overridable calculated settings belong under the initially collapsed Advanced
-disclosure. Opening or closing that disclosure never changes override values.
+overridable calculated settings stay displayed in the framed Advanced overrides
+group, with each field independently set to Automatic or an explicit value.
 The panel has no review object, acknowledgement state or procedural checkbox.
 The earlier `ScientificAdapter` and `GuidedMeasurementPanel` remain compatibility
 APIs for existing integrations; new measurement pages do not use their review flow.
@@ -252,7 +252,7 @@ Use the panel's named extension points instead of replacing its layout:
 | Purpose | API |
 | --- | --- |
 | Essential inputs and extra actions | `settings_layout` / `control_layout`, `settings_extras_layout`, `add_settings_action(text, callback)` |
-| Independent overrides | `set_advanced_widget(widget)`, `advanced_layout`, `advanced_button`, `advanced_content` |
+| Always-visible independent overrides | `set_advanced_widget(widget)`, `advanced_layout`, `advanced_content` / `advanced_group` |
 | Blank actions | `blank_actions_layout`, `add_blank_action(text, callback)` |
 | Standard actions and plan files | `action_layout`, `file_layout` |
 | Derived values and primary results | `summary_form`, `summary_values`, `set_summary_rows(rows)`, `result_layout`, `add_result_widget(widget)` |

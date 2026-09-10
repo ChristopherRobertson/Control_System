@@ -68,7 +68,7 @@ class Adapter:
     def new_run(self): self.calls.append("new run")
 
 
-def make_panel(tmp_path, adapter=None, mode="single", root_provider=None):
+def make_panel(tmp_path, adapter=None, mode="single", root_provider=None, advanced_widget=None):
     from PySide6.QtWidgets import QWidget
     from control_app.measurement_host.context import ContextFactory
     from control_app.measurement_host.ownership import HardwareCoordinator
@@ -76,12 +76,12 @@ def make_panel(tmp_path, adapter=None, mode="single", root_provider=None):
     coordinator = HardwareCoordinator(tmp_path / "instrument.lock")
     context = ContextFactory(ownership=coordinator, save_root_provider=root_provider or (lambda: tmp_path)).for_experiment(
         "fixed_wavenumber_kinetics").for_mode(mode)
-    return CompactMeasurementPanel(QWidget(), adapter or Adapter(), context), coordinator
+    return CompactMeasurementPanel(QWidget(), adapter or Adapter(), context, advanced_widget=advanced_widget), coordinator
 
 
-def test_compact_extension_layout_has_no_review_control_and_collapsed_advanced(app, tmp_path):
+def test_compact_extension_layout_has_visible_framed_overrides_without_review_or_disclosure(app, tmp_path):
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QCheckBox, QLabel, QWidget
+    from PySide6.QtWidgets import QCheckBox, QGroupBox, QLabel, QToolButton, QWidget
     from control_app.ui.widgets.phase_scan_widget import PhaseScanWidget
     panel, coordinator = make_panel(tmp_path)
     reference = PhaseScanWidget()
@@ -101,13 +101,18 @@ def test_compact_extension_layout_has_no_review_control_and_collapsed_advanced(a
         assert panel.settings_scroll.widget().layout() is panel.settings_layout
         advanced = QWidget()
         panel.set_advanced_widget(advanced)
-        assert not panel.advanced_button.isChecked() and panel.advanced_content.isHidden()
-        toggles = []
-        panel.advanced_toggled.connect(toggles.append)
-        panel.advanced_button.click()
-        assert not panel.advanced_content.isHidden() and toggles == [True]
-        panel.advanced_button.click()
-        assert panel.advanced_content.isHidden() and toggles == [True, False]
+        panel.resize(1000, 800)
+        panel.show()
+        app.processEvents()
+        assert panel.advanced_content is panel.advanced_group
+        assert isinstance(panel.advanced_content, QGroupBox)
+        assert not panel.advanced_content.isCheckable()
+        assert not panel.advanced_content.isFlat()
+        assert panel.advanced_content.isVisible() and advanced.isVisible()
+        assert panel.advanced_layout.contentsMargins() == reference.advanced_group.layout().contentsMargins()
+        assert panel.settings_layout.indexOf(panel.advanced_content) >= 0
+        assert not panel.findChildren(QToolButton)
+        assert not hasattr(panel, "advanced_button") and not hasattr(panel, "advanced_toggled")
         blank = panel.add_blank_action("Acquire blank", lambda: None)
         capability = panel.add_settings_action("Check device", lambda: None)
         plot = QLabel("Scientific plot")
@@ -119,6 +124,51 @@ def test_compact_extension_layout_has_no_review_control_and_collapsed_advanced(a
     finally:
         panel.deleteLater()
         reference.deleteLater()
+
+
+@pytest.mark.parametrize("at_construction", [True, False])
+def test_visible_override_rows_keep_independent_auto_choices_across_a_run(app, tmp_path, at_construction):
+    from PySide6.QtWidgets import QComboBox, QFormLayout, QWidget
+    advanced = QWidget()
+    form = QFormLayout(advanced)
+    rate, order = QComboBox(), QComboBox()
+    for editor, label, value in ((rate, "Sample rate", 1000), (order, "Filter order", 2)):
+        editor.addItem("Automatic", None)
+        editor.addItem(str(value), value)
+        form.addRow(label, editor)
+    panel, _ = make_panel(tmp_path, advanced_widget=advanced if at_construction else None)
+    if not at_construction:
+        panel.set_advanced_widget(advanced)
+    try:
+        panel.resize(1000, 800)
+        panel.show()
+        app.processEvents()
+        assert rate.isVisible() and order.isVisible()
+        assert rate.isEnabled() and order.isEnabled()
+        rate.setCurrentIndex(1)
+        assert rate.currentData() == 1000 and order.currentData() is None
+        order.setCurrentIndex(1)
+        rate.setCurrentIndex(0)
+        assert rate.currentData() is None and order.currentData() == 2
+        panel.adapter.settings.update(rate=rate.currentData(), order=order.currentData())
+        panel.refresh_plan()
+        panel.begin("preliminary")
+        wait_for(app, lambda: not panel.command_running())
+        panel.adapter.gate.clear()
+        snapshot = panel.begin("measurement")
+        assert rate.isVisible() and order.isVisible()
+        assert not rate.isEnabled() and not order.isEnabled()
+        assert snapshot.settings["rate"] is None and snapshot.settings["order"] == 2
+        panel.adapter.gate.set()
+        wait_for(app, lambda: not panel.command_running())
+        assert rate.isVisible() and order.isVisible()
+        assert rate.isEnabled() and order.isEnabled()
+        assert rate.currentData() is None and order.currentData() == 2
+    finally:
+        panel.adapter.gate.set()
+        if panel.command_running():
+            wait_for(app, lambda: not panel.command_running())
+        panel.deleteLater()
 
 
 def test_actual_preliminary_compatibility_controls_start_and_survives_harmless_refresh(app, tmp_path):
