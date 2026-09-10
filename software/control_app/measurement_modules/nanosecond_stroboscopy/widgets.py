@@ -10,7 +10,7 @@ import time
 import numpy as np
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
+    QBoxLayout, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
     QHBoxLayout, QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
@@ -54,8 +54,8 @@ class NanosecondSettingsWidget(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         self.measurement_group = QGroupBox("Measurement")
         layout = QFormLayout(self.measurement_group)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setVerticalSpacing(3)
+        layout.setContentsMargins(8, 2, 8, 2)
+        layout.setVerticalSpacing(2)
         root.addWidget(self.measurement_group)
         for key, label in (("wavenumbers_cm1", "Wavenumbers (cm⁻¹)"), ("delays_ns", "Delays (ns)")):
             control = QLineEdit()
@@ -81,7 +81,7 @@ class NanosecondSettingsWidget(QWidget):
         self.advanced_widget = QWidget()
         advanced = QVBoxLayout(self.advanced_widget)
         advanced.setContentsMargins(0, 0, 0, 0)
-        advanced.setSpacing(3)
+        advanced.setSpacing(2)
         self.detector_groups = {}
         forms = {}
         for role in (("sample", "reference") if mode == "dual" else ("sample",)):
@@ -89,13 +89,13 @@ class NanosecondSettingsWidget(QWidget):
                 group = QGroupBox(role.title())
                 self.detector_groups[role] = group
                 form = QFormLayout(group)
-                form.setContentsMargins(8, 4, 8, 4)
+                form.setContentsMargins(8, 2, 8, 2)
                 advanced.addWidget(group)
             else:
                 form = QFormLayout()
                 form.setContentsMargins(0, 0, 0, 0)
                 advanced.addLayout(form)
-            form.setVerticalSpacing(3)
+            form.setVerticalSpacing(2)
             forms[role] = form
         for key, label, unit in self.OVERRIDES:
             role = "reference" if key.startswith("reference_") else "sample"
@@ -288,8 +288,9 @@ class NanosecondPanel(CompactMeasurementPanel):
         adapter = NanosecondScientificAdapter(context, settings, runner_factory=runner_factory)
         super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
         self.advanced_group.setTitle("HF2LI overrides")
-        self.advanced_layout.setContentsMargins(8, 4, 8, 4)
-        self.settings_layout.setSpacing(4)
+        self.advanced_layout.setContentsMargins(8, 2, 8, 2)
+        self.settings_layout.setSpacing(3)
+        self.file_layout.setDirection(QBoxLayout.Direction.LeftToRight)
         settings.changed.connect(self.refresh_plan)
         self.save_root_provider = lambda: self._next_root or self.context.save_root()
         self.preliminary_button.setText("Acquire unpumped sample")

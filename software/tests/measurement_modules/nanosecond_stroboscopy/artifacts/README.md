@@ -4,7 +4,19 @@ Captured 2026-09-10 from the actual `ControlSystemMainWindow` with an isolated
 ownership coordinator and a blocked hardware handler. Plotted values are saved
 synthetic example data for layout inspection, not physical measurements.
 
-The current override-form correction is shown in:
+The final disconnected-startup acceptance uses Segoe UI 9 at 1100 × 780,
+with no loaded result or suppressed validation:
+
+- `single-startup-plan-actions-1100x780.png`
+- `dual-startup-plan-actions-1100x780.png`
+
+Every override, Restore Auto, Save Plan, and Load Plan has its full rectangle
+inside the initial settings viewport. Both inner and outer scroll ranges are
+zero. Save/Load share a row; their dual-mode rectangles are at y = 434, height
+24, within a 468-pixel-high viewport. Nine affected UI/shell checks passed.
+The guarded acceptance harness reported zero hardware attempts.
+
+Earlier example-data override-form evidence is preserved in:
 
 - `single-visible-overrides-1100x780.png`: all three HF2LI Auto choices visible.
 - `dual-visible-overrides-1100x780.png`: all six independent sample/reference

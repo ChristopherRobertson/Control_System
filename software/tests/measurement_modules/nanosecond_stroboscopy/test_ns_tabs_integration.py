@@ -234,15 +234,18 @@ def test_ns_instrument_change_invalidates_only_its_receiver(ns_qt, ns_pair):
 
 
 def test_ns_compact_pages_fit_actual_app_without_outer_scrolling(ns_qt, tmp_path):
-    from PySide6.QtGui import QFont, QFontDatabase
+    from PySide6.QtCore import QPoint, QRect
+    from PySide6.QtGui import QFont, QFontDatabase, QRegion
     from control_app.ui.contracts import blocked_handler
     from control_app.ui.main_window import ControlSystemMainWindow
     from control_app.measurement_host.ownership import HardwareCoordinator
     handler = blocked_handler("Compact UI verification; no hardware")
     handler.coordinator = HardwareCoordinator(tmp_path / "render.lock")
+    # Match real Windows startup and the acceptance harness, independent of a
+    # font selected by an earlier test in the same QApplication.
     previous_font = ns_qt.font()
-    QFontDatabase.addApplicationFont("C:/Windows/Fonts/arial.ttf")
-    ns_qt.setFont(QFont("Arial", 9))
+    QFontDatabase.addApplicationFont("C:/Windows/Fonts/segoeui.ttf")
+    ns_qt.setFont(QFont("Segoe UI", 9))
     window = ControlSystemMainWindow(handler, persist_settings=False)
     try:
         window.resize(1100, 780)
@@ -258,8 +261,15 @@ def test_ns_compact_pages_fit_actual_app_without_outer_scrolling(ns_qt, tmp_path
                 assert handle.widget.advanced_group.isVisible()
                 assert handle.widget.settings_scroll.verticalScrollBar().maximum() == 0
                 assert handle.widget.settings_scroll.horizontalScrollBar().maximum() == 0
-                for control in handle.widget.settings_widget.override_inputs.values():
-                    assert control.isVisibleTo(handle.widget)
+                assert handle.widget.result is None
+                viewport = handle.widget.settings_scroll.viewport()
+                controls = (*handle.widget.settings_widget.override_inputs.values(),
+                            handle.widget.settings_widget.restore_auto_button,
+                            handle.widget.save_plan_button, handle.widget.load_plan_button)
+                for control in controls:
+                    assert control.isVisibleTo(viewport)
+                    assert viewport.rect().contains(QRect(control.mapTo(viewport, QPoint(0, 0)), control.size()))
+                    assert (QRegion(control.rect()) - control.visibleRegion()).isEmpty()
     finally:
         window.deleteLater()
         ns_qt.processEvents()
