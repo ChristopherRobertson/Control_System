@@ -180,6 +180,9 @@ class QCLService(InjectedService):
     def __init__(self, guard):
         super().__init__(guard)
         self.emission = False
+        self.armed = False
+        self.scan_status = {"scan_in_progress": False, "scan_active": False, "scan_paused": False}
+        self.waiting_for_process_trigger = False
         self.sweep = {}
         self.pulse = {"pulse_rate_hz": 120000., "pulse_width_ns": 1000., "current_ma": 500.}
         self.pulse_history = []
@@ -191,8 +194,10 @@ class QCLService(InjectedService):
 
     def initialize(self): self.touch("initialize")
     def deinitialize(self): self.close()
-    def arm(self): self.touch("arm")
-    def disarm(self): self.touch("disarm")
+    def arm(self): self.touch("arm"); self.armed = True
+    def disarm(self): self.touch("disarm"); self.armed = False
+    def is_laser_armed(self): self.touch("is_laser_armed"); return self.armed
+    def get_scan_status(self): self.touch("get_scan_status"); return deepcopy(self.scan_status)
     def cancel_manual_tune(self): self.touch("cancel_manual_tune")
     def are_tecs_ready(self): self.touch("are_tecs_ready"); return True
     def is_tuned(self): self.touch("is_tuned"); return True
@@ -210,7 +215,7 @@ class QCLService(InjectedService):
     def is_key_switch_set(self): return True
     def get_system_error_word(self): return 0
     def read_state(self): return SimpleNamespace(to_dict=lambda: {"emission_on": self.emission, "interlock": True})
-    def get_scan_waiting_process_trigger(self): return True
+    def get_scan_waiting_process_trigger(self): self.touch("get_scan_waiting_process_trigger"); return self.waiting_for_process_trigger
     def is_emission_on(self): return self.emission
 
     def set_qcl_pulse_params(self, *, qcl, **params):
@@ -238,6 +243,8 @@ class QCLService(InjectedService):
         self.touch("start_sweep_scan")
         self.sweep = deepcopy(params)
         self.sweep_generation += 1
+        self.scan_status.update(scan_in_progress=True, scan_active=True)
+        self.waiting_for_process_trigger = True
 
     def get_sweep_parameters(self):
         result = deepcopy(self.sweep or {"start_cm1": 1900., "stop_cm1": 1900.4, "scan_rate_cm1_s": 2., "repetitions": 2})
@@ -251,7 +258,10 @@ class QCLService(InjectedService):
         return {"start": self.trigger["start"], "interval": interval, "num_triggers": count, "units": 2}
 
     def turn_emission_off(self): self.touch("turn_emission_off"); self.emission = False
-    def stop_scan_if_needed(self): self.touch("stop_scan_if_needed")
+    def stop_scan_if_needed(self):
+        self.touch("stop_scan_if_needed")
+        self.scan_status.update(scan_in_progress=False, scan_active=False, scan_paused=False)
+        self.waiting_for_process_trigger = False
     def start_emission(self): self.touch("start_emission"); self.emission = True
 
 
@@ -953,3 +963,52 @@ def test_fresh_readonly_pulse_checks_catch_changes_after_configuration_before_em
     assert restored["safe_verified"],restored["errors"]
     assert not services["mircat"].emission
     context.ownership.release(operation.ownership,safe_verified=True,preservation_verified=True,detail="Fresh pulse readback failure retained")
+
+
+@pytest.mark.parametrize("fault", ["ignored_disarm", "ignored_stop", "unknown_armed", "scan_read_error", "missing_scan_flags", "unknown_waiting"])
+def test_final_mircat_idle_verification_retains_fault_and_attempts_all_cleanup(tmp_path,monkeypatch,fault):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path,monkeypatch,live=True)
+    if fault == "ignored_disarm":
+        monkeypatch.setattr(QCLService,"disarm",lambda self:self.touch("disarm"))
+    elif fault == "ignored_stop":
+        monkeypatch.setattr(QCLService,"stop_scan_if_needed",lambda self:self.touch("stop_scan_if_needed"))
+    elif fault == "unknown_armed":
+        def read(self): self.touch("is_laser_armed"); return None
+        monkeypatch.setattr(QCLService,"is_laser_armed",read)
+    elif fault in ("scan_read_error","missing_scan_flags"):
+        def read(self):
+            self.touch("get_scan_status")
+            if fault == "scan_read_error": raise OSError("injected final scan status uncertainty")
+            return {"scan_active":False}
+        monkeypatch.setattr(QCLService,"get_scan_status",read)
+    elif fault == "unknown_waiting":
+        original = QCLService.get_scan_waiting_process_trigger
+        def read(self):
+            value = original(self)
+            return None if "disarm" in self.calls else value
+        monkeypatch.setattr(QCLService,"get_scan_waiting_process_trigger",read)
+    runner = SlowScanRunner(context)
+    with pytest.raises(RuntimeError,match="safe idle is unverified"):
+        runner.run(StartSnapshot(operation,"measurement",draft,{}),worker())
+    result = runner.last_result
+    assert result["status"] == "failed" and not result["restoration"]["safe_verified"]
+    record = result["restoration"]["records"]["MIRcat final idle readbacks"]
+    assert set(record) == {"emission_on","armed","scan_status","waiting_for_process_trigger","read_errors"}
+    assert record["emission_on"] is False
+    if fault == "ignored_disarm": assert record["armed"] is True
+    if fault == "ignored_stop":
+        assert record["scan_status"]["scan_active"] is True and record["waiting_for_process_trigger"] is True
+    if fault == "scan_read_error": assert "injected" in record["read_errors"]["scan_status"]
+    assert result["partial_native_records"]
+    assert all(device.closed for device in services.values())
+    calls = services["mircat"].calls
+    assert calls.index("is_laser_armed") < calls.index("close")
+    assert calls.index("get_scan_status") < calls.index("close")
+    assert calls[-2] == "get_scan_waiting_process_trigger" and calls[-1] == "close"
+    assert all(not value for name in ("t660_1","t660_2") for value in services[name].channels.values())
+    assert coordinator.snapshot()["state"] == "fault"
+    loaded = load_run(result["path"],expected_mode="dual")
+    assert loaded["restoration"]["records"]["MIRcat final idle readbacks"] == record

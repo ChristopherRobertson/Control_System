@@ -730,10 +730,28 @@ class InstalledSlowScanBackend:
             attempt(f"verify {name} OFF", verify)
         if "mircat" in self.devices:
             def verify_qcl():
-                if self.devices["mircat"].is_emission_on():
-                    raise RuntimeError("MIRcat emission remains ON")
-                return {"emission_on": False}
-            attempt("verify emission OFF", verify_qcl)
+                qcl = self.devices["mircat"]
+                observed = {"read_errors": {}}
+                # Retain all available final observations even when one getter
+                # fails. A successful stop/disarm command is not a readback.
+                records["MIRcat final idle readbacks"] = observed
+                for key, getter in (("emission_on", qcl.is_emission_on), ("armed", qcl.is_laser_armed),
+                                    ("scan_status", qcl.get_scan_status),
+                                    ("waiting_for_process_trigger", qcl.get_scan_waiting_process_trigger)):
+                    try:
+                        observed[key] = getter()
+                    except Exception as exc:
+                        observed[key] = None
+                        observed["read_errors"][key] = str(exc)
+                scan = observed.get("scan_status")
+                scan = scan if isinstance(scan, dict) else {}
+                expected_false = {key: observed.get(key) for key in ("emission_on", "armed", "waiting_for_process_trigger")}
+                expected_false.update({key: scan.get(key) for key in ("scan_in_progress", "scan_active", "scan_paused")})
+                unresolved = [name for name, value in expected_false.items() if value is not False]
+                if unresolved or observed["read_errors"]:
+                    raise RuntimeError("MIRcat safe idle is unverified: " + ", ".join(unresolved or observed["read_errors"]))
+                return observed
+            attempt("verify MIRcat safe idle", verify_qcl)
         for name, device in reversed(tuple(self.devices.items())):
             attempt(f"close {name}", device.deinitialize if name == "mircat" else device.close)
         return {"safe_verified": not errors, "errors": errors, "records": records,
