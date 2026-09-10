@@ -54,7 +54,7 @@ class RepeatedRapidScanRunner:
         if self._cancel_event is not None:
             self._cancel_event.set()
 
-    def run(self, snapshot, worker, kind=None, *, review_contract=None, blank=None, background=None):
+    def run(self, snapshot, worker, kind=None, *, compatibility_contract=None, review_contract=None, blank=None, background=None):
         operation, plan = snapshot.operation, snapshot.plan
         settings = get(plan, "settings")
         kind = kind or snapshot.kind
@@ -62,17 +62,14 @@ class RepeatedRapidScanRunner:
         record = {"experiment_id": "repeated_rapid_scan", "schema_version": 1,
                   "run_id": operation.run_id, "mode": get(settings, "mode"), "kind": kind,
                   "condition_id": get(settings, "condition_id", get(get(settings, "condition", {}), "condition_id")),
-                  "operation": operation.to_dict(), "plan": plain(plan), "review_contract": plain(review_contract or {}),
-                  "preliminary_selection": snapshot.preliminary, "native_movies": [], "qualification_movies": [],
+                  "operation": operation.to_dict(), "plan": plain(plan), "compatibility_contract": plain(compatibility_contract or review_contract or {}),
+                  "preliminary_selection": snapshot.preliminary, "native_movies": [], "qualification_movies": [], "omitted_controls": [],
                   "processed": [], "assessments": [], "status": "partial", "errors": [],
                   "output_path": str(operation.output_path), "baseline": None}
         record["background"] = background
         self.last_result = record
         self.active = True
         self._cancel_event = worker.cancel_event
-        self._physical_state = None
-        self._physical_pending_state = None
-        self._physical_records = record.setdefault("physical_actions", [])
         acquirer, failure, restoration = None, None, {"safe_verified": True, "errors": [], "device_access_started": False}
         preservation_verified = False
         try:
@@ -81,9 +78,6 @@ class RepeatedRapidScanRunner:
                 raise ValueError("Scientific plan settings are missing")
             if operation.instance_id != f"repeated_rapid_scan:{get(settings, 'mode')}":
                 raise ValueError("Operation mode differs from the frozen scientific plan")
-            if operation.hardware and kind != "capabilities" and not get(plan, "ready_for_hardware", False):
-                missing = [get(item, "message", str(item)) for item in get(plan, "readiness_items", ()) if get(item, "blocks_hardware", True)]
-                raise ValueError("Installed acquisition readiness: " + "; ".join(missing))
             factory = self.acquirer_factory
             if factory is None:
                 if operation.hardware:
@@ -93,8 +87,48 @@ class RepeatedRapidScanRunner:
                     factory = SimulationAcquirer
             acquirer = factory(self.context, operation, plan)
             acquirer.role = kind
-            acquirer.prepare(worker)
+            discover = getattr(acquirer, "discover", None)
+            if operation.hardware and callable(discover):
+                discover(worker)
+                if kind != "capabilities":
+                    from .planner import resolve_intent_settings, build_plan
+                    from .settings import AcquisitionIntent
+                    record["requested_plan"] = record["plan"]
+                    settings = resolve_intent_settings(AcquisitionIntent.from_settings(settings),
+                        mode=settings.mode, base_settings=settings, capabilities=acquirer.readbacks["capabilities"],
+                        overrides=settings.manual_overrides)
+                    plan = build_plan(settings, capabilities=acquirer.readbacks["capabilities"])
+                    acquirer.plan, acquirer.settings = plan, settings
+            if kind != "capabilities" or not callable(discover):
+                acquirer.prepare(worker)
+            if kind != "capabilities":
+                # Preserve the selected native rate/filter/range after ordinary
+                # hardware quantization; do not treat quantization as a refusal.
+                actual_values = get(get(acquirer.readbacks, "capabilities", {}), "live_settings", {})
+                fields = ("sample_rate_hz", "reference_rate_hz", "sample_filter_order", "reference_filter_order",
+                          "sample_filter_timeconstant_s", "reference_filter_timeconstant_s",
+                          "sample_input_range_v", "reference_input_range_v",
+                          "mircat_pulse_rate_hz", "mircat_pulse_width_ns", "mircat_current_ma")
+                updates = {name: actual_values[name] for name in fields if name in actual_values}
+                if updates:
+                    settings = replace(settings, **updates)
+                    from .planner import build_plan
+                    plan = build_plan(settings, capabilities=acquirer.readbacks.get("capabilities", {}))
+                    acquirer.plan, acquirer.settings = plan, settings
+                from .session import operational_contract
+                requested_contract = record["compatibility_contract"]
+                record["requested_compatibility_contract"] = requested_contract
+                record["compatibility_contract"] = operational_contract(settings.to_dict(),
+                    {"observed_changes": requested_contract.get("instrument_changes", {})})
+                record["plan"] = plain(plan)
+                if kind == "blank":
+                    retained = get(get(plan, "capabilities", {}), "selected_baseline_bytes", 0)
+                    if get(plan, "estimates").get("blank_action_memory_bytes", 0) + retained > settings.memory_limit_bytes:
+                        raise MemoryError("Full blank schedule exceeds available memory allocation")
+                    if get(plan, "estimates").get("blank_action_storage_bytes", 0) + retained > settings.storage_limit_bytes:
+                        raise OSError("Full blank schedule exceeds native storage allocation")
             record["readbacks"] = acquirer.readbacks
+            record["capabilities"] = acquirer.readbacks.get("capabilities", {})
             if kind == "capabilities":
                 record["capabilities"] = acquirer.readbacks.get("capabilities", {})
                 record["status"] = "complete"
@@ -116,16 +150,6 @@ class RepeatedRapidScanRunner:
                     restoration = {"safe_verified": False, "errors": [f"{type(exc).__name__}: {exc}"]}
                 record["raw_movies"] = acquirer.raw_movies
                 record["readbacks"] = acquirer.readbacks
-            physical_uncertain = self._physical_state in ("pump_blocked", "dark") or self._physical_pending_state in ("pump_blocked", "dark")
-            if operation.hardware and physical_uncertain:
-                try:
-                    if not restoration.get("safe_verified", False):
-                        raise RuntimeError("Physical restoration cannot be requested until safe optical output inhibition is verified")
-                    worker.confirm_physical_action("Instrument outputs are inhibited. Restore the sample, probe and pump path to the recorded pre-run physical configuration.", cleanup=True)
-                    self._physical_records.append({"action": "restore physical configuration", "accepted": True})
-                except BaseException as exc:
-                    restoration["safe_verified"] = False
-                    restoration.setdefault("errors", []).append(f"Physical restoration not confirmed: {exc}")
             record["restoration"] = restoration
             if restoration.get("errors") or not restoration.get("safe_verified", False):
                 record["errors"].extend(restoration.get("errors", ["Safe restoration not verified"]))
@@ -170,38 +194,37 @@ class RepeatedRapidScanRunner:
         settings = get(plan, "settings")
         if kind == "blank" and get(settings, "mode") == "dual":
             raise ValueError("Dual mode records matched reference simultaneously; no routine sequential blank")
-        if kind == "preliminary" and get(settings, "mode") == "single":
-            if not blank or not get(blank, "baseline") or not get(get(blank, "baseline"), "complete", False):
-                raise ValueError("Acquire or load a complete compatible sequential blank before the sample preliminary")
-            record["blank"] = blank
-            record["blank_run_id"] = get(blank, "run_id")
-        if record["operation"]["hardware"]:
-            self._confirm_physical(worker, "blank" if kind == "blank" else "sample",
-                "Load the complete matched blank/control cell and confirm condition and temperature identifiers." if kind == "blank" else
-                "Load the sample and, for dual mode, the matched-buffer reference. Confirm preparation, cell, position and temperature records; pump commands remain inhibited.", acquirer)
+        blank = self._reusable(blank, record, "blank")
+        record["blank"] = blank
+        record["background"] = background
+        record["blank_run_id"] = get(blank, "run_id") if blank else None
         selected = list(get(plan, "movies"))
         if kind == "preliminary":
             # One complete unpumped movie per direction supplies sample Q0.
             selected = list({get(movie, "direction"): movie for movie in reversed(selected)}.values())
+        display_background = self._normalization(background or (get(blank, "baseline") if blank else None), record, background=True)
         for index, movie_plan in enumerate(selected):
             worker.check_cancelled()
-            movie = acquirer.capture(_unpumped(movie_plan, ":"+kind), worker)
+            movie = self._capture(acquirer, _unpumped(movie_plan, ":"+kind), worker, record)
             record["native_movies"].append(movie)
             state = self._stationarity(movie.scans, settings)
             record["assessments"].append(state)
-            if not state.accepted:
-                raise ValueError("Unpumped train rejected: " + "; ".join(state.reasons))
-            record["processed"].append(reconstruct_movie(movie, background=background or (get(blank, "baseline") if blank else None),
+            record["processed"].append(reconstruct_movie(movie, background=display_background,
                 spectral_match_tolerance_cm1=(settings.scan_stop_cm1-settings.scan_start_cm1)/(max(64, int(settings.sample_rate_hz*settings.measured_scan_period_s))-1)*.6,
                 cancelled=worker.cancel_event.is_set,
                 band_windows_cm1=settings.band_windows_cm1, offband_windows_cm1=settings.offband_windows_cm1))
         baseline_kind = "background" if kind == "blank" else "q0" if settings.mode == "dual" else "single_baseline"
-        # Acquisition acceptance is distinct from the host's named explicit
-        # preliminary review required before Start; snapshot contains that review.
+        # Baseline validity and stationarity are measured diagnostics. No named
+        # reviewer or approval flag is required to retain/use raw observations.
         record["baseline"] = _combined_baseline(record["native_movies"], baseline_kind, record["run_id"]+":baseline", accepted=True)
         if not record["baseline"].complete:
-            raise ValueError("Preliminary/blank lacks complete valid detector and wavelength support")
+            record.setdefault("warnings", []).append("Baseline has incomplete support; raw data retained and unsupported normalized points remain missing")
         record["status"] = "complete"
+
+    @staticmethod
+    def _capture(acquirer, movie_plan, worker, record):
+        movie = acquirer.capture(movie_plan, worker)
+        return replace(movie, metadata={**movie.metadata, "compatibility_contract": record["compatibility_contract"]})
 
     @staticmethod
     def _stationarity(scans, settings):
@@ -211,32 +234,39 @@ class RepeatedRapidScanRunner:
 
     def _measurement(self, acquirer, plan, preliminary, worker, record, blank, background=None):
         settings = get(plan, "settings")
-        baseline = get(preliminary, "baseline")
-        if baseline is None or not baseline.complete or not baseline.accepted:
-            raise ValueError("A compatible accepted unpumped preliminary baseline is required")
-        blank = blank or get(preliminary, "blank")
+        preliminary = self._reusable(preliminary, record, "sample baseline")
+        blank = self._reusable(blank or get(preliminary, "blank"), record, "blank")
         background = background or (get(blank, "baseline") if blank else None) or get(preliminary, "background")
-        record["background"] = background
-        if settings.mode == "single" and background is None:
-            raise ValueError("Single-detector measurement requires its compatible complete sequential blank")
-        record["baseline"], record["blank"] = baseline, blank
+        if preliminary is None or get(preliminary, "baseline") is None:
+            notify(worker, "Acquisition: recording unpumped sample baseline automatically")
+            preliminary = {"experiment_id": "repeated_rapid_scan", "schema_version": 1,
+                "kind": "preliminary", "mode": settings.mode, "condition_id": settings.condition_id,
+                "run_id": record["run_id"], "compatibility_contract": record["compatibility_contract"],
+                "operation": record["operation"], "plan": record["plan"], "native_movies": [],
+                "processed": [], "assessments": [], "status": "partial"}
+            record["auto_preliminary"] = preliminary
+            old_role = acquirer.role
+            acquirer.role = "preliminary"
+            try:
+                self._preliminary(acquirer, plan, "preliminary", worker, preliminary, blank, background)
+            finally:
+                acquirer.role = old_role
+        baseline = get(preliminary, "baseline")
+        record["baseline"], record["blank"], record["background"] = baseline, blank, background
         record["blank_run_id"] = get(blank, "run_id") if blank else None
+        baseline = self._normalization(baseline, record)
+        background = self._normalization(background, record, background=True)
+        if settings.mode == "single" and background is None:
+            record.setdefault("warnings", []).append("No compatible blank: native signal and changes relative to the unpumped sample are available; absolute absorbance is unavailable")
         movies = get(plan, "movies")
         for index, movie_plan in enumerate(movies):
             worker.check_cancelled()
-            if record["operation"]["hardware"]:
-                control = get(movie_plan, "control")
-                physical_state = control if control in ("pump_blocked", "dark") else "sample"
-                self._confirm_physical(worker, physical_state, get(movie_plan, "required_action"), acquirer)
-            if get(movie_plan, "control") == "sample":
-                notify(worker, f"Pre-pump stationarity: qualification train for movie {index+1}/{len(movies)}")
-                qualification = acquirer.capture(movie_plan, worker, qualification=True)
-                record["qualification_movies"].append(qualification)
-                state = self._stationarity(qualification.scans, settings)
-                record["assessments"].append(state)
-                if not state.accepted:
-                    raise ValueError("Pre-pump stationarity rejected; pump remains inhibited: " + "; ".join(state.reasons))
-            movie = acquirer.capture(movie_plan, worker)
+            if record["operation"]["hardware"] and get(movie_plan, "control") in ("pump_blocked", "dark"):
+                record["omitted_controls"].append({"movie_id": get(movie_plan, "movie_id"),
+                    "requested_control": get(movie_plan, "control"), "status": "not_acquired",
+                    "reason": "No installed actuator changes the optical blocking state; no blocking state or control data is fabricated"})
+                continue
+            movie = self._capture(acquirer, movie_plan, worker, record)
             record["native_movies"].append(movie)
             expected = get(movie_plan, "pump_count", 0)
             if len(movie.pump_observations) != expected or any(not p.independently_observed for p in movie.pump_observations):
@@ -249,7 +279,7 @@ class RepeatedRapidScanRunner:
                 cancelled=worker.cancel_event.is_set)
             record["processed"].append(reconstruction)
             diagnostic_dark = get(movie_plan, "control") == "dark"
-            permitted_exclusions = {"missing_calibrated_trajectory", "missing_baseline_support"}
+            permitted_exclusions = {"missing_calibrated_trajectory", "missing_baseline_support", "missing_background_support"}
             if diagnostic_dark:
                 # A measured detector-dark control has no physical logarithmic
                 # normalization support. Keep zero/native samples and flags;
@@ -271,7 +301,7 @@ class RepeatedRapidScanRunner:
                 pre_state = self._stationarity(pre, settings)
                 record["assessments"].append(pre_state)
                 if not pre_state.accepted:
-                    raise ValueError("Declared movie pre-pump region failed retrospective stationarity; no next pump")
+                    record.setdefault("warnings", []).append("Measured pre-pump sample is nonstationary; recovery inference is limited")
                 notify(worker, "Recovery verification: measured band populations and off-band baseline")
                 reset = assess_recovery(pre, post, settings.band_windows_cm1, settings.offband_windows_cm1,
                     band_relative_tolerance=settings.recovery.band_relative_tolerance,
@@ -290,19 +320,37 @@ class RepeatedRapidScanRunner:
         else:
             record["status"] = "complete"
 
-    def _confirm_physical(self, worker, state, description, acquirer):
-        if self._physical_state == state:
-            return
-        callback = getattr(worker, "confirm_physical_action", None)
-        if callback is None:
-            raise ValueError("Connected operation requires the host operator physical-action confirmation")
-        pause = getattr(acquirer, "safe_pause", None)
-        if pause is None:
-            raise ValueError("Connected adapter cannot verify safe pause before manual physical action")
-        pause()
-        self._physical_pending_state = state
-        callback(description)
-        self._physical_state = state
-        self._physical_pending_state = None
-        self._physical_records.append({"state": state, "description": description, "accepted": True,
-                                       "observed_utc": datetime.now(timezone.utc).isoformat()})
+    @staticmethod
+    def _normalization(value, record, *, background=False):
+        if value is None:
+            return None
+        from .session import compatibility_conflicts
+        reasons = []
+        if value.mode != record["mode"]:
+            reasons.append("Detector mode differs")
+        expected = "background" if background else "q0" if record["mode"] == "dual" else "single_baseline"
+        if value.kind != expected:
+            reasons.append("Reference kind differs")
+        if not value.complete:
+            reasons.append("Reference record has incomplete native support")
+        if "acquisition" in value.compatibility:
+            reasons.extend(compatibility_conflicts(value.compatibility, record["compatibility_contract"]))
+        if reasons:
+            record.setdefault("unused_normalizations", []).append({"source": value, "reasons": reasons})
+            record.setdefault("warnings", []).append("Reference retained without normalization: " + "; ".join(reasons))
+            return None
+        return value
+
+    @staticmethod
+    def _reusable(candidate, record, label):
+        if not candidate:
+            return None
+        from .session import compatibility_conflicts, record_contract
+        observed = record_contract(candidate)
+        conflicts = compatibility_conflicts(observed, record["compatibility_contract"]) if observed is not None else ["No acquisition compatibility information"]
+        if get(candidate, "mode") != record["mode"]:
+            conflicts.append("Detector mode differs")
+        if conflicts:
+            record.setdefault("unused_baselines", []).append({"kind": label, "source": candidate, "differences": conflicts})
+            return None
+        return candidate

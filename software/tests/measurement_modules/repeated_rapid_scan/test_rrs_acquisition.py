@@ -30,8 +30,6 @@ class Worker:
         self.actions = []
     def check_cancelled(self):
         if self.cancel_event.is_set(): raise InterruptedError("operator stop")
-    def confirm_physical_action(self, description, cleanup=False):
-        self.actions.append((description, cleanup))
 
 
 def context(tmp_path, mode="single"):
@@ -66,7 +64,7 @@ def test_rrs_simulated_end_to_end_one_pump_per_movie_and_native_roundtrip(tmp_pa
     assert len(result["native_movies"]) == len(plan.movies)
     assert all(len(movie.pump_observations) == 1 for movie in result["native_movies"])
     assert all(len(movie.scans) == plan.movies[0].scans_per_movie for movie in result["native_movies"])
-    assert len(result["qualification_movies"]) == len(plan.movies)
+    assert not result["qualification_movies"]
     reloaded = load_run(result["output_path"], expected_mode=mode).record
     for original, retained in zip(result["native_movies"], reloaded["native_movies"]):
         np.testing.assert_array_equal(original.scans[0].sample.timestamps_s, retained.scans[0].sample.timestamps_s)
@@ -102,18 +100,20 @@ def test_rrs_failed_reset_retains_finite_outcome_and_prevents_next_pump(tmp_path
     assert len(result["native_movies"]) == 1
 
 
-def test_rrs_stationarity_failure_never_arms_pump(tmp_path):
-    ctx, plan = context(tmp_path), build_plan(settings())
-    sample = preliminary(ctx, plan)
-    created = []
-    def factory(*args):
-        value = SimulationAcquirer(*args, faults={"stationarity": True}); created.append(value); return value
-    runner = RepeatedRapidScanRunner(ctx, factory)
-    with pytest.raises(ValueError, match="stationarity rejected"):
-        runner.run(snapshot(ctx, plan, "measurement", sample), Worker())
-    assert created[0].pump_count == 0
-    assert len(runner.last_result["qualification_movies"]) == 1
-    assert load_run(runner.last_result["output_path"]).record["status"] == "failed"
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_rrs_first_start_records_baseline_without_blank_qualification_or_prompt(tmp_path, mode):
+    ctx, plan = context(tmp_path, mode), build_plan(settings(mode))
+    worker = Worker()
+    result = RepeatedRapidScanRunner(ctx).run(snapshot(ctx, plan, "measurement"), worker)
+    assert result["status"] == "complete"
+    assert result["auto_preliminary"]["kind"] == "preliminary"
+    assert result["auto_preliminary"]["baseline"].complete
+    assert not result["qualification_movies"]
+    assert all(not movie.pump_observations for movie in result["auto_preliminary"]["native_movies"])
+    assert len(result["native_movies"]) == len(plan.movies)
+    if mode == "single":
+        assert result["blank"] is None
+        assert any("No compatible blank" in warning for warning in result["warnings"])
 
 
 @pytest.mark.parametrize("fault", ["missing_pump", "extra_pump"])
@@ -226,7 +226,7 @@ def test_rrs_installed_capture_upload_acknowledgements_and_native_continuity(tmp
         def is_tuned(self): return True
         def set_external_sweep_trigger_params(self, **kwargs): pass
         def set_wavelength_trigger_pulse_width_us(self, value): pass
-        def turn_emission_on(self, **kwargs): pass
+        def start_emission(self): pass
         def cancel_manual_tune(self): pass
         def start_sweep_scan(self, **kwargs): self.sweep = kwargs
         def get_sweep_parameters(self): return self.sweep
@@ -238,7 +238,7 @@ def test_rrs_installed_capture_upload_acknowledgements_and_native_continuity(tmp
     acquirer = InstalledDevicesAcquirer(ctx, snapshot(ctx, plan, "measurement").operation, plan)
     hf, clock, timing = HF(), Timing(), Timing()
     acquirer.devices = {"hf2li": hf, "t660_1": clock, "t660_2": timing, "mircat": QCL()}
-    acquirer.config = {"marker_interval_cm1": 53/6, "marker_width_us": 1, "approved_laser_safety_condition": True}
+    acquirer.config = {"marker_interval_cm1": 53/6, "marker_width_us": 1}
     acquirer.readbacks = {**readbacks, "required_demodulators": (0, 2)}
     acquirer._quality = lambda: {"locked": True, "overload": False}
     movie = acquirer.capture(plan.movies[0], Worker())
@@ -252,16 +252,17 @@ def test_rrs_installed_capture_upload_acknowledgements_and_native_continuity(tmp
     assert sum(frame["channels"]["B"]["enabled"] for frame in timing.frames) == 1
     assert acquirer.raw_movies[0]["upload"]["acknowledged"]
     assert len(movie.pump_observations) == 1  # It is read at .125 s, not copied from planned .5 s.
-    chunks, _ = native_fixture(count=plan.settings.pre_scans)
+    chunks, _ = native_fixture(count=count)
     for values in chunks[0]["data"].values():
         values["dio"] &= np.uint32(~(1 << 17) & 0xffffffff)
     hf.reads = 0
-    qualification = acquirer.capture(plan.movies[0], Worker(), qualification=True)
-    assert len(qualification.scans) == plan.settings.pre_scans
-    assert len(timing.frames) == plan.settings.pre_scans+1
+    from control_app.measurement_modules.repeated_rapid_scan.runner import _unpumped
+    baseline = acquirer.capture(_unpumped(plan.movies[0], ":baseline"), Worker())
+    assert len(baseline.scans) == count
+    assert len(timing.frames) == count+1
     assert not any(values["enabled"] for values in timing.frames[-1]["channels"].values())
-    assert acquirer.devices["mircat"].sweep["repetitions"] == plan.settings.pre_scans
-    assert not qualification.pump_observations
+    assert acquirer.devices["mircat"].sweep["repetitions"] == count
+    assert not baseline.pump_observations
 
 
 def test_rrs_hardware_owner_held_through_restore_save_and_sibling_manual_contention(tmp_path):
@@ -430,3 +431,426 @@ def test_rrs_dark_controls_retain_zero_native_diagnostics_without_false_absorban
         processed = next(value for value in result["processed"] if value.movie_id == movie.movie_id)
         assert not np.any(processed.points[0].valid)
         assert np.all(np.isnan(processed.points[0].delta_absorbance))
+
+class InstalledTransport:
+    """Injected serial, LabOne and ctypes transports; production services execute."""
+    def __init__(self, mode, coordinator, worker, fault=None):
+        from copy import deepcopy
+        self.copy = deepcopy
+        self.mode, self.coordinator, self.worker, self.fault = mode, coordinator, worker, fault
+        self.calls, self.subscribed, self.nodes = [], set(), {}
+        self.train_starts = 0
+        self.emission, self.armed = False, False
+        self.sweep = [1898., 1951., 530., 2, 1]
+        self.trigger = [0, 0, 1898., 1951., 53./11, 2, 0, 0]
+        self.pulse, self.marker_width = [2500000., 100., 600.], 100
+        self.frame_generation = self.polled_generation = 0
+        self.units = {}
+        for port in ('COM3', 'COM7'):
+            self.units[port] = {'TRIG:SOUR': 'OFF', 'TRIG:FREQ:SYN': '1000000',
+                'TRIGGER:EXTERNAL:PREDIV': '1', 'GATE:MODE': '0', 'BURST:MODE': 'OFF',
+                'frames': [], 'pending': {}, 'refs': {i: (0 if i % 2 else i-1) for i in range(1,9)},
+                'times': {i: (0. if i % 2 else 1e-7) for i in range(1,9)},
+                'channels': {ch: {'on': 'OFF', 'mode': 'DW', 'pol': 'POS', 'term': 'ON'} for ch in 'ABCD'},
+                'status': 'OFF', 'shots': '0'}
+        for i in range(6):
+            for name, value in {'enable': int(i in (0,3)), 'adcselect': int(i == 3), 'oscselect': 0,
+                    'harmonic': 1, 'order': 4, 'timeconstant': .0001, 'rate': 2000. if i != 3 else 4000., 'trigger': 0}.items():
+                self.nodes[f'/dev2468/demods/{i}/{name}'] = value
+        for i in (0,1):
+            for name, value in {'ac': 1, 'imp50': 0, 'diff': 0, 'range': 1.}.items():
+                self.nodes[f'/dev2468/sigins/{i}/{name}'] = value
+        for name, value in {'enable': 1, 'adcselect': 4, 'freqcenter': 1e6, 'harmonic': 1, 'order': 4, 'adcthreshold': 0, 'locked': 1}.items():
+            self.nodes[f'/dev2468/plls/0/{name}'] = value
+        if self.fault == 'unlocked': self.nodes['/dev2468/plls/0/locked'] = 0
+        self.nodes.update({'/dev2468/oscs/0/freq': 1e6, '/dev2468/clockbase': 20000,
+                          '/dev2468/system/extclk': 1})
+        for path in ('plllock', 'dcmlock', 'adcclip/0', 'adcclip/1'):
+            self.nodes['/dev2468/status/flags/'+path] = 0
+
+    def own(self, action):
+        assert self.coordinator.snapshot()['state'] == 'owned', action
+        self.calls.append(action)
+
+    # LabOne API transport. No production HF2LI methods are replaced.
+    def getList(self, path): self.own('hf read '+path); return ['dev2468']
+    def getString(self, path): self.own('hf read '+path); return 'dev2468'
+    def listNodes(self, path, *args): self.own('hf list'); return ['/dev2468']
+    def connectDevice(self, *args): self.own('hf connect')
+    def disconnect(self): self.own('hf disconnect')
+    def getInt(self, path):
+        self.own('hf read '+path)
+        if self.fault == 'unknown_health' and '/status/flags/' in path:
+            raise OSError('node unavailable')
+        return int(self.nodes[path])
+    def getDouble(self, path): self.own('hf read '+path); return float(self.nodes[path])
+    def setInt(self, path, value): self.own('hf set '+path); self.nodes[path] = int(value)
+    def setDouble(self, path, value):
+        self.own('hf set '+path)
+        # Demonstrate real native quantization; it is retained and accepted.
+        self.nodes[path] = 20000. if path.endswith('/demods/2/rate') and value > 20000. else float(value)
+    def sync(self): self.own('hf sync')
+    def subscribe(self, path): self.own('hf subscribe'); self.subscribed.add(path)
+    def unsubscribe(self, path): self.own('hf unsubscribe'); self.subscribed.discard(path)
+    def poll(self, *args):
+        self.own('hf poll')
+        if self.polled_generation == self.frame_generation:
+            return {}
+        self.polled_generation = self.frame_generation
+        unit = self.units['COM7']
+        frames = unit['frames']
+        period = int(unit['TRIGGER:EXTERNAL:PREDIV']) / float(self.units['COM3']['TRIG:FREQ:SYN'].removesuffix('HZ'))
+        count = int(self.sweep[4])
+        marker_count = round(abs(self.trigger[3]-self.trigger[2])/self.trigger[4])+1
+        output = {}
+        for path in self.subscribed:
+            rate = self.nodes[path.replace('/sample', '/rate')]
+            step = int(20000/rate)
+            local_ticks = np.arange(0, round((count+1)*period*20000), step, dtype=np.int64)
+            times = local_ticks/20000
+            dio = np.zeros(len(times), dtype=np.uint32)
+            for index in range(count):
+                start = round(index*period*20000)+40
+                stop = start + round(min(.09, period-.004)*20000)
+                dio[(local_ticks >= start) & (local_ticks < stop)] |= 1 << 21
+                for marker in np.linspace(start+20, stop-20, marker_count).round().astype(int):
+                    dio[(local_ticks >= marker) & (local_ticks < marker+max(round(self.marker_width*.02), 4))] |= 1 << 22
+                frame = frames[index]
+                if frame.get(('B','mode')) == 'ON':
+                    pump = index*period+frame['time3']
+                    dio[(times >= pump) & (times < pump+.001)] |= 1 << 17
+            output[path] = {'timestamp': 2**53+71+local_ticks, 'x': np.ones(len(times)),
+                            'y': np.zeros(len(times)), 'dio': dio, 'frequency': np.full(len(times), 1e6)}
+        if self.train_starts >= 2 and self.fault == 'overload':
+            self.nodes['/dev2468/status/flags/adcclip/0'] = 1
+        if self.train_starts >= 2 and self.fault == 'abort':
+            self.worker.cancel_event.set()
+            unit['status'] = 'RUNNING'
+        return output
+
+    # MIRcat SDK functions are produced dynamically at the ctypes boundary.
+    def __getattr__(self, name):
+        if not name.startswith('MIRcatSDK_'): raise AttributeError(name)
+        def call(*args):
+            self.own(name)
+            key = name.removeprefix('MIRcatSDK_')
+            def val(arg): return arg.value
+            def put(values, pointers=args):
+                for pointer, value in zip(pointers, values): pointer._obj.value = value
+            if key in ('Initialize', 'DeInitialize', 'TuneToWW', 'CancelManualTuneMode'): pass
+            elif key == 'ArmLaser': self.armed = True
+            elif key == 'DisarmLaser': self.armed = self.fault == 'disarm'
+            elif key == 'IsLaserArmed': put([self.armed])
+            elif key == 'TurnEmissionOn': self.emission = True
+            elif key == 'TurnEmissionOff': self.emission = False
+            elif key == 'StopScanInProgress': pass
+            elif key in ('IsConnectedToLaser','IsInterlockedStatusSet','IsKeySwitchStatusSet','IsLaserArmed','AreTECsAtSetTemperature','IsTuned','GetScanWaitingProcessTrigger'): put([True])
+            elif key == 'IsEmissionOn': put([self.emission])
+            elif key in ('GetSystemErrorWord','GetStatusMask'): put([0])
+            elif key in ('GetNumInstalledQcls','GetActiveQcl'): put([1])
+            elif key == 'GetQclTuningRange': put([1800., 2100., 2], args[1:])
+            elif key in ('GetQCLPulseRate','GetQCLPulseWidth','GetQCLCurrent'):
+                put([self.pulse[('GetQCLPulseRate','GetQCLPulseWidth','GetQCLCurrent').index(key)]], args[1:])
+            elif key == 'GetQCLPulseLimits': put([3e6, 500., 50.], args[1:])
+            elif key == 'GetQCLMinPulsedCurrent': put([1], args[1:])
+            elif key == 'GetQCLMaxPulsedCurrent': put([1000], args[1:])
+            elif key == 'SetQCLParams': self.pulse = [val(arg) for arg in args[1:]]
+            elif key == 'GetWlTrigParams': put(self.trigger)
+            elif key == 'SetWlTrigParams': self.trigger = [val(arg) for arg in args]
+            elif key == 'GetWlTrigPulseWidth': put([self.marker_width])
+            elif key == 'SetWlTrigPulseWidth': self.marker_width = val(args[0])
+            elif key == 'StartSweepScan': self.sweep = [val(arg) for arg in args[:5]]
+            elif key in ('GetSweepStartWW','GetSweepStopWW','GetSweepScanSpeed'):
+                put([self.sweep[('GetSweepStartWW','GetSweepStopWW','GetSweepScanSpeed').index(key)], 2])
+            elif key == 'GetSweepNumScans': put([self.sweep[4]])
+            elif key == 'GetWlTrigChanParams': put([2, self.trigger[2], self.trigger[3], self.trigger[4], round(abs(self.trigger[3]-self.trigger[2])/self.trigger[4])+1], args[1:])
+            elif key == 'GetScanStatus': put([False, False, False, 0, 100, self.sweep[1], 2, False, False])
+            else: raise AssertionError('Unhandled SDK call '+key)
+            return 0
+        return call
+
+    def serial(self, port, **kwargs):
+        harness = self
+        class Serial:
+            response = b''
+            def reset_input_buffer(self): pass
+            def flush(self): pass
+            def close(self): harness.own('serial close '+port)
+            def write(self, payload):
+                command = payload.decode('ascii').strip()
+                self.response = (';'.join(harness.command(port, entry) for entry in command.split(';'))+'\n').encode('ascii')
+            def readline(self):
+                value, self.response = self.response, b''
+                return value
+        return Serial()
+
+    def command(self, port, command):
+        import re
+        from control_app.measurement_modules.repeated_rapid_scan.acquisition import seconds
+        self.own(port+' '+command)
+        text = command.upper().lstrip(':')
+        unit = self.units[port]
+        if text == '*IDN?': return 'Berkeley,T660,123,F5'
+        if text == 'FEATURE:FRAME?': return '1'
+        if text.startswith('TIME:RELTO'):
+            edge = int(re.search(r'\d+', text)[0])
+            if '?' in text: return str(unit['refs'][edge])
+            unit['refs'][edge] = int(text.split()[-1]); return 'OK'
+        if text.startswith(('TIME:DEL','TIME:QUEUE')):
+            edge = int(re.search(r'\d+', text)[0])
+            if '?' in text: return str(unit['times'][edge])+'s'
+            value = seconds(command.split()[-1])
+            if 'QUEUE' in text: unit['pending']['time'+str(edge)] = value
+            else: unit['times'][edge] = value
+            return 'OK'
+        if text == 'TIME:COMMIT':
+            for key, value in unit['pending'].items():
+                if isinstance(key, str) and key.startswith('time'): unit['times'][int(key[4:])] = value
+            return 'OK'
+        if text.startswith('CHANNEL:QUEUE:'):
+            field = text.split(':')[2].split()[0]
+            channel, value = text.split(' ', 1)[1].replace(',', '').split()
+            unit['pending'][channel, field.lower()] = value
+            return 'OK'
+        if text.startswith('TFRAME:STORE '):
+            index = int(text.split()[-1])
+            if index == 0: unit['frames'] = []
+            unit['frames'].append(self.copy(unit['pending'])); return 'OK'
+        if text.startswith('CHAN'):
+            channel = text.split()[-1]
+            state = unit['channels'][channel]
+            if '?' in text:
+                if text.startswith('CHAN:ON?'): return state['on']
+                if text.startswith('CHAN:TIMINGMODE?'): return state['mode']
+                if text.startswith('CHAN:50OHM?'): return state['term']
+                if text.startswith('CHANNEL:ACTIVE:POLARITY?'): return state['pol']
+            else:
+                verb = text.split(':')[1].split()[0]
+                if verb in ('ON','OFF'): state['on'] = verb
+                elif verb in ('POS','NEG'): state['pol'] = verb
+                elif verb in ('50OHM','LOWZ'): state['term'] = 'ON' if verb == '50OHM' else 'OFF'
+                elif verb in ('DELAYWIDTH','RISEFALL'): state['mode'] = 'DW' if verb == 'DELAYWIDTH' else 'RF'
+                else: raise AssertionError(text)
+                return 'OK'
+        if text == 'TFRAME:START':
+            self.train_starts += 1; self.frame_generation += 1
+            unit['status'], unit['shots'] = 'DONE', str(len(unit['frames']))
+            return 'OK'
+        if text == 'TFRAME:STOP': unit['status'] = 'OFF'; return 'OK'
+        if text == 'TFRAME:STATUS?': return unit['status']
+        if text == 'TRIG:SHOTS?': return unit['shots']
+        if text.endswith('?'):
+            key = text[:-1]
+            defaults = {'CLOCK:MODE': 'IN' if port == 'COM3' else 'OUT', 'CLOCK:EXTERNAL': '1', 'CLOCK:FREQUENCY': '10000000', 'CLOCK:STATUS': '1',
+                'TRIGGER:INPUT:POLARITY': 'POS', 'TRIGGER:INPUT:TERMINATION': '50OHM', 'TRIGGER:INPUT:VOLTAGE': '2', 'TRAIN:ACTIVE:COUNT': '0'}
+            if key not in unit and key not in defaults: raise AssertionError(text)
+            return unit.get(key, defaults.get(key))
+        if ' ' in text:
+            key, value = text.split(' ', 1)
+            unit[key] = value
+        return 'OK'
+
+
+def installed_context(tmp_path, monkeypatch, mode, worker, fault=None):
+    import serial
+    import yaml
+    from control_app.devices.hf2li_service import HF2LIService
+    from control_app.devices.mircat_service import MircatService
+    from control_app.devices.t660_service import T660Service
+    from control_app.measurement_host.device_factories import installed_device_factories
+    configuration = yaml.safe_load(Path('instrument/hardware_configuration.yaml').read_text())
+    configuration['devices']['hf2li']['device_id'] = 'dev2468'
+    if fault == 'unlocked': configuration['repeated_rapid_scan'] = {'lock_timeout_s': .001}
+    coordinator = HardwareCoordinator(tmp_path/'installed.lock')
+    transport = InstalledTransport(mode, coordinator, worker, fault)
+    monkeypatch.setattr(serial, 'Serial', transport.serial)
+    command = T660Service.command
+    monkeypatch.setattr(T660Service, 'command', lambda self, text, **kwargs: command(self, text, **{**kwargs, 'delay_s': 0}))
+    monkeypatch.setattr(HF2LIService, '_load_labone_module', lambda self: SimpleNamespace(ziDAQServer=lambda *args: transport))
+    monkeypatch.setattr(MircatService, '_load_sdk', lambda self: transport)
+    monkeypatch.setattr(MircatService, '_bind_functions', lambda self: None)
+    ctx = ContextFactory(configuration_provider=lambda: configuration,
+        real_device_factories=installed_device_factories(), ownership=coordinator,
+        save_root_provider=lambda: tmp_path).for_experiment('repeated_rapid_scan').for_mode(mode)
+    return ctx, transport, coordinator
+
+
+def installed_plan(mode):
+    return build_plan(replace(settings(mode), manual_overrides={'measured_scan_period_s': .1,
+        'scan_speed_cm1_s': 530., 'controls': ()}), capabilities={'selected_baseline_bytes': 65536})
+
+
+@pytest.mark.parametrize('mode', ['single', 'dual'])
+def test_rrs_real_installed_factories_first_start_with_injected_native_transports(tmp_path, monkeypatch, mode):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, mode, worker)
+    plan = installed_plan(mode)
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation):
+        result = runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert result['status'] == 'complete', result['assessments']
+    assert coordinator.snapshot()['state'] == 'free'
+    assert result['auto_preliminary']['baseline'].complete
+    assert not result['qualification_movies']
+    assert len(result['native_movies']) == 2
+    assert all(len(movie.pump_observations) == 1 for movie in result['native_movies'])
+    assert result['capabilities']['live_settings']['sample_rate_hz'] == 2000.
+    assert result['capabilities']['acquisition_timing_rate_hz'] == 20000.
+    assert result['plan']['settings']['sample_rate_hz'] == 2000.
+    assert result['readbacks']['health_configured']['schema_version'] == 'hf2li-acquisition-health/1'
+    assert result['capabilities']['actual_scan_period_s'] is None
+    assert result['capabilities']['available_memory_bytes'] > 0
+    assert result['capabilities']['selected_baseline_bytes'] == 65536
+    assert result['plan']['estimates']['selected_baseline_bytes'] == 65536
+    assert not transport.subscribed and not transport.emission and not transport.armed
+    assert all(state['on'] == 'OFF' for unit in transport.units.values() for state in unit['channels'].values())
+    assert transport.pulse == [2500000., 100., 600.]
+    assert result['restoration']['safe_verified']
+    assert result['native_movies'][0].metadata['axis_basis'] == 'observed_markers_nominal_axis'
+    assert not result['native_movies'][0].scans[0].trajectory.calibration_id
+    if mode == 'dual':
+        assert result['plan']['settings']['reference_rate_hz'] == 4000.
+        assert result['native_movies'][0].scans[0].reference is not None
+    # The all-OFF terminator is a physical frame, never a MIRcat repetition.
+    for raw in result['raw_movies']:
+        assert raw['readbacks']['physical_frame_count'] == raw['readbacks']['expected_scan_count']+1
+        assert not any(ch['enabled'] for ch in raw['uploaded_frames'][-1]['channels'].values())
+
+
+@pytest.mark.parametrize('fault', ['overload', 'abort'])
+def test_rrs_installed_transport_failure_or_stop_preserves_raw_and_releases_after_cleanup(tmp_path, monkeypatch, fault):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'dual', worker, fault)
+    plan = installed_plan('dual')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True, cancel=lambda reason: worker.cancel_event.set())
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(InterruptedError if fault == 'abort' else RuntimeError):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert runner.last_result['status'] == ('cancelled' if fault == 'abort' else 'failed')
+    assert runner.last_result['restoration']['safe_verified']
+    assert runner.last_result['raw_movies'][-1]['chunks'][0]['data']
+    assert not transport.subscribed and not transport.emission and not transport.armed
+    assert coordinator.snapshot()['state'] == 'free'
+    retained = load_run(runner.last_result['output_path']).record
+    assert retained['raw_movies'][-1]['chunks'][0]['data']
+    assert transport.train_starts == 2  # automatic baseline then one pump; no retry
+
+
+def test_rrs_installed_capability_check_is_read_only_and_unknown_health_is_retained(tmp_path, monkeypatch):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'dual', worker, 'unknown_health')
+    plan = installed_plan('dual')
+    before = dict(transport.nodes)
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    with ctx.hardware_scope(operation):
+        result = RepeatedRapidScanRunner(ctx).run(StartSnapshot(operation, 'capabilities', plan, None), worker)
+    assert result['status'] == 'complete'
+    assert result['readbacks']['health_before']['clock_locked'] is None
+    assert result['readbacks']['health_before']['read_errors']
+    assert transport.nodes == before
+    assert not any(call.startswith('hf set ') for call in transport.calls)
+    assert not any(call.startswith('MIRcatSDK_Set') or call in ('MIRcatSDK_TurnEmissionOn','MIRcatSDK_ArmLaser','MIRcatSDK_StartSweepScan') for call in transport.calls)
+    assert transport.train_starts == 0 and not transport.emission
+    assert coordinator.snapshot()['state'] == 'free'
+
+@pytest.mark.parametrize('fault', ['unlocked', 'unknown_health'])
+def test_rrs_actual_lock_failure_stops_before_emission_unknown_health_stays_informational(tmp_path, monkeypatch, fault):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker, fault)
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation):
+        if fault == 'unlocked':
+            with pytest.raises(TimeoutError, match='reference-lock'):
+                runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+            assert transport.train_starts == 0
+            assert 'MIRcatSDK_TurnEmissionOn' not in transport.calls
+        else:
+            result = runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+            assert result['status'] == 'complete'
+            assert result['readbacks']['health_configured']['clock_locked'] is None
+            assert result['readbacks']['health_configured']['read_errors']
+    assert coordinator.snapshot()['state'] == 'free'
+    assert not transport.emission and not transport.subscribed
+
+
+def test_rrs_actual_native_rates_revalidate_memory_before_any_capture(tmp_path, monkeypatch):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'dual', worker)
+    # The initial two detector + idle carrier profile fits. The configured
+    # native carrier adds full-movie retention and exceeds this explicit bound.
+    value = settings('dual')
+    value = replace(value, manual_overrides={'measured_scan_period_s': .1, 'controls': (), 'memory_limit_bytes': 30_000_000})
+    plan = build_plan(value)
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(ValueError, match='memory budget'):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert transport.train_starts == 0
+    assert 'MIRcatSDK_TurnEmissionOn' not in transport.calls
+    assert coordinator.snapshot()['state'] == 'free'
+    assert runner.last_result['restoration']['safe_verified']
+
+
+def test_rrs_automatic_baseline_reused_but_filter_change_reacquires_without_confirmation(tmp_path):
+    ctx, plan = context(tmp_path), build_plan(settings())
+    runner = RepeatedRapidScanRunner(ctx)
+    first = runner.run(snapshot(ctx, plan, 'measurement'), Worker())
+    baseline_record = first['auto_preliminary']
+    # Reviewer/temperature/condition provenance does not invalidate native reuse.
+    baseline_record['baseline'] = replace(baseline_record['baseline'], accepted=False)
+    changed = replace(plan.settings, condition=replace(plan.settings.condition, temperature_K=87., condition_id='renamed'))
+    second = runner.run(snapshot(ctx, build_plan(changed), 'measurement', baseline_record), Worker())
+    assert 'auto_preliminary' not in second
+    changed = replace(changed, sample_filter_timeconstant_s=.002)
+    third = runner.run(snapshot(ctx, build_plan(changed), 'measurement', baseline_record), Worker())
+    assert third['auto_preliminary']['baseline'].complete
+    assert third['unused_baselines'][0]['differences']
+    assert third['status'] == 'complete'
+
+@pytest.mark.parametrize('mode', ['single', 'dual'])
+def test_rrs_partial_optional_background_limits_absolute_only(tmp_path, mode):
+    ctx, plan = context(tmp_path, mode), build_plan(settings(mode))
+    runner = RepeatedRapidScanRunner(ctx)
+    first = runner.run(snapshot(ctx, plan, 'measurement'), Worker())
+    baseline_record = first['auto_preliminary']
+    supports = []
+    for support in baseline_record['baseline'].spectra:
+        selected = np.asarray(support.wavenumbers_cm1) < 1920.
+        supports.append(replace(support, wavenumbers_cm1=np.asarray(support.wavenumbers_cm1)[selected],
+            values=np.asarray(support.values)[selected], variance=np.asarray(support.variance)[selected],
+            valid=None if support.valid is None else np.asarray(support.valid)[selected]))
+    background = replace(baseline_record['baseline'], kind='background', spectra=tuple(supports))
+    result = runner.run(snapshot(ctx, plan, 'measurement', baseline_record), Worker(), background=background)
+    assert result['status'] == 'complete'
+    points = result['processed'][0].points[0]
+    assert np.any(points.flags['missing_background_support'] & points.valid)
+    assert np.any(np.isfinite(points.delta_absorbance))
+    assert np.any(np.isfinite(points.absolute_absorbance))
+    assert np.any(np.isnan(points.absolute_absorbance) & points.valid)
+    wrong = replace(background, compatibility={**background.compatibility, 'acquisition':
+                    {**background.compatibility['acquisition'], 'sample_rate_hz': 999.}})
+    raw = runner.run(snapshot(ctx, plan, 'measurement', baseline_record), Worker(), background=wrong)
+    assert raw['status'] == 'complete' and raw['unused_normalizations']
+    assert np.any(np.isfinite(raw['processed'][0].points[0].delta_absorbance))
+    assert np.all(np.isnan(raw['processed'][0].points[0].absolute_absorbance))
+
+
+def test_rrs_installed_failed_disarm_retains_fault_ownership_and_native_record(tmp_path, monkeypatch):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker, 'disarm')
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(RuntimeError, match='disarmed readback'):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert runner.last_result['status'] == 'cleanup_failed'
+    assert transport.armed and not transport.emission
+    assert runner.last_result['restoration']['mircat_safe_readbacks']['armed'] is True
+    assert not runner.last_result['restoration']['safe_verified']
+    assert coordinator.snapshot()['state'] == 'fault'
+    assert load_run(runner.last_result['output_path']).record['native_movies']
+    recovery = coordinator.acquire('test-explicit-recovery', recovery=True)
+    coordinator.release(recovery, safe_verified=True, preservation_verified=True)
