@@ -9,6 +9,7 @@ from time import monotonic, sleep
 from uuid import uuid4
 
 from PySide6.QtGui import QFont, QFontDatabase
+from PySide6.QtCore import QPoint, QRect
 from PySide6.QtWidgets import QApplication
 
 from control_app.measurement_host.ownership import HardwareCoordinator
@@ -43,6 +44,17 @@ def render(folder):
         for _ in range(3):
             app.processEvents()
         window.workspace_scroll.verticalScrollBar().setValue(0)
+        if panel.objectName().startswith("repeated_rapid_scan:"):
+            viewport = panel.settings_scroll.viewport()
+            controls = [panel.settings_widget.sample, *panel.settings_widget.inputs.values(),
+                        *panel.settings_widget.override_inputs.values(),
+                        panel.settings_widget.restore_auto_button, panel.capability_button,
+                        panel.save_plan_button, panel.load_plan_button]
+            for control in controls:
+                bounds = QRect(control.mapTo(viewport, QPoint()), control.size())
+                assert viewport.rect().contains(bounds), (name, control.objectName(), bounds)
+            assert panel.settings_scroll.verticalScrollBar().maximum() == 0
+            assert panel.settings_scroll.horizontalScrollBar().maximum() == 0
         window.grab().save(str(folder / name))
 
     for panel, name in ((window.phase_scan_widget, "phase-scan-single-shell.png"),

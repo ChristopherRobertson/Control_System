@@ -397,6 +397,51 @@ def test_rrs_production_pair_installs_in_main_window_without_sibling_packages(ap
         window.deleteLater()
 
 
+def test_rrs_full_shell_keeps_every_settings_control_in_view(app, tmp_path):
+    from PySide6.QtCore import QPoint, QRect
+    from PySide6.QtGui import QFont, QFontDatabase
+    from control_app.ui.contracts import blocked_handler
+    from control_app.ui.main_window import ControlSystemMainWindow
+    font_path = Path("C:/Windows/Fonts/segoeui.ttf")
+    if font_path.exists():
+        QFontDatabase.addApplicationFont(str(font_path))
+    previous_font = app.font()
+    app.setFont(QFont("Segoe UI", 9))
+    handler = blocked_handler("Injected layout test")
+    handler.coordinator = HardwareCoordinator(tmp_path / "layout.lock")
+    window = ControlSystemMainWindow(handler, module_discovery=(DESCRIPTOR,))
+    window.phase_scan_widget._capability_check_attempted = True
+    window.dual_detector_phase_scan_widget._capability_check_attempted = True
+    window.resize(1100, 780)
+    window.show()
+    try:
+        for mode in ("single", "dual"):
+            panel = next(window.tabs.widget(i) for i in range(window.tabs.count())
+                         if window.tabs.widget(i).objectName() == f"repeated_rapid_scan:{mode}")
+            window.tabs.setCurrentWidget(panel)
+            for _ in range(3):
+                app.processEvents()
+            window.grab().save(str(tmp_path / f"layout-{mode}.png"))
+            viewport = panel.settings_scroll.viewport()
+            controls = [panel.settings_widget.sample, *panel.settings_widget.inputs.values(),
+                        *panel.settings_widget.override_inputs.values(),
+                        panel.settings_widget.restore_auto_button, panel.capability_button,
+                        panel.save_plan_button, panel.load_plan_button]
+            for control in controls:
+                assert control.isVisible()
+                bounds = QRect(control.mapTo(viewport, QPoint()), control.size())
+                assert viewport.rect().contains(bounds), (mode, control.objectName(), bounds)
+            for control in (panel.start_button, panel.abort_button, panel.preliminary_button):
+                assert panel.rect().contains(QRect(control.mapTo(panel, QPoint()), control.size()))
+            assert panel.settings_scroll.verticalScrollBar().maximum() == 0
+            assert panel.settings_scroll.horizontalScrollBar().maximum() == 0
+            assert window.workspace_scroll.verticalScrollBar().maximum() == 0
+    finally:
+        window.hide()
+        window.deleteLater()
+        app.setFont(previous_font)
+
+
 def test_rrs_presentation_failure_does_not_strand_completed_worker(app, tabs, monkeypatch):
     panel = tabs[1].widget
     small_plan(panel)

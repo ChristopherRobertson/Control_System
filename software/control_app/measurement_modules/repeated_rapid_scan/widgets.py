@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QPushButton,
     QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox,
     QFileDialog, QSizePolicy,
 )
@@ -81,13 +81,13 @@ class SettingsWidget(QWidget):
             ("scan_speed_cm1_s", "Scan speed (cm⁻¹/s)"),
             ("sample_rate_hz", "Sample rate (Sa/s)"),
             ("sample_filter_order", "Sample filter order"),
-            ("sample_filter_timeconstant_s", "Sample filter τ (s)"),
+            ("sample_filter_timeconstant_s", "Time constant (s)"),
         ]
         if mode == "dual":
             overrides += [
                 ("reference_rate_hz", "Reference rate (Sa/s)"),
                 ("reference_filter_order", "Reference filter order"),
-                ("reference_filter_timeconstant_s", "Reference filter τ (s)"),
+                ("reference_filter_timeconstant_s", "Time constant (s)"),
             ]
         overrides += [
             ("probe_frequency_hz", "Repetition rate (Hz)"),
@@ -96,6 +96,8 @@ class SettingsWidget(QWidget):
         for key, label in overrides:
             combo = QComboBox()
             combo.setEditable(True)
+            combo.setMinimumContentsLength(6)
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
             combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
             combo.addItem("Automatic", None)
             initial = getattr(self._base, key)
@@ -105,7 +107,26 @@ class SettingsWidget(QWidget):
             combo.currentIndexChanged.connect(lambda *_: self.changed.emit())
             combo.lineEdit().editingFinished.connect(lambda *_: self.changed.emit())
             self.override_inputs[key] = combo
-            advanced.addRow(label, combo)
+            if mode != "dual" or key not in {
+                    "sample_rate_hz", "sample_filter_order", "sample_filter_timeconstant_s",
+                    "reference_rate_hz", "reference_filter_order", "reference_filter_timeconstant_s"}:
+                advanced.addRow(label, combo)
+        if mode == "dual":
+            detectors = QWidget()
+            grid = QGridLayout(detectors)
+            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setVerticalSpacing(3)
+            for column, role in enumerate(("sample", "reference"), 1):
+                grid.addWidget(QLabel(role.title()), 0, column)
+                for row, (suffix, label) in enumerate((("rate_hz", "Rate (Sa/s)"),
+                        ("filter_order", "Filter order"), ("filter_timeconstant_s", "Time constant (s)")), 1):
+                    if column == 1:
+                        grid.addWidget(QLabel(label), row, 0)
+                    control = self.override_inputs[f"{role}_{suffix}"]
+                    control.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+                    control.setMinimumWidth(72)
+                    grid.addWidget(control, row, column)
+            advanced.insertRow(1, detectors)
         self.restore_auto_button = QPushButton("Restore automatic settings")
         self.restore_auto_button.clicked.connect(self.restore_automatic)
         advanced.addRow(self.restore_auto_button)
@@ -461,6 +482,11 @@ class RepeatedRapidScanPanel(CompactMeasurementPanel):
         adapter = RepeatedRapidScanAdapter(context, settings)
         self._initial_state_values = {}
         super().__init__(settings, adapter, context, advanced_widget=settings.advanced)
+        self.file_layout.setDirection(QHBoxLayout.Direction.LeftToRight)
+        self.blank_actions_layout.setDirection(QHBoxLayout.Direction.LeftToRight)
+        self.settings_layout.setContentsMargins(6, 6, 6, 6)
+        self.settings_layout.setSpacing(3)
+        self.advanced_layout.setContentsMargins(6, 6, 6, 6)
         self.setObjectName(context.instance_id)
         self.preliminary_button.setText("Acquire sample · pump off")
         self.start_button.setText("Start recovery movies")
@@ -503,6 +529,7 @@ class RepeatedRapidScanPanel(CompactMeasurementPanel):
 
     def refresh_plan(self, *_):
         super().refresh_plan()
+        self.validation.setVisible(bool(self.validation.text()))
         if self.plan is not None:
             self.preliminary = self.adapter.compatible_preliminary(self.plan)
             self.refresh_readiness()
