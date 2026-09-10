@@ -99,6 +99,18 @@ def test_optional_sample_temperature_and_review_metadata_never_change_control_no
         process_sweep(first, blank=incompatible)
 
 
+def test_retired_requested_resolution_and_models_do_not_change_normalization():
+    sweep = native("single", metadata={"compatibility": {"settings": {
+        "mode": "single", "sample_rate_hz": 100,
+        "requested_resolution_cm1": -1, "measured_linewidth_cm1": "unavailable",
+        "fit_peak_count": 0, "fit_line_shape": "old-model",
+        "imported_requested_metadata": {"segments": [{"qcl": 4}], "sample_rate_hz": 1}}}})
+    background = control("blank", np.full(4, 10.), mode="single",
+        metadata={"compatibility": {"settings": {"mode": "single", "sample_rate_hz": 100}}})
+    result = process_sweep(sweep, blank=background)
+    np.testing.assert_allclose(result.signal, -np.log10(sweep.sample / 10))
+
+
 def test_uneven_reverse_controls_never_silently_fill_missing_intervals():
     axis = np.array([9., 8.5, 8., 3., 2., 1.])
     points = np.array([1., 1.5, 2., 4., 7., 8.25, 9.])

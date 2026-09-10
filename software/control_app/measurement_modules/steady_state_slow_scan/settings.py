@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
+from copy import deepcopy
 from typing import Any, Mapping
 
 EXPERIMENT_ID = "steady_state_slow_scan"
@@ -67,42 +68,26 @@ class SlowScanSettings:
     condition: ConditionIdentity = field(default_factory=ConditionIdentity)
     lower_cm1: float = 1900.0
     upper_cm1: float = 1975.0
-    segments: tuple[SpectralSegment, ...] = ()
     purpose: str = "survey"
-    # This is an editable scientific request, not a commissioned operating value.
-    requested_resolution_cm1: float = 0.25
-    measured_linewidth_cm1: float | None = None
-    requested_scan_speed_cm1_s: float | None = None
-    sample_rate_hz: float | None = None
+    requested_scan_speed_cm1_s: float = 2.0
+    current_ma: float | None = None
     time_constant_s: float | None = None
     filter_order: int | None = None
-    reference_sample_rate_hz: float | None = None
     reference_time_constant_s: float | None = None
     reference_filter_order: int | None = None
-    sample_range_v: float | None = None
-    reference_range_v: float | None = None
     replicates: int = 2
-    settle_s: float | None = None
-    marker_interval_cm1: float | None = None
-    marker_width_s: float | None = None
-    probe_rate_hz: float | None = None
-    probe_width_s: float | None = None
-    process_pulse_width_s: float | None = None
-    dark_duration_s: float | None = None
+    repetition_rate_hz: float | None = None
+    pulse_width_s: float | None = None
     hardware: bool = True
     calibration_bundle_ids: tuple[str, ...] = ()
     plan_label: str = ""
-    fit_peak_count: int = 1
-    fit_line_shape: str = "gaussian"
-    fit_baseline_degree: int = 1
-    fit_fringe_periods_cm1: tuple[float, ...] = ()
+    imported_requested_metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.mode not in ("single", "dual"):
             raise ValueError("Slow scan mode must be single or dual")
-        object.__setattr__(self, "segments", tuple(self.segments))
         object.__setattr__(self, "calibration_bundle_ids", tuple(self.calibration_bundle_ids))
-        object.__setattr__(self, "fit_fringe_periods_cm1", tuple(self.fit_fringe_periods_cm1))
+        object.__setattr__(self, "imported_requested_metadata", deepcopy(self.imported_requested_metadata))
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "SlowScanSettings":
@@ -117,12 +102,24 @@ class SlowScanSettings:
         data.pop("physical_controls_confirmed", None)
         data.pop("acceptance_reviewer", None)
         data.pop("acceptance_rationale", None)
+        # Retain historical requests separately; none can govern acquisition.
+        imported = deepcopy(data.get("imported_requested_metadata", {}))
+        for name in ("segments", "requested_resolution_cm1", "measured_linewidth_cm1", "sample_rate_hz",
+                     "reference_sample_rate_hz", "sample_range_v", "reference_range_v", "settle_s",
+                     "marker_interval_cm1", "marker_width_s", "process_pulse_width_s", "dark_duration_s",
+                     "fit_peak_count", "fit_line_shape", "fit_baseline_degree", "fit_fringe_periods_cm1", "probe_width_s"):
+            if name in data:
+                imported[name] = data.pop(name)
+        if "probe_rate_hz" in data:
+            previous_rate = data.pop("probe_rate_hz")
+            imported["probe_rate_hz"] = previous_rate
+            data.setdefault("repetition_rate_hz", previous_rate)
+        data["imported_requested_metadata"] = imported
+        if data.get("requested_scan_speed_cm1_s") is None:
+            data["requested_scan_speed_cm1_s"] = 2.0
         values = _known(cls, data)
         if isinstance(values.get("condition"), Mapping):
             values["condition"] = ConditionIdentity.from_dict(values["condition"])
-        if "segments" in values:
-            values["segments"] = tuple(item if isinstance(item, SpectralSegment) else SpectralSegment.from_dict(item)
-                                       for item in values["segments"])
         result = cls(**values)
         if instance_id is not None and instance_id != result.instance_id:
             raise ValueError("Plan instance_id and detector mode disagree")

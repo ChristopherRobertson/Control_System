@@ -31,9 +31,8 @@ def wait_for(app, panel, timeout=30):
 
 
 def settings(mode="single"):
-    from control_app.measurement_modules.steady_state_slow_scan.settings import SlowScanSettings, SpectralSegment
-    return SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1904.,
-        segments=(SpectralSegment("window-1", 1, 1900., 1904.),)).to_dict()
+    from control_app.measurement_modules.steady_state_slow_scan.settings import SlowScanSettings
+    return SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1904.).to_dict()
 
 
 def inject_backend(panel, backend_type=None):
@@ -86,14 +85,16 @@ def test_compact_tabs_construct_without_devices_or_approval_state(app, tabs):
     assert first.start_button.isEnabled(), first.validation.text()
     assert second.start_button.isEnabled(), second.validation.text()
     assert first.adapter.validate_preliminary(None, first.plan) == ()
-    assert first.settings_editor.segments.rowCount() == 0
+    assert not hasattr(first.settings_editor, "segments")
+    assert not hasattr(first.settings_editor, "resolution")
+    assert not hasattr(first, "refit_button")
     requested = first.settings_editor.read_settings()
     requested["condition"]["sample_id"] = "one tab only"
     first.settings_editor.apply_settings(requested)
     assert second.settings_editor.read_settings()["condition"]["sample_id"] == ""
     from PySide6.QtWidgets import QLabel, QLineEdit
     for panel in (first, second):
-        labels = " ".join(label.text() for label in panel.settings_editor.advanced_widget.findChildren(QLabel))
+        labels = " ".join(label.text() for label in panel.settings_editor.findChildren(QLabel))
         assert not any(word in labels.casefold() for word in ("temperature", "thermal", "preparation", "metadata", "exposure"))
         assert not any(editor.objectName() in requested["condition"] for editor in panel.findChildren(QLineEdit))
     assert all(key.startswith("measurements/steady_state_slow_scan/single/v1/") for key in preferences)
@@ -106,7 +107,8 @@ def test_shown_compact_sample_without_preliminary_saves_loads_and_exports(app, t
     panel.show()
     app.processEvents()
     assert panel.width() == 1100 and panel.height() == 780
-    assert not panel.advanced_content.isVisible()
+    assert not hasattr(panel, "advanced_button")
+    assert all(editor.isVisible() for editor in panel.settings_editor.fields.values())
     assert not panel.preliminary_button.isVisible()
     assert panel.settings_editor.isVisible()
     assert panel.plot.isVisible()
@@ -122,17 +124,18 @@ def test_shown_compact_sample_without_preliminary_saves_loads_and_exports(app, t
     assert panel.adapter.controls["q0"]["run_id"] == panel.result["run_id"]
     assert panel.result["spectra"][0].quantity == ("raw_sample_signal" if mode == "single" else "reference_normalized_ratio")
     assert len(panel.result["spectra"]) == 4
-    assert len(panel.plot.figure.axes) == 2
+    assert len(panel.plot.figure.axes) == 1
+    assert not panel.result["fits"]
     panel.analysis_button.setChecked(True)
     app.processEvents()
     assert panel.height() == 780
     assert panel.plot.canvas.geometry().bottom() < panel.plot.height()
-    assert panel.settings_editor.read_settings()["sample_rate_hz"] is None
+    assert "sample_rate_hz" not in panel.settings_editor.read_settings()
     source = Path(panel.result["path"])
     assert (source / "run.json").is_file()
     panel.save_plan(tmp_path / f"{mode}.json")
     wait_for(app, panel)
-    assert json.loads((tmp_path / f"{mode}.json").read_text())["settings"]["sample_rate_hz"] is None
+    assert "sample_rate_hz" not in json.loads((tmp_path / f"{mode}.json").read_text())["settings"]
     panel.new_run()
     assert panel.result is panel.preliminary is None
     assert panel.adapter.controls == {"dark": None, "blank": None, "q0": None}
@@ -155,23 +158,89 @@ def test_independent_auto_overrides_roundtrip_and_optional_metadata(app, tabs, t
     panel = tabs[0][1].widget
     editor = panel.settings_editor
     editor.override_inputs["time_constant_s"].setText("0.017")
-    editor.override_inputs["reference_sample_rate_hz"].setText("112.0")
+    editor.override_inputs["reference_filter_order"].setText("2")
     loaded = editor.read_settings()
     loaded["condition"].update(condition_id="Arbitrary buffer condition", temperature_k=77.)
     editor.apply_settings(loaded)
     requested = editor.read_settings()
     assert requested["time_constant_s"] == .017
-    assert requested["sample_rate_hz"] is None
-    assert requested["reference_sample_rate_hz"] == 112.
+    assert requested["filter_order"] is None
+    assert requested["reference_filter_order"] == 2
     assert requested["reference_time_constant_s"] is None
     editor.apply_settings({**requested, "hardware": False})
     assert editor.read_settings()["hardware"] is True
-    editor.restore_automatic()
+    for control in editor.fields.values():
+        control.clear()
     assert all(editor.read_settings()[key] is None for key in editor.override_inputs)
     assert editor.read_settings()["condition"] == loaded["condition"]
     assert panel.start_button.isEnabled(), panel.validation.text()
     assert editor.lower.value() == 1900.
     assert editor.upper.value() == 1975.
+
+
+def test_visible_physical_controls_and_removed_preferences_do_not_return(app, tabs):
+    from PySide6.QtWidgets import QLabel
+    editor = tabs[0][1].widget.settings_editor
+    assert set(editor.fields) == {"current_ma", "repetition_rate_hz", "pulse_width_s", "time_constant_s", "filter_order",
+                                  "reference_time_constant_s", "reference_filter_order"}
+    assert editor.scan_speed.minimum() == .1
+    assert editor.scan_speed.maximum() == 10000.
+    editor.scan_speed.setValue(125.)
+    editor.fields["current_ma"].setText("350")
+    editor.fields["repetition_rate_hz"].setText("100000")
+    editor.fields["pulse_width_s"].setText("3000")
+    requested = editor.read_settings()
+    assert requested["requested_scan_speed_cm1_s"] == 125.
+    assert requested["current_ma"] == 350.
+    assert requested["pulse_width_s"] == pytest.approx(3e-6)
+    editor.fields["pulse_width_s"].setText("3010")
+    with pytest.raises(ValueError, match="30%"):
+        editor.read_settings()
+    assert not tabs[0][1].widget.start_button.isEnabled()
+    stale = settings("dual")
+    stale.update(requested_resolution_cm1=.001, segments=[{"segment_id":"old", "qcl":3, "lower_cm1":1, "upper_cm1":2}],
+                 probe_width_s=.5, sample_rate_hz=17, fit_peak_count=4, dark_duration_s=50)
+    editor.apply_settings(stale)
+    current = editor.read_settings()
+    assert current["pulse_width_s"] is None
+    assert all(key not in current for key in ("requested_resolution_cm1", "segments", "probe_width_s", "sample_rate_hz", "fit_peak_count", "dark_duration_s"))
+    labels = " ".join(label.text().casefold() for label in editor.findChildren(QLabel))
+    assert not any(word in labels for word in ("resolution", "marker", "settling", "fringe", "baseline", "line width", "peak components"))
+
+
+def test_actual_shell_keeps_entire_input_rectangles_visible_at_1100_by_780(app, tmp_path):
+    from PySide6.QtCore import QPoint, QRect
+    from PySide6.QtGui import QFont, QFontDatabase
+    from control_app.measurement_host.ownership import HardwareCoordinator
+    from control_app.ui.contracts import blocked_handler
+    from control_app.ui.main_window import ControlSystemMainWindow
+    from control_app.measurement_modules.steady_state_slow_scan.registration import DESCRIPTOR
+    handler = blocked_handler("UI geometry test: device access disabled")
+    handler.coordinator = HardwareCoordinator(tmp_path / "shell.lock")
+    handler.hardware_access = False
+    previous_font = app.font()
+    QFontDatabase.addApplicationFont("C:/Windows/Fonts/segoeui.ttf")
+    app.setFont(QFont("Segoe UI", 9))
+    window = ControlSystemMainWindow(command_handler=handler, module_discovery=(DESCRIPTOR,))
+    try:
+        window.resize(1100, 780)
+        for mode in ("single", "dual"):
+            panel = next(handle.widget for handle in window.measurement_lifecycle.handles
+                         if handle.instance_id == f"steady_state_slow_scan:{mode}")
+            window.tabs.setCurrentWidget(panel)
+            window.show()
+            for _ in range(8):
+                app.processEvents()
+            viewport = panel.settings_scroll.viewport()
+            for name, editor in panel.settings_editor.fields.items():
+                bounds = QRect(editor.mapTo(viewport, QPoint()), editor.size())
+                assert viewport.rect().contains(bounds), (mode, name, bounds, viewport.rect())
+            assert window.workspace_scroll.verticalScrollBar().maximum() == 0
+    finally:
+        window.hide()
+        window.deleteLater()
+        app.processEvents()
+        app.setFont(previous_font)
 
 
 def test_blank_and_dark_records_reject_wrong_kind_or_status_without_metadata_gates(app, tabs):
@@ -187,7 +256,7 @@ def test_blank_and_dark_records_reject_wrong_kind_or_status_without_metadata_gat
         panel.adapter.accept_control("blank", {**record, "experiment_id": "another"})
 
 
-def test_refit_preserves_original_native_and_linked_slice_navigation(app, tabs):
+def test_native_plot_keeps_original_and_linked_slice_navigation(app, tabs):
     panel = tabs[0][1].widget
     panel.settings_editor.apply_settings(settings("dual"))
     inject_backend(panel)
@@ -200,9 +269,7 @@ def test_refit_preserves_original_native_and_linked_slice_navigation(app, tabs):
     panel.spectral_slice.set_index(1)
     panel.spectral_slice.input.stepBy(1)
     assert panel.spectral_slice.index != 1
-    panel.refit()
-    wait_for(app, panel)
-    assert Path(panel.result["analysis_path"]).is_file(), panel.status.text()
+    panel.view_choice.setCurrentIndex(panel.view_choice.findData("sample"))
     assert native_path.read_bytes() == original
     assert panel._displayed is panel.result
 

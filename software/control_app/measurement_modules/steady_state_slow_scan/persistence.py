@@ -87,6 +87,7 @@ def _write_json_exclusive(path, payload):
 
 
 def save_plan(path, settings, *, mode=None, plan=None):
+    """Save requested data losslessly, including inert imported-setting metadata."""
     settings = _plain(settings)
     mode = _mode(settings, mode)
     return _write_json_exclusive(path, {"schema_version": SCHEMA_VERSION, "experiment_id": EXPERIMENT_ID,
@@ -96,6 +97,11 @@ def save_plan(path, settings, *, mode=None, plan=None):
 
 
 def load_plan(path, *, expected_mode=None, expected_condition_id=None):
+    """Read historical requests unchanged; executable settings normalize separately.
+
+    A loaded plan is a record, not a schedule to execute. SlowScanSettings and
+    the planner retire obsolete controls when preparing a new acquisition.
+    """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     _validate_envelope(data, "slow_scan_plan", expected_mode, expected_condition_id)
     settings = data["settings"]

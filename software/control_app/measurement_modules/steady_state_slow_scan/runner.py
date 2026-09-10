@@ -15,6 +15,7 @@ from .native import combine_poll_streams
 
 _CONTROL_SETTINGS = ("mode", "segments", "replicates")
 _CONTROL_SELECTED = ("sample_rate_hz", "reference_sample_rate_hz", "time_constant_s", "filter_order",
+    "repetition_rate_hz", "pulse_width_s", "current_ma",
     "probe_rate_hz", "probe_width_s", "marker_interval_cm1", "marker_width_s",
     "process_pulse_width_s", "demodulator_roles", "hf2li")
 
@@ -164,7 +165,7 @@ class SlowScanRunner:
     def _run(self, snapshot, worker, *, role=None, backend=None):
         from .acquisition import InstalledSlowScanBackend
         from .timing import compile_timing
-        from .processing import NativeSweep, FitSettings, fit_spectrum, fit_model_alternatives, assess_sweeps
+        from .processing import NativeSweep, assess_sweeps
         from .persistence import save_run
         self.cancel.clear()
         operation, plan = snapshot.operation, snapshot.plan
@@ -180,6 +181,7 @@ class SlowScanRunner:
             "settings": plan.settings.to_dict(), "plan": plan.to_dict(), "operation": operation.to_dict(),
             "compatibility": compatibility(plan), "sweeps": [], "spectra": [], "fits": [],
             "fit_alternatives": [], "quality": {}, "readbacks": {}, "controls": {}, "restoration": {},
+            "analysis_policy": {"peak_model": None, "automatic_peak_fitting": False},
             "events": [], "simulation": not operation.hardware,
             "claims": {"pump_command_count": 0, "optical_pump_count": None,
                 "optical_time_zero": "unresolved/not measured by static spectroscopy",
@@ -238,6 +240,21 @@ class SlowScanRunner:
                     raise MemoryError("Declared complete acquisition exceeds available memory; revise the explicit plan")
                 controls = dict(snapshot.preliminary or {})
                 self._validate_controls(controls, plan, kind)
+            if kind == "capability":
+                report("configuration", "Checking connected capabilities under exclusive ownership")
+                result["readbacks"] = active_backend.discover(check)
+                result["status"] = "completed"
+            else:
+                compiled = compile_timing(plan)
+                result["compiled_timing"] = compiled.to_dict()
+                prepared_plan = active_backend.prepare(plan, compiled, check, report)
+                if prepared_plan is not None:
+                    # Observed input ranging is part of preparation. Compatibility
+                    # uses the final selected ranges, never the prior idle ranges.
+                    plan = prepared_plan
+                    result["plan"] = plan.to_dict()
+                    result["compatibility"] = compatibility(plan)
+                result["readbacks"] = active_backend.readbacks
                 for name in ("dark", "blank", "q0"):
                     if controls.get(name) is None:
                         continue
@@ -247,16 +264,7 @@ class SlowScanRunner:
                         result.setdefault("unused_controls", {})[name] = list(reasons)
                         controls.pop(name)
                         report("configuration", f"{name.capitalize()} differs; acquiring without this record")
-            if kind == "capability":
-                report("configuration", "Checking connected capabilities under exclusive ownership")
-                result["readbacks"] = active_backend.discover(check)
-                result["status"] = "completed"
-            else:
-                compiled = compile_timing(plan)
-                result["compiled_timing"] = compiled.to_dict()
-                active_backend.prepare(plan, compiled, check, report)
-                result["readbacks"] = active_backend.readbacks
-                for name in ("dark", "blank", "q0"):
+                        continue
                     try:
                         self._validate_instrument_controls({name: controls.get(name)}, active_backend.readbacks)
                     except ValueError as exc:
@@ -306,24 +314,11 @@ class SlowScanRunner:
                             worker.progress.emit(block_index+1, len(compiled.blocks))
                         except Exception:
                             pass
-                    report("analysis", "Fitting spectra")
+                    report("analysis", "Processing spectra")
                     for sweep in result["sweeps"]:
                         check()
                         processed = self._process(sweep, controls, plan, kind, check)
                         result["spectra"].append(processed)
-                        fit_settings = FitSettings(peak_count=plan.settings.fit_peak_count,
-                            line_shape=plan.settings.fit_line_shape, baseline_degree=plan.settings.fit_baseline_degree,
-                            fringe_periods_cm1=plan.settings.fit_fringe_periods_cm1)
-                        if kind != "blank" and np.count_nonzero(processed.valid) >= max(12, fit_settings.peak_count*6):
-                            fitted = fit_spectrum(processed, fit_settings, cancel_check=check)
-                            result["fits"].append(fitted)
-                            alternate_shape = "lorentzian" if fit_settings.line_shape == "gaussian" else "gaussian"
-                            candidates = [fit_settings, replace(fit_settings, line_shape=alternate_shape),
-                                replace(fit_settings, baseline_degree=0 if fit_settings.baseline_degree else 1)]
-                            if fit_settings.fringe_periods_cm1:
-                                candidates.append(replace(fit_settings, fringe_periods_cm1=()))
-                            alternatives = fit_model_alternatives(processed, candidates, cancel_check=check)
-                            result["fit_alternatives"].append(alternatives)
                     result["quality"] = assess_sweeps(result["spectra"],
                         max_gap_cm1=plan.inputs.scientific_profile.get("control_match_max_gap_cm1"),
                         maximum_rms_difference=plan.inputs.scientific_profile.get("maximum_repeatability_rms"))

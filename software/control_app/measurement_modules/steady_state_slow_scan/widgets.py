@@ -9,7 +9,7 @@ import time
 import numpy as np
 from PySide6.QtCore import QTimer, Signal, Qt
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QHBoxLayout, QLabel,
+    QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
     QWidget, QFileDialog, QDoubleSpinBox, QSpinBox, QHeaderView, QToolButton,
 )
@@ -39,39 +39,28 @@ def _quantity_label(quantity):
 
 
 class SlowScanSettingsWidget(QWidget):
-    """Short acquisition form with optional independent automatic overrides."""
+    """One visible acquisition form; connected values supply independent Auto fields."""
 
     changed = Signal()
-    OVERRIDE_FIELDS = (
-        ("requested_scan_speed_cm1_s", "Scan speed (cm⁻¹/s)"),
-        ("measured_linewidth_cm1", "Measured line width (cm⁻¹)"),
-        ("sample_rate_hz", "Sample rate (Hz)"),
-        ("time_constant_s", "Sample time constant (s)"),
-        ("filter_order", "Sample filter order"),
-        ("sample_range_v", "Sample input range (V)"),
-        ("reference_sample_rate_hz", "Reference rate (Hz)"),
-        ("reference_time_constant_s", "Reference time constant (s)"),
-        ("reference_filter_order", "Reference filter order"),
-        ("reference_range_v", "Reference input range (V)"),
-        ("settle_s", "Settling (s)"),
-        ("marker_interval_cm1", "Marker interval (cm⁻¹)"),
-        ("marker_width_s", "Marker width (s)"),
-        ("probe_rate_hz", "Probe rate (Hz)"),
-        ("probe_width_s", "Probe width (s)"),
-        ("process_pulse_width_s", "Process pulse width (s)"),
-        ("dark_duration_s", "Dark duration (s)"),
-    )
-    INTEGERS = {"filter_order", "reference_filter_order", "replicates", "fit_peak_count", "fit_baseline_degree"}
+    FILTER_FIELDS = (("time_constant_s", "Sample time constant (s)"),
+                     ("filter_order", "Sample filter order"),
+                     ("reference_time_constant_s", "Reference time constant (s)"),
+                     ("reference_filter_order", "Reference filter order"))
+    AUTO_FIELDS = (("current_ma", "Current (mA)", 1.),
+                   ("repetition_rate_hz", "Repetition rate (Hz)", 1.),
+                   ("pulse_width_s", "Pulse width (ns)", 1e-9))
 
     def __init__(self, mode, parent=None):
         super().__init__(parent)
         from .settings import SlowScanSettings
         self.mode, self._applying = mode, False
         self._base = SlowScanSettings(mode=mode).to_dict()
-        self.fields = {}
+        self.fields = self.override_inputs = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        form = QFormLayout()
+        group = QGroupBox("Scan settings")
+        form = QFormLayout(group)
+        form.setVerticalSpacing(2)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.plan_label = QLineEdit()
         self.plan_label.setPlaceholderText("Optional")
@@ -87,131 +76,63 @@ class SlowScanSettingsWidget(QWidget):
             editor.valueChanged.connect(self._changed)
         form.addRow("From", self.lower)
         form.addRow("To", self.upper)
-        self.resolution = QDoubleSpinBox()
-        self.resolution.setObjectName("requested_resolution_cm1")
-        self.resolution.setDecimals(4)
-        self.resolution.setRange(.0001, 1000.)
-        self.resolution.setSuffix(" cm⁻¹")
-        self.resolution.setKeyboardTracking(False)
-        self.resolution.valueChanged.connect(self._changed)
+        self.scan_speed = QDoubleSpinBox()
+        self.scan_speed.setObjectName("requested_scan_speed_cm1_s")
+        self.scan_speed.setDecimals(3)
+        self.scan_speed.setRange(.1, 10000.)
+        self.scan_speed.setSuffix(" cm⁻¹/s")
+        self.scan_speed.setKeyboardTracking(False)
+        self.scan_speed.valueChanged.connect(self._changed)
+        form.addRow("Scan speed", self.scan_speed)
+        for key, label, _scale in self.AUTO_FIELDS:
+            editor = QLineEdit()
+            editor.setObjectName(key)
+            editor.setPlaceholderText("Auto")
+            editor.textChanged.connect(self._changed)
+            self.fields[key] = editor
+            form.addRow(label, editor)
         self.repeats = QSpinBox()
         self.repeats.setObjectName("replicates")
         self.repeats.setRange(1, 8192)
         self.repeats.valueChanged.connect(self._changed)
-        form.addRow("Resolution", self.resolution)
         form.addRow("Repeats per direction", self.repeats)
-        layout.addLayout(form)
         self.advanced_widget = QWidget()
-        advanced = QVBoxLayout(self.advanced_widget)
-        advanced.setContentsMargins(0, 0, 0, 0)
-        advanced.addWidget(QLabel("Optional segment overrides (cm⁻¹)"))
-        self.segments = QTableWidget(0, 3)
-        self.segments.setHorizontalHeaderLabels(["From", "To", "QCL"])
-        self.segments.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.segments.verticalHeader().hide()
-        self.segments.setMinimumHeight(84)
-        self.segments.setMaximumHeight(135)
-        self.segments.cellChanged.connect(self._changed)
-        advanced.addWidget(self.segments)
-        row = QHBoxLayout()
-        add, remove = QPushButton("Add window"), QPushButton("Remove")
-        add.clicked.connect(lambda: self.add_segment())
-        remove.clicked.connect(self.remove_segment)
-        row.addWidget(add)
-        row.addWidget(remove)
-        advanced.addLayout(row)
-        self.capability_button = QPushButton("Check connected device")
-        self.capability_button.setToolTip("Read connected settings under instrument ownership. Start also reads the device automatically.")
-        advanced.addWidget(self.capability_button)
-        override_form = QFormLayout()
-        override_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.override_inputs = {}
-        for key, label in self.OVERRIDE_FIELDS:
+        filter_form = QFormLayout(self.advanced_widget)
+        filter_form.setContentsMargins(0, 0, 0, 0)
+        filter_form.setVerticalSpacing(4)
+        filter_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        for key, label in self.FILTER_FIELDS:
             if mode == "single" and key.startswith("reference_"):
                 continue
             editor = QLineEdit()
             editor.setObjectName(key)
             editor.setPlaceholderText("Auto")
             editor.textChanged.connect(self._changed)
-            self.fields[key] = self.override_inputs[key] = editor
-            override_form.addRow(label, editor)
-        advanced.addLayout(override_form)
-        automatic = QPushButton("Restore automatic settings")
-        automatic.clicked.connect(self.restore_automatic)
-        advanced.addWidget(automatic)
-        fit_form = QFormLayout()
-        fit_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.peak_count = QSpinBox()
-        self.peak_count.setRange(0, 8)
-        self.peak_count.valueChanged.connect(self._changed)
-        self.baseline_degree = QSpinBox()
-        self.baseline_degree.setRange(0, 2)
-        self.baseline_degree.valueChanged.connect(self._changed)
-        self.line_shape = QComboBox()
-        self.line_shape.addItems(["gaussian", "lorentzian"])
-        self.line_shape.currentTextChanged.connect(self._changed)
-        self.fringes = QLineEdit()
-        self.fringes.setPlaceholderText("Optional periods, comma separated")
-        self.fringes.textChanged.connect(self._changed)
-        fit_form.addRow("Peak components", self.peak_count)
-        fit_form.addRow("Line shape", self.line_shape)
-        fit_form.addRow("Baseline degree", self.baseline_degree)
-        fit_form.addRow("Fringe periods (cm⁻¹)", self.fringes)
-        advanced.addLayout(fit_form)
+            self.fields[key] = editor
+            filter_form.addRow(label, editor)
+        layout.addWidget(group)
+        self.capability_button = QPushButton("Read connected settings")
+        layout.addWidget(self.capability_button)
         self.apply_settings(self._base)
 
     def _changed(self, *_):
         if not self._applying:
             self.changed.emit()
 
-    def add_segment(self, values=None):
-        was_applying = self._applying
-        self._applying = True
-        row = self.segments.rowCount()
-        self.segments.insertRow(row)
-        values = values or {"segment_id": f"window-{row + 1}", "qcl": 0, "lower_cm1": "", "upper_cm1": ""}
-        for column, key in enumerate(("lower_cm1", "upper_cm1", "qcl")):
-            value = values.get(key, "")
-            item = QTableWidgetItem("Auto" if key == "qcl" and value == 0 else str(value))
-            item.setData(Qt.ItemDataRole.UserRole, values.get("segment_id", f"window-{row + 1}"))
-            self.segments.setItem(row, column, item)
-        self._applying = was_applying
-        self._changed()
-
-    def remove_segment(self):
-        row = self.segments.currentRow()
-        if row >= 0:
-            self.segments.removeRow(row)
-            self._changed()
-
-    def restore_automatic(self):
-        self._applying = True
-        for editor in self.override_inputs.values():
-            editor.clear()
-        self._applying = False
-        self.changed.emit()
-
     def read_settings(self):
         from .settings import SlowScanSettings
         values = deepcopy(self._base)
-        values.update(mode=self.mode, hardware=True,
-                      lower_cm1=self.lower.value(), upper_cm1=self.upper.value(),
-                      plan_label=self.plan_label.text().strip(), requested_resolution_cm1=self.resolution.value(),
-                      replicates=self.repeats.value(), fit_peak_count=self.peak_count.value(),
-                      fit_baseline_degree=self.baseline_degree.value(), fit_line_shape=self.line_shape.currentText(),
-                      fit_fringe_periods_cm1=[float(v.strip()) for v in self.fringes.text().split(",") if v.strip()])
-        values["segments"] = []
-        for row in range(self.segments.rowCount()):
-            items = [self.segments.item(row, column) for column in range(3)]
-            text = [item.text().strip() if item else "" for item in items]
-            qcl = 0 if not text[2] or text[2].casefold() == "auto" else int(text[2])
-            values["segments"].append({"segment_id": items[0].data(Qt.ItemDataRole.UserRole) or f"window-{row+1}",
-                                       "qcl": qcl, "lower_cm1": float(text[0]), "upper_cm1": float(text[1])})
-        for key, editor in self.override_inputs.items():
-            value = editor.text().strip()
-            values[key] = None if not value or value.casefold() == "auto" else int(value) if key in self.INTEGERS else float(value)
-        for key in ("condition_equilibrated", "physical_controls_confirmed"):
-            values.pop(key, None)
+        values.update(mode=self.mode, hardware=True, lower_cm1=self.lower.value(), upper_cm1=self.upper.value(),
+                      plan_label=self.plan_label.text().strip(), requested_scan_speed_cm1_s=self.scan_speed.value(),
+                      replicates=self.repeats.value())
+        scales = {key: scale for key, _label, scale in self.AUTO_FIELDS}
+        for key, editor in self.fields.items():
+            text = editor.text().strip()
+            values[key] = (None if not text or text.casefold() == "auto" else int(text) if key.endswith("filter_order")
+                           else float(text) * scales.get(key, 1.))
+        if values["repetition_rate_hz"] is not None and values["pulse_width_s"] is not None:
+            if values["repetition_rate_hz"] * values["pulse_width_s"] > .30 + 1e-12:
+                raise ValueError("Pulse duty must be 30% or less")
         return SlowScanSettings.from_dict(values).to_dict()
 
     def apply_settings(self, settings):
@@ -226,18 +147,12 @@ class SlowScanSettingsWidget(QWidget):
             self.plan_label.setText(data.get("plan_label", ""))
             self.lower.setValue(data["lower_cm1"])
             self.upper.setValue(data["upper_cm1"])
-            self.resolution.setValue(data["requested_resolution_cm1"])
+            self.scan_speed.setValue(data.get("requested_scan_speed_cm1_s") or 2.)
             self.repeats.setValue(data["replicates"])
-            self.peak_count.setValue(data.get("fit_peak_count", 1))
-            self.baseline_degree.setValue(data.get("fit_baseline_degree", 1))
-            self.line_shape.setCurrentText(data.get("fit_line_shape", "gaussian"))
-            self.fringes.setText(", ".join(str(v) for v in data.get("fit_fringe_periods_cm1", ())))
-            for key, editor in self.override_inputs.items():
+            scales = {key: scale for key, _label, scale in self.AUTO_FIELDS}
+            for key, editor in self.fields.items():
                 value = data.get(key)
-                editor.setText("" if value is None else str(value))
-            self.segments.setRowCount(0)
-            for segment in data["segments"]:
-                self.add_segment(segment)
+                editor.setText("" if value is None else f"{value / scales.get(key, 1.):g}")
         finally:
             self._applying = False
         self.changed.emit()
@@ -344,7 +259,7 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.control_status.setWordWrap(True)
         self.settings_extras_layout.addWidget(self.control_status)
         self.load_dark_button = QPushButton("Load dark…")
-        settings.advanced_widget.layout().addWidget(self.load_dark_button)
+        self.settings_extras_layout.addWidget(self.load_dark_button)
         self.load_dark_button.clicked.connect(lambda: self._choose_control("dark"))
         settings.capability_button.clicked.connect(lambda: self._user_action(lambda: self.begin_control("capability")))
 
@@ -405,9 +320,8 @@ class SlowScanPanel(CompactMeasurementPanel):
         analysis.addLayout(selections)
         tools = QHBoxLayout()
         self.comparison_button = QPushButton("Compare run…")
-        self.refit_button = QPushButton("Refit")
         self.selection_export = QPushButton("Export selection…")
-        for button in (self.comparison_button, self.refit_button, self.selection_export):
+        for button in (self.comparison_button, self.selection_export):
             tools.addWidget(button)
         analysis.addLayout(tools)
         self.analysis_content.hide()
@@ -430,7 +344,6 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.view_choice.currentIndexChanged.connect(self.redraw)
         self.spectral_slice.index_changed.connect(self.redraw)
         self.comparison_button.clicked.connect(self._choose_comparison)
-        self.refit_button.clicked.connect(lambda: self._user_action(self.refit))
         self.selection_export.clicked.connect(lambda: self._user_action(self._export_selection_dialog))
         settings.changed.connect(self._settings_changed)
         self._update_local_controls()
@@ -450,7 +363,7 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.blank_button.setEnabled(idle and self.plan is not None)
         for button in (self.load_blank_button, self.load_dark_button):
             button.setEnabled(idle)
-        for button in (self.comparison_button, self.refit_button, self.selection_export):
+        for button in (self.comparison_button, self.selection_export):
             button.setEnabled(idle and self._displayed is not None)
         if hasattr(self, "control_status"):
             controls = self.adapter.controls
@@ -471,9 +384,6 @@ class SlowScanPanel(CompactMeasurementPanel):
             try:
                 if kind in ("dark", "blank", "capability", "load_dark", "load_blank"):
                     self.adapter.accept_control(kind.removeprefix("load_"), outcome.result)
-                elif kind == "refit":
-                    self.result = outcome.result
-                    self.display_result(outcome.result)
                 elif kind == "load_comparison":
                     self._comparison = outcome.result
                     self.redraw()
@@ -618,12 +528,6 @@ class SlowScanPanel(CompactMeasurementPanel):
             displayed = deepcopy(self._displayed)
             self.begin_operation("load_comparison",
                 lambda _snapshot, worker: self.adapter.load_comparison(Path(path), displayed, worker), requires_valid_plan=False)
-
-    def refit(self):
-        if self._displayed is None:
-            raise ValueError("Acquire or load a spectrum before refitting")
-        settings, result = deepcopy(self.adapter.read_settings()), deepcopy(self._displayed)
-        self.begin_operation("refit", lambda _snapshot, worker: self.adapter.refit(result, settings, worker), requires_valid_plan=False)
 
     def selected_windows(self):
         windows = []

@@ -1,7 +1,7 @@
 """Deterministic spectral planning from requests and explicit instrument evidence.
 
-No device modules are imported here. Native sampling and the selected HF2LI
-response jointly constrain speed; "slow" is not assigned a fixed scan rate.
+No device modules are imported here. The entered scan speed is authoritative;
+native sampling and filter response remain separately reported constraints.
 """
 
 from __future__ import annotations
@@ -18,6 +18,18 @@ from .settings import PlannerInputs, QCLWindow, SlowScanSettings, SpectralSegmen
 
 def _positive(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
+
+
+def current_to_requested_range_v(current_ma):
+    """Operator-specified range policy, not a measured detector calibration."""
+    if not isinstance(current_ma, (int, float)) or not math.isfinite(current_ma) or current_ma < 0:
+        raise ValueError("Current must be finite and nonnegative")
+    if current_ma <= 500:
+        # HF2LI manual Signal Inputs range starts at 1 mV; avoid a zero request.
+        return max(.001, current_ma / 500.)
+    if current_ma <= 750:
+        return 1. + (current_ma - 500.) * .003
+    return min(2., 1.75 + (current_ma - 750.) * .001)
 
 
 @dataclass(frozen=True)
@@ -94,22 +106,7 @@ def _filter(order, tau):
 
 
 def _segments(settings, inputs):
-    if settings.segments:
-        return settings.segments
-    result, cursor = [], settings.lower_cm1
-    while cursor < settings.upper_cm1:
-        candidates = [window for window in inputs.qcl_windows if window.lower_cm1 <= cursor < window.upper_cm1]
-        if not candidates:
-            future = [window.lower_cm1 for window in inputs.qcl_windows if cursor < window.lower_cm1 < settings.upper_cm1]
-            if not future:
-                break
-            cursor = min(future)
-            continue
-        window = max(candidates, key=lambda item: item.upper_cm1)
-        end = min(window.upper_cm1, settings.upper_cm1)
-        result.append(SpectralSegment(f"segment-{len(result)+1}", window.qcl, cursor, end))
-        cursor = end
-    return tuple(result)
+    return (SpectralSegment("qcl-1", 1, settings.lower_cm1, settings.upper_cm1),)
 
 
 def build_plan(settings, inputs=None):
@@ -118,23 +115,21 @@ def build_plan(settings, inputs=None):
     inputs = PlannerInputs.from_dict(deepcopy(inputs.to_dict() if isinstance(inputs, PlannerInputs) else inputs or {}))
     profile, selected = inputs.scientific_profile, {}
     errors, readiness, warnings, blocks = [], [], [], []
-    resolution = settings.requested_resolution_cm1
-    if not _positive(resolution): errors.append("Spectral resolution must be finite and positive")
+    requested_speed = settings.requested_scan_speed_cm1_s
+    if not _positive(requested_speed) or not .1 <= requested_speed <= 10000:
+        errors.append("Scan speed must be in 0.1–10000 cm^-1/s")
     if type(settings.replicates) is not int or not 1 <= settings.replicates <= 8191: errors.append("Replicates must be an integer in 1..8191")
     if not _positive(settings.lower_cm1) or not _positive(settings.upper_cm1) or settings.lower_cm1 >= settings.upper_cm1:
         errors.append("Enter finite lower < upper wavenumbers")
-    if settings.fit_line_shape not in ("gaussian", "lorentzian") or settings.fit_baseline_degree not in (0, 1, 2): errors.append("Unsupported peak/baseline model")
-    if type(settings.fit_peak_count) is not int or not 1 <= settings.fit_peak_count <= 8: errors.append("Peak count must be in 1..8")
-    if any(not _positive(value) for value in settings.fit_fringe_periods_cm1): errors.append("Fringe periods must be finite and positive")
-    names = ("measured_linewidth_cm1", "requested_scan_speed_cm1_s", "sample_rate_hz", "time_constant_s", "filter_order",
-             "reference_sample_rate_hz", "reference_time_constant_s", "reference_filter_order", "sample_range_v", "reference_range_v",
-             "settle_s", "marker_interval_cm1", "marker_width_s", "probe_rate_hz", "probe_width_s", "process_pulse_width_s", "dark_duration_s")
+    names = ("time_constant_s", "filter_order", "reference_time_constant_s", "reference_filter_order", "repetition_rate_hz", "pulse_width_s")
     for name in names:
         if getattr(settings, name) is not None and not _positive(getattr(settings, name)): errors.append(f"{name} must be Auto or finite and positive")
-    for segment in settings.segments:
-        if type(segment.qcl) is not int or not 0 <= segment.qcl <= 255 or not segment.segment_id.strip(): errors.append("Segment needs a label and QCL Auto (0) or installed number")
-        if not _positive(segment.lower_cm1) or not _positive(segment.upper_cm1) or segment.lower_cm1 >= segment.upper_cm1: errors.append("Invalid segment bounds")
-    if len({segment.segment_id for segment in settings.segments}) != len(settings.segments): errors.append("Segment labels must be unique")
+    if settings.current_ma is not None and (not isinstance(settings.current_ma, (int, float)) or isinstance(settings.current_ma, bool)
+                                          or not math.isfinite(settings.current_ma) or settings.current_ma < 0):
+        errors.append("Current must be Auto or a finite nonnegative mA value")
+    if settings.repetition_rate_hz is not None and settings.pulse_width_s is not None and not errors:
+        if settings.repetition_rate_hz * settings.pulse_width_s > .30 + 1e-12:
+            errors.append("Repetition rate × pulse width must not exceed 0.30 (30% duty)")
     if errors:
         return SlowScanPlan(settings, inputs, settings.to_dict(), selected, deepcopy(inputs.actual_readbacks), (), {}, tuple(errors), (), ())
     warnings.extend(profile.get("runtime_warnings", ()))
@@ -144,9 +139,6 @@ def build_plan(settings, inputs=None):
     if not inputs.process_trigger_qualified or not inputs.wavelength_markers_qualified: warnings.append("Native event counts and directions are checked per sweep; optical timing remains uncalibrated")
     if inputs.simulation: warnings.append("Injected test fixture; not a connected-device fallback")
     segments = _segments(settings, inputs)
-    if not segments: readiness.append("Connect MIRcat to resolve requested coverage")
-    if segments and not settings.segments and sum(s.upper_cm1-s.lower_cm1 for s in segments) < settings.upper_cm1-settings.lower_cm1-1e-8:
-        warnings.append("Requested range contains unsupported QCL intervals; explicit segment gaps are retained")
     hf = deepcopy(profile.get("hf2li", {}))
     roles = inputs.demodulator_roles
     for role in (("sample", "reference", "timing") if settings.mode == "dual" else ("sample", "timing")):
@@ -155,7 +147,8 @@ def build_plan(settings, inputs=None):
     elif settings.replicates + 1 > inputs.t660_frame_capacity: errors.append("Continuous block exceeds physical frame memory; reduce replicates")
     timing_rate = inputs.timing_rate_hz
     if not _positive(timing_rate): readiness.append("Connected HF2LI timing rate unavailable")
-    seed = settings.requested_scan_speed_cm1_s or profile.get("requested_scan_speed_cm1_s")
+    seed = requested_speed
+    duration = (settings.upper_cm1 - settings.lower_cm1) / seed
     estimates_by_role, rates = {}, []
     for role in (("sample", "reference") if settings.mode == "dual" else ("sample",)):
         fields = ("sample_rate_hz", "time_constant_s", "filter_order") if role == "sample" else ("reference_sample_rate_hz", "reference_time_constant_s", "reference_filter_order")
@@ -174,25 +167,19 @@ def build_plan(settings, inputs=None):
             tau = min(constants, key=lambda value: abs(value-tau_request))
             if not math.isclose(tau, tau_request, rel_tol=1e-6, abs_tol=1e-12): errors.append(f"{role} time constant unsupported; choose Auto or a connected value"); continue
         else:
-            initial_speed = seed or resolution / (2 * _filter(order, previous.get("timeconstant_s") or min(constants))["rise_s"])
-            target = resolution / (2 * initial_speed * _filter(order, 1.)["rise_s"])
-            tau = max((value for value in constants if value <= target), default=min(constants))
+            live_tau = previous.get("timeconstant_s")
+            tau = min(constants, key=lambda value: abs(value-live_tau)) if _positive(live_tau) else min(constants)
         response = _filter(order, tau)
-        if not _positive(seed): seed = resolution / (2*response["rise_s"])
         supported = inputs.supported_sample_rates_hz if role == "sample" else (inputs.supported_reference_sample_rates_hz or inputs.supported_sample_rates_hz)
         supported = tuple(sorted(value for value in supported if _positive(value)))
         if not supported: readiness.append(f"Connected {role} sample rates unavailable"); continue
-        rate_request = getattr(settings, fields[0])
-        if rate_request is not None:
-            rate = min(supported, key=lambda value: abs(value-rate_request))
-            if not math.isclose(rate, rate_request, rel_tol=1e-6, abs_tol=1e-9): errors.append(f"{role} sample rate unsupported; choose Auto or a connected value"); continue
-        else:
-            minimum = max(4 * seed / resolution, 2 * response["bandwidth_hz"])
-            rate = next((value for value in supported if value >= minimum), supported[-1])
+        minimum = max(32 / duration, 2 * response["bandwidth_hz"])
+        rate = next((value for value in supported if value >= minimum), supported[-1])
+        if rate * duration < 2: errors.append(f"{role} stream cannot sample the requested scan duration")
         hf[role] = {**previous, "order": order, "timeconstant_s": tau, "rate_sps": rate}
         selected.update({fields[0]: rate, fields[1]: tau, fields[2]: order, f"{role}_filter_estimate": response})
         input_name = "ch1" if role == "sample" else "ch2"
-        input_range = getattr(settings, f"{role}_range_v") or hf.get("sigins", {}).get(input_name, {}).get("range_v")
+        input_range = hf.get("sigins", {}).get(input_name, {}).get("range_v")
         if not _positive(input_range): readiness.append(f"Connected {role} input range unavailable")
         else:
             hf.setdefault("sigins", {}).setdefault(input_name, {})["range_v"] = input_range
@@ -208,43 +195,107 @@ def build_plan(settings, inputs=None):
     selected.update(nominal_response_s=response, planning_response_s=response, measured_response_s=profile.get("measured_response_s"),
                     response_basis="nominal cascaded-RC 10–90% rise estimate", intrinsic_resolution_cm1=profile.get("intrinsic_resolution_cm1"),
                     intrinsic_resolution_known=_positive(profile.get("intrinsic_resolution_cm1")))
-    linewidth = settings.measured_linewidth_cm1 or profile.get("measured_linewidth_cm1")
-    target_step = min(resolution/2, linewidth/6) if _positive(linewidth) else resolution/2
+    target_step = seed / min(rates) if rates else None
     selected["target_native_spacing_cm1"] = target_step
+    selected["sampling_basis"] = "Smallest installed rate at least twice nominal filter bandwidth and 32 samples per sweep; no resolution target"
+    selected["scan_speed_cm1_s"] = seed
     def choose(name, auto=None):
-        value = getattr(settings, name)
+        value = getattr(settings, name, None)
         if value is None: value = auto if auto is not None else profile.get(name)
         if not _positive(value): readiness.append(f"Connect instruments to resolve {name}"); value = None
         selected[name] = value
         return value
-    probe_rate, probe_width = choose("probe_rate_hz"), choose("probe_width_s")
+    pulse_params = deepcopy(profile.get("qcl_pulse_params", {}).get("1", {}))
+    pulse_limits = inputs.actual_readbacks.get("qcl_pulse_limits", {}).get("1", {})
+    probe_rate = choose("repetition_rate_hz", profile.get("probe_rate_hz"))
+    optical_width = choose("pulse_width_s", pulse_params.get("pulse_width_ns", 0.) * 1e-9)
+    if optical_width is not None:
+        try:
+            # SetQCLParams encodes optical width as float32 nanoseconds. Use
+            # that same width before deriving an internal-frequency ceiling.
+            width_ns = struct.unpack("f", struct.pack("f", optical_width * 1e9))[0]
+            if not _positive(width_ns):
+                raise ValueError("Unrepresentable optical width")
+            optical_width = selected["pulse_width_s"] = width_ns * 1e-9
+        except (OverflowError, ValueError, struct.error):
+            errors.append("Optical pulse width cannot be represented by the MIRcat SDK")
+            optical_width = selected["pulse_width_s"] = None
+    probe_width = profile.get("probe_width_s")
     if probe_rate:
         probe_rate = selected["probe_rate_hz"] = round(probe_rate/.02)*.02
+        selected["repetition_rate_hz"] = probe_rate
+        if probe_rate <= 0:
+            errors.append("Repetition rate rounds to zero on the documented 0.02 Hz DDS grid")
+        # TTL trigger duration is a separate electrical parameter, never the
+        # emitted optical pulse width programmed through MIRcat SetQCLParams.
+        if _positive(probe_width) and probe_rate > 0:
+            probe_width = min(probe_width, .5/probe_rate)
         if probe_rate > 16e6 or (probe_width and probe_rate*(probe_width+62.5e-9) >= 1): errors.append("Probe exceeds documented T660 repetition/width limit")
-    process = choose("process_pulse_width_s", profile.get("process_pulse_width_s", .010))
+        if optical_width and probe_rate * optical_width > .30 + 1e-12: errors.append("Repetition rate × pulse width must not exceed 0.30 (30% duty)")
+    selected["probe_width_s"] = probe_width
+    if not _positive(probe_width): readiness.append("Connect T660-1 to resolve electrical trigger width")
+    selected["pulse_duty_fraction"] = probe_rate * optical_width if probe_rate and optical_width else None
+    selected["probe_width_basis"] = "Observed electrical trigger width, shortened if needed for selected cadence; separate from optical pulse width"
+    if probe_rate and optical_width:
+        internal_rate = pulse_params.get("pulse_rate_hz")
+        internal_limit = min(.30, pulse_limits.get("max_duty_cycle", 30.)/100)
+        if (not _positive(internal_rate) or internal_rate <= probe_rate or
+            internal_rate * optical_width > internal_limit or
+            (pulse_limits and internal_rate > pulse_limits["max_pulse_rate_hz"])):
+            if pulse_limits:
+                ceiling = min(pulse_limits["max_pulse_rate_hz"], min(.30, pulse_limits["max_duty_cycle"]/100)/optical_width)
+                packed = struct.unpack("I", struct.pack("f", ceiling))[0]
+                internal_rate = struct.unpack("f", struct.pack("I", packed))[0]
+                if internal_rate > ceiling:
+                    internal_rate = struct.unpack("f", struct.pack("I", packed - 1))[0]
+            else:
+                readiness.append("Connect MIRcat to resolve internal pulse rate headroom")
+        if pulse_limits and (not _positive(internal_rate) or internal_rate <= probe_rate):
+            errors.append("No MIRcat internal pulse rate above external repetition fits vendor limits")
+        pulse_params.update(pulse_rate_hz=internal_rate, pulse_width_ns=width_ns)
+        if pulse_limits and (internal_rate > pulse_limits["max_pulse_rate_hz"] or
+                             width_ns > pulse_limits["max_pulse_width_ns"] or
+                             internal_rate*optical_width > min(.30, pulse_limits["max_duty_cycle"]/100) + 1e-12):
+            errors.append("MIRcat internal pulse rate/optical width exceeds connected vendor limits")
+        selected["mircat_internal_rate_hz"] = internal_rate
+    current = settings.current_ma if settings.current_ma is not None else profile.get("qcl_pulse_params", {}).get("1", {}).get("current_ma")
+    limits = inputs.actual_readbacks.get("qcl_current_limits", {}).get("1")
+    if not isinstance(current, (int, float)) or not math.isfinite(current) or current < 0:
+        readiness.append("Connect MIRcat to resolve QCL 1 current")
+    elif limits is not None and not min(limits) <= current <= max(limits): errors.append("Current exceeds connected QCL 1 limits")
+    elif pulse_params:
+        pulse_params["current_ma"] = current
+        profile["qcl_pulse_params"] = {"1": pulse_params}
+    selected["current_ma"] = current
+    if isinstance(current, (int, float)) and math.isfinite(current) and current >= 0:
+        requested_range = current_to_requested_range_v(current)
+        selected["requested_input_range_v"] = requested_range
+        selected["input_range_basis"] = "Operator policy: 500mA→1V, 750mA→1.75V, 1000mA→2V; actual HF2LI readback authoritative"
+        for role, input_name in (("sample", "ch1"), ("reference", "ch2")):
+            if role == "reference" and settings.mode == "single": continue
+            if input_name in hf.get("sigins", {}): hf["sigins"][input_name]["range_v"] = requested_range
+            selected[f"{role}_range_v"] = requested_range
+    process = choose("process_pulse_width_s", .010)
     if process and not .001 <= process <= .1: errors.append("MIRcat process pulse must be in manufacturer 1–100 ms range")
     settle = choose("settle_s", filter_settle or None)
     dark = choose("dark_duration_s", max(20/min(rates), filter_settle) if rates else None)
-    marker_width = choose("marker_width_s")
+    marker_width = choose("marker_width_s", math.ceil(2e6/timing_rate)/1e6 if _positive(timing_rate) else None)
     if marker_width:
         marker_width = selected["marker_width_s"] = round(marker_width*1e6)/1e6
         if not 1e-6 <= marker_width <= .065535: errors.append("Marker width must fit 1–65535 us register")
         if timing_rate and marker_width*timing_rate < 2: errors.append("Marker pulse needs at least two timing samples")
     span = min((segment.upper_cm1-segment.lower_cm1 for segment in segments), default=0.)
-    interval = choose("marker_interval_cm1", min(span, max(resolution, 4*(seed or 0.)*(marker_width or 0.))) if span else None)
+    interval = choose("marker_interval_cm1", min(span, max(span/100, 4*seed*(marker_width or 0.))) if span else None)
     if not inputs.t660_tick_s or not inputs.t660_maximum_delay_s: readiness.append("T660 timing capabilities unavailable")
     for segment in segments:
-        windows = [w for w in inputs.qcl_windows if w.lower_cm1 <= segment.lower_cm1 < segment.upper_cm1 <= w.upper_cm1 and (not segment.qcl or w.qcl == segment.qcl)]
+        windows = [w for w in inputs.qcl_windows if w.qcl == 1 and w.lower_cm1 <= segment.lower_cm1 < segment.upper_cm1 <= w.upper_cm1]
         if not windows:
-            if inputs.qcl_windows: errors.append(f"{segment.segment_id}: range crosses installed QCL bounds")
-            else: readiness.append(f"Connect MIRcat to resolve {segment.segment_id} coverage")
+            if inputs.qcl_windows: errors.append("Requested range is outside installed QCL 1 bounds")
+            else: readiness.append("Connect MIRcat to resolve QCL 1 coverage")
             continue
         window = min(windows, key=lambda value: value.qcl)
         if not all(_positive(value) for value in (seed, probe_rate, process, settle, interval)) or not rates or not response: continue
-        speed_limit = min(min(rates)*target_step, resolution/math.hypot(response, 1/min(rates)))
-        speed = struct.unpack("f", struct.pack("f", settings.requested_scan_speed_cm1_s or min(seed, speed_limit)))[0]
-        effective = math.sqrt((profile.get("intrinsic_resolution_cm1") or 0.)**2 + (speed/min(rates))**2 + (speed*response)**2)
-        if effective > resolution*1.00001: warnings.append(f"{segment.segment_id}: estimated broadening exceeds requested resolution; raw acquisition remains available")
+        speed = struct.unpack("f", struct.pack("f", seed))[0]
         if window.maximum_speed_cm1_s and speed > window.maximum_speed_cm1_s: errors.append("Requested speed exceeds supplied installed limit")
         if window.minimum_speed_cm1_s and speed < window.minimum_speed_cm1_s: errors.append("Requested speed is below supplied installed limit")
         duration = (segment.upper_cm1-segment.lower_cm1)/speed
@@ -259,7 +310,7 @@ def build_plan(settings, inputs=None):
     if not hf.get("pll") or not hf.get("timing"): readiness.append("Connected HF2LI reference/timing configuration unavailable")
     if hf.get("pll") and probe_rate: hf["pll"]["freqcenter_hz"] = probe_rate
     native_spacing = max((block.scan_speed_cm1_s/min(rates) for block in blocks), default=target_step)
-    selected.update(control_match_max_gap_cm1=2*native_spacing, control_matching_basis="bounded local support matching within two selected native sample spacings; no calibration claim",
+    selected.update(control_match_max_gap_cm1=2*native_spacing if native_spacing is not None else None, control_matching_basis="bounded local support matching within two selected native sample spacings; no calibration claim",
         commanded_pump_events=0, electrical_pump_events=None, optical_pump_events=None, axes_authority="observed controller wavelength markers in native Sweep Active intervals",
         time_zero_irf_status="not established by static spectroscopy", resolution_estimate_basis="quadrature of native sampling and nominal HF2LI rise plus applicable known intrinsic resolution")
     # Native compatibility/normalization consumes this explicit engineering policy.
@@ -363,7 +414,7 @@ def inputs_from_context(context, settings, readbacks=None, *, configuration=None
 
 def simulation_inputs(settings: SlowScanSettings) -> PlannerInputs:
     """Explicit synthetic fixture profile, never used automatically for hardware."""
-    effective_segments = settings.segments or (SpectralSegment("range", 1, settings.lower_cm1, settings.upper_cm1),)
+    effective_segments = (SpectralSegment("qcl-1", 1, settings.lower_cm1, settings.upper_cm1),)
     profile = {
         "measured_linewidth_cm1": 2., "requested_scan_speed_cm1_s": 2., "sample_rate_hz": 1000.,
         "time_constant_s": .001, "filter_order": 2, "settle_s": .02,
@@ -371,7 +422,7 @@ def simulation_inputs(settings: SlowScanSettings) -> PlannerInputs:
         "probe_width_s": 1e-6, "process_pulse_width_s": .001, "dark_duration_s": .1,
         "measured_response_s": .01, "intrinsic_resolution_cm1": .05,
         "response_calibration_id": "SIMULATED-HF", "axis_calibration_id": "SIMULATED-AXIS",
-        "probe_calibration_id": "SIMULATED-PROBE", "qcl_currents_ma": {str(s.qcl): 1. for s in settings.segments},
+        "probe_calibration_id": "SIMULATED-PROBE", "qcl_currents_ma": {"1": 1.},
         "hf2li": {
             "sample": {"adcselect": 0, "oscselect": 0, "harmonic": 1, "order": 2, "timeconstant_s": .001, "rate_sps": 1000., "trigger": 0},
             "reference": {"adcselect": 1, "oscselect": 0, "harmonic": 1, "order": 2, "timeconstant_s": .001, "rate_sps": 1000., "trigger": 0, "measured_response_s": .01},
@@ -380,10 +431,10 @@ def simulation_inputs(settings: SlowScanSettings) -> PlannerInputs:
                        "ch2": {"index": 1, "ac": False, "impedance_50ohm": False, "differential": False, "range_v": 1.}},
             "pll": {"index": 0, "enable": True, "adcselect": 8, "freqcenter_hz": 100000., "harmonic": 1, "order": 1, "adcthreshold": 0},
         },
-        "qcl_pulse_params": {str(segment.qcl): {"pulse_rate_hz": 100000., "pulse_width_ns": 1000., "current_ma": 1.} for segment in settings.segments},
+        "qcl_pulse_params": {str(segment.qcl): {"pulse_rate_hz": 120000., "pulse_width_ns": 1000., "current_ma": 1.} for segment in effective_segments},
         "external_pulse_acceptance": {str(segment.qcl): {"source_id": "SIMULATED-ACCEPTANCE", "maximum_rate_hz": 200000.,
-            "minimum_width_s": 1e-8, "maximum_width_s": 2e-6, "maximum_duty_cycle": .3} for segment in settings.segments},
-        "marker_channel_by_qcl": {str(segment.qcl): segment.qcl for segment in settings.segments},
+            "minimum_width_s": 1e-8, "maximum_width_s": 2e-6, "maximum_duty_cycle": .3} for segment in effective_segments},
+        "marker_channel_by_qcl": {str(segment.qcl): segment.qcl for segment in effective_segments},
         "direction_bit_by_direction": {"forward": 1, "reverse": 0},
         "t660_clock_readbacks": {
             "t660_1": {"clock_connector_mode": "IN", "clock_external_lock_enabled": "1", "clock_external_frequency_hz": "10000000", "clock_lock_status": "LOCKED"},
@@ -395,7 +446,7 @@ def simulation_inputs(settings: SlowScanSettings) -> PlannerInputs:
     profile["hf2li_capabilities"] = {role: {"orders": (1, 2, 3, 4), "timeconstants_by_order": {order: (.0001, .001, .002, .01) for order in range(1, 5)}}
                                     for role in ("sample", "reference")}
     for segment in effective_segments:
-        profile["qcl_pulse_params"][str(segment.qcl or 1)] = {"pulse_rate_hz": 100000., "pulse_width_ns": 1000., "current_ma": 1.}
+        profile["qcl_pulse_params"][str(segment.qcl or 1)] = {"pulse_rate_hz": 120000., "pulse_width_ns": 1000., "current_ma": 1.}
         profile["marker_channel_by_qcl"][str(segment.qcl or 1)] = segment.qcl or 1
     windows = tuple(QCLWindow(qcl, min(s.lower_cm1 for s in effective_segments if (s.qcl or 1) == qcl),
                              max(s.upper_cm1 for s in effective_segments if (s.qcl or 1) == qcl), source_id="SIMULATED-QCL")

@@ -9,7 +9,7 @@ import pytest
 from control_app.measurement_host import ContextFactory
 from control_app.measurement_host.ownership import HardwareCoordinator, OwnershipError
 from control_app.measurement_host.presentation import StartSnapshot
-from control_app.measurement_modules.steady_state_slow_scan.settings import SlowScanSettings, ConditionIdentity, SpectralSegment
+from control_app.measurement_modules.steady_state_slow_scan.settings import SlowScanSettings, ConditionIdentity
 from control_app.measurement_modules.steady_state_slow_scan.planner import build_plan, simulation_inputs
 from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner, SyntheticSlowScanBackend, compatibility_errors
 from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
@@ -33,7 +33,7 @@ def setup(tmp_path, mode="single"):
     settings = SlowScanSettings(mode=mode, hardware=False, condition=ConditionIdentity(sample_id="sample-1", preparation_id="prep-1",
         cell_id="cell-1", position_id="position-1", temperature_id="room-1", matrix_id="buffer-1",
         configuration_id="config-1", temperature_k=295., temperature_uncertainty_k=.2, temperature_record_id="T-1"),
-        segments=(SpectralSegment("band", 1, 1900., 1910.),))
+        lower_cm1=1900., upper_cm1=1910.)
     plan = build_plan(settings, simulation_inputs(settings))
     return coordinator, context, plan
 
@@ -240,7 +240,7 @@ def test_legacy_record_compatibility_ignores_retired_procedure_metadata(tmp_path
         "physical_controls_confirmed": True, "condition_equilibrated": True},
         "selected": plan.selected, "calibration_bundle_ids": ["old-profile"],
         "configuration_id": "old-user-label"}}
-    changed = replace(plan, settings=replace(plan.settings, plan_label="new label", fit_peak_count=2,
+    changed = replace(plan, settings=replace(plan.settings, plan_label="new label", imported_requested_metadata={"fit_peak_count": 2},
         condition=replace(plan.settings.condition, temperature_k=77., sample_id="new sample")))
     assert not compatibility_errors(legacy, changed)
 
@@ -264,3 +264,36 @@ def test_changed_qcl_current_invalidates_relative_control(tmp_path):
         **plan.inputs.scientific_profile["qcl_pulse_params"]["1"], "current_ma": 2.}}}
     changed = replace(plan, inputs=replace(plan.inputs, scientific_profile=profile))
     assert "qcl_pulse_params" in " ".join(compatibility_errors(blank, changed))
+
+
+def test_new_acquisition_has_no_implicit_peak_model_from_legacy_settings(tmp_path):
+    _, context, plan = setup(tmp_path)
+    retired = {"fit_peak_count": 8, "fit_line_shape": "lorentzian", "fit_baseline_degree": 2,
+               "fit_fringe_periods_cm1": [1.], "requested_resolution_cm1": .00001,
+               "measured_linewidth_cm1": .00002}
+    migrated = SlowScanSettings.from_dict({**plan.settings.to_dict(), **retired})
+    changed = build_plan(migrated, plan.inputs)
+    result = SlowScanRunner(context).run(operation(context, changed, "measurement"), Worker())
+    assert result["status"] == "completed"
+    assert result["fits"] == result["fit_alternatives"] == []
+    assert result["analysis_policy"]["peak_model"] is None
+    assert all(s.metadata["qcl"] == 1 for s in result["sweeps"])
+    assert [block.to_dict() for block in changed.blocks] == [block.to_dict() for block in plan.blocks]
+    assert load_run(result["path"])["settings"]["imported_requested_metadata"]["fit_peak_count"] == 8
+
+
+def test_control_compatibility_uses_prepared_actual_input_ranges(tmp_path):
+    from copy import deepcopy
+    _, context, plan = setup(tmp_path)
+    class Backend(SyntheticSlowScanBackend):
+        def prepare(self, planned, compiled, check, report):
+            super().prepare(planned, compiled, check, report)
+            selected = deepcopy(planned.selected)
+            selected["hf2li"]["sigins"]["ch1"]["range_v"] = 1.5
+            return replace(planned, selected=selected)
+    runner = SlowScanRunner(context, backend_factory=Backend)
+    dark = runner.run(operation(context, plan, "dark"), Worker())
+    assert dark["plan"]["selected"]["hf2li"]["sigins"]["ch1"]["range_v"] == 1.5
+    sample = runner.run(operation(context, plan, "measurement", {"dark": dark}), Worker())
+    assert "dark_native_records" not in sample
+    assert sample["controls"]["dark"]["run_id"] == dark["run_id"]

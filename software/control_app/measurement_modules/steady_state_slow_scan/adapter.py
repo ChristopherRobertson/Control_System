@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import replace
 import json
 from pathlib import Path
-from uuid import uuid4
 
 from control_app.measurement_host.presentation import ScientificSelections, StartSnapshot
+from control_app.measurement_host.context import thaw_data
 from .settings import SlowScanSettings, PlannerInputs
 from .planner import build_plan, inputs_from_context
 
@@ -64,25 +63,23 @@ class SlowScanScientificAdapter:
         return tuple(plan.errors) if plan is not None and kind in ("measurement", "preliminary", "blank") else ()
 
     def summarize_plan(self, plan):
-        selected = plan.selected
-        segments = plan.settings.segments
-        windows = "; ".join(f"{segment.lower_cm1:g}–{segment.upper_cm1:g}" for segment in segments)
-        if not windows:
-            lower, upper = getattr(plan.settings, "lower_cm1", None), getattr(plan.settings, "upper_cm1", None)
-            windows = f"{lower:g}–{upper:g}" if lower is not None and upper is not None else "Enter a range"
+        selected, settings = plan.selected, plan.settings
         duration = plan.estimates.get("wall_clock_s")
-        estimated = f"{duration:.3g} s" if duration and plan.blocks else "Resolved from connected settings at Start"
-        rates = []
-        for label, key in (("Sample", "sample_rate_hz"), ("Reference", "reference_sample_rate_hz")):
-            value = selected.get(key)
-            if value and (label == "Sample" or self.context.mode == "dual"):
-                rates.append(f"{label} {value:g} Hz")
-        speeds = sorted({block.scan_speed_cm1_s for block in plan.blocks})
-        trajectory = ", ".join(f"{value:g}" for value in speeds) + " cm⁻¹/s" if speeds else "Automatic"
-        return (("Spectral range", windows + " cm⁻¹"),
-                ("Resolution / repeats", f"{plan.settings.requested_resolution_cm1:g} cm⁻¹ / {plan.settings.replicates} each direction"),
-                ("Trajectory", trajectory), ("HF2LI", "; ".join(rates) or "Automatic, independently resolved per detector"),
-                ("Estimated time", estimated))
+        current = selected.get("current_ma", settings.current_ma)
+        rate = selected.get("repetition_rate_hz", settings.repetition_rate_hz)
+        width = selected.get("pulse_width_s", settings.pulse_width_s)
+        duty = f"{100*rate*width:.3g}%" if rate and width else "Auto"
+        filters = []
+        for label, tau_key, order_key in (("Sample", "time_constant_s", "filter_order"),
+                                           ("Reference", "reference_time_constant_s", "reference_filter_order")):
+            tau, order = selected.get(tau_key), selected.get(order_key)
+            if tau and order and (label == "Sample" or self.context.mode == "dual"):
+                filters.append(f"{label} {tau*1000:g} ms, order {order}")
+        return (("Range", f"{settings.lower_cm1:g}–{settings.upper_cm1:g} cm⁻¹"),
+                ("Speed / repeats", f"{settings.requested_scan_speed_cm1_s:g} cm⁻¹/s / {settings.replicates} each direction"),
+                ("Laser current", f"{current:g} mA" if current is not None else "Auto"),
+                ("Pulse duty", duty), ("HF2LI filters", "; ".join(filters) or "Auto"),
+                ("Estimated time", f"{duration:.3g} s" if duration and plan.blocks else "Available after device readback"))
 
     def estimated_seconds(self, plan):
         return plan.estimates.get("wall_clock_s") if plan is not None else None
@@ -108,7 +105,7 @@ class SlowScanScientificAdapter:
             controls["q0"] = deepcopy(snapshot.preliminary)
         plan = snapshot.plan
         if plan is None and snapshot.kind == "capability":
-            plan = build_plan(SlowScanSettings.from_dict(snapshot.settings))
+            plan = build_plan(SlowScanSettings.from_dict(thaw_data(snapshot.settings)))
         return StartSnapshot(snapshot.operation, snapshot.kind, plan, controls)
 
     def run_control(self, snapshot, worker):
@@ -208,37 +205,6 @@ class SlowScanScientificAdapter:
     def export_run(self, path, result):
         from .persistence import export_run
         return export_run(path, result)
-
-    def refit(self, result, settings, worker):
-        from .processing import FitSettings, fit_model_alternatives
-        from .persistence import export_run
-        worker.message.emit("Analysis: fitting individual spectra and prospective model alternatives")
-        chosen = FitSettings(peak_count=settings["fit_peak_count"], line_shape=settings["fit_line_shape"],
-                             baseline_degree=settings["fit_baseline_degree"],
-                             fringe_periods_cm1=tuple(settings["fit_fringe_periods_cm1"]))
-        alternative_shape = "lorentzian" if chosen.line_shape == "gaussian" else "gaussian"
-        alternatives = (chosen, replace(chosen, line_shape=alternative_shape),
-                        replace(chosen, baseline_degree=0 if chosen.baseline_degree else 1))
-        result["fits"], result["fit_alternatives"] = [], []
-        for index, spectrum in enumerate(result.get("spectra", ())):
-            worker.check_cancelled()
-            try:
-                fits = fit_model_alternatives(spectrum, alternatives, cancel_check=worker.check_cancelled)
-            except ValueError as exc:
-                if "Insufficient independent valid native support" not in str(exc):
-                    raise
-                result.setdefault("analysis_notes", []).append({"sweep_id": spectrum.native.sweep_id,
-                                                                 "fit_unavailable": str(exc)})
-                continue
-            result["fits"].append(fits[0])
-            result["fit_alternatives"].append(fits)
-            worker.progress.emit(index + 1, len(result["spectra"]))
-        worker.check_cancelled()
-        if result.get("path"):
-            path = Path(result["path"]) / f"analysis_{uuid4()}.json"
-            export_run(path, result)
-            result["analysis_path"] = str(path)
-        return result
 
     def export_selection(self, path, result, windows, worker):
         from .persistence import export_selection

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import json
 import pytest
 from control_app.measurement_modules.steady_state_slow_scan.settings import ConditionIdentity, PlannerInputs, QCLWindow, SlowScanSettings, SpectralSegment
-from control_app.measurement_modules.steady_state_slow_scan.planner import build_plan, resolve_runtime_inputs, inputs_from_context
+from control_app.measurement_modules.steady_state_slow_scan.planner import build_plan, resolve_runtime_inputs, inputs_from_context, current_to_requested_range_v
 from control_app.measurement_modules.steady_state_slow_scan.timing import compile_timing, quantize_seconds, assert_pump_inhibited
 
 
@@ -25,11 +25,11 @@ def live_readbacks(mode="single"):
     return {"hf2li":caps,"hf2li_settings":{"nodes":nodes,"read_errors":[]},
             "qcl_windows":[{"qcl":1,"min_cm1":1800.,"max_cm1":2050.}],"qcl_pulse_params":{"1":{"pulse_rate_hz":120000.,"pulse_width_ns":1000.,"current_ma":1.}},
             "t660_1":{"queries":{"synth_frequency":{"ok":True,"response":"100000Hz"}},"channels":{"B":{"width_edge":{"ok":True,"response":"1000ns"}}}},
-            "probe_width_s":1e-6,"t660_frame_capacity":8192,"marker_width_us":1000,"sweep":{"scan_rate_cm1_s":2.}}
+            "qcl_current_limits":{"1":(0.,1000.)},"qcl_pulse_limits":{"1":{"max_pulse_rate_hz":300000.,"max_pulse_width_ns":5000.,"max_duty_cycle":30.}},"probe_width_s":1e-6,"t660_frame_capacity":8192,"marker_width_us":1000,"sweep":{"scan_rate_cm1_s":2.}}
 
 
 def plan_for(settings=None, readbacks=None):
-    settings = settings or SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,requested_resolution_cm1=.05)
+    settings = settings or SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.)
     return build_plan(settings,resolve_runtime_inputs({},readbacks or live_readbacks(settings.mode),settings))
 
 
@@ -77,51 +77,16 @@ def test_incompatible_native_plan_rejected(field,value):
     with pytest.raises(ValueError): SlowScanSettings.from_dict(data)
 
 
-def test_live_ranges_automatically_create_explicit_qcl_blocks_and_gaps():
-    settings=SlowScanSettings(lower_cm1=1900.,upper_cm1=1904.,requested_resolution_cm1=.05)
-    raw=live_readbacks(); raw["qcl_windows"]=[{"qcl":1,"min_cm1":1890.,"max_cm1":1901.},{"qcl":2,"min_cm1":1902.,"max_cm1":1910.}]
-    plan=plan_for(settings,raw)
-    assert plan.ready
-    assert [(b.qcl,b.start_cm1,b.stop_cm1) for b in plan.blocks] == [(1,1900.,1901.),(1,1901.,1900.),(2,1902.,1904.),(2,1904.,1902.)]
-    assert any("unsupported QCL intervals" in warning for warning in plan.warnings)
 
 
-def test_explicit_segment_syntax_can_be_saved_before_discovery():
-    settings=SlowScanSettings(segments=(SpectralSegment("custom",0,1900.,1901.),))
-    assert not build_plan(settings).errors
-    assert build_plan(SlowScanSettings.from_dict(json.loads(json.dumps(settings.to_dict())))).readiness
 
 
-def test_known_out_of_range_explicit_segment_blocks():
-    settings=SlowScanSettings(segments=(SpectralSegment("bad",1,1800.,2100.),))
-    assert any("QCL bounds" in error for error in plan_for(settings).errors)
 
 
-def test_each_detector_override_is_independent_and_auto_recomputes():
-    settings=SlowScanSettings(mode="dual",lower_cm1=1900.,upper_cm1=1901.,requested_resolution_cm1=.05)
-    base=plan_for(settings)
-    manual=plan_for(replace(settings,reference_filter_order=3,reference_sample_rate_hz=1000.))
-    assert manual.ready
-    assert manual.selected["reference_filter_order"] == 3
-    assert manual.selected["filter_order"] == base.selected["filter_order"]
-    assert manual.selected["time_constant_s"] == base.selected["time_constant_s"]
-    changed=plan_for(replace(settings,reference_sample_rate_hz=1000.,requested_resolution_cm1=.005))
-    assert changed.ready
-    assert changed.selected["reference_sample_rate_hz"] == 1000.
-    assert changed.selected["time_constant_s"] != base.selected["time_constant_s"]
-    assert changed.selected["sample_rate_hz"] != base.selected["sample_rate_hz"]
 
 
-def test_unsupported_hardware_override_is_specific_error():
-    assert any("sample rate unsupported" in error for error in plan_for(replace(plan_for().settings,sample_rate_hz=600.)).errors)
-    assert any("filter order unsupported" in error for error in plan_for(replace(plan_for().settings,filter_order=8)).errors)
 
 
-def test_narrow_resolution_remains_claim_warning_with_explicit_fast_scan():
-    plan=plan_for(replace(plan_for().settings,requested_resolution_cm1=.00001,requested_scan_speed_cm1_s=10.))
-    assert plan.ready
-    assert any("broadening" in warning for warning in plan.warnings)
-    assert plan.blocks[0].scan_speed_cm1_s == 10.
 
 
 def test_native_support_matching_policy_is_bounded_and_recorded():
@@ -194,9 +159,6 @@ def test_plan_keeps_native_actual_values_and_detaches_input():
     assert plan.estimates["wall_clock_s"] == pytest.approx(plan.estimates["sample_acquisition_s"]+plan.estimates["dark_s"])
 
 
-@pytest.mark.parametrize("period", [0., -1., float("nan"), float("inf")])
-def test_invalid_fringe_model_is_rejected_before_device_discovery(period):
-    assert "Fringe periods" in " ".join(build_plan(SlowScanSettings(fit_fringe_periods_cm1=(period,))).errors)
 
 
 def test_optional_report_labels_and_legacy_review_fields_do_not_gate_operation():
@@ -226,3 +188,107 @@ def test_optional_calibration_preserves_guarded_models_without_unchecked_timing_
     assert plan.inputs.scientific_profile["axis_correction"]["calibration_id"] == "axis-1"
     assert plan.inputs.scientific_profile["path_balance"]["control_id"] == "B-1"
     assert any("not applied" in warning for warning in plan.warnings)
+
+
+@pytest.mark.parametrize("speed", [.1, 2., 400., 10000.])
+def test_entered_speed_is_authoritative_without_resolution_throttling(speed):
+    plan = plan_for(SlowScanSettings(lower_cm1=1800.,upper_cm1=2000.,requested_scan_speed_cm1_s=speed))
+    assert plan.ready, (plan.errors,plan.readiness)
+    assert all(block.scan_speed_cm1_s == pytest.approx(speed,rel=1e-7) for block in plan.blocks)
+    assert {block.qcl for block in plan.blocks} == {1}
+
+
+@pytest.mark.parametrize("speed", [0., .099, 10001., float("nan"), float("inf")])
+def test_invalid_speed_rejected_before_connected_discovery(speed):
+    assert "Scan speed" in " ".join(build_plan(SlowScanSettings(requested_scan_speed_cm1_s=speed)).errors)
+
+
+def test_saved_removed_controls_cannot_change_selected_settings_or_select_qcl2():
+    plain = plan_for()
+    data = plain.settings.to_dict()
+    retired = {"segments":[{"segment_id":"old","qcl":2,"lower_cm1":1.,"upper_cm1":2.}],
+        "requested_resolution_cm1":1e-12,"measured_linewidth_cm1":0.,"sample_rate_hz":1.,"reference_sample_rate_hz":1.,
+        "sample_range_v":9.,"reference_range_v":9.,"settle_s":999.,"marker_interval_cm1":20.,"marker_width_s":2.,
+        "dark_duration_s":999.,"process_pulse_width_s":1.,"fit_peak_count":7,"fit_line_shape":"invalid",
+        "fit_baseline_degree":3,"fit_fringe_periods_cm1":[-1.],"probe_width_s":.9}
+    data.update(retired)
+    restored = SlowScanSettings.from_dict(data)
+    changed = plan_for(restored)
+    assert changed.selected == plain.selected and changed.blocks == plain.blocks
+    assert restored.imported_requested_metadata == retired and restored.pulse_width_s is None
+    assert SlowScanSettings.from_dict(restored.to_dict()).imported_requested_metadata == retired
+
+
+def test_legacy_cadence_migrates_but_electrical_width_is_not_optical_width():
+    settings = SlowScanSettings.from_dict({"probe_rate_hz":80000.,"probe_width_s":5e-6})
+    assert settings.repetition_rate_hz == 80000. and settings.pulse_width_s is None
+    plan = plan_for(replace(settings,lower_cm1=1900.,upper_cm1=1901.))
+    assert plan.selected["pulse_width_s"] == pytest.approx(1e-6)
+    assert plan.selected["probe_width_s"] == pytest.approx(1e-6)
+
+
+def test_qcl2_coverage_cannot_route_an_out_of_range_request():
+    readbacks = live_readbacks()
+    readbacks["qcl_windows"].append({"qcl":2,"min_cm1":2100.,"max_cm1":2300.})
+    plan = plan_for(SlowScanSettings(lower_cm1=2100.,upper_cm1=2200.),readbacks)
+    assert "QCL 1 bounds" in " ".join(plan.errors) and not plan.blocks
+
+
+@pytest.mark.parametrize("current,expected", [(0.,.001),(250.,.5),(500.,1.),(625.,1.375),(750.,1.75),(1000.,2.),(1200.,2.)])
+def test_confirmed_current_range_policy(current,expected):
+    assert current_to_requested_range_v(current) == pytest.approx(expected)
+
+
+def test_current_and_independent_filter_controls_are_real_settings():
+    settings = SlowScanSettings(mode="dual",lower_cm1=1900.,upper_cm1=1901.,current_ma=750.,reference_filter_order=3,reference_time_constant_s=.002)
+    plan = plan_for(settings)
+    assert plan.ready
+    assert plan.selected["hf2li"]["sample"]["order"] == 2 and plan.selected["hf2li"]["reference"]["order"] == 3
+    assert plan.selected["hf2li"]["reference"]["timeconstant_s"] == .002
+    assert plan.inputs.scientific_profile["qcl_pulse_params"]["1"]["current_ma"] == 750.
+    assert plan.selected["sample_range_v"] == plan.selected["reference_range_v"] == 1.75
+    assert "Current exceeds" in " ".join(plan_for(replace(settings,current_ma=1001.)).errors)
+
+
+def test_visible_optical_duty_limit_is_inclusive_and_independent_of_ttl_width():
+    at_limit = build_plan(SlowScanSettings(repetition_rate_hz=100000.,pulse_width_s=3e-6))
+    assert not any("30% duty" in error for error in at_limit.errors)
+    above = build_plan(SlowScanSettings(repetition_rate_hz=100000.,pulse_width_s=3.0001e-6))
+    assert "30% duty" in " ".join(above.errors)
+    plan = plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,pulse_width_s=2e-6))
+    assert plan.ready and plan.selected["pulse_duty_fraction"] == pytest.approx(.2)
+    assert plan.selected["probe_width_s"] == 1e-6
+    assert plan.inputs.scientific_profile["qcl_pulse_params"]["1"]["pulse_width_ns"] == pytest.approx(2000.)
+
+
+def test_internal_vendor_duty_is_separate_and_cannot_exceed_thirty_percent():
+    raw = live_readbacks()
+    raw["qcl_pulse_params"]["1"]["pulse_rate_hz"] = 190000.
+    raw["qcl_pulse_limits"]["1"]["max_duty_cycle"] = 40.
+    plan = plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,pulse_width_s=2e-6),raw)
+    assert plan.ready
+    params = plan.inputs.scientific_profile["qcl_pulse_params"]["1"]
+    assert params["pulse_rate_hz"] * params["pulse_width_ns"] * 1e-9 <= .30 + 1e-12
+    assert params["pulse_rate_hz"] > plan.selected["repetition_rate_hz"]
+    raw["qcl_pulse_limits"]["1"]["max_duty_cycle"] = 10.
+    assert plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,pulse_width_s=2e-6),raw).errors
+
+
+def test_internal_rate_ceiling_uses_sdk_float32_optical_width_not_unrounded_request():
+    import struct
+    requested_ns = 1500.0069134
+    raw = live_readbacks()
+    raw["qcl_pulse_params"]["1"]["pulse_rate_hz"] = 100000.
+    settings = SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,repetition_rate_hz=150000.,pulse_width_s=requested_ns*1e-9)
+    plan = plan_for(settings,raw)
+    assert plan.ready, (plan.errors,plan.readiness)
+    params = plan.inputs.scientific_profile["qcl_pulse_params"]["1"]
+    encoded_width = struct.unpack("f",struct.pack("f",requested_ns))[0]
+    encoded_rate = struct.unpack("f",struct.pack("f",params["pulse_rate_hz"]))[0]
+    assert encoded_width == 1500.0069580078125
+    assert plan.settings.pulse_width_s == settings.pulse_width_s
+    assert params["pulse_width_ns"] == encoded_width
+    assert plan.selected["pulse_width_s"] == encoded_width*1e-9
+    assert encoded_rate == params["pulse_rate_hz"]
+    assert 150000. < encoded_rate < 199999.078125
+    assert encoded_rate * encoded_width * 1e-9 <= .30

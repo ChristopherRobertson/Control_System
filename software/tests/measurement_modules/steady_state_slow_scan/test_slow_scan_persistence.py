@@ -74,6 +74,32 @@ def test_plan_roundtrip_includes_derived_schedule_and_rejects_other_instances(tm
             load_plan(other)
 
 
+def test_legacy_plan_requests_remain_metadata_after_normalization_and_resave(tmp_path):
+    from control_app.measurement_modules.steady_state_slow_scan.settings import SlowScanSettings
+    current = {"mode": "single", "lower_cm1": 1939, "upper_cm1": 1949,
+               "requested_scan_speed_cm1_s": 4., "repetition_rate_hz": 100000., "pulse_width_s": 1e-6}
+    retired = {"requested_resolution_cm1": -1., "measured_linewidth_cm1": "unknown",
+        "segments": [{"segment_id": "historical-QCL4", "qcl": 4, "lower_cm1": 1600, "upper_cm1": 1700}],
+        "fit_peak_count": 0, "fit_line_shape": "historical-model", "fit_baseline_degree": 99,
+        "fit_fringe_periods_cm1": [-1], "probe_width_s": 150e-9}
+    original = {**current, **retired, "imported_requested_metadata": {"previous_note": "retained"}}
+    first = save_plan(tmp_path / "legacy.json", original)
+    assert load_plan(first) == original
+    normalized = SlowScanSettings.from_dict(load_plan(first)).to_dict()
+    expected = SlowScanSettings.from_dict(current).to_dict()
+    imported = normalized.pop("imported_requested_metadata")
+    expected.pop("imported_requested_metadata")
+    assert normalized == expected
+    assert imported == {"previous_note": "retained", **retired}
+    normalized["imported_requested_metadata"] = imported
+    resaved = save_plan(tmp_path / "resaved.json", normalized)
+    reloaded = SlowScanSettings.from_dict(load_plan(resaved)).to_dict()
+    assert reloaded == normalized
+    assert load_plan(first) == original
+    # A legacy T660 TTL width must never become the optical QCL pulse width.
+    assert reloaded["pulse_width_s"] == current["pulse_width_s"]
+
+
 def test_native_roundtrip_is_exact_dtype_values_directions_flags_and_rich_results(tmp_path):
     run = retained_run()
     first = run["sweeps"][0]
@@ -110,6 +136,32 @@ def test_exports_are_new_revisions_and_preserve_original_native(tmp_path):
     assert original_path.read_bytes() == original_bytes
     with pytest.raises(FileExistsError):
         export_run(export, run)
+
+
+def test_historical_fit_settings_and_results_survive_load_and_export_without_refitting(tmp_path, monkeypatch):
+    run = retained_run()
+    legacy = {"requested_resolution_cm1": .004, "measured_linewidth_cm1": .03,
+        "segments": [{"segment_id": "old-QCL4", "qcl": 4, "lower_cm1": 1939, "upper_cm1": 1949}],
+        "fit_peak_count": 6, "fit_line_shape": "lorentzian", "fit_baseline_degree": 2,
+        "fit_fringe_periods_cm1": [2.3, 8.1]}
+    run["settings"].update(legacy)
+    fitted = run["fits"][0]
+    alternative = replace(fitted, settings=replace(fitted.settings, selection_reason="Historical alternative"))
+    run["fit_alternatives"] = [(fitted, alternative)]
+    def no_refitting(*args, **kwargs):
+        raise AssertionError("Loading or exporting must not refit historical observations")
+    monkeypatch.setattr("control_app.measurement_modules.steady_state_slow_scan.processing.fit_spectrum", no_refitting)
+    original = save_run(tmp_path / "original", run)
+    loaded = load_run(original)
+    exported = load_run(export_run(tmp_path / "export.json", loaded))
+    for record in (loaded, exported):
+        assert record["settings"] == run["settings"]
+        assert record["fits"][0].settings == fitted.settings
+        assert record["fits"][0].peaks == fitted.peaks
+        assert record["fit_alternatives"][0][1].settings == alternative.settings
+        for name in ("fitted", "baseline", "residuals", "covariance", "parameters", "valid"):
+            before, after = getattr(fitted, name), getattr(record["fits"][0], name)
+            assert before.dtype == after.dtype and before.tobytes() == after.tobytes()
 
 
 def test_storage_failure_retains_acquisition_chunks_and_does_not_invent_completed_manifest(tmp_path, monkeypatch):

@@ -54,6 +54,7 @@ class TimingService(InjectedService):
         self.frames = []
         self.recipes = []
         self.shot_error = 0
+        self.frequency_hz = 100000.
         self.fail_disable = False
         self.references = {edge: edge - 1 if edge % 2 == 0 else 0 for edge in range(1, 9)}
         self.absolute = {0: 0., **{edge: 1e-6 if edge % 2 == 0 else 0. for edge in range(1, 9)}}
@@ -100,7 +101,7 @@ class TimingService(InjectedService):
     def read_active_settings(self):
         self.touch("read_active_settings")
         response = lambda value: {"ok": True, "response": str(value)}
-        return {"queries": {"predivider": response(1), "synth_frequency": response("100000Hz"),
+        return {"queries": {"predivider": response(1), "synth_frequency": response(f"{self.frequency_hz:.12g}Hz"),
                             "clock_connector_mode": response("IN" if self.name == "t660_1" else "OUT"),
                             "clock_external_lock_enabled": response("1" if self.name == "t660_1" else "0"),
                             "clock_external_frequency_hz": response("10000000"),
@@ -124,6 +125,8 @@ class TimingService(InjectedService):
         self.touch("apply_recipe")
         self.recipes.append(deepcopy(recipe))
         self.source = recipe["trigger_source"]
+        if "clock" in recipe:
+            self.frequency_hz = acquisition._quantity(recipe["clock"]["frequency"])
         if "external_trigger" in recipe:
             self.receiver = deepcopy(recipe["external_trigger"])
         for ch, value in recipe["channels"].items():
@@ -178,7 +181,8 @@ class QCLService(InjectedService):
         super().__init__(guard)
         self.emission = False
         self.sweep = {}
-        self.pulse = {"pulse_rate_hz": 100000., "pulse_width_ns": 1000., "current_ma": 1.}
+        self.pulse = {"pulse_rate_hz": 120000., "pulse_width_ns": 1000., "current_ma": 500.}
+        self.pulse_history = []
         self.trigger = {"pulse_mode": 2, "process_trigger_mode": 1, "start": 1900., "stop": 1900.4,
                         "interval": .1, "units": 2, "dwell_us": 0, "after_off_us": 0}
         self.width_us = 1000
@@ -196,7 +200,7 @@ class QCLService(InjectedService):
     def get_num_installed_qcls(self): self.touch("get_num_installed_qcls"); return 1
     def get_qcl_tuning_range(self, qcl): self.touch("get_qcl_tuning_range"); return {"qcl": qcl, "min_cm1": 1800., "max_cm1": 2000.}
     def get_qcl_pulse_limits(self, qcl): return {"max_pulse_rate_hz": 200000., "max_pulse_width_ns": 2000., "max_duty_cycle": 30.}
-    def get_qcl_current_limits(self, qcl): return (0., 10.)
+    def get_qcl_current_limits(self, qcl): assert qcl == 1; return (0., 1000.)
     def get_qcl_pulse_rate(self, qcl): return self.pulse["pulse_rate_hz"]
     def get_qcl_pulse_width(self, qcl): return self.pulse["pulse_width_ns"]
     def get_qcl_current(self, qcl): return self.pulse["current_ma"]
@@ -210,7 +214,9 @@ class QCLService(InjectedService):
     def is_emission_on(self): return self.emission
 
     def set_qcl_pulse_params(self, *, qcl, **params):
+        assert qcl == 1
         self.touch("set_qcl_pulse_params")
+        self.pulse_history.append(deepcopy(params))
         self.pulse = deepcopy(params)
         return deepcopy(params)
 
@@ -271,6 +277,7 @@ class HFService(InjectedService):
         self.oscillator_drift = False
         self.reload_calls = []
         self.native_delivered = []
+        self.coerce_range_to = None
 
     def export_settings_snapshot(self, **kwargs):
         self.touch("export_settings_snapshot")
@@ -295,6 +302,8 @@ class HFService(InjectedService):
         for item in preset.settings["signal_inputs"].values():
             for key, node in (("ac", "ac"), ("impedance_50ohm", "imp50"), ("differential", "diff"), ("range_v", "range")):
                 self.nodes[f"/{self.device_id}/sigins/{item['index']}/{node}"]["value"] = item[key]
+                if key == "range_v" and self.coerce_range_to is not None:
+                    self.nodes[f"/{self.device_id}/sigins/{item['index']}/{node}"]["value"] = min(item[key], self.coerce_range_to)
         item = preset.settings["pll"]
         for key, node in (("enable", "enable"), ("adcselect", "adcselect"), ("freqcenter_hz", "freqcenter"), ("harmonic", "harmonic"), ("order", "order"), ("adcthreshold", "adcthreshold")):
             self.nodes[f"/{self.device_id}/plls/{item['index']}/{node}"]["value"] = item[key]
@@ -367,7 +376,7 @@ class HFService(InjectedService):
         return record
 
 
-def configured(tmp_path, monkeypatch, mode="dual", *, live=False):
+def configured(tmp_path, monkeypatch, mode="dual", *, live=False, settings_override=None):
     from pathlib import Path
     configuration_path = Path(__file__).resolve().parents[4] / "instrument" / "hardware_configuration.yaml"
     config = yaml.safe_load(configuration_path.read_text(encoding="utf-8"))
@@ -388,11 +397,11 @@ def configured(tmp_path, monkeypatch, mode="dual", *, live=False):
     context = ContextFactory(configuration_provider=lambda: config, save_root_provider=lambda: tmp_path,
                              real_device_factories={name: make(name) for name in ("hf2li", "mircat", "t660_1", "t660_2")},
                              ownership=coordinator).for_experiment("steady_state_slow_scan").for_mode(mode)
-    settings = SlowScanSettings(mode=mode, segments=(SpectralSegment("band", 1, 1900., 1900.4),),
-                                sample_rate_hz=1000., time_constant_s=.001, reference_time_constant_s=.002,
+    settings = SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1900.4,
+                                time_constant_s=.001, reference_time_constant_s=.002, reference_filter_order=3,
                                 condition=ConditionIdentity(configuration_id="fixture-config"))
     if live:
-        settings = SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1900.4, requested_resolution_cm1=.05)
+        settings = SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1900.4)
         plan, compiled = build_plan(settings), None
     else:
         inputs = simulation_inputs(settings)
@@ -401,6 +410,9 @@ def configured(tmp_path, monkeypatch, mode="dual", *, live=False):
         profile["hf2li"]["sigins"]["ch2"]["range_v"] = .3
         plan = build_plan(settings, replace(inputs, scientific_profile=profile))
         compiled = compile_timing(plan)
+    if settings_override is not None:
+        settings = settings_override
+        plan, compiled = build_plan(settings), None
     operation = context.begin_operation(settings.to_dict(), hardware=True)
     active["operation"] = operation
     backend = InstalledSlowScanBackend(context, operation)
@@ -603,7 +615,7 @@ def test_owned_installed_adapter_dark_and_both_directions_retain_native(tmp_path
     assert demods[0]["order"] == 2
     if mode == "dual":
         assert demods[3]["order"] == 3 and demods[3]["timeconstant_s"] == .002
-        assert preset["signal_inputs"]["ch2"]["range_v"] == .3
+        assert preset["signal_inputs"]["ch2"]["range_v"] == .002
     else:
         assert 3 not in demods
     assert all(not value for name in ("t660_1", "t660_2") for value in services[name].channels.values())
@@ -812,3 +824,132 @@ def test_safe_idle_uses_frame_commands_only_on_the_frame_capable_generator(tmp_p
     assert not any(command.startswith("TFRame:") for command in services["t660_1"].calls)
     assert "TFRame:STOp" in services["t660_2"].calls
     context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True, detail="Frame capability exclusion verified")
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+@pytest.mark.parametrize("current,requested", [(500.,1.),(750.,1.75),(1000.,2.)])
+def test_current_drives_requested_range_and_real_coercion_is_used_and_restored(tmp_path, monkeypatch, mode, current, requested):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    settings = SlowScanSettings(mode=mode,lower_cm1=1900.,upper_cm1=1900.4,current_ma=current,pulse_width_s=1.5e-6)
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path,monkeypatch,mode,live=True,settings_override=settings)
+    original = HFService.__init__
+    def initialize(self,*args):
+        original(self,*args)
+        self.coerce_range_to = 1.5
+    monkeypatch.setattr(HFService,"__init__",initialize)
+    monkeypatch.setattr(QCLService,"read_state",lambda self: (_ for _ in ()).throw(AssertionError("Broad active-QCL state forbidden")))
+    result = SlowScanRunner(context).run(StartSnapshot(operation,"measurement",draft,{}),worker())
+    assert result["status"] == "completed" and not result["fits"]
+    record = result["readbacks"]["detector_input_ranges"]
+    assert record["actual_current_ma"] == current and record["requested_range_v"] == requested
+    actual_range = min(requested,1.5)
+    selected = result["plan"]["selected"]
+    for role,label in (("sample","ch1"),("reference","ch2")):
+        if role == "reference" and mode == "single": continue
+        assert services["hf2li"].presets[0]["signal_inputs"][label]["range_v"] == requested
+        assert selected[f"{role}_range_v"] == actual_range
+        assert selected["hf2li"]["sigins"][label]["range_v"] == actual_range
+        assert result["compatibility"]["selected"]["hf2li"]["sigins"][label]["range_v"] == actual_range
+    assert any(row["current_ma"] == current and row["pulse_width_ns"] == pytest.approx(1500.) for row in services["mircat"].pulse_history)
+    assert selected["pulse_width_s"] == pytest.approx(1.5e-6) and selected["probe_width_s"] == 1e-6
+    assert services["mircat"].pulse["current_ma"] == 500.
+    assert services["mircat"].pulse["pulse_width_ns"] == 1000.
+    assert result["restoration"]["safe_verified"] and coordinator.snapshot()["state"] == "free"
+
+
+@pytest.mark.parametrize("fault", ["external_duty","internal_duty","observed_duty","vendor_duty"])
+def test_optical_duty_is_rechecked_before_emission_for_internal_and_external_rates(tmp_path,monkeypatch,fault):
+    context, _, operation, backend, plan, compiled, services = configured(tmp_path,monkeypatch)
+    pulse = plan.inputs.scientific_profile["qcl_pulse_params"]["1"]
+    if fault == "external_duty": pulse["pulse_width_ns"] = 4000.
+    if fault == "internal_duty": pulse.update(pulse_rate_hz=190000.,pulse_width_ns=2000.)
+    if fault == "observed_duty":
+        pulse.update(pulse_rate_hz=150000.,pulse_width_ns=2000.)
+        original = QCLService.get_qcl_pulse_width
+        monkeypatch.setattr(QCLService,"get_qcl_pulse_width",lambda self,qcl:original(self,qcl)*(1+1e-7))
+    if fault == "vendor_duty":
+        original = QCLService.get_qcl_pulse_limits
+        monkeypatch.setattr(QCLService,"get_qcl_pulse_limits",lambda self,qcl:{**original(self,qcl),"max_duty_cycle":10.})
+    with context.hardware_scope(operation):
+        with pytest.raises(ValueError,match="duty|controller limits"):
+            backend.prepare(plan,compiled,lambda:None,lambda *args:None)
+        restored = backend.restore()
+    assert "start_emission" not in services["mircat"].calls and not services["mircat"].emission
+    assert restored["safe_verified"], restored["errors"]
+    context.ownership.release(operation.ownership,safe_verified=True,preservation_verified=True,detail="Optical duty rejection retained")
+
+
+def test_prepared_plan_retains_accepted_sdk_float_readbacks_for_compatibility(tmp_path,monkeypatch):
+    context, _, operation, backend, draft, _, services = configured(tmp_path,monkeypatch,live=True)
+    original = QCLService.get_qcl_pulse_width
+    monkeypatch.setattr(QCLService,"get_qcl_pulse_width",lambda self,qcl:original(self,qcl)*(1+1e-7))
+    with context.hardware_scope(operation):
+        plan = backend.resolve_plan(draft.settings,lambda:None)
+        compiled = compile_timing(plan)
+        actual = backend.prepare(plan,compiled,lambda:None,lambda *args:None)
+        observed = services["mircat"].get_qcl_pulse_width(1)
+        assert actual.selected["pulse_width_s"] == observed*1e-9
+        assert actual.inputs.scientific_profile["qcl_pulse_params"]["1"]["pulse_width_ns"] == observed
+        assert actual.requested == plan.requested
+        restored = backend.restore()
+    assert restored["safe_verified"]
+    context.ownership.release(operation.ownership,safe_verified=True,preservation_verified=True,detail="Actual SDK pulse readback retained")
+
+
+@pytest.mark.parametrize("fault", ["dds_after_recipe", "dds_after_start", "width_after_trigger", "current_after_sweep",
+                                   "limits_after_sweep", "current_after_tune", "internal_after_trigger", "current_limits_after_trigger"])
+def test_fresh_readonly_pulse_checks_catch_changes_after_configuration_before_emission(tmp_path,monkeypatch,fault):
+    context, _, operation, backend, plan, compiled, services = configured(tmp_path,monkeypatch)
+    create = backend._create
+    def factory(name):
+        device = create(name)
+        if name == "t660_1" and fault.startswith("dds"):
+            method = "apply_recipe" if fault == "dds_after_recipe" else "start_continuous_clock"
+            original = getattr(device,method)
+            def changed(*args,**kwargs):
+                value = original(*args,**kwargs)
+                device.frequency_hz = 110000.
+                return value
+            setattr(device,method,changed)
+        if name == "mircat" and not fault.startswith("dds"):
+            method = "tune_to_wavenumber" if fault == "current_after_tune" else "start_sweep_scan" if fault.endswith("sweep") else "set_external_sweep_trigger_params"
+            original = getattr(device,method)
+            def changed(*args,**kwargs):
+                value = original(*args,**kwargs)
+                if fault.startswith("width"): device.pulse["pulse_width_ns"] = 1500.
+                elif fault.startswith("internal"): device.pulse["pulse_rate_hz"] = 130000.
+                elif fault == "limits_after_sweep":
+                    getter = device.get_qcl_pulse_limits
+                    device.get_qcl_pulse_limits = lambda qcl:{**getter(qcl),"max_duty_cycle":25.}
+                elif fault == "current_limits_after_trigger": device.get_qcl_current_limits = lambda qcl:(0.,999.)
+                else: device.pulse["current_ma"] = 300.
+                return value
+            setattr(device,method,changed)
+        return device
+    monkeypatch.setattr(backend,"_create",factory)
+    with context.hardware_scope(operation):
+        if fault == "dds_after_recipe":
+            with pytest.raises(ValueError,match="DDS"):
+                backend.prepare(plan,compiled,lambda:None,lambda *args:None)
+        else:
+            actual_plan = backend.prepare(plan,compiled,lambda:None,lambda *args:None)
+            programmed_count = len(services["mircat"].pulse_history)
+            with pytest.raises(ValueError,match="DDS|readback differs|limits changed"):
+                backend.acquire_block(compiled.blocks[0],actual_plan,lambda:None,lambda *args:None)
+            # No setter during the final checks may hide a changed actual value.
+            assert len(services["mircat"].pulse_history) == programmed_count
+        rejected = [row for row in backend.readbacks["pulse_observations"] if not row["valid"]]
+        assert rejected
+        observed = rejected[-1]
+        assert observed["pulse"] and observed["pulse_limits"] and observed["current_limits"]
+        if fault.startswith("dds"):
+            assert observed["external_rate_hz"] == 110000.
+            assert observed["external_duty_fraction"] == pytest.approx(.11)
+        elif fault == "current_after_tune": assert observed["stage"] == "after_tune"
+        else: assert observed["stage"] == "before_emission"
+        assert "start_emission" not in services["mircat"].calls
+        restored = backend.restore()
+    assert restored["safe_verified"],restored["errors"]
+    assert not services["mircat"].emission
+    context.ownership.release(operation.ownership,safe_verified=True,preservation_verified=True,detail="Fresh pulse readback failure retained")

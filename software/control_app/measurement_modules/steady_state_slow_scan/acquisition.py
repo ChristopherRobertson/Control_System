@@ -6,6 +6,7 @@ electrical edges. Each direction/QCL block is declared by the typed planner.
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import math
 import re
 from time import monotonic
@@ -105,6 +106,8 @@ class InstalledSlowScanBackend:
                 device.connect()
         self.hf, self.qcl = self.devices["hf2li"], self.devices["mircat"]
         self.units = {name: self.devices[name] for name in ("t660_1", "t660_2")}
+        if self.qcl.get_num_installed_qcls() < 1:
+            raise RuntimeError("Installed QCL 1 is unavailable")
 
     def discover(self, check):
         """Owned explicit operation; no optical emission or timing starts."""
@@ -118,23 +121,23 @@ class InstalledSlowScanBackend:
         capabilities = callback()
         check()
         pulse_params = {str(i): {"pulse_rate_hz": self.qcl.get_qcl_pulse_rate(i), "pulse_width_ns": self.qcl.get_qcl_pulse_width(i),
-                                "current_ma": self.qcl.get_qcl_current(i)} for i in range(1, self.qcl.get_num_installed_qcls()+1)}
+                                "current_ma": self.qcl.get_qcl_current(i)} for i in (1,)}
         self.readbacks = {"hf2li": capabilities, "hf2li_settings": self.hf.export_settings_snapshot(preset=self.snapshot_preset),
-            "qcl_windows": [self.qcl.get_qcl_tuning_range(i) for i in range(1, self.qcl.get_num_installed_qcls()+1)],
+            "qcl_windows": [self.qcl.get_qcl_tuning_range(1)],
             "qcl_pulse_params": pulse_params,
-            "qcl_pulse_limits": {str(i): self.qcl.get_qcl_pulse_limits(i) for i in range(1, self.qcl.get_num_installed_qcls()+1)},
-            "qcl_current_limits": {str(i): self.qcl.get_qcl_current_limits(i) for i in range(1, self.qcl.get_num_installed_qcls()+1)},
+            "qcl_pulse_limits": {"1": self.qcl.get_qcl_pulse_limits(1)},
+            "qcl_current_limits": {"1": self.qcl.get_qcl_current_limits(1)},
             "marker_width_us": self.qcl.get_wavelength_trigger_pulse_width_us(),
             "probe_width_s": self.before["t660_1"]["absolute_edges_s"]["4"] - self.before["t660_1"]["absolute_edges_s"]["3"],
             "probe_width_basis": "Difference of retained absolute falling/rising T660-1 B edges",
             "t660_1": self.units["t660_1"].read_active_settings(), "t660_2": self.units["t660_2"].read_active_settings(),
             "t660_frame_capacity": self.units["t660_2"].verified_frame_capacity(),
-            "mircat_state": self.qcl.read_state().to_dict()}
+            "mircat_state": {"qcl": 1, "current_ma": pulse_params["1"]["current_ma"],
+                             "pulse_width_ns": pulse_params["1"]["pulse_width_ns"], "pulse_rate_hz": pulse_params["1"]["pulse_rate_hz"]}}
         try:
             self.readbacks["sweep"] = self.qcl.get_sweep_parameters()
         except Exception as exc:
-            # No previous sweep is a normal initial state. A speed is derived
-            # from resolution/filter capabilities and verified after programming.
+            # No previous sweep is normal; the entered speed governs this scan.
             self.readbacks["previous_sweep_unavailable"] = str(exc)
         return deepcopy(self.readbacks)
 
@@ -171,7 +174,7 @@ class InstalledSlowScanBackend:
             "marker_width_us": self.qcl.get_wavelength_trigger_pulse_width_us(),
             "qcls": [{"qcl": i, "pulse_rate_hz": self.qcl.get_qcl_pulse_rate(i),
                       "pulse_width_ns": self.qcl.get_qcl_pulse_width(i), "current_ma": self.qcl.get_qcl_current(i)}
-                     for i in range(1, self.qcl.get_num_installed_qcls()+1)]}
+                     for i in (1,)]}
 
     def inhibit(self):
         errors = []
@@ -215,7 +218,23 @@ class InstalledSlowScanBackend:
             self._snapshot()
         self.inhibit()
         check()
-        profile = plan.inputs.scientific_profile
+        actual_pulse, _, _ = self._configure_qcl_pulses(plan)
+        from .planner import current_to_requested_range_v
+        requested_range = current_to_requested_range_v(actual_pulse["current_ma"])
+        selected = deepcopy(plan.selected)
+        selected["current_ma"] = actual_pulse["current_ma"]
+        selected["pulse_width_s"] = actual_pulse["pulse_width_ns"] * 1e-9
+        selected["mircat_internal_rate_hz"] = actual_pulse["pulse_rate_hz"]
+        selected["pulse_duty_fraction"] = selected["repetition_rate_hz"] * selected["pulse_width_s"]
+        selected["requested_input_range_v"] = requested_range
+        for role, label in (("sample", "ch1"), ("reference", "ch2")):
+            if role == "reference" and plan.settings.mode == "single": continue
+            selected["hf2li"]["sigins"][label]["range_v"] = requested_range
+        profile = deepcopy(plan.inputs.scientific_profile)
+        profile["qcl_pulse_params"]["1"].update({field: actual_pulse[field] for field in ("current_ma", "pulse_rate_hz", "pulse_width_ns")})
+        plan = replace(plan, selected=selected, inputs=replace(plan.inputs, scientific_profile=profile))
+        self.plan = plan
+        self.readbacks["qcl_selected_pulse"] = deepcopy(actual_pulse)
         from control_app.devices.hf2li_service import HF2LIPreset
         roles = plan.inputs.demodulator_roles
         hf_profile = plan.selected["hf2li"]
@@ -248,6 +267,13 @@ class InstalledSlowScanBackend:
         for label, item in hf_profile["sigins"].items():
             for key, node in (("ac", "ac"), ("impedance_50ohm", "imp50"), ("differential", "diff"), ("range_v", "range")):
                 actual = self.readbacks["hf2li"]["nodes"][f"/{self.hf.device_id}/sigins/{item['index']}/{node}"]["value"]
+                if key == "range_v":
+                    if not math.isfinite(actual) or actual <= 0:
+                        raise ValueError("HF2LI returned invalid detector input range")
+                    item["range_v"] = actual
+                    role = "sample" if item["index"] == 0 else "reference"
+                    selected[f"{role}_range_v"] = actual
+                    continue
                 if not math.isclose(actual, item[key], rel_tol=1e-6, abs_tol=1e-12):
                     raise ValueError(f"HF2LI {label} {key}: selected {item[key]}, actual {actual}")
         pll = hf_profile["pll"]
@@ -279,9 +305,7 @@ class InstalledSlowScanBackend:
                 raise ValueError(f"{name} clock_lock_status/connector invalid: {status}/{connector}")
             if frequency != 10000000:
                 raise ValueError(f"{name} installed 10 MHz clock reports {frequency} Hz")
-        clock_actual = _quantity(_response(self.readbacks["t660_1"]["queries"]["synth_frequency"]))
-        if not math.isclose(clock_actual, plan.selected["probe_rate_hz"], rel_tol=1e-9):
-            raise ValueError(f"Probe synthesizer selected {plan.selected['probe_rate_hz']} Hz, actual {clock_actual} Hz")
+        self._validate_live_pulses(plan, "probe_recipe_applied")
         for channel in "ABC":
             readback = self.readbacks["t660_1"]["channels"][channel]
             width = _quantity(_response(readback["width_edge"]))
@@ -292,9 +316,13 @@ class InstalledSlowScanBackend:
             if int(self.units["t660_1"].command(f"TIME:RELTo{edge}?")) != 0:
                 raise ValueError(f"T660-1 leading edge {edge} is not referenced to its hardware trigger")
         self.readbacks["before"] = deepcopy(self.before)
+        self.readbacks["detector_input_ranges"] = {"basis": selected["input_range_basis"],
+            "actual_current_ma": actual_pulse["current_ma"], "requested_range_v": requested_range,
+            "actual_ranges_v": {label: item["range_v"] for label, item in hf_profile["sigins"].items()}}
         self.configured = True
         self.verify_pump_off()
         report("configuration", "Instrument settings and pump inhibition verified")
+        return plan
 
     def _wait(self, seconds, check):
         deadline = monotonic()+seconds
@@ -320,6 +348,7 @@ class InstalledSlowScanBackend:
         self._wait_reference_lock(check)
         self._wait(plan.selected["settle_s"], check)
         self._health()
+        self._validate_live_pulses(plan, "dark_reference_started")
         roles = plan.inputs.demodulator_roles
         demods = [roles["sample"], roles["timing"]]
         if plan.settings.mode == "dual":
@@ -338,6 +367,8 @@ class InstalledSlowScanBackend:
         scan = block.block
         self.inhibit()
         check()
+        if scan.qcl != 1:
+            raise ValueError("Slow scan can route only installed QCL 1")
         profile = plan.inputs.scientific_profile
         coverage = self.qcl.get_qcl_tuning_range(scan.qcl)
         if not coverage["min_cm1"] <= min(scan.start_cm1, scan.stop_cm1) < max(scan.start_cm1, scan.stop_cm1) <= coverage["max_cm1"]:
@@ -358,26 +389,9 @@ class InstalledSlowScanBackend:
             self._wait(.025, check)
         report("tuning/settling", f"{scan.segment_id} {scan.direction}: settle {scan.settle_s:g} s")
         self._wait(scan.settle_s, check)
-        qcl_params = profile["qcl_pulse_params"][str(scan.qcl)]
-        pulse_limits = self.qcl.get_qcl_pulse_limits(scan.qcl)
-        current_limits = self.qcl.get_qcl_current_limits(scan.qcl)
-        if (qcl_params["pulse_rate_hz"] > pulse_limits["max_pulse_rate_hz"] or
-            qcl_params["pulse_width_ns"] > pulse_limits["max_pulse_width_ns"] or
-            qcl_params["pulse_rate_hz"] * qcl_params["pulse_width_ns"] * 1e-9 > pulse_limits["max_duty_cycle"] / 100. or
-            not min(current_limits) <= qcl_params["current_ma"] <= max(current_limits)):
-            raise ValueError("Selected QCL pulse/current parameters exceed connected controller limits")
-        if (plan.selected["probe_rate_hz"] > pulse_limits["max_pulse_rate_hz"] or
-            plan.selected["probe_width_s"] * 1e9 > pulse_limits["max_pulse_width_ns"] or
-            plan.selected["probe_rate_hz"] * plan.selected["probe_width_s"] > pulse_limits["max_duty_cycle"] / 100.):
-            raise ValueError("External probe pulse requests exceed connected QCL receiver limits")
-        actual_pulse = self.qcl.set_qcl_pulse_params(qcl=scan.qcl, **qcl_params)
-        for field in ("pulse_rate_hz", "pulse_width_ns"):
-            if not math.isclose(actual_pulse[field], qcl_params[field], rel_tol=1e-6):
-                raise ValueError(f"MIRcat {field} readback differs from the selected setting")
-        actual_current = self.qcl.get_qcl_current(scan.qcl)
-        if not math.isclose(actual_current, qcl_params["current_ma"], rel_tol=1e-6, abs_tol=1e-6):
-            raise ValueError("MIRcat current readback differs from the selected setting")
-        actual_pulse["current_ma_observed"] = actual_current
+        pulse_observation = self._validate_live_pulses(plan, "after_tune", block_id=scan.block_id)
+        actual_pulse = pulse_observation["pulse"]
+        pulse_limits, current_limits = pulse_observation["pulse_limits"], pulse_observation["current_limits"]
         interval = plan.selected["marker_interval_cm1"]
         self.qcl.set_external_sweep_trigger_params(start_cm1=scan.start_cm1, stop_cm1=scan.stop_cm1,
             wavelength_trigger_interval_cm1=interval, external_process_trigger=True)
@@ -389,7 +403,7 @@ class InstalledSlowScanBackend:
             raise ValueError("MIRcat marker width readback differs")
         self.qcl.cancel_manual_tune()
         self.qcl.start_sweep_scan(start_cm1=scan.start_cm1, stop_cm1=scan.stop_cm1,
-                                  scan_rate_cm1_s=scan.scan_speed_cm1_s, qcl=scan.qcl, repetitions=scan.replicates)
+                                  scan_rate_cm1_s=scan.scan_speed_cm1_s, qcl=1, repetitions=scan.replicates)
         actual = self.qcl.get_sweep_parameters()
         for name, expected in (("start_cm1", scan.start_cm1), ("stop_cm1", scan.stop_cm1),
                                ("scan_rate_cm1_s", scan.scan_speed_cm1_s), ("repetitions", scan.replicates)):
@@ -413,9 +427,9 @@ class InstalledSlowScanBackend:
             progress=lambda done, total: report("timing-table upload", f"Acknowledged {done}/{total} frames"),
             cancel_check=check))
         self.verify_pump_off()
-        self.readbacks[scan.block_id] = {"sweep": actual, "markers": marker_params, "pulse": actual_pulse, "upload": upload,
+        self.readbacks.setdefault(scan.block_id, {}).update({"sweep": actual, "markers": marker_params, "pulse": actual_pulse, "upload": upload,
                                          "installed_coverage": coverage, "installed_pulse_limits": pulse_limits,
-                                         "installed_current_limits": current_limits, "trigger": trigger}
+                                         "installed_current_limits": current_limits, "trigger": trigger})
         roles = plan.inputs.demodulator_roles
         demods = [roles["sample"], roles["timing"]]
         if plan.settings.mode == "dual":
@@ -430,6 +444,8 @@ class InstalledSlowScanBackend:
             self._wait_reference_lock(check)
             self._wait(scan.settle_s, check)
             self._health()
+            check()
+            self._validate_live_pulses(plan, "before_emission", block_id=scan.block_id)
             self.qcl.start_emission()
             self.units["t660_2"].start_frame_table()
             unit.enable_channel("B")
@@ -492,6 +508,79 @@ class InstalledSlowScanBackend:
         self.readbacks[scan.block_id]["native_streams"] = streams
         self.readbacks[scan.block_id]["flags"] = flags
         return observed
+
+    def _configure_qcl_pulses(self, plan):
+        qcl_params = plan.inputs.scientific_profile["qcl_pulse_params"]["1"]
+        pulse_limits = self.qcl.get_qcl_pulse_limits(1)
+        current_limits = self.qcl.get_qcl_current_limits(1)
+        optical_width = qcl_params["pulse_width_ns"] * 1e-9
+        external_rate = plan.selected["repetition_rate_hz"]
+        duty_limit = min(.30, pulse_limits["max_duty_cycle"] / 100.)
+        if external_rate * optical_width > duty_limit + 1e-12:
+            raise ValueError("Repetition rate × optical pulse width exceeds 30% duty")
+        if not qcl_params["pulse_rate_hz"] > external_rate:
+            raise ValueError("MIRcat internal pulse rate must exceed the external repetition rate")
+        if (qcl_params["pulse_rate_hz"] > pulse_limits["max_pulse_rate_hz"] or
+            qcl_params["pulse_width_ns"] > pulse_limits["max_pulse_width_ns"] or
+            qcl_params["pulse_rate_hz"] * optical_width > duty_limit + 1e-12 or
+            not min(current_limits) <= qcl_params["current_ma"] <= max(current_limits)):
+            raise ValueError("Selected QCL pulse/current parameters exceed connected controller limits")
+        actual = self.qcl.set_qcl_pulse_params(qcl=1, **qcl_params)
+        self.readbacks["configured_pulse_limits"] = {"pulse_limits": deepcopy(pulse_limits), "current_limits": deepcopy(current_limits)}
+        record = self._validate_live_pulses(plan, "pulse_parameters_programmed", read_dds=False)
+        observed = record["pulse"]
+        actual.update(observed, current_ma_observed=observed["current_ma"])
+        return actual, pulse_limits, current_limits
+
+    def _validate_live_pulses(self, plan, stage, *, block_id=None, read_dds=True):
+        """Read only: retain current QCL-1/DDS state before checking emission."""
+        record = {"stage": stage, "block_id": block_id, "pulse": {}, "valid": False}
+        self.readbacks.setdefault("pulse_observations", []).append(record)
+        if block_id is not None:
+            self.readbacks.setdefault(block_id, {}).setdefault("pulse_observations", []).append(record)
+        try:
+            for key, getter in (("pulse_rate_hz", self.qcl.get_qcl_pulse_rate),
+                                ("pulse_width_ns", self.qcl.get_qcl_pulse_width), ("current_ma", self.qcl.get_qcl_current)):
+                record["pulse"][key] = getter(1)
+            record["pulse_limits"] = self.qcl.get_qcl_pulse_limits(1)
+            record["current_limits"] = self.qcl.get_qcl_current_limits(1)
+            if read_dds:
+                record["t660_1"] = self.units["t660_1"].read_active_settings()
+                queries = record["t660_1"]["queries"]
+                record["external_rate_hz"] = _quantity(_response(queries["synth_frequency"]))
+                record["predivider"] = int(_response(queries["predivider"]))
+            else:
+                record["external_rate_hz"] = plan.selected["repetition_rate_hz"]
+                record["cadence_basis"] = "Selected cadence; DDS not programmed yet"
+        except Exception as exc:
+            record["read_error"] = str(exc)
+            raise
+        observed, limits = record["pulse"], record["pulse_limits"]
+        external = record["external_rate_hz"]
+        expected = plan.inputs.scientific_profile["qcl_pulse_params"]["1"]
+        record["selected"] = {**deepcopy(expected), "external_rate_hz": plan.selected["repetition_rate_hz"]}
+        if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in (*observed.values(), external, *limits.values(), *record["current_limits"])):
+            raise ValueError("MIRcat/DDS returned nonfinite pulse or limit readbacks")
+        width = observed["pulse_width_ns"] * 1e-9
+        duty_limit = min(.30, limits["max_duty_cycle"] / 100.)
+        record.update(external_duty_fraction=external*width,
+                      internal_duty_fraction=observed["pulse_rate_hz"]*width, duty_limit_fraction=duty_limit)
+        if (external <= 0 or width <= 0 or observed["pulse_rate_hz"] <= external or
+            record["external_duty_fraction"] > duty_limit + 1e-12 or record["internal_duty_fraction"] > duty_limit + 1e-12 or
+            observed["pulse_rate_hz"] > limits["max_pulse_rate_hz"] or observed["pulse_width_ns"] > limits["max_pulse_width_ns"] or
+            not min(record["current_limits"]) <= observed["current_ma"] <= max(record["current_limits"])):
+            raise ValueError("MIRcat observed pulse duty/internal rate/current exceeds connected limits")
+        if read_dds and (record["predivider"] != 1 or not math.isclose(external, plan.selected["repetition_rate_hz"], rel_tol=1e-9)):
+            raise ValueError("T660 actual DDS cadence/predivider changed from the selected setting")
+        for field, value in observed.items():
+            if not math.isclose(value, expected[field], rel_tol=1e-6, abs_tol=1e-6):
+                raise ValueError(f"MIRcat {field} readback differs from the selected setting")
+        original_limits = self.readbacks.get("configured_pulse_limits")
+        if original_limits and (record["pulse_limits"] != original_limits["pulse_limits"] or
+                                tuple(record["current_limits"]) != tuple(original_limits["current_limits"])):
+            raise ValueError("MIRcat pulse/current limits changed after configuration")
+        record["valid"] = True
+        return record
 
     def _wait_reference_lock(self, check, timeout_s=10.):
         """Reference-only preparation; hardware frames still schedule all edges."""

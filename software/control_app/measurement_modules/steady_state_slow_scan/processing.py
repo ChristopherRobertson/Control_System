@@ -138,7 +138,8 @@ def _control_compatible(sweep, control, kind):
             "state_verification_id", "thermal_history_id", "calibration_bundle_ids", "promoted_bundle_ids",
             "acceptance_reviewer", "acceptance_rationale", "review_complete", "condition_equilibrated",
             "physical_controls_confirmed", "plan_label", "purpose", "hardware", "metadata", "annotations",
-            "notes", "operator", "description"}
+            "notes", "operator", "description", "imported_requested_metadata",
+            "requested_resolution_cm1", "measured_linewidth_cm1"}
         return {key: operational(item) for key, item in value.items()
                 if key not in annotations and not key.startswith("fit_")}
     expected = operational(sweep.metadata.get("compatibility", {}))
