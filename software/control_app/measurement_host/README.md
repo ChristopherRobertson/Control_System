@@ -242,6 +242,11 @@ hardware ownership. Its scientific snapshot plan may be `None`. Completion emits
 `operation_finished(kind, WorkerOutcome)` so the feature can retain its result and
 call `refresh_readiness()` or `refresh_plan()`.
 
+If `read_settings()` itself requires valid scientific inputs, a feature may
+provide pure `read_operation_settings(kind)` to supply unvalidated intent and
+mode for custom actions with `requires_valid_plan=False`. The host freezes that
+data using the same snapshot path. Standard acquisition never uses this hook.
+
 Use the panel's named extension points instead of replacing its layout:
 
 | Purpose | API |

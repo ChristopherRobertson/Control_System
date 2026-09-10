@@ -199,6 +199,77 @@ def test_invalid_plan_capability_action_is_owned_and_custom_abort_reaches_adapte
         panel.deleteLater()
 
 
+def test_raw_operation_settings_allow_owned_capability_check_when_scientific_settings_fail(app, tmp_path):
+    class InvalidSettingsAdapter(Adapter):
+        def __init__(self):
+            super().__init__()
+            self.raw = {"real": True, "mode": "single", "bounds": {"start_cm1": None}}
+            self.raw_kinds, self.validations = [], []
+        def read_settings(self):
+            raise ValueError("Acquisition bounds are invalid")
+        def read_operation_settings(self, kind):
+            self.raw_kinds.append(kind)
+            return self.raw
+        def validate_operation(self, kind, plan, preliminary):
+            self.validations.append((kind, plan))
+            return ()
+    adapter = InvalidSettingsAdapter()
+    panel, coordinator = make_panel(tmp_path, adapter)
+    gate = Event()
+    outcomes = []
+    panel.outcome_ready.connect(outcomes.append)
+    def capabilities(snapshot, worker):
+        try:
+            coordinator.assert_owner(snapshot.operation.ownership)
+            assert gate.wait(2)
+            assert snapshot.plan is None and snapshot.settings["bounds"]["start_cm1"] is None
+            return {"connected": True}
+        finally:
+            panel.context.ownership.release(snapshot.operation.ownership, safe_verified=True, preservation_verified=True)
+    try:
+        assert panel.plan is None
+        with pytest.raises(ValueError, match="valid plan"):
+            panel.begin("measurement")
+        with pytest.raises(ValueError, match="require a valid plan"):
+            panel.begin_operation("preliminary", capabilities, requires_valid_plan=False)
+        assert adapter.raw_kinds == []
+        snapshot = panel.begin_operation("capabilities", capabilities, requires_valid_plan=False)
+        assert coordinator.snapshot()["state"] == "owned"
+        assert snapshot.settings["mode"] == "single"
+        adapter.raw["bounds"]["start_cm1"] = 1900.
+        assert snapshot.settings["bounds"]["start_cm1"] is None
+        gate.set()
+        wait_for(app, lambda: not panel.command_running())
+        assert adapter.raw_kinds == ["capabilities"]
+        assert adapter.validations == [("capabilities", None)]
+        assert outcomes[-1].state == "completed" and outcomes[-1].result == {"connected": True}
+        assert coordinator.snapshot()["state"] == "free"
+        assert not panel.start_button.isEnabled()
+    finally:
+        gate.set()
+        if panel.command_running():
+            wait_for(app, lambda: not panel.command_running())
+        panel.deleteLater()
+
+
+def test_acquisitions_and_plan_required_actions_never_use_raw_settings_hook(app, tmp_path):
+    class ValidSettingsAdapter(Adapter):
+        def read_operation_settings(self, kind):
+            pytest.fail(f"Raw settings hook must not be used for {kind}")
+    panel, _ = make_panel(tmp_path, ValidSettingsAdapter())
+    try:
+        panel.begin("preliminary")
+        wait_for(app, lambda: not panel.command_running())
+        panel.begin("measurement")
+        wait_for(app, lambda: not panel.command_running())
+        panel.begin_operation("blank", panel.adapter.run_preliminary)
+        wait_for(app, lambda: not panel.command_running())
+        assert [snapshot.kind for snapshot in panel.adapter.calls] == ["preliminary", "measurement", "blank"]
+        assert panel.result["spectrum"] == [1, 2, 3]
+    finally:
+        panel.deleteLater()
+
+
 def test_post_dispatch_error_retains_ownership_and_busy_until_cleanup(app, tmp_path, monkeypatch):
     from control_app.measurement_host.presentation import OperationWorker
     adapter = Adapter()

@@ -179,6 +179,12 @@ class CompactScientificAdapter(Protocol):
     An optional ``validate_operation(kind, plan, preliminary)`` can express the
     numeric/device/data prerequisites for additional blank or capability actions.
     It must not represent an acknowledgement or approval flag.
+
+    An optional ``read_operation_settings(kind)`` supplies raw intent/mode data
+    only for custom actions using requires_valid_plan=False. This permits device
+    checks before scientific inputs can be resolved. Its data is frozen before
+    ownership, and validate_operation still applies. Standard acquisitions and
+    actions requiring a valid plan never call this optional hook.
     """
 
     def read_settings(self) -> Any: ...
@@ -1043,8 +1049,12 @@ if QWidget is not None:
                 return
             plan, preliminary = deepcopy(self.plan), deepcopy(self.preliminary)
             selected = self.adapter.selected_records()
-            host_plan = (self._host_plan if requires_valid_plan and self._host_plan is not None
-                         else self.context.new_plan(self.adapter.read_settings()))
+            if requires_valid_plan:
+                host_plan = self._host_plan or self.context.new_plan(self.adapter.read_settings())
+            else:
+                raw_settings = getattr(self.adapter, "read_operation_settings", None)
+                settings = raw_settings(kind) if callable(raw_settings) else self.adapter.read_settings()
+                host_plan = self.context.new_plan(settings)
             operation_snapshot = self.context.begin_operation(
                 plan=host_plan, calibration_records=selected.calibration_records,
                 sample_records=selected.sample_records,
