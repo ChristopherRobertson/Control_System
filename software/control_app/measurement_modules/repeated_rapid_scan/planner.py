@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 import json
 import math
 from pathlib import Path
 from typing import Any, Mapping
 
-from .settings import EXPERIMENT_ID, RepeatedRapidScanSettings
+from .settings import EXPERIMENT_ID, AcquisitionIntent, RepeatedRapidScanSettings
 from .timing import CompiledMovie, T660_FRAME_CAPACITY, compile_movie
 
 
@@ -16,6 +17,7 @@ class HardwareCapabilities:
     frame_capacity: int = T660_FRAME_CAPACITY
     max_aggregate_rate_hz: float | None = None
     max_movie_bytes: int | None = None
+    available_memory_bytes: int | None = None
     available_demodulators: tuple[int, ...] = (0, 1, 2, 3, 4, 5)
     connected_readback_id: str = ""
     detector_roles_verified: bool = False
@@ -23,9 +25,11 @@ class HardwareCapabilities:
     continuous_recording_verified: bool = False
     actual_sample_rate_hz: float | None = None
     actual_reference_rate_hz: float | None = None
-    acquisition_timing_rate_hz: float = 0.0
+    acquisition_timing_rate_hz: float | None = None
     actual_scan_period_s: float | None = None
     supported_sample_rates_hz: tuple[float, ...] = ()
+    live_settings: dict[str, Any] = field(default_factory=dict)
+    scan_transition_s: float | None = None
     unsupported_automatic_actions: tuple[str, ...] = ("sample exchange", "pump blocking", "temperature control", "position change")
 
 
@@ -50,7 +54,7 @@ class CalibrationEvidence:
 class ReadinessItem:
     code: str
     message: str
-    blocks_hardware: bool = True
+    blocks_hardware: bool = False
 
 
 @dataclass(frozen=True)
@@ -141,6 +145,114 @@ def _typed(value: Any, cls):
     return cls(**data)
 
 
+def resolve_intent_settings(intent: AcquisitionIntent | Mapping[str, Any], *, mode: str = "single",
+                            base_settings: RepeatedRapidScanSettings | Mapping[str, Any] | None = None,
+                            capabilities: HardwareCapabilities | Mapping[str, Any] | None = None,
+                            overrides: Mapping[str, Any] | None = None) -> RepeatedRapidScanSettings:
+    """Resolve essential intent from actual readbacks and independent overrides.
+
+    Existing values remain requests when no readback is available. No calibration,
+    temperature, evidence acceptance, or condition label participates in choice.
+    Scan periods are rounded up to whole carrier cycles; phases use the native
+    10 ps grid. Overrides persist separately from the selected numeric values.
+    """
+    if not isinstance(intent, AcquisitionIntent):
+        intent = AcquisitionIntent.from_dict(intent)
+    intent.validate()
+    base = base_settings or RepeatedRapidScanSettings(mode=mode)
+    if isinstance(base, Mapping):
+        base = RepeatedRapidScanSettings.from_dict(base)
+    if mode not in ("single", "dual"):
+        raise ValueError("mode must be single or dual")
+    caps = _typed(capabilities, HardwareCapabilities)
+    manual = dict(base.manual_overrides if overrides is None else overrides)
+    protected = {"mode", "execution", "condition", "experiment_id", "schema_version", "acquisition_intent",
+                 "manual_overrides", "scan_start_cm1", "scan_stop_cm1", "repeats", "phase_offsets_s", "post_scans"}
+    known = set(base.__dataclass_fields__)
+    if set(manual) - (known - protected):
+        raise ValueError("Unsupported manual overrides: " + ", ".join(sorted(set(manual) - (known - protected))))
+    live = {key: value for key, value in caps.live_settings.items() if key in known - protected and value is not None}
+    for cap_name, field_name in (("actual_sample_rate_hz", "sample_rate_hz"),
+                                  ("actual_reference_rate_hz", "reference_rate_hz")):
+        actual_value = getattr(caps, cap_name)
+        if actual_value is not None:
+            live.setdefault(field_name, actual_value)
+    data = base.to_dict()
+    data.update(live)
+    data.update(manual)
+    data.update(mode=mode, execution="hardware", scan_start_cm1=intent.spectral_min_cm1,
+                scan_stop_cm1=intent.spectral_max_cm1, repeats=intent.repeats)
+    if caps.available_memory_bytes is not None and "memory_limit_bytes" not in manual:
+        if type(caps.available_memory_bytes) is not int or caps.available_memory_bytes <= 0:
+            raise ValueError("available host memory must be a positive integer byte count")
+        # Retained-run accounting already includes reconstructed arrays. Reserve
+        # half the currently available RAM for the UI and other active programs.
+        data["memory_limit_bytes"] = max(1, caps.available_memory_bytes // 2)
+    width = intent.spectral_max_cm1 - intent.spectral_min_cm1
+    frequency = float(data["probe_frequency_hz"])
+    speed = float(data["scan_speed_cm1_s"])
+    if not math.isfinite(frequency) or frequency <= 0 or not math.isfinite(speed) or speed <= 0:
+        raise ValueError("probe frequency and scan speed must be positive finite values")
+    if "measured_scan_period_s" in manual:
+        period = float(manual["measured_scan_period_s"])
+    else:
+        same_window = (caps.live_settings.get("scan_start_cm1", base.scan_start_cm1) == intent.spectral_min_cm1
+                       and caps.live_settings.get("scan_stop_cm1", base.scan_stop_cm1) == intent.spectral_max_cm1)
+        measured = caps.actual_scan_period_s or live.get("measured_scan_period_s")
+        if measured is not None and same_window and "scan_speed_cm1_s" not in manual:
+            proposed = float(measured)
+        else:
+            transition = 0.0 if caps.scan_transition_s is None else float(caps.scan_transition_s)
+            if not math.isfinite(transition) or transition < 0:
+                raise ValueError("scan transition duration must be nonnegative and finite")
+            proposed = width / speed + transition
+        # A process pulse must finish before the next frame. This is an explicit
+        # automatic cadence choice, not an unnoticed mutation of a scan-speed override.
+        minimum = max(float(data["process_delay_s"]) + float(data["process_pulse_width_s"]),
+                      float(data["fire_pulse_width_s"]), float(data["qswitch_pulse_width_s"])) + 2e-6
+        proposed = max(proposed, minimum)
+        cycles = int((Decimal(str(proposed)) * Decimal(str(frequency))).to_integral_value(rounding=ROUND_CEILING))
+        period = cycles / frequency
+    if not math.isfinite(period) or period <= 0:
+        raise ValueError("scan period must be positive and finite")
+    quantum = Decimal("0.00000000001")
+    phases = tuple(float((Decimal(str(period)) * index / intent.phase_count / quantum).to_integral_value(rounding=ROUND_HALF_UP) * quantum)
+                   for index in range(intent.phase_count))
+    if len(set(phases)) != len(phases) or phases[-1] >= period:
+        raise ValueError("phase count exceeds the timing grid available within this scan period")
+    post = max(1, int((Decimal(str(intent.observation_duration_s)) / Decimal(str(period))).to_integral_value(rounding=ROUND_CEILING)))
+    data.update(measured_scan_period_s=period, phase_offsets_s=phases, post_scans=post)
+    for field_name in ("sample_rate_hz", "reference_rate_hz"):
+        if field_name == "reference_rate_hz" and mode != "dual":
+            continue
+        rates = tuple(float(rate) for rate in caps.supported_sample_rates_hz)
+        if rates:
+            if any(not math.isfinite(rate) or rate <= 0 for rate in rates):
+                raise ValueError("connected sample-rate choices must be finite and positive")
+            target = float(data[field_name])
+            data[field_name] = min(rates, key=lambda rate: (abs(rate-target), rate))
+    for field_name, fractions in (("band_windows_cm1", ((.2, .8),)),
+                                  ("offband_windows_cm1", ((0., .1), (.9, 1.)))):
+        if field_name not in manual:
+            clipped = [(max(float(lo), intent.spectral_min_cm1), min(float(hi), intent.spectral_max_cm1))
+                       for lo, hi in data[field_name] if min(float(hi), intent.spectral_max_cm1) > max(float(lo), intent.spectral_min_cm1)]
+            data[field_name] = clipped or [(intent.spectral_min_cm1 + width*lo, intent.spectral_min_cm1 + width*hi) for lo, hi in fractions]
+    # Keep every optional annotation, including temperature, verbatim.
+    data["condition"]["sample_id"] = intent.sample_name.strip()
+    data["acquisition_intent"] = intent.to_dict()
+    data["manual_overrides"] = manual
+    basis = "connected readbacks" if live or caps.actual_scan_period_s is not None else "initial requests; readbacks unavailable"
+    data["value_source"] = f"Automatic intent resolution from {basis}; independent overrides retained. Band/off-band windows are editable analysis inputs, not identified measurements."
+    return RepeatedRapidScanSettings.from_dict(data)
+
+
+def build_plan_from_intent(intent: AcquisitionIntent | Mapping[str, Any], *, mode: str = "single",
+                           base_settings=None, capabilities=None, overrides=None) -> RepeatedRapidScanPlan:
+    settings = resolve_intent_settings(intent, mode=mode, base_settings=base_settings,
+                                       capabilities=capabilities, overrides=overrides)
+    return build_plan(settings, capabilities=capabilities)
+
+
 def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabilities=None,
                calibration=None) -> RepeatedRapidScanPlan:
     if isinstance(settings, Mapping):
@@ -161,13 +273,13 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
                 for control in ("sample", *settings.controls):
                     number += 1
                     compiled = compile_movie(settings, phase, pump_enabled=control in ("sample", "pump_blocked"), direction=direction)
-                    action = {"sample": "Verify sample and pump path; accept pre-pump stationarity before arming",
+                    action = {"sample": "Sample recovery movie with one pump and retained pre-pump scans",
                               "pump_blocked": "Manually block the pump; confirm physical state (no installed shutter); one observed electrical event, zero sample optical events",
                               "dark": "Manually establish detector-dark condition; retain restoration record",
                               "probe_only": "Pump commands inhibited; retain probe-only full movie"}[control]
                     movies.append(MoviePlan(f"movie-{number:04d}", phase_index, phase, compiled.selected_phase_s,
                                             direction, control, repeat, int(control in ("sample", "pump_blocked")), compiled,
-                                            settings.pre_scans if control == "sample" else 0, action))
+                                            0, action))
     first = movies[0].compiled
     if first.physical_frame_count > caps.frame_capacity:
         raise ValueError(f"uninterrupted movie exceeds connected frame capacity {caps.frame_capacity}; no splitting is performed")
@@ -175,7 +287,7 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
     if not set(active_demods) <= set(caps.available_demodulators):
         raise ValueError("selected detector demodulators are unavailable on the installed recorder")
     rate = settings.sample_rate_hz + (settings.reference_rate_hz if settings.mode == "dual" else 0)
-    aggregate = rate + caps.acquisition_timing_rate_hz
+    aggregate = rate + (caps.acquisition_timing_rate_hz or 0.0)
     if caps.max_aggregate_rate_hz is not None and aggregate > caps.max_aggregate_rate_hz:
         raise ValueError("full detector and timing aggregate rate exceeds connected HF2LI throughput; scans will not be silently slowed")
     if caps.supported_sample_rates_hz:
@@ -228,11 +340,17 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
     requested = {"scan_period_s": settings.measured_scan_period_s, "phase_offsets_s": list(settings.phase_offsets_s),
                  "sample_rate_hz": settings.sample_rate_hz, "reference_rate_hz": settings.reference_rate_hz,
                  "scan_speed_cm1_s": settings.scan_speed_cm1_s}
+    requested.update(settings.manual_overrides)
+    if settings.acquisition_intent:
+        requested["acquisition_intent"] = dict(settings.acquisition_intent)
     selected = {**requested, "scan_period_s": first.scan_period_s,
+                "sample_rate_hz": settings.sample_rate_hz, "reference_rate_hz": settings.reference_rate_hz,
                 "phase_offsets_s": [compile_movie(settings, phase).selected_phase_s for phase in settings.phase_offsets_s],
                 "predivider": first.predivider, "probe_frequency_hz": first.input_frequency_hz}
     actual = {"sample_rate_hz": caps.actual_sample_rate_hz, "reference_rate_hz": caps.actual_reference_rate_hz,
               "scan_period_s": caps.actual_scan_period_s, "readback_id": caps.connected_readback_id,
+              "timing_rate_hz": caps.acquisition_timing_rate_hz, "live_settings": dict(caps.live_settings),
+              "available_memory_bytes": caps.available_memory_bytes,
               "pump_timestamps": "available only in acquired native records"}
     estimates = {"movie_count": len(movies), "pump_count": sum(movie.pump_count for movie in movies),
                  "scans_per_movie": first.expected_scan_count, "movie_duration_s": first.duration_s,
@@ -242,6 +360,7 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
                  "movie_native_bytes": movie_native, "movie_memory_bytes": movie_memory,
                  "retained_run_memory_bytes": retained_run_memory,
                  "storage_bytes": storage_bytes, "aggregate_rate_hz": aggregate,
+                 "timing_stream_estimate_known": caps.acquisition_timing_rate_hz is not None,
                  "upload_commands": upload_commands, "upload_s": upload_s,
                  "total_capture_count": total_capture_count,
                  "qualification_s": qualification_s, "preliminary_s": preliminary_s, "blank_s": blank_s,
@@ -254,53 +373,24 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
 
 
 def _readiness(settings, caps, evidence):
+    """Observability notes only; absent metadata never inhibits acquisition."""
     items = []
-    def need(condition, code, message, blocking=True):
-        if not condition:
-            items.append(ReadinessItem(code, message, blocking))
-    need(bool(caps.connected_readback_id), "connected_readbacks", "Connected capability/readback identity is unresolved.")
-    need(caps.detector_roles_verified, "detector_roles", "Verify sample Signal 1 / reference Signal 2 demodulator roles and actual rates.")
-    need(caps.receiver_topology_verified, "receiver_topology", "Qualify the installed HF2LI/PicoScope tee loads and receiver transfer.")
-    need(caps.continuous_recording_verified, "continuous_recording", "Qualify finite uninterrupted full-memory HF2LI recording and aggregate throughput.")
-    need(caps.max_aggregate_rate_hz is not None, "aggregate_throughput", "Connected aggregate detector and timing throughput is unresolved.")
-    need(evidence.promoted and evidence.source.startswith("instrument/promoted_bundles/"), "promoted_calibration", "Load applicable explicitly promoted instrument evidence; the built-in example does not authorize hardware.")
-    for key, label in (("trajectory_id", "scan trajectory/marker mapping"), ("electrical_timing_id", "electrical clock/latency mapping"),
-                       ("response_id", "native scan/filter response"), ("detector_id", "detector linearity and range"),
-                       ("topology_id", "installed receiver topology"), ("reset_equivalence_id", "condition-specific equivalent-state reset")):
-        need(bool(getattr(evidence, key)), key, f"Applicable {label} record is unresolved.")
-    need(bool(settings.condition.sample_selection_id), "sample_selection", "Load an accepted versioned sample spectral selection covering bands and off-band baseline.")
-    need(bool(settings.condition.state_verification_ids), "sample_state", "Record accepted sample preparation and pre-run state verification.")
-    need(all(getattr(settings.condition, key) != "unassigned" for key in ("sample_id", "preparation_id", "cell_id", "position_id")),
-         "sample_identity", "Assign sample, independent preparation, cell and illuminated-position identities.")
-    need(evidence.condition_id == settings.condition_id, "condition_applicability", "Reset/calibration applicability does not identify this condition.")
-    need(bool(evidence.applicable_settings), "operating_applicability", "Promoted evidence must specify applicable scan, probe, pump and detector settings.")
-    required = ("scan_start_cm1", "scan_stop_cm1", "measured_scan_period_s", "scan_speed_cm1_s",
-                "probe_frequency_hz", "probe_pulse_width_s", "process_delay_s", "process_pulse_width_s",
-                "fire_to_qswitch_s", "fire_pulse_width_s", "qswitch_pulse_width_s", "sample_demodulator",
-                "sample_input_range_v", "sample_filter_order", "sample_filter_timeconstant_s", "sample_rate_hz")
-    if settings.mode == "dual":
-        required += ("reference_demodulator", "reference_input_range_v", "reference_filter_order",
-                     "reference_filter_timeconstant_s", "reference_rate_hz")
-    for key in required:
-        need(key in evidence.applicable_settings and evidence.applicable_settings[key] == getattr(settings, key),
-             f"applicability_{key}", f"Selected {key} is not supported by the loaded applicability record.")
-    need(bool(evidence.optical_time_zero_id), "optical_time_zero", "Optical time zero/IRF is unresolved: report electrical-sync-relative times and bounded claims.", False)
-    need(bool(settings.condition.temperature_record_id), "temperature_evidence", "Temperature is a requested condition; no measured temperature record supports a quantitative temperature claim.", False)
-    need(bool(settings.condition.concentration_metadata), "concentration_mass_balance", "Concentration/free-CO/mass-balance evidence is absent; report apparent recovery without assigning solvent mechanism.", False)
+    if not caps.connected_readback_id:
+        items.append(ReadinessItem("connected_readbacks", "Actual instrument values will be recorded when connected.", False))
+    if caps.acquisition_timing_rate_hz is None:
+        items.append(ReadinessItem("timing_throughput", "Timing-stream rate is unknown; current memory estimate excludes that unknown rate.", False))
+    if not evidence.trajectory_id:
+        items.append(ReadinessItem("trajectory", "Calibrated wavelength trajectory unavailable; retain native detector/timing data and label any nominal axis.", False))
+    if not evidence.optical_time_zero_id:
+        items.append(ReadinessItem("optical_time_zero", "Optical time zero is unknown; use observed electrical-sync-relative times.", False))
+    if not evidence.response_id:
+        items.append(ReadinessItem("response", "Measured response kernel unavailable; raw/relative acquisition remains available and kinetic fits must state their response basis.", False))
     return items
 
 
 def resolve_operating_settings(settings, *, promoted_bundle: Mapping[str, Any], installed_readbacks: Mapping[str, Any]):
-    """Apply explicit promoted values, then retain connected actuals separately.
-
-    An ordinary sample-selection record cannot masquerade as an instrument bundle.
-    Caller supplies the bundle loaded from the canonical promoted registry.
-    """
+    """Load optional operating values without making evidence an execution gate."""
     evidence = _typed(promoted_bundle, CalibrationEvidence)
-    if not evidence.promoted or not evidence.source.startswith("instrument/promoted_bundles/"):
-        raise ValueError("operating values require an explicitly promoted instrument bundle")
-    if evidence.condition_id != settings.condition_id:
-        raise ValueError("promoted operating profile is incompatible with the selected condition")
     prohibited = {"experiment_id", "schema_version", "mode", "execution", "condition"}
     if set(evidence.operating_values) & prohibited:
         raise ValueError("instrument operating values cannot replace experiment/mode/condition identity")
@@ -343,6 +433,6 @@ def load_plan(path: str | Path, *, mode: str | None = None, condition_id: str | 
     result = RepeatedRapidScanPlan.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
     if mode is not None and result.mode != mode:
         raise ValueError(f"Plan detector mode {result.mode!r} is incompatible with {mode!r}")
-    if condition_id is not None and result.condition_id != condition_id:
-        raise ValueError("Plan condition is incompatible with the selected sample condition")
+    # condition_id is retained as a compatible legacy argument; scientific
+    # condition labels/temperature annotations do not alter operational planning.
     return result

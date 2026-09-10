@@ -1,8 +1,4 @@
-"""Hardware-free, unit-explicit scientific settings for finite recovery movies.
-
-The built-in numbers are EXAMPLE ONLY planning inputs. They are deliberately not
-commissioning evidence and never become installed operating values by being saved.
-"""
+"""Hardware-free, unit-explicit requests and optional scientific annotations."""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
@@ -15,19 +11,19 @@ SCHEMA_VERSION = 1
 
 @dataclass(frozen=True)
 class ConditionProfile:
-    condition_id: str = "example-hrp-room-temperature"
-    sample_id: str = "unassigned"
+    condition_id: str = "sample"
+    sample_id: str = "Sample"
     preparation_id: str = "unassigned"
     cell_id: str = "unassigned"
     position_id: str = "unassigned"
-    protein: str = "HRP-CO"
-    temperature_K: float = 298.15
+    protein: str = ""
+    temperature_K: float | None = None
     temperature_record_id: str = ""
     sample_selection_id: str = ""
     concentration_metadata: dict[str, Any] = field(default_factory=dict)
     artifact_control_ids: tuple[str, ...] = ()
     state_verification_ids: tuple[str, ...] = ()
-    notes: str = "EXAMPLE ONLY: select an accepted sample and condition profile."
+    notes: str = ""
 
 
 @dataclass(frozen=True)
@@ -43,14 +39,14 @@ class RecoveryCriteria:
 @dataclass(frozen=True)
 class RepeatedRapidScanSettings:
     mode: str = "single"
-    execution: str = "simulation"
+    execution: str = "hardware"
     condition: ConditionProfile = field(default_factory=ConditionProfile)
     phase_offsets_s: tuple[float, ...] = (0.0, 0.025, 0.05, 0.075)
     pre_scans: int = 5
     post_scans: int = 100
     repeats: int = 1
     directions: tuple[str, ...] = ("forward", "reverse")
-    controls: tuple[str, ...] = ("probe_only", "pump_blocked")
+    controls: tuple[str, ...] = ("probe_only",)
     scan_start_cm1: float = 1898.0
     scan_stop_cm1: float = 1951.0
     band_windows_cm1: tuple[tuple[float, float], ...] = ((1903.0, 1907.0), (1942.0, 1946.0))
@@ -69,6 +65,9 @@ class RepeatedRapidScanSettings:
     reference_filter_timeconstant_s: float = 0.001
     probe_frequency_hz: float = 1000000.0
     probe_pulse_width_s: float = 150e-9
+    mircat_pulse_rate_hz: float | None = None
+    mircat_pulse_width_ns: float | None = None
+    mircat_current_ma: float | None = None
     process_pulse_width_s: float = 0.001
     process_delay_s: float = 0.0
     fire_to_qswitch_s: float = 200e-6
@@ -86,9 +85,11 @@ class RepeatedRapidScanSettings:
     storage_bytes_per_second: float = 20_000_000.0
     memory_limit_bytes: int = 512 * 1024 * 1024
     storage_limit_bytes: int = 10 * 1024 * 1024 * 1024
-    value_source: str = "EXAMPLE ONLY: hardware-free planning, not an operating recipe"
+    value_source: str = "Initial requests; connected readbacks are not yet available. Band windows are nominal analysis inputs."
     calibration_ids: tuple[str, ...] = ()
     instrument_state_id: str = "unverified"
+    acquisition_intent: dict[str, Any] = field(default_factory=dict)
+    manual_overrides: dict[str, Any] = field(default_factory=dict)
     schema_version: int = SCHEMA_VERSION
     experiment_id: str = EXPERIMENT_ID
 
@@ -137,8 +138,6 @@ class RepeatedRapidScanSettings:
         for name in ("pre_scans", "post_scans", "repeats", "memory_limit_bytes", "storage_limit_bytes"):
             if type(getattr(self, name)) is not int or getattr(self, name) < 1:
                 raise ValueError(f"{name} must be a positive integer")
-        if self.pre_scans < self.recovery.consecutive_scans:
-            raise ValueError("pre_scans must cover the required consecutive stationarity scans")
         positive = ("measured_scan_period_s", "scan_speed_cm1_s", "sample_rate_hz", "reference_rate_hz",
                     "sample_input_range_v", "reference_input_range_v", "sample_filter_timeconstant_s",
                     "reference_filter_timeconstant_s", "probe_frequency_hz", "probe_pulse_width_s",
@@ -146,15 +145,17 @@ class RepeatedRapidScanSettings:
                     "timing_quantum_s", "storage_bytes_per_second")
         for name in positive:
             _finite(getattr(self, name), name, positive=True)
+        for name in ("mircat_pulse_rate_hz", "mircat_pulse_width_ns", "mircat_current_ma"):
+            if getattr(self, name) is not None:
+                _finite(getattr(self, name), name, positive=True)
         for name in ("process_delay_s", "tuning_settling_s", "preparation_s", "restoration_s", "analysis_s", "upload_acknowledgment_s"):
             _finite(getattr(self, name), name, nonnegative=True)
         _finite(self.scan_start_cm1, "scan_start_cm1")
         _finite(self.scan_stop_cm1, "scan_stop_cm1")
         if self.scan_start_cm1 >= self.scan_stop_cm1:
             raise ValueError("scan_start_cm1 must be below scan_stop_cm1")
-        _finite(self.condition.temperature_K, "temperature_K", positive=True)
-        if not self.condition_id:
-            raise ValueError("condition_id must be explicit")
+        # Temperature and scientific evidence are annotations, never execution
+        # or compatibility inputs. Only values used by hardware are validated.
         if not self.phase_offsets_s or len(set(self.phase_offsets_s)) != len(self.phase_offsets_s):
             raise ValueError("phase offsets must be a nonempty unique sequence")
         for phase in self.phase_offsets_s:
@@ -167,8 +168,6 @@ class RepeatedRapidScanSettings:
             raise ValueError("controls support probe_only, pump_blocked and dark; physical actions are explicit")
         for name in ("band_windows_cm1", "offband_windows_cm1"):
             windows = getattr(self, name)
-            if not windows:
-                raise ValueError(f"{name} must include measured spectral support")
             for window in windows:
                 if len(window) != 2 or not all(math.isfinite(x) for x in window):
                     raise ValueError(f"{name} requires finite lower/upper pairs in cm^-1")
@@ -198,6 +197,57 @@ def _finite(value: Any, name: str, *, positive=False, nonnegative=False) -> None
 
 
 def example_settings(mode: str = "single") -> RepeatedRapidScanSettings:
-    result = RepeatedRapidScanSettings(mode=mode)
+    result = RepeatedRapidScanSettings(mode=mode, execution="simulation",
+                                      controls=("probe_only", "pump_blocked"),
+                                      condition=ConditionProfile(condition_id="example-hrp-room-temperature",
+                                          sample_id="unassigned", protein="HRP-CO", temperature_K=298.15,
+                                          notes="EXAMPLE ONLY: simulated condition annotation"),
+                                      value_source="EXAMPLE ONLY: explicit simulation fixture; no connected readbacks")
     result.validate()
     return result
+
+
+@dataclass(frozen=True)
+class AcquisitionIntent:
+    """The operator's essential request; instrument choices are resolved later."""
+    sample_name: str = "Sample"
+    spectral_min_cm1: float = 1898.0
+    spectral_max_cm1: float = 1951.0
+    observation_duration_s: float = 10.0
+    phase_count: int = 4
+    repeats: int = 1
+
+    def validate(self) -> None:
+        if not isinstance(self.sample_name, str) or not self.sample_name.strip():
+            raise ValueError("sample_name must be a nonempty name")
+        _finite(self.spectral_min_cm1, "spectral_min_cm1")
+        _finite(self.spectral_max_cm1, "spectral_max_cm1")
+        if self.spectral_min_cm1 >= self.spectral_max_cm1:
+            raise ValueError("spectral_min_cm1 must be below spectral_max_cm1")
+        _finite(self.observation_duration_s, "observation_duration_s", positive=True)
+        for name in ("phase_count", "repeats"):
+            if type(getattr(self, name)) is not int or getattr(self, name) < 1:
+                raise ValueError(f"{name} must be a positive integer")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "AcquisitionIntent":
+        result = cls(**dict(value))
+        result.validate()
+        return result
+
+    @classmethod
+    def from_settings(cls, settings: RepeatedRapidScanSettings | Mapping[str, Any]) -> "AcquisitionIntent":
+        if isinstance(settings, Mapping):
+            settings = RepeatedRapidScanSettings.from_dict(settings)
+        if settings.acquisition_intent:
+            return cls.from_dict(settings.acquisition_intent)
+        sample = settings.condition.sample_id
+        result = cls("Sample" if sample in ("", "unassigned") else sample,
+                     settings.scan_start_cm1, settings.scan_stop_cm1,
+                     settings.post_scans * settings.measured_scan_period_s,
+                     len(settings.phase_offsets_s), settings.repeats)
+        result.validate()
+        return result

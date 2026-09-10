@@ -4,11 +4,14 @@ import json
 
 import pytest
 
-from control_app.measurement_modules.repeated_rapid_scan.settings import RepeatedRapidScanSettings, example_settings
+from control_app.measurement_modules.repeated_rapid_scan.settings import (
+    AcquisitionIntent, ConditionProfile, RepeatedRapidScanSettings, example_settings,
+)
 from control_app.measurement_modules.repeated_rapid_scan.timing import compile_movie
 from control_app.measurement_modules.repeated_rapid_scan.planner import (
     build_plan, HardwareCapabilities, CalibrationEvidence, load_plan, save_plan,
     resolve_calibration_from_bundle,
+    resolve_intent_settings, build_plan_from_intent,
 )
 
 
@@ -104,7 +107,8 @@ def test_rrs_control_events_are_explicit_and_phase_matched():
 
 def test_rrs_default_examples_never_claim_commissioning_or_optical_zero():
     plan = build_plan(compact())
-    assert not plan.ready_for_hardware
+    assert plan.ready_for_hardware
+    assert not any(item.blocks_hardware for item in plan.readiness_items)
     assert any(item.code == "optical_time_zero" and not item.blocks_hardware for item in plan.readiness_items)
     assert "EXAMPLE ONLY" in plan.settings.value_source
     assert plan.actual["sample_rate_hz"] is None
@@ -141,7 +145,7 @@ def test_rrs_promoted_manifest_requires_status_and_method_specific_evidence():
                                                    "repeated_rapid_scan": {"calibration": {"trajectory_id": "trajectory-1"}}})
     assert calibration.source == "instrument/promoted_bundles/test"
     assert calibration.promoted
-    assert not build_plan(compact(), calibration=calibration).ready_for_hardware
+    assert build_plan(compact(), calibration=calibration).ready_for_hardware
 
 
 def test_rrs_no_reference_demod_reuse_and_band_support_must_be_complete():
@@ -156,7 +160,7 @@ def test_rrs_upload_estimate_uses_pending_deltas_and_includes_full_workflow():
     table = plan.movies[0].compiled
     assert table.command_count < len(table.frames) * 21
     assert plan.estimates["wall_time_s"] > plan.estimates["acquisition_s"] + plan.estimates["upload_s"]
-    assert plan.estimates["qualification_s"] > 0
+    assert plan.estimates["qualification_s"] == 0
 
 
 def test_rrs_complete_run_retention_memory_is_budgeted_not_only_one_movie():
@@ -187,9 +191,135 @@ def test_rrs_terminal_inhibit_frame_counts_against_connected_and_total_capacity(
         compile_movie(replace(settings, post_scans=8186))
 
 
-def test_rrs_qualification_and_memory_estimates_include_terminal_period():
+def test_rrs_no_separate_qualification_and_memory_estimates_include_terminal_period():
     plan = build_plan(compact())
     assert plan.estimates["physical_frames_per_movie"] == plan.estimates["scans_per_movie"] + 1
-    samples = sum(movie.control == "sample" for movie in plan.movies)
-    assert plan.estimates["qualification_s"] == samples * (plan.settings.pre_scans + 1) * plan.selected["scan_period_s"]
+    assert not any(movie.qualification_scans for movie in plan.movies)
+    assert plan.estimates["qualification_s"] == 0
     assert plan.estimates["movie_duration_s"] == plan.estimates["spectral_record_duration_s"] + plan.estimates["terminal_inhibit_duration_s"]
+
+
+def test_rrs_normal_defaults_are_installed_and_have_no_sample_or_temperature_claim():
+    normal = RepeatedRapidScanSettings()
+    assert normal.execution == "hardware"
+    assert normal.condition.protein == ""
+    assert normal.condition.temperature_K is None
+    assert normal.condition.notes == ""
+    assert normal.controls == ("probe_only",)
+    assert example_settings().execution == "simulation"
+
+
+def test_rrs_intent_resolves_complete_duration_phases_sample_and_repeat_schedule():
+    intent = AcquisitionIntent("Cell A sample", 1900., 1920., .43, 3, 2)
+    settings = resolve_intent_settings(intent)
+    assert settings.condition.sample_id == intent.sample_name
+    assert settings.execution == "hardware"
+    assert settings.scan_start_cm1 == 1900 and settings.scan_stop_cm1 == 1920
+    assert settings.post_scans * settings.measured_scan_period_s >= intent.observation_duration_s
+    assert len(settings.phase_offsets_s) == 3
+    assert settings.repeats == 2
+    assert settings.acquisition_intent == intent.to_dict()
+    assert "not identified measurements" in settings.value_source
+    assert all(1900 <= lo < hi <= 1920 for lo,hi in (*settings.band_windows_cm1, *settings.offband_windows_cm1))
+    assert build_plan(settings).pump_count == 3 * 2 * len(settings.directions)
+
+
+def test_rrs_intent_uses_live_readbacks_then_independent_overrides():
+    intent = AcquisitionIntent(observation_duration_s=.2)
+    caps = HardwareCapabilities(actual_sample_rate_hz=500., actual_reference_rate_hz=1000.,
+        live_settings={"scan_speed_cm1_s": 1060., "sample_filter_order": 2,
+                       "sample_filter_timeconstant_s": .002, "reference_filter_order": 3,
+                       "reference_filter_timeconstant_s": .003, "probe_frequency_hz": 1000000.})
+    settings = resolve_intent_settings(intent, mode="dual", capabilities=caps,
+                                      overrides={"sample_rate_hz": 1500., "sample_filter_order": 4})
+    assert settings.scan_speed_cm1_s == 1060
+    assert settings.measured_scan_period_s == .05
+    assert settings.sample_rate_hz == 1500 and settings.reference_rate_hz == 1000
+    assert settings.sample_filter_order == 4 and settings.reference_filter_order == 3
+    assert settings.sample_filter_timeconstant_s == .002
+    assert settings.manual_overrides == {"sample_rate_hz":1500., "sample_filter_order":4}
+
+
+def test_rrs_scan_speed_override_changes_automatic_period_without_resetting_filter_override():
+    intent = AcquisitionIntent(observation_duration_s=.2)
+    caps = HardwareCapabilities(actual_scan_period_s=.1, live_settings={"scan_speed_cm1_s":530.})
+    one = resolve_intent_settings(intent, capabilities=caps,
+        overrides={"scan_speed_cm1_s":1060., "sample_filter_timeconstant_s":.003})
+    assert one.measured_scan_period_s == .05
+    assert one.sample_filter_timeconstant_s == .003
+    two = resolve_intent_settings(intent, base_settings=one, capabilities=caps)
+    assert two.manual_overrides == one.manual_overrides
+    assert two.measured_scan_period_s == .05
+
+
+def test_rrs_auto_supported_rate_quantization_preserves_requested_value_separately():
+    caps = HardwareCapabilities(supported_sample_rates_hz=(500.,1000.,2000.), acquisition_timing_rate_hz=100.)
+    settings = resolve_intent_settings(AcquisitionIntent(observation_duration_s=.2), capabilities=caps,
+                                      overrides={"sample_rate_hz":1400.})
+    plan = build_plan(settings, capabilities=caps)
+    assert plan.requested["sample_rate_hz"] == 1400.
+    assert plan.selected["sample_rate_hz"] == 1000.
+    assert plan.actual["sample_rate_hz"] is None
+
+
+def test_rrs_temperature_and_optional_evidence_do_not_change_resolution_or_gate_plan():
+    intent = AcquisitionIntent(observation_duration_s=.2)
+    room = RepeatedRapidScanSettings(condition=ConditionProfile(temperature_K=298.15))
+    cryo = replace(room, condition=replace(room.condition, temperature_K=77., protein="different annotation",
+                                         temperature_record_id="annotation-only"))
+    first = resolve_intent_settings(intent, base_settings=room)
+    second = resolve_intent_settings(intent, base_settings=cryo)
+    assert first.condition.temperature_K == 298.15 and second.condition.temperature_K == 77.
+    assert build_plan(first).movies == build_plan(second).movies
+    assert build_plan(first).ready_for_hardware and build_plan(second).ready_for_hardware
+    assert not any("temperature" in note.code for note in build_plan(second).readiness_items)
+
+
+def test_rrs_raw_acquisition_needs_no_calibration_bands_or_scientific_approval():
+    settings = replace(RepeatedRapidScanSettings(), band_windows_cm1=(), offband_windows_cm1=(),
+                       pre_scans=1, condition=ConditionProfile(condition_id="", temperature_K=None))
+    plan = build_plan(settings)
+    assert plan.ready_for_hardware
+    assert not plan.calibration.promoted
+    assert all(movie.qualification_scans == 0 for movie in plan.movies)
+
+
+def test_rrs_saved_intent_and_override_state_survive_plan_reload(tmp_path):
+    plan = build_plan_from_intent(AcquisitionIntent("Persisted sample", observation_duration_s=.3),
+                                overrides={"scan_speed_cm1_s":600., "sample_filter_order":2})
+    restored = load_plan(save_plan(plan,tmp_path/"intent.json"), mode="single", condition_id="annotation ignored")
+    intent = AcquisitionIntent.from_settings(restored.settings)
+    settings = resolve_intent_settings(intent, base_settings=restored.settings)
+    assert intent.sample_name == "Persisted sample"
+    assert settings.manual_overrides == plan.settings.manual_overrides
+    assert settings.phase_offsets_s == plan.settings.phase_offsets_s
+    assert settings.execution == "hardware"
+
+
+def test_rrs_unknown_readbacks_are_not_fabricated_by_automatic_choices():
+    plan = build_plan_from_intent(AcquisitionIntent(observation_duration_s=.2))
+    assert plan.actual["sample_rate_hz"] is None
+    assert plan.actual["scan_period_s"] is None
+    assert plan.actual["timing_rate_hz"] is None
+    assert not plan.estimates["timing_stream_estimate_known"]
+    assert "readbacks unavailable" in plan.settings.value_source
+
+
+def test_rrs_invalid_essential_request_and_unrepresentable_manual_timing_still_fail():
+    with pytest.raises(ValueError, match="spectral_min"):
+        resolve_intent_settings(AcquisitionIntent(spectral_min_cm1=2000,spectral_max_cm1=1900))
+    with pytest.raises(ValueError, match="Unsupported manual"):
+        resolve_intent_settings(AcquisitionIntent(), overrides={"condition":{}})
+    with pytest.raises(ValueError, match="integer number"):
+        build_plan_from_intent(AcquisitionIntent(observation_duration_s=.2),
+                              overrides={"measured_scan_period_s":.1000004})
+
+
+def test_rrs_automatic_memory_budget_uses_available_host_memory_and_keeps_override():
+    caps = HardwareCapabilities(available_memory_bytes=8 * 1024**3)
+    automatic = resolve_intent_settings(AcquisitionIntent(), capabilities=caps)
+    assert automatic.memory_limit_bytes == 4 * 1024**3
+    manual = resolve_intent_settings(AcquisitionIntent(), capabilities=caps,
+                                    overrides={"memory_limit_bytes":2 * 1024**3})
+    assert manual.memory_limit_bytes == 2 * 1024**3
+    assert manual.manual_overrides["memory_limit_bytes"] == 2 * 1024**3
