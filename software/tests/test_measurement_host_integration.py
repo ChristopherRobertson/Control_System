@@ -50,6 +50,9 @@ def pair_factory(context):
 
 def test_independent_packages_install_together_without_shell_edits(app, tmp_path, monkeypatch):
     """Actual registration imports from separate directories plus broken SDK isolation."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QToolButton
     from control_app.ui.main_window import ControlSystemMainWindow
     ids = ("steady_state_slow_scan", "fixed_wavenumber_kinetics", "nanosecond_stroboscopy",
            "microsecond_stroboscopy", "repeated_rapid_scan", "single_pump_scan_burst")
@@ -72,14 +75,40 @@ def test_independent_packages_install_together_without_shell_edits(app, tmp_path
     try:
         assert window.tabs.count() == 19
         assert [window.tabs.tabText(i) for i in range(14, 19)] == ["MIRcat", "T660-1", "Nd:YAG", "OPO Iris", "Plotter"]
-        assert window.tab_selector.count() == 19
+        assert not hasattr(window, "tab_selector")
+        assert window.findChild(QWidget, "workspace_tab_selector") is None
+        assert window.tabs.usesScrollButtons()
         assert len({window.tabs.tabText(i) for i in range(19)}) == 19
         assert "optional device SDK unavailable" in window.host_status.text()
         handles = window.measurement_lifecycle.handles
         assert len({h.instance_id for h in handles}) == 14
+        window.resize(1100, 780)
+        window.show()
+        app.processEvents()
+        bar = window.tabs.tabBar()
+        right_arrow = next(button for button in bar.findChildren(QToolButton)
+                           if button.arrowType() == Qt.ArrowType.RightArrow)
+        assert right_arrow.isVisible()
+        scroll_clicks = 0
         for index in range(19):
-            window.tab_selector.setCurrentIndex(index)
+            # Reach every tab through the actual native overflow buttons, then
+            # click its visible label. No secondary navigation widget is used.
+            for _ in range(38):
+                center = bar.tabRect(index).center()
+                arrows_start = min(button.geometry().left() for button in bar.findChildren(QToolButton)
+                                   if button.isVisible())
+                if 0 <= center.x() < arrows_start:
+                    break
+                assert right_arrow.isEnabled()
+                QTest.mouseClick(right_arrow, Qt.MouseButton.LeftButton)
+                app.processEvents()
+                scroll_clicks += 1
+            else:
+                pytest.fail(f"Native scroll arrows did not expose tab {index}")
+            QTest.mouseClick(bar, Qt.MouseButton.LeftButton, pos=center)
+            QTest.qWait(10)
             assert window.tabs.currentIndex() == index
+        assert scroll_clicks > 0
         offline = handles[2]
         offline.widget.busy = True
         offline.state_changed.emit(True)

@@ -24,8 +24,8 @@ from control_app.measurement_host.registry import create_registered_tabs, discov
 try:
     from PySide6.QtCore import QObject, QSettings, QTimer, Signal, Slot, Qt
     from PySide6.QtWidgets import (QMessageBox, QMainWindow, QTabWidget, QWidget,
-                                  QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QScrollArea, QComboBox,
-                                  QDialog, QDialogButtonBox, QFormLayout, QCheckBox)
+                                  QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QScrollArea,
+                                  QDialog, QDialogButtonBox, QFormLayout, QCheckBox, QSizePolicy)
 
     PYSIDE6_AVAILABLE = True
 except ImportError:  # pragma: no cover - import-safe in non-UI environments
@@ -125,6 +125,10 @@ class ControlSystemMainWindow(QMainWindow):
             existing_instance_ids=tuple(h.instance_id for h in phase_handles),
         )
         self.registration_issues = created.issues
+        # Hidden feature pages must not enlarge the established device/Phase
+        # Scan pages through QStackedWidget's aggregate minimum-size hint.
+        self._measurement_page_policies = tuple(
+            (handle.widget, QSizePolicy(handle.widget.sizePolicy())) for handle in created.handles)
         self._measurement_state_bridges = []
         for handle in (*phase_handles, *created.handles):
             self.measurement_lifecycle.register(handle)
@@ -143,6 +147,8 @@ class ControlSystemMainWindow(QMainWindow):
         tabs.addTab(self.iris_widget, "OPO Iris")
         self.scan_plotter_widget = ScanPlotterWidget()
         tabs.addTab(self.scan_plotter_widget, "Plotter")
+        tabs.currentChanged.connect(self._update_measurement_page_sizes)
+        self._update_measurement_page_sizes()
         self.mircat_widget.scan_data_ready_callback = self.scan_plotter_widget.set_rows
         self.mircat_widget.scan_metadata_ready_callback = self.scan_plotter_widget.set_diagnostic_metadata
         central = QWidget()
@@ -167,15 +173,6 @@ class ControlSystemMainWindow(QMainWindow):
         self.recovery_button = QPushButton("Review instrument recovery…")
         self.recovery_button.clicked.connect(self._review_recovery)
         layout.addWidget(self.recovery_button)
-        # A direct selector complements Qt's scrolling tab bar when all seven
-        # experiment pairs are installed on a short or narrow desktop.
-        self.tab_selector = QComboBox()
-        self.tab_selector.setObjectName("workspace_tab_selector")
-        for index in range(tabs.count()):
-            self.tab_selector.addItem(tabs.tabText(index))
-        self.tab_selector.currentIndexChanged.connect(tabs.setCurrentIndex)
-        tabs.currentChanged.connect(self.tab_selector.setCurrentIndex)
-        layout.addWidget(self.tab_selector)
         # Instrument forms can be taller than a monitor's usable desktop.
         # Scroll the workspace instead of imposing their combined minimum
         # size on the native window (especially on secondary monitors).
@@ -199,6 +196,18 @@ class ControlSystemMainWindow(QMainWindow):
                 saved = str(default_save_location())
             self.save_location.setText(str(saved))
             self._apply_save_location()
+
+    def _update_measurement_page_sizes(self, *_):
+        """Use a feature's native sizing only while that feature is selected."""
+        selected = self.tabs.currentWidget()
+        for widget, original in self._measurement_page_policies:
+            policy = QSizePolicy(original)
+            if widget is not selected:
+                policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
+                policy.setVerticalPolicy(QSizePolicy.Policy.Ignored)
+            widget.setSizePolicy(policy)
+            widget.updateGeometry()
+        self.tabs.updateGeometry()
 
     def _phase_start_blocker(self, hardware=True):
         if not hardware:

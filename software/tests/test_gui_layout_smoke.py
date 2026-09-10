@@ -87,15 +87,18 @@ def test_seven_tab_gui_shell_instantiates_without_hardware(monkeypatch, tmp_path
         for index, (title, widget) in enumerate(expected_tabs):
             assert window.tabs.tabText(index) == title
             assert window.tabs.widget(index) is widget
-            assert window.tab_selector.itemText(index) == title
-        assert window.tab_selector.count() == len(expected_tabs)
+            window.tabs.tabBar().setCurrentIndex(index)
+            assert window.tabs.currentWidget() is widget
+        assert not hasattr(window, "tab_selector")
+        assert window.findChild(QWidget, "workspace_tab_selector") is None
+        assert window.tabs.usesScrollButtons()
         legacy_indices = [window.tabs.indexOf(widget) for _, widget in legacy_tabs]
         assert legacy_indices == sorted(set(legacy_indices))
         assert [window.tabs.tabText(index) for index in legacy_indices] == [title for title, _ in legacy_tabs]
-        window.tab_selector.setCurrentIndex(window.tabs.count() - 1)
+        window.tabs.tabBar().setCurrentIndex(window.tabs.count() - 1)
         assert window.tabs.currentWidget() is window.scan_plotter_widget
-        window.tabs.setCurrentIndex(0)
-        assert window.tab_selector.currentIndex() == 0
+        window.tabs.tabBar().setCurrentIndex(0)
+        assert window.tabs.currentWidget() is window.phase_scan_widget
         if discovery_case != "installed":
             assert window.registration_issues == ()
             assert window.tabs.count() == (7 if discovery_case == "empty" else 9)

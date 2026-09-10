@@ -84,8 +84,9 @@ def test_us_actual_host_discovery_preserves_reserved_phase_scan_pair(qt_app, tmp
     from control_app.measurement_host import ContextFactory, discover_modules, create_registered_tabs
     discovered = discover_modules()
     assert not discovered.issues
-    assert [entry.experiment_id for entry in discovered.descriptors] == ["microsecond_stroboscopy"]
-    result = create_registered_tabs(discovered, ContextFactory(save_root_provider=lambda: tmp_path),
+    selected = [entry for entry in discovered.descriptors if entry.experiment_id == "microsecond_stroboscopy"]
+    assert len(selected) == 1
+    result = create_registered_tabs(selected, ContextFactory(save_root_provider=lambda: tmp_path),
         existing_titles=("Phase Scan", "Dual-Detector Phase Scan"),
         existing_instance_ids=("phase_scan:single", "phase_scan:dual"))
     assert not result.issues

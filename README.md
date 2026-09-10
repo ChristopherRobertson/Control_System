@@ -66,9 +66,14 @@ register their own pair through
 `software/control_app/measurement_modules/<experiment_id>/registration.py`.
 Discovery sorts descriptors by display order and stable ID, isolates optional
 import/construction failures, and adds the pairs before the unchanged MIRcat,
-T660-1, Nd:YAG, OPO Iris and Plotter device-tab order. A workspace selector and
-scrolling tab bar keep every tab reachable. Offline analysis, simulation and
+T660-1, Nd:YAG, OPO Iris and Plotter device-tab order. The horizontal tab bar's
+native scroll arrows keep every tab reachable. Offline analysis, simulation and
 plan editing can continue while another tab owns the instrument.
+
+This checkout includes all six measurement packages, each with single- and
+dual-detector tabs, for nineteen tabs in total. Restart an already-running UI
+after updating the checkout so it discovers the installed packages. Hidden
+measurement pages do not change the existing Phase Scan pages' layout size.
 
 The [version 1 module API](software/control_app/measurement_host/README.md)
 specifies the descriptor, two lifecycle handles, scoped context, frozen operation
