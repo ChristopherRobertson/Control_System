@@ -10,6 +10,19 @@ records contribute axis, timing or uncertainty provenance. Neither promotion,
 review flags, descriptive temperature records nor preparation acknowledgements
 are prerequisites for recording native/relative data.
 
+Only MIRcat **QCL1** is addressed. **Repetition rate** sets the emitted T660
+external-trigger cadence (`probe_frequency_hz`) for MIRcat mode 2. **Pulse
+width** sets `mircat_pulse_width_ns` through the MIRcat SDK; it is distinct from
+the T660 TTL width. Both external cadence and automatic internal MIRcat rate
+must satisfy `rate_hz * actual_mircat_width_ns * 1e-9 <= 0.30`, together with
+stricter installed vendor limits. Internal rate must exceed external cadence.
+A missing MIRcat pulse member is resolved from the actual QCL1 readback before
+a change is applied; no counterpart is invented. Saved overrides receive the
+same pair validation. Device readbacks and the applied pair remain in the run.
+Saved UI settings migrate removed engineering controls into
+`historical_ui_settings`; only currently visible overrides and analysis windows
+are reused. Native run loading does not perform this settings migration.
+
 Each pumped movie has one Fire/Q-switch pair, every declared pre-pump scan,
 the pump-crossing scan, all post-pump scans and a final all-disabled terminal.
 The terminal has no scan index or spectral trigger but counts against physical

@@ -4,7 +4,84 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 from collections.abc import Mapping
+from decimal import Decimal
 import math
+
+UI_OVERRIDE_FIELDS = ("scan_speed_cm1_s", "sample_rate_hz", "sample_filter_order",
+                      "sample_filter_timeconstant_s", "probe_frequency_hz", "mircat_pulse_width_ns")
+UI_REFERENCE_OVERRIDE_FIELDS = ("reference_rate_hz", "reference_filter_order", "reference_filter_timeconstant_s")
+ANALYSIS_WINDOW_FIELDS = ("band_windows_cm1", "offband_windows_cm1")
+
+
+def normalize_ui_settings(value, mode=None):
+    """Migrate UI requests; removed engineering controls become provenance only.
+
+    This is intentionally separate from native run loading and the backend
+    settings model. Existing intent preserves independent Auto choices. A legacy
+    settings document without intent preserves its accessible explicit values.
+    """
+    from .settings import AcquisitionIntent, RepeatedRapidScanSettings
+    from .planner import resolve_intent_settings
+
+    source = deepcopy(value.to_dict() if hasattr(value,"to_dict") else dict(value))
+    source_mode = source.get("mode",mode or "single")
+    if mode is not None and source_mode != mode:
+        raise ValueError("Settings belong to another detector mode")
+    defaults = RepeatedRapidScanSettings(mode=source_mode).to_dict()
+    visible = UI_OVERRIDE_FIELDS + (UI_REFERENCE_OVERRIDE_FIELDS if source_mode == "dual" else ())
+    allowed = visible + ANALYSIS_WINDOW_FIELDS
+    metadata = ("condition","execution","schema_version","experiment_id","value_source",
+                "calibration_ids","instrument_state_id")
+    data = deepcopy(defaults)
+    for key in metadata + allowed:
+        if key in source:
+            data[key] = deepcopy(source[key])
+    history = deepcopy(source.get("historical_ui_settings",{}))
+    if not isinstance(history,Mapping):
+        raise ValueError("historical_ui_settings must be a mapping")
+    history = dict(history)
+    previous_migration = history.get("ui_controls_version") == 2
+    removed = deepcopy(history.get("removed_settings",{}))
+    excluded = set(metadata + allowed + ("mode","acquisition_intent","manual_overrides","historical_ui_settings"))
+    derived = {"measured_scan_period_s","phase_offsets_s","post_scans","scan_start_cm1","scan_stop_cm1","repeats"}
+    def plain(item):
+        if isinstance(item,Mapping): return {key:plain(part) for key,part in item.items()}
+        if isinstance(item,(tuple,list)): return [plain(part) for part in item]
+        return item
+    for key, item in source.items():
+        if key in excluded or (previous_migration and key in derived):
+            continue
+        if key not in defaults or plain(item) != plain(defaults[key]):
+            removed.setdefault(key,deepcopy(item))
+    raw_manual = source.get("manual_overrides",{})
+    if not isinstance(raw_manual,Mapping):
+        raise ValueError("manual_overrides must be a mapping")
+    removed_manual = deepcopy(history.get("removed_manual_overrides",{}))
+    for key,item in raw_manual.items():
+        if key not in allowed:
+            removed_manual.setdefault(key,deepcopy(item))
+    manual = {key:deepcopy(item) for key,item in raw_manual.items() if key in allowed and item is not None}
+    intent = source.get("acquisition_intent")
+    if not intent:
+        condition = source.get("condition",defaults["condition"])
+        period = source.get("measured_scan_period_s",defaults["measured_scan_period_s"])
+        scans = source.get("post_scans",defaults["post_scans"])
+        intent = AcquisitionIntent(sample_name=condition.get("sample_id","Sample"),
+            spectral_min_cm1=source.get("scan_start_cm1",defaults["scan_start_cm1"]),
+            spectral_max_cm1=source.get("scan_stop_cm1",defaults["scan_stop_cm1"]),
+            observation_duration_s=float(Decimal(str(period))*Decimal(str(scans))),
+            phase_count=len(source.get("phase_offsets_s",defaults["phase_offsets_s"])),
+            repeats=source.get("repeats",defaults["repeats"])).to_dict()
+        for key in allowed:
+            if key in source and key not in raw_manual and source[key] is not None:
+                manual[key] = deepcopy(source[key])
+    history["ui_controls_version"] = 2
+    if removed: history["removed_settings"] = removed
+    if removed_manual: history["removed_manual_overrides"] = removed_manual
+    data["historical_ui_settings"] = history
+    data["manual_overrides"] = manual
+    data["acquisition_intent"] = deepcopy(intent)
+    return resolve_intent_settings(intent,mode=source_mode,base_settings=data,overrides=manual).to_dict()
 
 _ACQUISITION_FIELDS = (
     "scan_start_cm1", "scan_stop_cm1", "measured_scan_period_s", "scan_speed_cm1_s",
@@ -62,7 +139,7 @@ def operational_contract(settings, configuration=None, calibration_records=(), s
     relevant_changes = {key:deepcopy(value) for key,value in changes.items()
         if any(token in key.lower() for token in ("scan", "wavelength", "demod", "rate", "range", "timeconstant",
                                                 "filter", "reference", "probe", "input", "oscillator", "path_balance"))}
-    return {"experiment_id":"repeated_rapid_scan", "schema_version":1,"mode":mode,
+    return {"experiment_id":"repeated_rapid_scan", "schema_version":1,"mode":mode,"mircat_qcl":1,
             "acquisition":{key:deepcopy(settings[key]) for key in names if key in settings and settings[key] is not None},
             "directions":tuple(settings.get("directions", ())),
             "sample_identity":{key:condition.get(key) for key in ("sample_id","preparation_id","cell_id","position_id")
@@ -72,16 +149,29 @@ def operational_contract(settings, configuration=None, calibration_records=(), s
 
 def record_contract(record):
     """Migrate legacy full-state records as data, without any approval state."""
+    observed_qcl = record.get("readbacks", {}).get("mircat_pulse", {}).get("qcl")
     direct = record.get("compatibility_contract")
     if isinstance(direct, Mapping) and direct:
-        return direct
+        result = deepcopy(direct)
+        if observed_qcl is not None:
+            result["mircat_qcl"] = observed_qcl
+        return result
     legacy = record.get("review_contract")
     if isinstance(legacy, Mapping) and "settings" in legacy:
-        return operational_contract(legacy["settings"],legacy.get("configuration", {}))
-    settings = record.get("operation", {}).get("settings")
-    if not settings:
-        settings = record.get("plan", {}).get("settings")
-    return operational_contract(settings) if settings else None
+        result = operational_contract(legacy["settings"],legacy.get("configuration", {}))
+    else:
+        settings = record.get("operation", {}).get("settings")
+        if not settings:
+            settings = record.get("plan", {}).get("settings")
+        if not settings:
+            return None
+        result = operational_contract(settings)
+    # Old records do not acquire a QCL1 identity just because the current engine
+    # is fixed to QCL1. Preserve observed source identity or reacquire support.
+    result.pop("mircat_qcl",None)
+    if observed_qcl is not None:
+        result["mircat_qcl"] = observed_qcl
+    return result
 
 
 @dataclass

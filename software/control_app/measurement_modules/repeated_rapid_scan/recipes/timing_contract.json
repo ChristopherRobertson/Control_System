@@ -3,6 +3,14 @@
   "experiment_id": "repeated_rapid_scan",
   "recipe_id": "rrs-finite-movie-t660-v1",
   "status": "COMPILER_CONTRACT_NOT_AN_OPERATING_RECIPE",
+  "mircat": {
+    "qcl": 1,
+    "pulse_controls": "Repetition rate (Hz) is emitted T660 external cadence probe_frequency_hz in MIRcat mode 2; Pulse width (ns) is the MIRcat SDK parameter mircat_pulse_width_ns, distinct from T660 TTL width",
+    "internal_rate": "MIRcat internal rate remains automatic and must exceed external cadence",
+    "maximum_duty_fraction": 0.3,
+    "duty_equation": "Both external cadence and internal MIRcat rate times actual MIRcat pulse_width_ns * 1e-9 <= min(0.30, connected_vendor_duty_fraction)",
+    "limits": "Retain connected vendor minimum/maximum pulse and current limits; resolve missing pulse values from QCL1 readbacks before applying a pair"
+  },
   "sources": [
     "references/manuals/T660/Highland Technologies T660 Manual.pdf sections 2, 3.5, 5.3, 5.4",
     "references/manuals/T660/Highland Technologies T660 Programming Guide.pdf page 92",

@@ -12,8 +12,21 @@ This page records the implementation contract. A full operator manual is deferre
 Enter the sample name, spectral limits, recovery observation duration, phase
 count and repeats. The summary shows the resulting movie count, scans, timing
 and storage. Automatic choices use installed capabilities and current readbacks;
-Advanced contains supported overrides. Acquisition uses the installed-device
+supported overrides remain visible in a framed group. Acquisition uses the installed-device
 adapter. Test devices are injected by tests and are not an operator mode.
+Loaded plans and preferences retain removed engineering controls only as
+historical provenance; new runs resolve those settings automatically. Accessible
+overrides, their independent Auto choices and selected analysis bands remain.
+
+This instrument uses **QCL1 only**. **Repetition rate** sets the external T660
+cadence that triggers MIRcat pulses in mode 2. **Pulse width** sets the MIRcat
+SDK optical pulse-width parameter; it is distinct from the T660 TTL width.
+External cadence times actual MIRcat width must not exceed **30% duty** or a
+stricter installed vendor limit. The internal MIRcat rate stays automatic and
+must also satisfy that duty limit and exceed the external cadence. Missing
+MIRcat values are resolved from QCL1 readbacks before applying a complete pair.
+Requested values and actual readbacks are retained; readback alone does not
+establish the optical pulse shape at the sample.
 
 **Start** configures the owned instruments, obtains an unpumped baseline when
 needed, records each complete movie, restores the instrument and saves native

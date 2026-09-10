@@ -4,7 +4,6 @@ from __future__ import annotations
 from copy import deepcopy
 from collections.abc import Mapping
 from dataclasses import asdict, fields, is_dataclass, replace
-from decimal import Decimal
 import csv
 import json
 from pathlib import Path
@@ -13,7 +12,7 @@ import numpy as np
 
 from control_app.measurement_host.context import thaw_data
 from control_app.measurement_host.presentation import ScientificSelections
-from .session import MeasurementSession, operational_contract
+from .session import MeasurementSession, normalize_ui_settings, operational_contract
 from .settings import AcquisitionIntent, ConditionProfile, RepeatedRapidScanSettings
 from .planner import HardwareCapabilities, build_plan
 
@@ -60,8 +59,8 @@ class RepeatedRapidScanAdapter:
                 pass
 
     def _preference_settings(self, value):
-        settings = RepeatedRapidScanSettings.from_dict(value)
-        legacy_example = settings.execution == "simulation" or "EXAMPLE ONLY" in settings.value_source.upper()
+        legacy_example = value.get("execution") == "simulation" or "EXAMPLE ONLY" in value.get("value_source","").upper()
+        settings = RepeatedRapidScanSettings.from_dict(normalize_ui_settings(value,self.context.mode))
         if not legacy_example:
             return settings.to_dict()
         intent = AcquisitionIntent.from_settings(settings)
@@ -84,6 +83,10 @@ class RepeatedRapidScanAdapter:
         return self.read_settings()
 
     def apply_settings(self, settings):
+        checked = RepeatedRapidScanSettings.from_dict(normalize_ui_settings(settings,self.context.mode))
+        if checked.mode != self.context.mode:
+            raise ValueError("Settings belong to another detector mode")
+        settings = checked.to_dict()
         self.settings_widget.apply(settings)
         self.context.preferences.setValue("settings", json.dumps(settings))
         self.context.preferences.sync()
@@ -232,6 +235,11 @@ class RepeatedRapidScanAdapter:
             self.runner.request_abort(reason)
 
     def save_plan(self, path, settings, plan):
+        checked = RepeatedRapidScanSettings.from_dict(normalize_ui_settings(settings,self.context.mode))
+        if checked.mode != self.context.mode or plan.settings.mode != self.context.mode:
+            raise ValueError("Plan settings belong to another detector mode")
+        settings = checked.to_dict()
+        plan = self.make_plan(settings)
         path = Path(path)
         with path.open("x", encoding="utf-8") as stream:
             json.dump({"record_kind": "repeated_rapid_scan_plan", "schema_version": 1,
@@ -246,25 +254,7 @@ class RepeatedRapidScanAdapter:
         if (value.get("record_kind") != "repeated_rapid_scan_plan" or value.get("schema_version") != 1
                 or value.get("experiment_id") != "repeated_rapid_scan" or value.get("mode") != self.context.mode):
             raise ValueError("Incompatible experiment, detector mode or plan schema")
-        settings = RepeatedRapidScanSettings.from_dict(value["settings"])
-        if settings.mode != self.context.mode:
-            raise ValueError("Plan settings belong to another detector mode")
-        if not settings.acquisition_intent:
-            from .planner import resolve_intent_settings
-            intent = replace(AcquisitionIntent.from_settings(settings),
-                observation_duration_s=float(Decimal(str(settings.measured_scan_period_s))*settings.post_scans))
-            excluded = {"mode","execution","condition","experiment_id","schema_version","acquisition_intent",
-                        "manual_overrides","scan_start_cm1","scan_stop_cm1","repeats","phase_offsets_s","post_scans",
-                        "value_source","calibration_ids","instrument_state_id"}
-            overrides = {key:deepcopy(item) for key,item in value["settings"].items() if key not in excluded and item is not None}
-            resolved = resolve_intent_settings(intent,mode=self.context.mode,base_settings=settings,overrides=overrides)
-            if len(resolved.phase_offsets_s)!=len(settings.phase_offsets_s) or not np.allclose(
-                    resolved.phase_offsets_s,settings.phase_offsets_s,rtol=0,atol=5e-12):
-                raise ValueError("Legacy plan has nonuniform phase offsets that cannot be represented by the phase-count input; its saved schedule was not changed")
-            if resolved.post_scans != settings.post_scans:
-                raise ValueError("Legacy post-scan schedule cannot be represented exactly by the duration input; its saved schedule was not changed")
-            settings = replace(settings,execution="hardware",acquisition_intent=intent.to_dict(),manual_overrides=overrides)
-        return settings.to_dict()
+        return normalize_ui_settings(value["settings"],self.context.mode)
 
     def load_run(self, path):
         from .persistence import load_run
