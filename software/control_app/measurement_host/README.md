@@ -207,10 +207,61 @@ without cancelling unrelated offline/simulated workers.
 
 ## Shared presentation with scientific adapters
 
-`presentation.py` defines the exact `ScientificAdapter` protocol and optional
-`GuidedMeasurementPanel(settings_widget, adapter, context)`. The panel supplies
-nonblocking workers, settings/summary/validation, Save/Load Plan, native loading,
-preliminary/review/start, New run, data export, progress and cancellation.
+New pages use `CompactMeasurementPanel(settings_widget, adapter, context,
+parent=None, *, advanced_widget=None)` from `presentation.py`, implementing
+`CompactScientificAdapter`. Essential scientific inputs occupy the left column;
+concise derived-setting rows and the primary plot occupy the right. Independently
+overridable calculated settings belong under the initially collapsed Advanced
+disclosure. Opening or closing that disclosure never changes override values.
+The panel has no review object, acknowledgement state or procedural checkbox.
+The earlier `ScientificAdapter` and `GuidedMeasurementPanel` remain compatibility
+APIs for existing integrations; new measurement pages do not use their review flow.
+
+Adapters retain `read_settings`, `apply_settings`, `make_plan`, `validate_plan`,
+`selected_records`, `hardware_required`, `run_preliminary`, `run_measurement`,
+`request_abort`, `save_plan`, `load_plan`, `load_run`, `export_run` and `new_run`
+signatures. `summarize_plan(plan)` returns ordered `(label, value)` pairs, with
+short values rather than explanatory paragraphs. Required
+`validate_preliminary(preliminary_or_None, plan) -> Sequence[str]` checks actual
+scientific data compatibility. Return `()` for `None` when a method does not need
+a separate preliminary; hide or repurpose its preliminary button. A harmless
+settings refresh retains acquired data and rechecks compatibility automatically.
+Optional `validate_operation(kind, plan, preliminary) -> Sequence[str]` validates
+numeric, device and data prerequisites for a particular action. Neither callback
+may introduce manual approval, temperature-provenance or promotion prerequisites
+for raw acquisition. Calibrated claims still use applicable promoted bundles.
+
+`begin("preliminary" | "measurement")` validates and dispatches the standard
+scientific action. Additional blank and device-check actions use
+`begin_operation(kind, callback, *, invalidates_preliminary=False,
+requires_valid_plan=True)`; the callback receives `(StartSnapshot, OperationWorker)`.
+Only custom actions may set `requires_valid_plan=False`, allowing a device check
+before acquisition inputs can produce a valid plan. Such an action still freezes
+current settings, invokes operation-specific validation and acquires declared
+hardware ownership. Its scientific snapshot plan may be `None`. Completion emits
+`operation_finished(kind, WorkerOutcome)` so the feature can retain its result and
+call `refresh_readiness()` or `refresh_plan()`.
+
+Use the panel's named extension points instead of replacing its layout:
+
+| Purpose | API |
+| --- | --- |
+| Essential inputs and extra actions | `settings_layout` / `control_layout`, `settings_extras_layout`, `add_settings_action(text, callback)` |
+| Independent overrides | `set_advanced_widget(widget)`, `advanced_layout`, `advanced_button`, `advanced_content` |
+| Blank actions | `blank_actions_layout`, `add_blank_action(text, callback)` |
+| Standard actions and plan files | `action_layout`, `file_layout` |
+| Derived values and primary results | `summary_form`, `summary_values`, `set_summary_rows(rows)`, `result_layout`, `add_result_widget(widget)` |
+| Native load and export | `run_file_layout` |
+
+The standard controls are `save_plan_button`, `load_plan_button`,
+`preliminary_button`, `start_button`, `abort_button`, `new_run_button`,
+`load_run_button`, `export_button`, `validation`, `status` and `progress`.
+Features may give actions scientific labels and hide redundant actions.
+`busy_changed`, `result_ready`, `preliminary_ready`, `run_loaded`, `outcome_ready`,
+`operation_finished` and `new_run_requested` notify the owning feature only.
+`command_running`, `close_blockers` and `request_abort` preserve the shared
+lifecycle, worker cleanup and native preservation boundaries.
+
 `LinkedSliceControl` and toolbar plot helpers are independent reusable parts.
 Scientific units support ns, us, ms and longer periods. The module chooses a
 suitable plot; a steady-state spectrum does not need a kinetic surface.
@@ -219,9 +270,10 @@ Adapter `hardware_required(kind, settings)` and `selected_records()` are pure.
 The panel creates the canonical operation before dispatching a worker and wraps
 hardware calls in `.hardware_scope`. Its `StartSnapshot` contains that operation
 plus detached scientific plan/preliminary data. Scientific adapters still own
-planning, readiness, normalization, fit models, schemas, review and verified
-cleanup/preservation. Implement these using the executable
-`DummyScientificAdapter` in `software/tests/test_measurement_host_presentation.py`.
+planning, data compatibility, normalization, fit models, schemas and verified
+cleanup/preservation. The executable compact adapter fixture and ownership,
+cancellation and file-operation examples are in
+`software/tests/test_compact_measurement_panel.py`.
 Do not extend PhaseScanWidget's `dual_detector` branch for new experiments.
 
 ## Narrow standalone interchange

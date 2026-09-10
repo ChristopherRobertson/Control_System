@@ -1,13 +1,17 @@
 """Reusable, hardware-free presentation for independently registered measurements.
 
-``GuidedMeasurementPanel`` combines a module's settings QWidget and scientific
+``CompactMeasurementPanel`` provides the shared Phase Scan-style presentation
+for new measurement pages, with data-based readiness and no review control.
+``GuidedMeasurementPanel`` retains compatibility with the earlier presentation.
+It combines a module's settings QWidget and scientific
 adapter with a small preliminary / review / start interaction. The adapter owns
 all scientific validation, serialization, readiness, normalization and runners.
 No experiment ID or detector-mode dispatch belongs here. Construction invokes
 only pure planning methods; device work belongs in explicit worker callbacks.
 
-Adapters must acquire the host coordinator before device access, retain it through
-restoration and native saving, and report cleanup/save failures by raising them.
+The panel acquires the host coordinator before dispatching declared hardware
+operations. Adapters retain ownership through restoration and native saving,
+release it with the verified outcomes, and report cleanup/save failures by raising.
 Worker completion means that its Python call returned; it never establishes safe
 hardware state. Cancellation is cooperative and must pass through runner cleanup.
 The immutable StartSnapshot envelope contains detached copies of scientific state
@@ -159,12 +163,48 @@ class PlotAdapter(Protocol):
     def draw(self, figure: Any, result: Any) -> None: ...
 
 
+class CompactScientificAdapter(Protocol):
+    """Scientific boundary for CompactMeasurementPanel; no manual review state.
+
+    All planning/validation callbacks are pure. ``validate_preliminary`` receives
+    the retained preliminary result (possibly None) and current plan. It returns
+    actual incompatibilities or missing data; an experiment without a preliminary
+    requirement returns (). The host adds no promotion or procedural conditions.
+
+    ``summarize_plan`` supplies concise (label, value) rows. Run and file callbacks
+    keep the same signature as ScientificAdapter. Hardware run callbacks execute
+    inside the frozen operation's ownership scope and remain responsible for
+    restoration, saving and explicitly releasing ownership with truthful outcomes.
+
+    An optional ``validate_operation(kind, plan, preliminary)`` can express the
+    numeric/device/data prerequisites for additional blank or capability actions.
+    It must not represent an acknowledgement or approval flag.
+    """
+
+    def read_settings(self) -> Any: ...
+    def apply_settings(self, settings: Any) -> None: ...
+    def make_plan(self, settings: Any) -> Any: ...
+    def validate_plan(self, plan: Any) -> Sequence[str]: ...
+    def summarize_plan(self, plan: Any) -> Sequence[tuple[str, str]]: ...
+    def selected_records(self) -> ScientificSelections: ...
+    def hardware_required(self, kind: str, settings: Any) -> bool: ...
+    def validate_preliminary(self, preliminary: Any, plan: Any) -> Sequence[str]: ...
+    def run_preliminary(self, snapshot: StartSnapshot, worker: OperationWorker) -> Any: ...
+    def run_measurement(self, snapshot: StartSnapshot, worker: OperationWorker) -> Any: ...
+    def request_abort(self, reason: str) -> None: ...
+    def save_plan(self, path: Path, settings: Any, plan: Any) -> None: ...
+    def load_plan(self, path: Path) -> Any: ...
+    def load_run(self, path: Path) -> Any: ...
+    def export_run(self, path: Path, result: Any) -> None: ...
+    def new_run(self) -> None: ...
+
+
 try:
     from PySide6.QtCore import Qt, QThread, Signal
     from PySide6.QtWidgets import (
-        QCheckBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel,
+        QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
         QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter,
-        QVBoxLayout, QWidget,
+        QToolButton, QVBoxLayout, QWidget,
     )
 except ImportError:  # Optional UI dependencies must not block module discovery.
     QWidget = None
@@ -189,6 +229,7 @@ if QWidget is not None:
             super().__init__(parent)
             self.operation = operation
             self.cancel_event = Event()
+            self.operation_started = Event()
             self.cancel_reason = "Cancellation requested"
             self.outcome: WorkerOutcome | None = None
             self.notification_errors: list[str] = []
@@ -212,6 +253,7 @@ if QWidget is not None:
             try:
                 # Always enter the operation even after an early abort: it may
                 # already own a host token and must execute its cleanup/finally.
+                self.operation_started.set()
                 result = self.operation(self)
                 self.outcome = WorkerOutcome("completed", result)
                 self.result.emit(result)
@@ -697,3 +739,417 @@ if QWidget is not None:
             path, _ = QFileDialog.getSaveFileName(self, "Export data", str(self.save_root_provider()), "Data files (*)")
             if path:
                 self.export_run(path)
+
+
+    class CompactMeasurementPanel(QWidget):
+        """Compact settings/actions left; derived rows and scientific plots right.
+
+        Constructor: (settings_widget, adapter, context, parent=None,
+        *, advanced_widget=None). No hardware access occurs during construction.
+        Essential settings belong in settings_widget; controls with derived
+        defaults belong in set_advanced_widget(). The disclosure starts collapsed
+        and only shows or hides those controls. Each field's Auto/value selection
+        independently determines its override. Connect settings signals to
+        refresh_plan(). There is no review widget or acknowledgement state.
+
+        Stable extension layouts: control_layout/settings_layout,
+        settings_extras_layout, advanced_layout, file_layout, blank_actions_layout,
+        action_layout, right_layout, summary_form, run_file_layout, result_layout.
+        add_action/add_blank_action/add_settings_action add controls in place.
+        begin_operation dispatches custom blank/capability work through the same
+        snapshot/ownership path. operation_finished(kind, outcome) lets a module
+        apply its own extra operation result and then call refresh_readiness().
+        requires_valid_plan=False permits a capability check before planning is possible.
+        """
+
+        busy_changed = Signal(bool)
+        result_ready = Signal(object)
+        preliminary_ready = Signal(object)
+        run_loaded = Signal(object, str)
+        outcome_ready = Signal(object)
+        operation_finished = Signal(str, object)
+        new_run_requested = Signal()
+        advanced_toggled = Signal(bool)
+
+        def __init__(self, settings_widget: QWidget, adapter: CompactScientificAdapter,
+                     context: MeasurementContext, parent=None, *, advanced_widget=None):
+            super().__init__(parent)
+            self.adapter, self.context = adapter, context
+            self.save_root_provider = context.save_root
+            self.settings_widget = settings_widget
+            self.plan = self.preliminary = self.result = self.worker = None
+            self.snapshot: StartSnapshot | None = None
+            self._busy = False
+            self._active_kind = None
+            self._host_plan = None
+            self._plan_issues = self._preliminary_issues = ()
+            self._operation_actions = []
+            root = QVBoxLayout(self)
+            self.splitter = QSplitter(Qt.Orientation.Horizontal)
+            root.addWidget(self.splitter, 1)
+            self.left_panel, self.right_panel = QWidget(), QWidget()
+            self.left_layout, self.right_layout = QVBoxLayout(self.left_panel), QVBoxLayout(self.right_panel)
+            self.splitter.addWidget(self.left_panel)
+            self.splitter.addWidget(self.right_panel)
+
+            controls = QWidget()
+            self.settings_layout = self.control_layout = QVBoxLayout(controls)
+            self.settings_layout.addWidget(settings_widget)
+            self.settings_extras_layout = QVBoxLayout()
+            self.settings_layout.addLayout(self.settings_extras_layout)
+            self.advanced_button = QToolButton()
+            self.advanced_button.setText("Advanced overrides")
+            self.advanced_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            self.advanced_button.setArrowType(Qt.ArrowType.RightArrow)
+            self.advanced_button.setCheckable(True)
+            self.advanced_content = QWidget()
+            self.advanced_layout = QVBoxLayout(self.advanced_content)
+            self.advanced_layout.setContentsMargins(0, 0, 0, 0)
+            self.settings_layout.addWidget(self.advanced_button)
+            self.settings_layout.addWidget(self.advanced_content)
+            self.advanced_button.hide()
+            self.advanced_content.hide()
+            self.advanced_button.toggled.connect(self._advanced_changed)
+
+            self.validation = QLabel()
+            self.validation.setWordWrap(True)
+            self.validation.setTextFormat(Qt.TextFormat.PlainText)
+            self.settings_layout.addWidget(self.validation)
+            self.save_plan_button, self.load_plan_button = QPushButton("Save plan…"), QPushButton("Load plan…")
+            self.file_layout = QVBoxLayout()
+            self.file_layout.addWidget(self.save_plan_button)
+            self.file_layout.addWidget(self.load_plan_button)
+            self.settings_layout.addLayout(self.file_layout)
+            self.settings_layout.addStretch(1)
+            self.settings_scroll = QScrollArea()
+            self.settings_scroll.setWidgetResizable(True)
+            self.settings_scroll.setWidget(controls)
+            self.left_layout.addWidget(self.settings_scroll, 1)
+
+            self.blank_actions_layout = QVBoxLayout()
+            self.left_layout.addLayout(self.blank_actions_layout)
+            self.action_layout = QVBoxLayout()
+            self.left_layout.addLayout(self.action_layout)
+            self.preliminary_button = QPushButton("Acquire preliminary")
+            self.start_button = QPushButton("Acquire sample")
+            self.abort_button = QPushButton("Stop")
+            self.abort_button.setProperty("danger", True)
+            self.new_run_button = QPushButton("New run")
+            for button in (self.preliminary_button, self.start_button, self.abort_button, self.new_run_button):
+                self.action_layout.addWidget(button)
+            self.status = QLabel()
+            self.status.setWordWrap(True)
+            self.status.setTextFormat(Qt.TextFormat.PlainText)
+            self.left_layout.addWidget(self.status)
+            self.progress = QProgressBar()
+            self.progress.setRange(0, 100)
+            self.progress.setValue(0)
+            self.progress.hide()
+            self.left_layout.addWidget(self.progress)
+
+            self.summary_group = QGroupBox("Derived experiment and effective settings")
+            self.summary_form = QFormLayout(self.summary_group)
+            self.summary_values = {}
+            self.right_layout.addWidget(self.summary_group)
+            self.load_run_button = QPushButton("Load native run…")
+            self.export_button = QPushButton("Export data…")
+            self.run_file_layout = QHBoxLayout()
+            self.run_file_layout.addWidget(self.load_run_button)
+            self.run_file_layout.addWidget(self.export_button)
+            self.run_file_layout.addStretch(1)
+            self.right_layout.addLayout(self.run_file_layout)
+            self.result_layout = QVBoxLayout()
+            self.right_layout.addLayout(self.result_layout, 1)
+
+            self.preliminary_button.clicked.connect(lambda: self._user_action(lambda: self.begin("preliminary")))
+            self.start_button.clicked.connect(lambda: self._user_action(lambda: self.begin("measurement")))
+            self.abort_button.clicked.connect(lambda: self.request_abort("Stopped by user"))
+            self.new_run_button.clicked.connect(lambda: self._user_action(self.new_run))
+            self.save_plan_button.clicked.connect(lambda: self._user_action(self._choose_save_plan))
+            self.load_plan_button.clicked.connect(lambda: self._user_action(self._choose_load_plan))
+            self.load_run_button.clicked.connect(lambda: self._user_action(self._choose_load_run))
+            self.export_button.clicked.connect(lambda: self._user_action(self._choose_export))
+            if advanced_widget is not None:
+                self.set_advanced_widget(advanced_widget)
+            self.refresh_plan()
+            self.splitter.setSizes([420, 900])
+
+        # These legacy helpers concern file dialogs and running state only; they
+        # carry no preliminary/review logic or widget-layout assumptions.
+        command_running = GuidedMeasurementPanel.command_running
+        close_blockers = GuidedMeasurementPanel.close_blockers
+        _progress = GuidedMeasurementPanel._progress
+        save_plan = GuidedMeasurementPanel.save_plan
+        load_plan = GuidedMeasurementPanel.load_plan
+        load_run = GuidedMeasurementPanel.load_run
+        export_run = GuidedMeasurementPanel.export_run
+        _choose_save_plan = GuidedMeasurementPanel._choose_save_plan
+        _choose_load_plan = GuidedMeasurementPanel._choose_load_plan
+        _choose_load_run = GuidedMeasurementPanel._choose_load_run
+        _choose_export = GuidedMeasurementPanel._choose_export
+
+        @staticmethod
+        def _brief(text):
+            line = str(text).splitlines()[0] if str(text) else ""
+            return line if len(line) <= 160 else line[:157].rstrip() + "…"
+
+        def set_status(self, message):
+            self.status.setText(self._brief(message))
+            self.status.setToolTip(str(message))
+
+        def output_location_changed(self, path):
+            """Refresh destination hints without changing any plan or run snapshot.
+
+            The scoped provider already reflects the application selection. File
+            dialogs read it when opened; active operations keep their frozen root.
+            """
+            destination = str(self.save_root_provider())
+            for button in (self.save_plan_button, self.load_plan_button,
+                           self.load_run_button, self.export_button):
+                button.setToolTip(destination)
+
+        def _user_action(self, callback):
+            try:
+                return callback()
+            except Exception as exc:
+                self.set_status(f"{type(exc).__name__}: {exc}")
+                return None
+
+        def set_advanced_widget(self, widget):
+            self.advanced_layout.addWidget(widget)
+            self.advanced_button.show()
+            self.advanced_content.setVisible(self.advanced_button.isChecked())
+
+        def _advanced_changed(self, expanded):
+            self.advanced_content.setVisible(expanded)
+            self.advanced_button.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+            self.advanced_toggled.emit(expanded)
+
+        def add_action(self, text, callback, *, section="actions", requires_plan=True):
+            layouts = {"actions": self.action_layout, "blank": self.blank_actions_layout,
+                       "settings": self.settings_extras_layout}
+            if section not in layouts:
+                raise ValueError("Action section must be actions, blank, or settings")
+            button = QPushButton(text)
+            button.clicked.connect(lambda: self._user_action(callback))
+            layouts[section].addWidget(button)
+            self._operation_actions.append((button, requires_plan))
+            self._update_controls()
+            return button
+
+        def add_blank_action(self, text, callback, *, requires_plan=True):
+            return self.add_action(text, callback, section="blank", requires_plan=requires_plan)
+
+        def add_settings_action(self, text, callback, *, requires_plan=False):
+            return self.add_action(text, callback, section="settings", requires_plan=requires_plan)
+
+        def add_result_widget(self, widget, stretch=1):
+            self.result_layout.addWidget(widget, stretch)
+
+        def set_summary_rows(self, rows):
+            if isinstance(rows, str):
+                rows = (("Plan", rows),) if rows else ()
+            elif hasattr(rows, "items"):
+                rows = rows.items()
+            rows = tuple(rows)
+            while self.summary_form.rowCount():
+                self.summary_form.removeRow(0)
+            self.summary_values.clear()
+            for label, value in rows:
+                display = QLabel(str(value))
+                display.setWordWrap(True)
+                display.setTextFormat(Qt.TextFormat.PlainText)
+                self.summary_values[str(label)] = display
+                self.summary_form.addRow(str(label), display)
+
+        def refresh_plan(self, *_):
+            if self._busy:
+                return
+            try:
+                settings = deepcopy(self.adapter.read_settings())
+                candidate = self.adapter.make_plan(settings)
+                self._plan_issues = tuple(self.adapter.validate_plan(candidate))
+                self.set_summary_rows(self.adapter.summarize_plan(candidate))
+                self.plan = None if self._plan_issues else candidate
+                self._host_plan = self.context.new_plan(settings) if self.plan is not None else None
+            except Exception as exc:
+                self.plan = self._host_plan = None
+                self._plan_issues = (str(exc),)
+                self.set_summary_rows(())
+            # Keep scientific data; compatibility, not a manual flag, determines
+            # whether it remains usable after settings or device changes.
+            self.refresh_readiness()
+
+        def refresh_readiness(self, *_):
+            if self._busy:
+                self._update_controls()
+                return
+            try:
+                self._preliminary_issues = (tuple(self.adapter.validate_preliminary(self.preliminary, self.plan))
+                                            if self.plan is not None else ())
+            except Exception as exc:
+                self._preliminary_issues = (str(exc),)
+            issues = self._plan_issues or self._preliminary_issues
+            self.validation.setText("\n".join(self._brief(issue) for issue in issues[:2]))
+            self.validation.setToolTip("\n".join(str(issue) for issue in issues))
+            self._update_controls()
+
+        def _update_controls(self, *_):
+            idle, valid = not self._busy, self.plan is not None
+            self.settings_widget.setEnabled(idle)
+            self.advanced_button.setEnabled(idle)
+            self.advanced_content.setEnabled(idle)
+            self.preliminary_button.setEnabled(idle and valid)
+            self.start_button.setEnabled(idle and valid and not self._preliminary_issues)
+            self.abort_button.setEnabled(self._busy and self._active_kind not in ("save_plan", "load_plan", "load_run", "export_run"))
+            self.new_run_button.setEnabled(idle)
+            self.save_plan_button.setEnabled(idle and valid)
+            self.load_plan_button.setEnabled(idle)
+            self.load_run_button.setEnabled(idle)
+            self.export_button.setEnabled(idle and self.result is not None)
+            for button, requires_plan in self._operation_actions:
+                button.setEnabled(idle and (valid or not requires_plan))
+            self.progress.setVisible(self._busy)
+
+        def begin(self, kind="measurement"):
+            if kind not in ("preliminary", "measurement"):
+                raise ValueError("Use begin_operation for a custom operation kind")
+            if self._busy:
+                raise RuntimeError("An operation is already running")
+            self.refresh_readiness()
+            if kind == "measurement" and self._preliminary_issues:
+                self.set_status(self._preliminary_issues[0])
+                return
+            callback = self.adapter.run_preliminary if kind == "preliminary" else self.adapter.run_measurement
+            return self.begin_operation(kind, callback, invalidates_preliminary=kind == "preliminary")
+
+        def begin_operation(self, kind, operation, *, invalidates_preliminary=False, requires_valid_plan=True):
+            """Freeze, own, and dispatch one scientific callback(snapshot, worker)."""
+            if self._busy:
+                raise RuntimeError("An operation is already running")
+            if kind in ("preliminary", "measurement") and not requires_valid_plan:
+                raise ValueError("Preliminary and measurement operations require a valid plan")
+            if requires_valid_plan and self.plan is None:
+                raise ValueError("A valid plan is required")
+            if kind == "measurement":
+                preliminary_issues = tuple(self.adapter.validate_preliminary(self.preliminary, self.plan))
+                if preliminary_issues:
+                    self.set_status(preliminary_issues[0])
+                    return
+            validation = getattr(self.adapter, "validate_operation", None)
+            issues = tuple(validation(kind, self.plan, self.preliminary)) if callable(validation) else ()
+            if issues:
+                self.set_status(issues[0])
+                return
+            plan, preliminary = deepcopy(self.plan), deepcopy(self.preliminary)
+            selected = self.adapter.selected_records()
+            host_plan = (self._host_plan if requires_valid_plan and self._host_plan is not None
+                         else self.context.new_plan(self.adapter.read_settings()))
+            operation_snapshot = self.context.begin_operation(
+                plan=host_plan, calibration_records=selected.calibration_records,
+                sample_records=selected.sample_records,
+                hardware=self.adapter.hardware_required(kind, host_plan.settings),
+                purpose=kind, cancel=self.request_abort,
+            )
+            snapshot = self.snapshot = StartSnapshot(operation_snapshot, str(kind), plan, preliminary)
+            if invalidates_preliminary:
+                self.preliminary = None
+
+            def execute(worker):
+                if snapshot.operation.hardware:
+                    with self.context.hardware_scope(snapshot.operation):
+                        return operation(snapshot, worker)
+                return operation(snapshot, worker)
+            try:
+                self._launch(execute, str(kind))
+            except Exception:
+                dispatched = self.worker and (self.worker.isRunning() or self.worker.operation_started.is_set())
+                if dispatched:
+                    # A startup wrapper may fail after the thread entered its
+                    # operation. Only that operation can verify/release ownership;
+                    # retain busy state until its completion callback is delivered.
+                    raise
+                if snapshot.operation.hardware:
+                    self.context.ownership.release(snapshot.operation.ownership, safe_verified=True,
+                                                   preservation_verified=True, detail="Worker dispatch failed before hardware access")
+                failed_worker, self.worker = self.worker, None
+                if failed_worker is not None:
+                    failed_worker.deleteLater()
+                self._busy, self._active_kind = False, None
+                self._update_controls()
+                self.busy_changed.emit(False)
+                raise
+            return snapshot
+
+        def _launch(self, operation, kind, path=None):
+            if self._busy:
+                raise RuntimeError("An operation is already running")
+            worker = self.worker = OperationWorker(operation, self)
+            self._busy, self._active_kind = True, kind
+            worker.message.connect(lambda text: self.set_status(text) if self.worker is worker else None)
+            worker.progress.connect(lambda done, total: self._progress(done, total) if self.worker is worker else None)
+            worker.finished.connect(lambda: self._finished(worker, kind, path))
+            self.progress.setRange(0, 0)
+            self.set_status(f"Running {kind.replace('_', ' ')}…")
+            self._update_controls()
+            self.busy_changed.emit(True)
+            worker.start()
+
+        def _finished(self, worker, kind, path):
+            if self.worker is not worker:
+                return
+            outcome = worker.outcome
+            self.progress.setRange(0, 100)
+            self.progress.setValue(100 if outcome.state == "completed" else 0)
+            self.set_status(outcome.error or "Complete")
+            loaded_plan = False
+            try:
+                if outcome.state == "completed":
+                    if kind == "preliminary":
+                        self.preliminary = outcome.result
+                        self.preliminary_ready.emit(outcome.result)
+                    elif kind == "measurement":
+                        self.result = outcome.result
+                        self.result_ready.emit(outcome.result)
+                    elif kind == "load_plan":
+                        self.adapter.apply_settings(outcome.result)
+                        loaded_plan = True
+                    elif kind == "load_run":
+                        self.result = outcome.result
+                        self.run_loaded.emit(outcome.result, str(path))
+                if worker.notification_errors:
+                    self.set_status("Notification failed: " + "; ".join(worker.notification_errors))
+            except Exception as exc:
+                self.set_status(f"Display failed: {type(exc).__name__}: {exc}")
+            finally:
+                self.worker = None
+                self._busy, self._active_kind = False, None
+                worker.deleteLater()
+                self.operation_finished.emit(kind, outcome)
+                if loaded_plan:
+                    self.refresh_plan()
+                else:
+                    self.refresh_readiness()
+                self.busy_changed.emit(False)
+                self.outcome_ready.emit(outcome)
+
+        def request_abort(self, reason):
+            if self.worker is None or not self._busy:
+                return
+            self.worker.request_abort(reason)
+            try:
+                if self._active_kind not in ("save_plan", "load_plan", "load_run", "export_run"):
+                    self.adapter.request_abort(reason)
+                self.set_status("Stopping; preserving data…")
+            except Exception as exc:
+                self.set_status(f"Stop failed: {type(exc).__name__}: {exc}")
+
+        def new_run(self):
+            if self._busy:
+                raise RuntimeError("Wait for the current operation to finish")
+            self.adapter.new_run()
+            self.preliminary = self.result = self.snapshot = None
+            self.progress.setValue(0)
+            self.refresh_plan()
+            self.set_status("")
+            self.new_run_requested.emit()
