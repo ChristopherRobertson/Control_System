@@ -252,7 +252,8 @@ def test_rrs_installed_capture_upload_acknowledgements_and_native_continuity(tmp
     acquirer.devices = {"hf2li": hf, "t660_1": clock, "t660_2": timing, "mircat": QCL()}
     acquirer.config = {"marker_interval_cm1": 53/6, "marker_width_us": 1, "qcl": 2}
     acquirer.settings = SimpleNamespace(**vars(plan.settings), qcl=2)
-    acquirer.readbacks = {**readbacks, "required_demodulators": (0, 2)}
+    acquirer.readbacks = {**readbacks, "required_demodulators": (0, 2),
+                          "mircat_pulse": {"qcl": 1, "pulse_rate_hz": 2500000., "pulse_width_ns": 100., "current_ma": 600.}}
     acquirer._quality = lambda: {"locked": True, "overload": False}
     movie = acquirer.capture(plan.movies[0], Worker())
     assert hf.starts == hf.stops == timing.started == 1
@@ -455,6 +456,9 @@ class InstalledTransport:
         self.train_starts = 0
         self.qcl_calls, self.pulse_writes = [], []
         self.vendor_duty_percent = 50.
+        self.vendor_first_limits = None
+        self.vendor_limit_reads = 0
+        self.frequency_readback_offset_hz = 0.
         self.emission, self.armed = False, False
         self.sweep = [1898., 1951., 530., 2, 1]
         self.trigger = [0, 0, 1898., 1951., 53./11, 2, 0, 0]
@@ -558,7 +562,9 @@ class InstalledTransport:
             def val(arg): return arg.value
             def put(values, pointers=args):
                 for pointer, value in zip(pointers, values): pointer._obj.value = value
-            if key == 'TuneToWW' and self.fault == 'changed_external_rate':
+            if key == 'TuneToWW' and self.fault in ('changed_width', 'changed_rate', 'changed_current'):
+                self.pulse[{'changed_rate': 0, 'changed_width': 1, 'changed_current': 2}[self.fault]] *= .9
+            elif key == 'TuneToWW' and self.fault == 'changed_external_rate':
                 self.units['COM3']['TRIG:FREQ:SYN'] = '4000000'
             elif key in ('Initialize', 'DeInitialize', 'TuneToWW', 'CancelManualTuneMode'): pass
             elif key == 'ArmLaser': self.armed = True
@@ -574,7 +580,11 @@ class InstalledTransport:
             elif key == 'GetQclTuningRange': put([1800., 2100., 2], args[1:])
             elif key in ('GetQCLPulseRate','GetQCLPulseWidth','GetQCLCurrent'):
                 put([self.pulse[('GetQCLPulseRate','GetQCLPulseWidth','GetQCLCurrent').index(key)]], args[1:])
-            elif key == 'GetQCLPulseLimits': put([3e6, 500., self.vendor_duty_percent], args[1:])
+            elif key == 'GetQCLPulseLimits':
+                self.vendor_limit_reads += 1
+                limits = self.vendor_first_limits if self.vendor_first_limits is not None and self.vendor_limit_reads == 1 else [3e6, 500., self.vendor_duty_percent]
+                if isinstance(limits, Exception): raise limits
+                put(limits, args[1:])
             elif key == 'GetQCLMinPulsedCurrent': put([1], args[1:])
             elif key == 'GetQCLMaxPulsedCurrent': put([1000], args[1:])
             elif key == 'SetQCLParams':
@@ -618,6 +628,8 @@ class InstalledTransport:
         text = command.upper().lstrip(':')
         unit = self.units[port]
         if text == '*IDN?': return 'Berkeley,T660,123,F5'
+        if text == 'TRIG:FREQ:SYN?' and self.frequency_readback_offset_hz:
+            return str(float(unit['TRIG:FREQ:SYN'].removesuffix('HZ')) + self.frequency_readback_offset_hz)
         if text == 'FEATURE:FRAME?': return '1'
         if text.startswith('TIME:RELTO'):
             edge = int(re.search(r'\d+', text)[0])
@@ -981,6 +993,81 @@ def test_rrs_valid_optical_duty_keeps_separate_internal_external_rate_constraint
             with pytest.raises(ValueError, match='internal repetition rate.*separate external'):
                 acquirer.prepare(worker)
             assert not transport.pulse_writes
+        finally:
+            restored = acquirer.restore(worker)
+            ctx.ownership.release(operation.ownership, safe_verified=restored['safe_verified'], preservation_verified=True)
+    assert restored['safe_verified'] and coordinator.snapshot()['state'] == 'free'
+
+
+@pytest.mark.parametrize('field', ['max_pulse_rate_hz', 'max_pulse_width_ns', 'max_duty_cycle'])
+@pytest.mark.parametrize('invalid', [float('nan'), float('inf'), 0., -1.], ids=['nan', 'infinity', 'zero', 'negative'])
+def test_rrs_nonfinite_or_nonpositive_sdk_limits_reject_before_pulse_write(tmp_path, monkeypatch, field, invalid):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker)
+    limits = [3e6, 500., 50.]
+    limits[('max_pulse_rate_hz','max_pulse_width_ns','max_duty_cycle').index(field)] = invalid
+    transport.vendor_first_limits = limits  # A subsequent fresh cleanup read is valid.
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(ValueError, match='connected pulse limits must be finite positive'):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    observed = runner.last_result['readbacks']['mircat_pulse_limits'][field]
+    assert np.isnan(observed) if np.isnan(invalid) else observed == invalid
+    assert transport.pulse_writes == [(2500000., 100., 600.)]  # Valid original restore only.
+    assert not any(name in transport.calls for name in ('MIRcatSDK_ArmLaser','MIRcatSDK_TurnEmissionOn','MIRcatSDK_StartSweepScan'))
+    assert runner.last_result['restoration']['safe_verified'] and coordinator.snapshot()['state'] == 'free'
+    retained = load_run(runner.last_result['output_path']).record['readbacks']['mircat_pulse_limits'][field]
+    assert np.isnan(retained) if np.isnan(invalid) else retained == invalid
+
+
+def test_rrs_missing_sdk_limits_raise_without_fallback(tmp_path, monkeypatch):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker)
+    transport.vendor_first_limits = RuntimeError('SDK pulse maximum data unavailable')
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(RuntimeError, match='maximum data unavailable'):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    assert 'MIRcatSDK_TurnEmissionOn' not in transport.calls
+    assert transport.pulse_writes == [(2500000., 100., 600.)]
+    assert runner.last_result['restoration']['safe_verified'] and coordinator.snapshot()['state'] == 'free'
+
+
+@pytest.mark.parametrize('fault', ['changed_rate', 'changed_width', 'changed_current'])
+def test_rrs_unexpected_valid_sdk_pulse_change_after_tune_is_retained_and_rejected(tmp_path, monkeypatch, fault):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker, fault)
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    runner = RepeatedRapidScanRunner(ctx)
+    with ctx.hardware_scope(operation), pytest.raises(RuntimeError, match='pulse readback changed'):
+        runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
+    captured = runner.last_result['raw_movies'][0]['readbacks']
+    changed_key = {'changed_rate':'pulse_rate_hz','changed_width':'pulse_width_ns','changed_current':'current_ma'}[fault]
+    assert captured['pre_emission_mircat_pulse'][changed_key] != runner.last_result['readbacks']['mircat_pulse'][changed_key]
+    assert captured['pre_emission_mircat_limits']['max_duty_cycle'] == 50.
+    assert captured['pre_emission_mircat_current_limits'] == (1., 1000.)
+    assert 'MIRcatSDK_TurnEmissionOn' not in transport.calls and transport.train_starts == 0
+    assert runner.last_result['restoration']['safe_verified'] and coordinator.snapshot()['state'] == 'free'
+
+
+def test_rrs_after_recipe_duty_uses_actual_dds_readback_within_timing_tolerance(tmp_path, monkeypatch):
+    worker = Worker()
+    ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker)
+    transport.frequency_readback_offset_hz = .00001
+    plan = installed_plan('single')
+    operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
+    with ctx.hardware_scope(operation):
+        acquirer = InstalledDevicesAcquirer(ctx, operation, plan)
+        try:
+            acquirer.prepare(worker)
+            actual = float(acquirer.readbacks['clock_settings']['queries']['synth_frequency']['response'])
+            assert actual != plan.settings.probe_frequency_hz
+            assert acquirer.readbacks['requested_mircat_internal_pulse_validation']['emitted_repetition_rate_hz'] == actual
+            assert acquirer.readbacks['actual_mircat_internal_pulse_validation']['emitted_repetition_rate_hz'] == actual
+            assert acquirer.readbacks['actual_mircat_internal_pulse_validation']['emitted_optical_duty_fraction'] > .1
         finally:
             restored = acquirer.restore(worker)
             ctx.ownership.release(operation.ownership, safe_verified=restored['safe_verified'], preservation_verified=True)

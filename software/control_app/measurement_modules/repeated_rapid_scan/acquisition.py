@@ -215,7 +215,11 @@ def _validate_mircat_internal_pulse(pulse, limits, current_limits, *, external_r
     """Validate optical pulse duty independently of the external TTL timing."""
     from .settings import validate_mircat_pulse_pair, validate_probe_optical_pulse_pair
     rate, width, current = (float(pulse[key]) for key in ("pulse_rate_hz", "pulse_width_ns", "current_ma"))
-    maximum = min(.30, float(limits["max_duty_cycle"])/100.)
+    max_rate, max_width, vendor_duty = (float(limits[key]) for key in
+        ("max_pulse_rate_hz", "max_pulse_width_ns", "max_duty_cycle"))
+    if not all(math.isfinite(value) and value > 0 for value in (max_rate, max_width, vendor_duty)):
+        raise ValueError("MIRcat connected pulse limits must be finite positive values")
+    maximum = min(.30, vendor_duty/100.)
     if not all(math.isfinite(value) and value > 0 for value in (rate, width, current, maximum)):
         raise ValueError("MIRcat internal pulse settings/limits must be finite positive values")
     external_duty = validate_probe_optical_pulse_pair(external_rate_hz, width) if external_rate_hz is not None else None
@@ -224,7 +228,7 @@ def _validate_mircat_internal_pulse(pulse, limits, current_limits, *, external_r
     duty = validate_mircat_pulse_pair(rate, width)
     if duty > maximum:
         raise ValueError(f"MIRcat internal optical duty cycle {duty:.9g} exceeds {maximum:.9g}; repetition rate times pulse width must be at most 30% and any lower device limit")
-    if rate > limits["max_pulse_rate_hz"] or width > limits["max_pulse_width_ns"] or not current_limits[0] <= current <= current_limits[1]:
+    if rate > max_rate or width > max_width or not current_limits[0] <= current <= current_limits[1]:
         raise ValueError("Selected MIRcat internal pulse settings exceed its connected readback limits")
     if external_rate_hz is not None and rate <= external_rate_hz:
         raise ValueError("MIRcat internal repetition rate must exceed the separate external T660 probe trigger rate")
@@ -423,7 +427,11 @@ class InstalledDevicesAcquirer:
         clock_actual = clock.read_active_settings()
         self.readbacks["clock_settings"] = clock_actual
         actual_frequency = clock_actual["queries"]["synth_frequency"]
-        if not actual_frequency.get("ok") or not math.isclose(float(str(actual_frequency["response"]).strip().upper().removesuffix("HZ")), self.settings.probe_frequency_hz, rel_tol=1e-10):
+        if not actual_frequency.get("ok"):
+            raise RuntimeError("T660 clock readback unavailable after applying the acquisition recipe")
+        actual_external_rate = float(str(actual_frequency["response"]).strip().upper().removesuffix("HZ"))
+        self.readbacks["actual_probe_frequency_hz"] = actual_external_rate
+        if not math.isclose(actual_external_rate, self.settings.probe_frequency_hz, rel_tol=1e-10):
             raise RuntimeError("T660 clock readback differs from the compiled scan clock")
         clock.start_continuous_clock()
         pulse = deepcopy(self.original["mircat"]["pulse"])
@@ -434,17 +442,18 @@ class InstalledDevicesAcquirer:
             if override is not None:
                 pulse[field] = override
         limits, current_limits = qcl.get_qcl_pulse_limits(qcl_id), qcl.get_qcl_current_limits(qcl_id)
-        if pulse["pulse_rate_hz"] <= self.settings.probe_frequency_hz:
+        self.readbacks.update(mircat_pulse_limits=limits, mircat_current_limits=current_limits)
+        if pulse["pulse_rate_hz"] <= actual_external_rate:
             raise ValueError("MIRcat internal repetition rate must exceed the separate external T660 probe trigger rate")
-        self.readbacks["requested_mircat_internal_pulse_validation"] = _validate_mircat_internal_pulse(pulse, limits, current_limits, external_rate_hz=self.settings.probe_frequency_hz)
+        self.readbacks["requested_mircat_internal_pulse_validation"] = _validate_mircat_internal_pulse(pulse, limits, current_limits, external_rate_hz=actual_external_rate)
         qcl.set_qcl_pulse_params(**pulse)
         self.readbacks["requested_mircat_pulse"] = pulse
         pulse = {"qcl": qcl_id, "pulse_rate_hz": qcl.get_qcl_pulse_rate(qcl_id),
                  "pulse_width_ns": qcl.get_qcl_pulse_width(qcl_id), "current_ma": qcl.get_qcl_current(qcl_id)}
         self.config["mircat_pulse"] = pulse
         self.readbacks["mircat_pulse"] = pulse
-        self.readbacks["actual_mircat_internal_pulse_validation"] = _validate_mircat_internal_pulse(pulse, limits, current_limits, external_rate_hz=self.settings.probe_frequency_hz)
-        if pulse["pulse_rate_hz"] <= self.settings.probe_frequency_hz:
+        self.readbacks["actual_mircat_internal_pulse_validation"] = _validate_mircat_internal_pulse(pulse, limits, current_limits, external_rate_hz=actual_external_rate)
+        if pulse["pulse_rate_hz"] <= actual_external_rate:
             raise ValueError("Readback MIRcat internal repetition rate does not exceed the separate external T660 probe trigger rate")
         for field, setting in (("pulse_rate_hz", "mircat_pulse_rate_hz"), ("pulse_width_ns", "mircat_pulse_width_ns"), ("current_ma", "mircat_current_ma")):
             self.readbacks["capabilities"]["live_settings"][setting] = pulse[field]
@@ -555,9 +564,15 @@ class InstalledDevicesAcquirer:
         external_rate = float(str(frequency["response"]).strip().upper().removesuffix("HZ"))
         actual_pulse = {"qcl": 1, "pulse_rate_hz": qcl.get_qcl_pulse_rate(1),
                         "pulse_width_ns": qcl.get_qcl_pulse_width(1), "current_ma": qcl.get_qcl_current(1)}
-        raw["readbacks"].update(pre_emission_mircat_pulse=actual_pulse, pre_emission_clock=clock_readback)
+        limits, current_limits = qcl.get_qcl_pulse_limits(1), qcl.get_qcl_current_limits(1)
+        raw["readbacks"].update(pre_emission_mircat_pulse=actual_pulse, pre_emission_clock=clock_readback,
+                               pre_emission_mircat_limits=limits, pre_emission_mircat_current_limits=current_limits)
         raw["readbacks"]["pre_emission_optical_pulse_validation"] = _validate_mircat_internal_pulse(
-            actual_pulse, qcl.get_qcl_pulse_limits(1), qcl.get_qcl_current_limits(1), external_rate_hz=external_rate)
+            actual_pulse, limits, current_limits, external_rate_hz=external_rate)
+        configured_pulse = self.readbacks.get("mircat_pulse")
+        if configured_pulse is None or any(actual_pulse[key] != configured_pulse[key]
+                                          for key in ("pulse_rate_hz", "pulse_width_ns", "current_ma")):
+            raise RuntimeError("MIRcat pulse readback changed from the configured acquisition before emission")
         if not math.isclose(external_rate, get(compiled, "input_frequency_hz"), rel_tol=1e-10):
             raise RuntimeError("Actual T660 repetition rate changed from the compiled finite scan timing")
         qcl.start_emission()
