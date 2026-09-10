@@ -9,7 +9,7 @@ import time
 import numpy as np
 from PySide6.QtCore import QTimer, Signal, Qt
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
+    QBoxLayout, QComboBox, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
     QWidget, QFileDialog, QDoubleSpinBox, QSpinBox, QHeaderView, QToolButton,
 )
@@ -58,8 +58,10 @@ class SlowScanSettingsWidget(QWidget):
         self.fields = self.override_inputs = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
         group = QGroupBox("Scan settings")
         form = QFormLayout(group)
+        form.setContentsMargins(6, 6, 6, 6)
         form.setVerticalSpacing(2)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.plan_label = QLineEdit()
@@ -97,11 +99,20 @@ class SlowScanSettingsWidget(QWidget):
         self.repeats.valueChanged.connect(self._changed)
         form.addRow("Repeats per direction", self.repeats)
         self.advanced_widget = QWidget()
-        filter_form = QFormLayout(self.advanced_widget)
+        filter_form = QGridLayout(self.advanced_widget)
         filter_form.setContentsMargins(0, 0, 0, 0)
-        filter_form.setVerticalSpacing(4)
-        filter_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        for key, label in self.FILTER_FIELDS:
+        filter_form.setHorizontalSpacing(4)
+        filter_form.setVerticalSpacing(2)
+        first_row = 1 if mode == "dual" else 0
+        if mode == "dual":
+            for column, label in ((1, "Sample"), (2, "Reference")):
+                heading = QLabel(label)
+                heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                filter_form.addWidget(heading, 0, column)
+                filter_form.setColumnStretch(column, 1)
+        filter_form.addWidget(QLabel("Time constant (s)"), first_row, 0)
+        filter_form.addWidget(QLabel("Filter order"), first_row + 1, 0)
+        for key, _label in self.FILTER_FIELDS:
             if mode == "single" and key.startswith("reference_"):
                 continue
             editor = QLineEdit()
@@ -109,7 +120,8 @@ class SlowScanSettingsWidget(QWidget):
             editor.setPlaceholderText("Auto")
             editor.textChanged.connect(self._changed)
             self.fields[key] = editor
-            filter_form.addRow(label, editor)
+            row = first_row + int(key.endswith("filter_order"))
+            filter_form.addWidget(editor, row, 2 if key.startswith("reference_") else 1)
         layout.addWidget(group)
         self.capability_button = QPushButton("Read connected settings")
         layout.addWidget(self.capability_button)
@@ -245,6 +257,11 @@ class SlowScanPanel(CompactMeasurementPanel):
         self._clock_start = None
         super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
         self.settings_editor = settings
+        self.settings_layout.setContentsMargins(6, 6, 6, 6)
+        self.settings_layout.setSpacing(4)
+        self.settings_extras_layout.setSpacing(2)
+        self.advanced_layout.setContentsMargins(6, 6, 6, 6)
+        self.file_layout.setDirection(QBoxLayout.Direction.LeftToRight)
         self.preliminary_button.hide()
         self.start_button.setText("Sample")
         self.abort_button.setText("Stop")
@@ -259,7 +276,12 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.control_status.setWordWrap(True)
         self.settings_extras_layout.addWidget(self.control_status)
         self.load_dark_button = QPushButton("Load dark…")
-        self.settings_extras_layout.addWidget(self.load_dark_button)
+        settings.layout().removeWidget(settings.capability_button)
+        device_actions = QHBoxLayout()
+        device_actions.setSpacing(4)
+        device_actions.addWidget(settings.capability_button)
+        device_actions.addWidget(self.load_dark_button)
+        self.settings_extras_layout.addLayout(device_actions)
         self.load_dark_button.clicked.connect(lambda: self._choose_control("dark"))
         settings.capability_button.clicked.connect(lambda: self._user_action(lambda: self.begin_control("capability")))
 
@@ -292,7 +314,7 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.quality.setMaximumHeight(48)
         self.result_layout.addWidget(self.quality)
         self.analysis_button = QToolButton()
-        self.analysis_button.setText("Peaks and selected windows")
+        self.analysis_button.setText("Selected windows")
         self.analysis_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.analysis_button.setArrowType(Qt.ArrowType.RightArrow)
         self.analysis_button.setCheckable(True)
@@ -305,6 +327,7 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.peak_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.peak_table.setMinimumHeight(75)
         self.peak_table.setMaximumHeight(100)
+        self.peak_table.hide()
         analysis.addWidget(self.peak_table)
         selections = QHBoxLayout()
         self.band_lower, self.band_upper, self.offband_lower, self.offband_upper = (QLineEdit() for _ in range(4))
@@ -484,6 +507,8 @@ class SlowScanPanel(CompactMeasurementPanel):
                               "band": self._bounds(self.band_lower, self.band_upper),
                               "offband": self._bounds(self.offband_lower, self.offband_upper)})
         peaks = _value(fit, "peaks", ()) if fit is not None else ()
+        self.analysis_button.setText("Peaks and selected windows" if fit is not None else "Selected windows")
+        self.peak_table.setVisible(fit is not None)
         self.peak_table.setRowCount(len(peaks))
         for row, peak in enumerate(peaks):
             for column, key in enumerate(("center_cm1", "center_uncertainty_cm1", "width_fwhm_cm1", "height", "integrated_area", "line_shape")):
@@ -576,6 +601,8 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.sweep_choice.clear()
         self.plot.clear_result()
         self.peak_table.setRowCount(0)
+        self.peak_table.hide()
+        self.analysis_button.setText("Selected windows")
         self.quality.setText("Acquire a sample or load a run to display its spectrum.")
         for field in (self.band_lower, self.band_upper, self.offband_lower, self.offband_upper):
             field.clear()

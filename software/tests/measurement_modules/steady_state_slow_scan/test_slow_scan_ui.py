@@ -232,9 +232,22 @@ def test_actual_shell_keeps_entire_input_rectangles_visible_at_1100_by_780(app, 
             for _ in range(8):
                 app.processEvents()
             viewport = panel.settings_scroll.viewport()
-            for name, editor in panel.settings_editor.fields.items():
+            editor = panel.settings_editor
+            controls = dict(editor.fields, plan_label=editor.plan_label, lower=editor.lower, upper=editor.upper,
+                            scan_speed=editor.scan_speed, repeats=editor.repeats,
+                            read_connected=editor.capability_button, load_dark=panel.load_dark_button)
+            for name, editor in controls.items():
                 bounds = QRect(editor.mapTo(viewport, QPoint()), editor.size())
                 assert viewport.rect().contains(bounds), (mode, name, bounds, viewport.rect())
+            for button in (panel.save_plan_button, panel.load_plan_button):
+                bounds = QRect(button.mapTo(viewport, QPoint()), button.size())
+                assert viewport.rect().contains(bounds), (mode, button.text(), bounds, viewport.rect())
+            assert panel.settings_scroll.horizontalScrollBar().maximum() == 0
+            assert panel.settings_scroll.verticalScrollBar().maximum() == 0
+            if mode == "single":
+                for button in (panel.blank_button, panel.load_blank_button):
+                    bounds = QRect(button.mapTo(window.workspace_scroll.viewport(), QPoint()), button.size())
+                    assert window.workspace_scroll.viewport().rect().contains(bounds)
             assert window.workspace_scroll.verticalScrollBar().maximum() == 0
     finally:
         window.hide()
@@ -408,9 +421,17 @@ def test_slow_scan_fits_match_sweep_identity_when_an_earlier_spectrum_has_no_fit
         fit_axis, 1 - .1*np.exp(-.5*((fit_axis-1902)/.4)**2), np.arange(120.), reference=np.ones(120)))
     fit = fit_spectrum(good)
     panel.display_result({"spectra": [short, good], "fits": [fit]})
+    assert panel.analysis_button.text() == "Selected windows"
+    assert panel.peak_table.isHidden()
     assert panel.peak_table.rowCount() == 0
     assert len(panel.plot.figure.axes) == 1
     panel.sweep_choice.setCurrentIndex(1)
+    assert panel.analysis_button.text() == "Peaks and selected windows"
+    assert not panel.peak_table.isHidden()
     assert panel.peak_table.rowCount() == 1
     assert float(panel.peak_table.item(0, 0).text()) == pytest.approx(1902., abs=.01)
     assert len(panel.plot.figure.axes) == 2
+    panel.sweep_choice.setCurrentIndex(0)
+    assert panel.analysis_button.text() == "Selected windows"
+    assert panel.peak_table.isHidden()
+    assert panel.peak_table.rowCount() == 0
