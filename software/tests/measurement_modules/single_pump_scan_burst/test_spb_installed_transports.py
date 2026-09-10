@@ -31,7 +31,11 @@ from control_app.measurement_modules.single_pump_scan_burst.settings import Sett
 class MircatSDKTransport:
     def __init__(self):
         self.functions, self.calls = {}, []
-        self.qcls = {1: [2e6, 150., 420.], 2: [2e6, 150., 810.]}
+        self.qcls = {1: [2.1e6, 142., 420.]}
+        self.pulse_limits = [2.2e6, 500., 30.]
+        self.current_limits = [0, 1500]
+        self.reject_external_trigger_mode = False
+        self.overshoot_next_width_ns = 0.
         self.trigger = [1, 0, 1900., 1950., 5., 2, 0, 0]
         self.sweep = [1900., 1950., 5000., 2, 1, False, 1]
         self.armed = self.emission = self.closed = False
@@ -62,15 +66,24 @@ class MircatSDKTransport:
             "GetScanWaitingProcessTrigger": self.scan_waiting or self.stuck_scan_field == "scan_waiting_process_trigger"}
         if name in booleans:
             out([booleans[name]])
-        elif name == "GetNumInstalledQcls": out([2])
-        elif name == "GetActiveQcl": out([2])  # Deliberately differs from the covering QCL.
-        elif name == "GetQclTuningRange": out([1800., 2000., 2] if values[0] == 1 else [2050., 2250., 2], args[1:])
+        elif name == "GetNumInstalledQcls": out([1])
+        elif name == "GetActiveQcl": out([1])
+        elif name == "GetQclTuningRange":
+            assert values[0] == 1
+            out([1800., 2000., 2], args[1:])
         elif name in ("GetQCLPulseRate", "GetQCLPulseWidth", "GetQCLCurrent"):
             index = ("GetQCLPulseRate", "GetQCLPulseWidth", "GetQCLCurrent").index(name)
             out([self.qcls[values[0]][index]], args[1:])
-        elif name == "SetQCLParams": self.qcls[values[0]] = values[1:]
+        elif name == "SetQCLParams":
+            assert values[0] == 1
+            self.qcls[values[0]] = values[1:]
+            self.qcls[1][1] += self.overshoot_next_width_ns
+            self.overshoot_next_width_ns = 0.
         elif name == "GetWlTrigParams": out(self.trigger)
-        elif name == "SetWlTrigParams": self.trigger = values
+        elif name == "SetWlTrigParams":
+            self.trigger = values
+            if self.reject_external_trigger_mode and values[0] == 2:
+                self.trigger[0] = 1
         elif name == "GetWlTrigPulseWidth": out([self.marker_width])
         elif name == "SetWlTrigPulseWidth": self.marker_width = values[0]
         elif name == "GetWlTrigChanParams":
@@ -88,9 +101,11 @@ class MircatSDKTransport:
         elif name == "GetAPIVersion": out([1, 0, 0])
         elif name == "GetTuneWW": out([1900., 2, 1])
         elif name == "GetActualWW": out([1900., 2, False])
-        elif name == "GetQCLPulseLimits": out([2e6, 500., 30.], args[1:])
-        elif name == "GetQCLMinPulsedCurrent": out([0], args[1:])
-        elif name == "GetQCLMaxPulsedCurrent": out([1500], args[1:])
+        elif name == "GetQCLPulseLimits":
+            assert values[0] == 1
+            out(self.pulse_limits, args[1:])
+        elif name == "GetQCLMinPulsedCurrent": out([self.current_limits[0]], args[1:])
+        elif name == "GetQCLMaxPulsedCurrent": out([self.current_limits[1]], args[1:])
         elif name in ("GetSystemErrorWord", "GetStatusMask"): out([0])
         elif name == "ArmLaser": self.armed = True
         elif name == "DisarmLaser": self.armed = False
@@ -194,6 +209,10 @@ class LabOneTransport:
         return int(self.nodes.get(path, 1 if path.endswith(("/order", "/harmonic")) else 0))
     def getDouble(self, path):
         defaults = {"rate": 230000., "timeconstant": 1e-6, "range": 1., "freq": 2e6}
+        if path.endswith("/oscs/0/freq"):
+            clock = next((serial for serial in reversed(self.bank.serials) if serial.port == "COM3"), None)
+            if clock:
+                defaults["freq"] = float(clock.state["TRIG:FREQ:SYN"].removesuffix("HZ"))
         return float(self.nodes.get(path, defaults.get(path.split("/")[-1], 0.)))
     def subscribe(self, path): self.subscriptions.add(path)
     def unsubscribe(self, path):
@@ -246,13 +265,14 @@ def transports(monkeypatch, tmp_path):
     return bank
 
 
-def make_runner(bank, mode, *, progress=None, **overrides):
+def make_runner(bank, mode, *, progress=None, allow_invalid=False, **overrides):
     request = Settings(mode=mode, early_scan_count=1, later_burst_count=1, scans_per_burst=1,
         final_scan_count=1, preliminary_scan_count=1, first_later_burst_s=.2,
         observation_limit_s=.5, tuning_settling_time_s=0.)
     request = replace(request, **overrides)
     plan = compile_plan(request)
-    assert plan.valid, plan.errors
+    if not allow_invalid:
+        assert plan.valid, plan.errors
     context = bank.factory.for_experiment("single_pump_scan_burst").for_mode(mode)
     operation = context.begin_operation(request.to_dict(), hardware=True)
     store = RunStore(operation.output_path, {"mode": mode, "settings": request.to_dict()})
@@ -458,3 +478,114 @@ def test_stuck_mircat_scan_state_after_stop_is_retained_and_faults_owner(transpo
     assert actual[field] is True
     assert actual["emission_on"] is False and actual["armed"] is False
     assert transports.sdk.closed
+
+
+def assert_only_qcl1_calls(sdk):
+    indexed = {"GetQclTuningRange", "GetQCLPulseRate", "GetQCLPulseWidth", "GetQCLCurrent", "SetQCLParams",
+        "GetWlTrigChanParams", "GetQCLPulseLimits", "GetQCLMinPulsedCurrent", "GetQCLMaxPulsedCurrent"}
+    for name, values in sdk.calls:
+        if name in indexed:
+            assert values[0] == 1, (name, values)
+        elif name == "TuneToWW":
+            assert values[2] == 1
+        elif name == "StartSweepScan":
+            assert values[6] == 1
+
+
+@pytest.mark.parametrize("saved_qcl", [2, 3, 4])
+def test_stale_saved_qcl_never_redirects_installed_reads_writes_or_restoration(transports, saved_qcl):
+    runner = make_runner(transports, "single", qcl=saved_qcl)
+    result = runner.prepare("preliminary")
+    assert result["complete"], result
+    assert runner.settings.qcl == 1
+    assert runner.plan.requested_settings.qcl == saved_qcl
+    assert_only_qcl1_calls(transports.sdk)
+    assert list(transports.sdk.qcls) == [1]
+    assert transports.sdk.qcls[1] == [2.1e6, 142., 420.]
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_visible_repetition_and_pulse_width_reach_external_clock_and_qcl1(transports, mode):
+    runner = make_runner(transports, mode, probe_rate_hz=1e6, probe_pulse_width_s=120e-9, probe_current_ma=440.)
+    result = runner.prepare("preliminary")
+    assert result["complete"], result
+    writes = [values for name, values in transports.sdk.calls if name == "SetQCLParams"]
+    assert writes[0] == [1, 2.1e6, 120., 440.]
+    assert writes[-1] == [1, 2.1e6, 142., 420.]
+    from control_app.devices.t660_service import _seconds_value
+    recipe = runner.adapter.recipe
+    assert recipe["frame_input_frequency_hz"] == 1e6
+    assert _seconds_value(recipe["probe_clock_recipe"]["channels"]["B"]["width"]) == pytest.approx(120e-9)
+    assert runner.settings.mircat_internal_pulse_rate_hz == 2.1e6
+    assert_only_qcl1_calls(transports.sdk)
+    modes = [values[:2] for name, values in transports.sdk.calls if name == "SetWlTrigParams"]
+    assert [2, 2] in modes  # Real external pulse and external process modes.
+
+
+def test_exact_internal_thirty_percent_from_ns_readback_is_accepted(transports):
+    transports.sdk.qcls[1] = [2e6, 150., 420.]
+    result = make_runner(transports, "single", probe_rate_hz=1e6).prepare("preliminary")
+    assert result["complete"], result
+    assert result["actual_settings"]["probe_pulse_width_s"] == 150 / 1e9
+    assert [1, 2e6, 150., 420.] in [values for name, values in transports.sdk.calls if name == "SetQCLParams"]
+
+
+@pytest.mark.parametrize("width_ns", [150.00001, 151.])
+def test_internal_duty_just_above_thirty_percent_is_rejected_before_emission(transports, width_ns):
+    transports.sdk.qcls[1] = [2e6, 150., 420.]
+    result = make_runner(transports, "single", allow_invalid=True, probe_rate_hz=1e6,
+        probe_pulse_width_s=width_ns / 1e9).prepare("preliminary")
+    assert not result["complete"] and "duty" in result["error"].lower(), result
+    assert "TurnEmissionOn" not in [name for name, values in transports.sdk.calls]
+    assert transports.coordinator.snapshot()["state"] == "free"
+
+
+def test_sdk_width_readback_over_thirty_percent_is_not_hidden_by_numeric_tolerance(transports):
+    transports.sdk.qcls[1] = [2e6, 150., 420.]
+    transports.sdk.overshoot_next_width_ns = .00002
+    result = make_runner(transports, "single", probe_rate_hz=1e6).prepare("preliminary")
+    assert not result["complete"] and "duty" in result["error"].lower(), result
+    assert "TurnEmissionOn" not in [name for name, values in transports.sdk.calls]
+    assert transports.sdk.qcls[1] == [2e6, 150., 420.]
+
+
+@pytest.mark.parametrize("constraint", ["internal_rate", "width", "current", "vendor_duty"])
+def test_actual_qcl1_vendor_constraints_remain_effective(transports, constraint):
+    overrides = {"probe_rate_hz": 1e6, "probe_pulse_width_s": 100e-9}
+    transports.sdk.qcls[1] = [2.1e6, 100., 420.]
+    if constraint == "internal_rate":
+        transports.sdk.pulse_limits[0] = 2e6
+    elif constraint == "width":
+        transports.sdk.pulse_limits[1] = 110.
+        overrides["probe_pulse_width_s"] = 120e-9
+    elif constraint == "current":
+        overrides["probe_current_ma"] = 1501.
+    else:
+        transports.sdk.pulse_limits[2] = 25.
+        overrides["probe_pulse_width_s"] = 130e-9
+    result = make_runner(transports, "single", **overrides).prepare("preliminary")
+    assert not result["complete"], result
+    assert "TurnEmissionOn" not in [name for name, values in transports.sdk.calls]
+    assert_only_qcl1_calls(transports.sdk)
+
+
+def test_rejected_external_trigger_mode_never_reaches_emission(transports):
+    transports.sdk.reject_external_trigger_mode = True
+    result = make_runner(transports, "single").prepare("preliminary")
+    assert not result["complete"] and "external" in result["error"].lower(), result
+    assert "TurnEmissionOn" not in [name for name, values in transports.sdk.calls]
+
+
+def test_restoration_readback_above_thirty_percent_retains_fault(transports):
+    transports.sdk.qcls[1] = [2e6, 150., 420.]
+    def arm_restoration_overshoot():
+        transports.sdk.overshoot_next_width_ns = .00002
+    transports.labone.on_poll = arm_restoration_overshoot
+    result = make_runner(transports, "single", probe_rate_hz=1e6).prepare("preliminary")
+    assert result["status"] == "cleanup_failed", result
+    assert any("duty" in error.lower() for error in result["cleanup_errors"])
+    assert transports.coordinator.snapshot()["state"] == "fault"
+    import json
+    restoration = json.loads((Path(result["output_path"]) / "records/restoration.json").read_text())
+    assert restoration["records"]["qcl-1-restored-pulse"]["pulse_width_ns"] > 150.
+    assert_only_qcl1_calls(transports.sdk)

@@ -6,21 +6,43 @@ after one pump trigger. Each tab has independent settings, records and output.
 
 Set the spectral range, scan speed, early coverage and total observation time.
 The application derives the scan interval, burst counts, later start times,
-device timing and acquisition rates. **Advanced** contains independent overrides;
-return an individual override to Auto to recalculate it. The summary above the
-plots shows the resulting schedule. Connected device operations obtain current
+device timing and acquisition rates. The always-visible **Advanced overrides**
+frame contains detector sample rate, filter order and time constant, probe
+**Repetition rate**, **Pulse width**, and scans per burst. Dual mode has independent
+sample and reference detector overrides. Return an individual override to Auto
+to recalculate it. The summary above the plots shows the resulting schedule.
+Connected device operations obtain current
 capabilities and preserve requested settings, resolved values and readbacks.
+Loading older preferences or a plan resets removed engineering controls to
+automatic values for a new acquisition. The visible overrides retain their
+individual values; saved source files and recorded runs remain unchanged.
 
-Use **Blank** to record an unpumped blank spectrum and **Sample** to record the
-unpumped sample. They use the same acquisition procedure. Matching records can
-be loaded and reused; changing descriptive sample or temperature metadata does
+The installed laser has one QCL. Every connected operation uses QCL1, including
+plans loaded with a historical QCL selection. Historical files retain their
+original selection for provenance; it does not select another device.
+Probe repetition rate in hertz multiplied by pulse width in seconds must be
+at most 0.30. The planner checks requested and hardware-quantized values and
+honors any stricter connected vendor limit.
+
+**Repetition rate** sets the external T660 probe trigger. **Pulse width** sets
+the MIRcat pulse duration and the corresponding T660 trigger width. The MIRcat
+internal pulse rate is preserved independently from its connected readback; it
+must exceed the external trigger rate, and its rate-times-width product must
+also satisfy the duty limit. A width can therefore be invalid even when the
+external trigger duty is exactly 30%. Both rates and the applied width are
+recorded and verified before emission.
+
+Use **Acquire blank** to record an unpumped blank spectrum in single-detector
+mode and **Acquire unpumped sample** to record the sample. They use the same
+acquisition procedure. Matching records can be loaded and reused; changing
+descriptive sample or temperature metadata does
 not change the procedure. Single-detector absorbance uses a compatible blank;
 relative changes can be measured without it.
 Dual-detector relative measurements use the simultaneous reference detector.
-**Start** acquires the pumped sequence. Missing normalization support leaves
+**Start pump sequence** acquires the pumped sequence. Missing normalization support leaves
 raw data available and the unsupported derived result unavailable.
 
-**Stop** cancels acquisition and retains partial native data. Device restoration
+**Abort** cancels acquisition and retains partial native data. Device restoration
 and saving complete before instrument ownership is released. A failed or
 interrupted sequence never fires an automatic replacement pump. **New run**
 starts a separate record. **Save Plan**, **Load Plan**, **Load Run** and **Export**

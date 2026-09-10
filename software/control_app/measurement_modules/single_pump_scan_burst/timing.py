@@ -11,13 +11,19 @@ from dataclasses import asdict, dataclass
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 from typing import Any, Mapping
 
-from .settings import Capabilities, Settings
+from .settings import Capabilities, PROBE_DUTY_CEILING, Settings
 
 
 def quantize(value: float, quantum: float, *, ceiling: bool = False) -> float:
     q = Decimal(str(quantum))
     return float((Decimal(str(value)) / q).to_integral_value(
         rounding=ROUND_CEILING if ceiling else ROUND_HALF_UP) * q)
+
+
+def duty_exceeds(rate_hz: float, width_s: float, limit: float = PROBE_DUTY_CEILING) -> bool:
+    """Compare unit-bearing decimal values without relaxing the 30% ceiling."""
+    maximum = min(Decimal(str(limit)), Decimal(str(PROBE_DUTY_CEILING)))
+    return Decimal(str(rate_hz)) * Decimal(str(width_s)) > maximum
 
 
 @dataclass(frozen=True)
@@ -120,6 +126,8 @@ def compile_block(settings: Settings, capabilities: Capabilities, *, block_id: s
 def probe_clock_recipe(settings: Settings, selected: Mapping[str, float]) -> dict[str, Any]:
     """Generic installed A/B/C topology using selected values, never Phase Scan defaults."""
     width = selected["probe_pulse_width_s"]
+    if duty_exceeds(selected["probe_rate_hz"], width):
+        raise ValueError("Probe repetition rate × pulse width must not exceed 30% duty")
     return {"stop_first": True, "trigger_source": "OFF", "predivider": 1,
         "gate_mode": 0, "burst_enabled": False,
         "clock": {"frequency": f"{selected['probe_rate_hz']:.12g}Hz", "shots": 0},

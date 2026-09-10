@@ -48,7 +48,16 @@ class BurstScientificAdapter:
         return compile_plan(requested, self.capabilities)
 
     def validate_plan(self, plan):
-        return tuple(plan.errors)
+        messages = []
+        limit = min(.30, plan.capabilities.probe_duty_max)
+        for error in plan.errors:
+            if "internal rate" in error and "duty limit" in error:
+                error = f"Shorten Pulse width: the laser's internal pulse duty would exceed {limit:.0%}."
+            elif "repetition rate" in error and "duty limit" in error:
+                error = f"Reduce Repetition rate or Pulse width: emitted pulse duty would exceed {limit:.0%}."
+            if error not in messages:
+                messages.append(error)
+        return tuple(messages)
 
     def summarize_plan(self, plan):
         if not plan.valid:
@@ -79,6 +88,8 @@ class BurstScientificAdapter:
                 ("Later bursts", f"{settings.later_burst_count} × {settings.scans_per_burst} scans"),
                 ("Observation", duration(settings.observation_limit_s)),
                 ("HF2LI rate", rates),
+                ("Pulse duty", f"{settings.probe_rate_hz * settings.probe_pulse_width_s * 100:.3g}% emitted / "
+                    f"{settings.mircat_internal_pulse_rate_hz * settings.probe_pulse_width_s * 100:.3g}% internal (max {min(.30, plan.capabilities.probe_duty_max) * 100:g}%)"),
                 ("Estimated data", data),
                 ("Total time", "≈" + duration(estimates.get("wall_time_min_s"))))
 
@@ -244,7 +255,7 @@ class BurstScientificAdapter:
 
     def save_plan(self, path, settings, plan):
         write_json(Path(path), {"schema_version": "single-pump-scan-burst-plan/1", "experiment_id": self.context.experiment_id,
-            "mode": self.context.mode, "settings": settings, "compiled_preview": json_value(plan)})
+            "mode": self.context.mode, "settings": self.settings_widget.normalize_settings(settings), "compiled_preview": json_value(plan)})
 
     def load_plan(self, path):
         record = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -252,8 +263,9 @@ class BurstScientificAdapter:
             raise ValueError("Choose a single-pump scan-burst plan.")
         if record.get("mode") != self.context.mode:
             raise ValueError("Choose a plan saved from this detector mode.")
-        self.make_plan(record["settings"])
-        return record["settings"]
+        settings = self.settings_widget.normalize_settings(record["settings"])
+        self.make_plan(settings)
+        return settings
 
     def load_run(self, path):
         return self._with_display(load_run(path, expected_mode=self.context.mode))

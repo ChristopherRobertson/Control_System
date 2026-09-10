@@ -5,8 +5,8 @@ from dataclasses import asdict, dataclass, field
 from math import ceil, isfinite, log10
 from typing import Any, Mapping
 
-from .settings import Capabilities, EXPERIMENT_ID, Settings, resolve_settings
-from .timing import BurstBlock, compile_block, probe_clock_recipe, quantize
+from .settings import Capabilities, EXPERIMENT_ID, INSTALLED_QCL, PROBE_DUTY_CEILING, Settings, resolve_settings
+from .timing import BurstBlock, compile_block, duty_exceeds, probe_clock_recipe, quantize
 
 PLAN_VERSION = 1
 ANALYSIS_VERSION = "single-pump-bursts-1"
@@ -132,6 +132,14 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
     for name in ("frame_capacity", "predivider_max", "train_count_max"):
         if type(getattr(cap, name)) is not int or getattr(cap, name) <= 0:
             errors.append(f"Capability {name} must be a positive integer")
+    for name in ("probe_rate_max_hz", "probe_pulse_width_max_s", "probe_current_max_ma", "mircat_internal_rate_max_hz", "mircat_internal_width_max_s"):
+        value = getattr(cap, name)
+        if value is not None and (not _finite_number(value) or value <= 0):
+            errors.append(f"Capability {name} must be finite and positive when supplied")
+    if cap.probe_current_min_ma is not None and (not _finite_number(cap.probe_current_min_ma) or cap.probe_current_min_ma < 0):
+        errors.append("Capability probe_current_min_ma must be finite and nonnegative when supplied")
+    if all(_finite_number(value) for value in (cap.probe_current_min_ma, cap.probe_current_max_ma)) and cap.probe_current_min_ma > cap.probe_current_max_ma:
+        errors.append("Installed pulsed-current bounds are reversed")
     if s.blank_source not in {"acquire", "loaded"}:
         errors.append("blank_source must be acquire or loaded")
     if s.probe_during_wait:
@@ -141,7 +149,7 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         errors.append("mode must be single or dual")
     required_positive = ["scan_start_cm1", "scan_stop_cm1", "scan_speed_cm1_s", "scan_interval_s",
         "observation_limit_s", "sample_rate_hz", "timing_rate_hz", "hf2_filter_tc_s",
-        "sample_input_range_v", "probe_rate_hz", "probe_pulse_width_s", "early_observation_s",
+        "sample_input_range_v", "probe_rate_hz", "probe_pulse_width_s", "mircat_internal_pulse_rate_hz", "early_observation_s",
         "pump_fire_to_q_s", "pump_fire_width_s", "pump_q_width_s", "process_width_s"]
     if s.mode == "dual":
         required_positive += ["reference_rate_hz", "reference_filter_tc_s", "reference_input_range_v"]
@@ -171,13 +179,12 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
     for name in ("hf2_filter_order",) + (("reference_filter_order",) if s.mode == "dual" else ()):
         if type(getattr(s, name)) is not int or not 1 <= getattr(s, name) <= 8:
             errors.append(f"{name} must be a supported integer order 1–8")
-    if type(s.qcl) is not int or not 1 <= s.qcl <= 4:
-        errors.append("qcl must identify an installed QCL (1–4)")
-    elif cap.qcl_ranges and all(_finite_number(v) for v in (s.scan_start_cm1, s.scan_stop_cm1)):
+    installed_ranges = tuple(row for row in cap.qcl_ranges if row.get("qcl") == INSTALLED_QCL)
+    if installed_ranges and all(_finite_number(v) for v in (s.scan_start_cm1, s.scan_stop_cm1)):
         lower, upper = sorted((s.scan_start_cm1, s.scan_stop_cm1))
-        if not any(r.get("qcl") == s.qcl and r.get("minimum_cm1", float("inf")) <= lower and
-                   r.get("maximum_cm1", -float("inf")) >= upper for r in cap.qcl_ranges):
-            errors.append("Selected QCL does not cover both requested scan endpoints")
+        if not any(r.get("minimum_cm1", float("inf")) <= lower and
+                   r.get("maximum_cm1", -float("inf")) >= upper for r in installed_ranges):
+            errors.append("Installed QCL 1 does not cover both requested scan endpoints")
     if len(set((*s.demod_indices, s.timing_demod))) != len(s.demod_indices) + 1:
         errors.append("Sample/reference/timing demodulators must be distinct")
     if s.sample_demod != 0 or (s.mode == "dual" and s.reference_demod != 3) or s.timing_demod != 2:
@@ -265,8 +272,28 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
             errors.append(f"{name} quantizes to zero on the installed edge grid")
     if errors:
         return Plan(s, cap, errors=tuple(errors), warnings=tuple(warnings), requested_settings=requested)
-    if selected["probe_pulse_width_s"] * selected["probe_rate_hz"] > cap.probe_duty_max:
-        errors.append("Probe pulse width × rate exceeds the manufacturer's duty limit")
+    duty_limit = min(PROBE_DUTY_CEILING, cap.probe_duty_max)
+    for label, rate, width in (("Requested", s.probe_rate_hz, s.probe_pulse_width_s),
+                               ("Quantized", selected["probe_rate_hz"], selected["probe_pulse_width_s"])):
+        if duty_exceeds(rate, width, duty_limit):
+            errors.append(f"{label} probe repetition rate × pulse width exceeds the {duty_limit:.0%} duty limit")
+        if cap.probe_rate_max_hz is not None and rate > cap.probe_rate_max_hz:
+            errors.append(f"{label} probe rate exceeds the installed external-probe rate limit")
+        if cap.probe_pulse_width_max_s is not None and width > cap.probe_pulse_width_max_s:
+            errors.append(f"{label} probe pulse width exceeds the installed pulse-width limit")
+        if s.mircat_internal_pulse_rate_hz <= rate:
+            errors.append(f"{label} external probe rate must be below the preserved MIRcat internal acceptance rate")
+        if duty_exceeds(s.mircat_internal_pulse_rate_hz, width, duty_limit):
+            errors.append(f"{label} MIRcat internal rate × optical pulse width exceeds the {duty_limit:.0%} duty limit")
+        if cap.mircat_internal_width_max_s is not None and width > cap.mircat_internal_width_max_s:
+            errors.append(f"{label} optical pulse width exceeds the installed MIRcat pulse-width limit")
+    if cap.mircat_internal_rate_max_hz is not None and s.mircat_internal_pulse_rate_hz > cap.mircat_internal_rate_max_hz:
+        errors.append("Preserved MIRcat internal rate exceeds the installed pulse-rate limit")
+    if s.probe_current_ma is not None:
+        if cap.probe_current_min_ma is not None and s.probe_current_ma < cap.probe_current_min_ma:
+            errors.append("Probe current is below the installed pulsed-current limit")
+        if cap.probe_current_max_ma is not None and s.probe_current_ma > cap.probe_current_max_ma:
+            errors.append("Probe current exceeds the installed pulsed-current limit")
     if s.probe_reference_delay_s + selected["probe_pulse_width_s"] + 62.5e-9 >= 1 / selected["probe_rate_hz"]:
         errors.append("Probe delay/width violates the T660 repetition dead time")
     divider = ceil(s.scan_interval_s * selected["probe_rate_hz"] - 1e-9)
@@ -366,6 +393,10 @@ def compile_plan(settings: Settings | Mapping[str, Any], capabilities: Capabilit
         "longest_observation_s": s.observation_limit_s, "native_bytes": native_bytes, "total_storage_bytes": total_storage_bytes,
         "native_estimate_basis": "48 bytes/detector sample + 24 bytes/timing sample across entire observation, ×1.25 retention allowance",
         "peak_memory_bytes": peak_memory_bytes, "aggregate_rate_hz": aggregate,
+        "external_probe_duty_fraction": selected["probe_rate_hz"] * selected["probe_pulse_width_s"],
+        "mircat_internal_duty_fraction": s.mircat_internal_pulse_rate_hz * selected["probe_pulse_width_s"],
+        "probe_duty_limit": duty_limit,
+        "internal_acceptance_margin_hz": s.mircat_internal_pulse_rate_hz - selected["probe_rate_hz"],
         "memory_estimate_basis": "full finite frame/block metadata ×3, plus three native chunks and four copies of the largest full block for reconstruction",
         "blank_source": s.blank_source if s.mode == "single" else "simultaneous matched reference",
         "blank_observation_s": blank_observation_s,

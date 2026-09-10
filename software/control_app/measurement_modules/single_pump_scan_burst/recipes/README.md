@@ -2,16 +2,22 @@
 
 `compile_plan` builds a finite recipe from five main inputs: spectral start/stop,
 scan speed, early observation coverage and total observation duration. Each
-Advanced value left automatic is resolved independently from installed readbacks,
+override left automatic is resolved independently from installed readbacks,
 module defaults and the requested scan. Overriding one value leaves the others
 automatic. The retained plan contains both requested and resolved settings.
 
-Connected discovery selects the QCL covering both spectral endpoints and reads
-its pulse parameters/current. HF2LI rates and filter settings are selected from
+Connected discovery reads QCL1's spectral range and pulse parameters/current.
+The installed laser contains exactly one QCL; all operations use QCL1 even when
+historical requested settings name another channel. HF2LI rates and filter settings are selected from
 supported values within aggregate throughput. Provisional offline requests are
 labeled as such and resolved again against connected capabilities. The maintained
-2 MHz/150 ns probe recipe and nominal 179830 ns Fire-to-Q-switch delay supply
-fallbacks; the latter is a command delay, not a measured optical correction.
+2 MHz external trigger and 2.1 MHz/142 ns internal MIRcat configuration supply
+fallbacks. Connected operation preserves the independent MIRcat internal rate;
+the visible repetition override sets the external T660 rate and the visible
+pulse-width override sets the MIRcat pulse width and T660 trigger width. The
+internal rate must exceed the external rate, and both rate-times-width products
+must satisfy the duty limit. The nominal 179830 ns Fire-to-Q-switch delay is a
+command delay, not a measured optical correction.
 Material, temperature, calibration, promotion and approval metadata do not gate
 planning or select operating values.
 
@@ -44,6 +50,8 @@ Timing limits are sourced from the maintained T660 Manual F5: 10 ps edge grid,
 80 ns–10 s train spacing on a 20 ns grid. Nonzero train counts are deliberately
 unused because the frozen host uploader supports the explicit one-pulse frame
 architecture. These command grids do not establish optical resolution or IRF.
-The planner checks timing, rate, duty, frame capacity, memory and declared storage
+The planner checks requested and quantized rate-times-width duty against the
+hard 0.30 ceiling and any stricter connected vendor limit. It also checks timing,
+rate, frame capacity, memory and declared storage
 and exposure budgets before creating or uploading an oversized table. Dark waits
 disable probe channel B while retaining reference A and the original time epoch.

@@ -16,7 +16,7 @@ from control_app.measurement_modules.single_pump_scan_burst.acquisition import (
 )
 from control_app.measurement_host.context import ContextFactory
 from control_app.measurement_modules.single_pump_scan_burst.planner import compile_plan, compile_preliminary
-from control_app.measurement_modules.single_pump_scan_burst.settings import example_settings
+from control_app.measurement_modules.single_pump_scan_burst.settings import Capabilities, example_settings
 
 
 def _native_streams(*, descending=False, missing_end=False, marker_count=3):
@@ -55,7 +55,7 @@ def test_incomplete_sweep_activity_cannot_be_accepted_as_a_complete_scan():
 
 def _adapter(*, marker_interval=25., requested_rate=1000000.):
     settings = replace(example_settings(), tuning_settling_time_s=0., probe_rate_hz=requested_rate)
-    plan = compile_plan(settings)
+    plan = compile_plan(settings, Capabilities(operating_values={"mircat_internal_pulse_rate_hz": 2_100_000.}))
     assert plan.valid, plan.errors
     operation = SimpleNamespace(configuration={}, instance_id=settings.instance_id, hardware=False)
     store = SimpleNamespace(append_event=lambda *a, **kw: None, save_record=lambda *a, **kw: None)
@@ -69,6 +69,7 @@ def _adapter(*, marker_interval=25., requested_rate=1000000.):
     adapter.timing.preload_frame_table.return_value = {"physical_frame_count": len(plan.blocks[0].frames)}
     adapter.qcl.is_tuned.return_value = True
     adapter.qcl.get_scan_waiting_process_trigger.return_value = True
+    adapter.qcl.set_external_sweep_trigger_params.return_value = {"pulse_mode": 2, "process_trigger_mode": 2}
     adapter.hf.get_oscillator_frequency.return_value = plan.selected_values["probe_rate_hz"]["selected"]
     adapter.hf.read_acquisition_health.return_value = {"reference_locked": True, "clock_locked": True, "overload": False}
     adapter.qcl.get_sweep_parameters.return_value = {
@@ -91,7 +92,10 @@ def test_burst_programming_uses_actual_host_service_signatures_and_selected_cloc
     arguments = adapter.timing.preload_frame_table.call_args.kwargs
     assert arguments["input_frequency_hz"] == plan.selected_values["probe_rate_hz"]["selected"]
     assert arguments["predivider"] == plan.blocks[0].predivider
-    assert adapter.recipe["qcl_pulse_parameters"]["pulse_rate_hz"] == plan.selected_values["probe_rate_hz"]["selected"]
+    assert adapter.recipe["qcl_pulse_parameters"]["pulse_rate_hz"] == plan.settings.mircat_internal_pulse_rate_hz
+    assert adapter.recipe["qcl_pulse_parameters"]["pulse_rate_hz"] > arguments["input_frequency_hz"]
+    assert adapter.recipe["qcl_pulse_parameters"]["pulse_width_ns"] == pytest.approx(
+        plan.selected_values["probe_pulse_width_s"]["selected"] * 1e9)
     np.testing.assert_array_equal(adapter.marker_targets, [1900., 1925., 1950.])
 
 
@@ -171,22 +175,27 @@ def test_connected_adapter_preflight_capture_and_restore_through_injected_host_s
     hf._get_node.side_effect = node
     qcl.get_num_installed_qcls.return_value = 1
     qcl.get_qcl_tuning_range.return_value = {"min_cm1": 1850., "max_cm1": 2000.}
-    qcl.get_qcl_pulse_rate.return_value = settings.probe_rate_hz
+    qcl.get_qcl_pulse_rate.return_value = 2_100_000.
     qcl.get_qcl_pulse_width.return_value = settings.probe_pulse_width_s * 1e9
     qcl.get_qcl_current.return_value = settings.probe_current_ma
+    qcl.get_qcl_pulse_limits.return_value = {
+        "qcl": 1, "max_pulse_rate_hz": 2_200_000., "max_pulse_width_ns": 500., "max_duty_cycle": 30.}
+    qcl.get_qcl_current_limits.return_value = (0., 500.)
     qcl.set_qcl_pulse_params.side_effect = lambda **values: {**values,
         "preserved_current_ma": settings.probe_current_ma, "current_ma_used": values["current_ma"]}
     qcl.get_wavelength_trigger_params.return_value = {"pulse_mode": 1, "process_trigger_mode": 1,
         "start": 1900., "stop": 1950., "interval": 25., "units": 2, "dwell_us": 0, "after_off_us": 0}
     qcl.get_wavelength_trigger_pulse_width_us.return_value = 20
+    qcl.set_external_sweep_trigger_params.return_value = {"pulse_mode": 2, "process_trigger_mode": 2}
     qcl.get_wavelength_trigger_channel_params.return_value = {"channel": 1, "units": 2, "units_name": "cm-1",
         "start": 1900., "stop": 1950., "interval": 5., "num_triggers": 11}
     qcl.get_sweep_parameters.return_value = {"start_cm1": 1900., "stop_cm1": 1950.,
         "scan_rate_cm1_s": 5000., "repetitions": 1}
     qcl.is_tuned.return_value = qcl.get_scan_waiting_process_trigger.return_value = True
     qcl.is_emission_on.return_value = qcl.is_laser_armed.return_value = False
-    qcl.read_state.return_value = {key: False for key in ("emission_on", "armed", "scan_in_progress",
-        "scan_active", "scan_paused", "scan_waiting_process_trigger")}
+    qcl.get_scan_status.return_value = {key: False for key in ("scan_in_progress", "scan_active", "scan_paused")}
+    qcl.start_sweep_scan.side_effect = lambda **_: setattr(qcl.get_scan_waiting_process_trigger, "return_value", True)
+    qcl.stop_scan_if_needed.side_effect = lambda: setattr(qcl.get_scan_waiting_process_trigger, "return_value", False)
     def reply(value):
         return {"ok": True, "response": str(value)}
     for unit in (clock, timing):

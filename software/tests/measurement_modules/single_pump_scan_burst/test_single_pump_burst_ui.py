@@ -85,7 +85,7 @@ def test_discovery_exact_tabs_compact_essentials_no_operator_gates(qt_app, tmp_p
     from control_app.measurement_host.registry import discover_modules, create_registered_tabs
     from control_app.measurement_host.presentation import CompactMeasurementPanel
     from control_app.measurement_modules.single_pump_scan_burst.widgets import ESSENTIALS
-    from PySide6.QtWidgets import QDoubleSpinBox
+    from PySide6.QtWidgets import QDoubleSpinBox, QGroupBox
     def forbidden(**kwargs):
         raise AssertionError("Construction must not instantiate a device")
     factory = ContextFactory(save_root_provider=lambda: tmp_path, ownership=object(), real_device_factories={"hf2li": forbidden})
@@ -108,10 +108,21 @@ def test_discovery_exact_tabs_compact_essentials_no_operator_gates(qt_app, tmp_p
         assert "sample_id" not in panel.settings_widget.controls
         assert "measured_temperature_k" not in panel.settings_widget.controls
         assert "hardware_evidence" not in panel.settings_widget.controls
-        assert not panel.advanced_content.isVisible()
+        panel._capability_check_attempted = True
+        panel.show()
+        qt_app.processEvents()
+        assert isinstance(panel.advanced_content, QGroupBox)
+        assert not panel.advanced_content.isCheckable()
+        assert panel.advanced_content.isVisible()
+        assert all(control.isVisible() for control in panel.settings_widget.override_controls.values())
+        assert "qcl" not in panel.settings_widget.controls
+        assert "probe_current_ma" not in panel.settings_widget.controls
+        assert "timing_rate_hz" not in panel.settings_widget.controls
+        assert len(panel.settings_widget.override_controls) == (6 if panel.context.mode == "single" else 9)
         assert panel.preliminary_button.isEnabled()
         assert panel.adapter.hardware_required("measurement", {"_execution": "simulated"})
         assert not panel.adapter.hardware_required("load_blank", {})
+        panel.hide()
         panel.deleteLater()
 
 
@@ -242,6 +253,96 @@ def test_auto_overrides_remain_independent_and_saved_plan_keeps_auto(qt_app, tmp
         other.adapter.load_plan(path)
     panel.deleteLater()
     other.deleteLater()
+
+
+def test_probe_display_units_saved_channel_normalization_and_duty_plumbing(qt_app, tmp_path):
+    panel = create_widget(tmp_path)
+    rate = panel.settings_widget.controls["probe_rate_hz"]
+    width = panel.settings_widget.controls["probe_pulse_width_s"]
+    rate.setEditText("1000")
+    width.setEditText("400")
+    assert panel.plan is None
+    assert "duty" in panel.validation.text().lower()
+    rate.setEditText("300")
+    width.setEditText("150")
+    assert panel.plan is None
+    assert "Shorten Pulse width" in panel.validation.text()
+    width.setEditText("100")
+    assert panel.plan is not None
+    requested = panel.adapter.read_settings()
+    assert requested["probe_rate_hz"] == 300000.
+    assert requested["probe_pulse_width_s"] == pytest.approx(100e-9)
+    assert requested["qcl"] == panel.plan.settings.qcl == 1
+    assert dict(panel.adapter.summarize_plan(panel.plan))["Pulse duty"].startswith("3%")
+    path = tmp_path / "fixed-channel.json"
+    panel.adapter.save_plan(path, requested, panel.plan)
+    legacy = json.loads(path.read_text(encoding="utf-8"))
+    legacy["settings"]["qcl"] = 3
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+    restored = panel.adapter.load_plan(path)
+    assert restored["qcl"] == 1
+    assert json.loads(path.read_text(encoding="utf-8"))["settings"]["qcl"] == 3
+    panel.adapter.apply_settings(restored)
+    assert rate.currentText() == "300" and width.currentText() == "100"
+    panel.begin("preliminary")
+    wait_for(qt_app, lambda: not panel.command_running())
+    acquisition = InjectedRunner.calls[-1]
+    assert acquisition.plan.settings.qcl == 1
+    assert acquisition.plan.settings.probe_rate_hz == 300000.
+    assert acquisition.plan.settings.probe_pulse_width_s == pytest.approx(100e-9)
+    assert acquisition.operation.settings["probe_rate_hz"] == 300000.
+    assert acquisition.operation.settings["probe_pulse_width_s"] == pytest.approx(100e-9)
+    panel.deleteLater()
+
+
+def test_supported_filter_choices_keep_each_detector_independent(qt_app, tmp_path):
+    from control_app.measurement_modules.single_pump_scan_burst.settings import Capabilities
+    panel = create_widget(tmp_path, "dual")
+    settings = panel.settings_widget
+    settings.set_capabilities(Capabilities(sample_rates_hz=(10000., 20000.), reference_rates_hz=(5000.,),
+        sample_filter_orders=(1, 2), reference_filter_orders=(1, 3),
+        sample_timeconstants_by_order={1: (1e-6,), 2: (2e-6,)},
+        reference_timeconstants_by_order={1: (3e-6,), 3: (4e-6,)}))
+    controls = settings.override_controls
+    assert float(controls["sample_rate_hz"].itemText(1)) == 10000.
+    assert float(controls["reference_rate_hz"].itemText(1)) == 5000.
+    controls["hf2_filter_order"].setEditText("2")
+    assert controls["hf2_filter_tc_s"].itemText(1) == "2e-06"
+    assert controls["reference_filter_tc_s"].itemText(1) == "3e-06"
+    values = settings.read_settings()
+    assert values["hf2_filter_order"] == 2
+    assert values["reference_filter_order"] is values["reference_filter_tc_s"] is None
+    panel.deleteLater()
+
+
+def test_removed_engineering_overrides_restore_auto_without_editing_old_plan(qt_app, tmp_path):
+    panel = create_widget(tmp_path, "dual")
+    values = panel.adapter.read_settings()
+    values.update(qcl=3, early_scan_count=99, later_burst_count=2, final_scan_count=12,
+        scan_interval_s=.5, first_scan_delay_s=.02, sample_input_range_v=.1,
+        reference_input_range_v=.2, timing_rate_hz=7000., probe_current_ma=123.,
+        pump_fire_to_q_s=.01, schedule_kind="information_based", later_burst_times_s=[1., 2.],
+        sample_rate_hz=10000., hf2_filter_order=2, reference_rate_hz=None,
+        probe_rate_hz=300000., probe_pulse_width_s=100e-9, scans_per_burst=2)
+    panel.adapter.apply_settings(values)
+    restored = panel.adapter.read_settings()
+    for field in ("early_scan_count", "later_burst_count", "final_scan_count", "scan_interval_s",
+                  "first_scan_delay_s", "sample_input_range_v", "reference_input_range_v",
+                  "timing_rate_hz", "probe_current_ma", "pump_fire_to_q_s"):
+        assert restored[field] is None
+    assert restored["qcl"] == 1
+    assert restored["schedule_kind"] == "logarithmic" and restored["later_burst_times_s"] == ()
+    assert restored["sample_rate_hz"] == 10000. and restored["hf2_filter_order"] == 2
+    assert restored["reference_rate_hz"] is None and restored["scans_per_burst"] == 2
+    path = tmp_path / "old-engineering-settings.json"
+    record = {"schema_version": "single-pump-scan-burst-plan/1", "experiment_id": "single_pump_scan_burst",
+              "mode": "dual", "settings": values}
+    path.write_text(json.dumps(record), encoding="utf-8")
+    loaded = panel.adapter.load_plan(path)
+    assert loaded["probe_current_ma"] is loaded["timing_rate_hz"] is None
+    assert loaded["probe_rate_hz"] == 300000. and loaded["probe_pulse_width_s"] == pytest.approx(100e-9)
+    assert json.loads(path.read_text(encoding="utf-8"))["settings"]["probe_current_ma"] == 123.
+    panel.deleteLater()
 
 
 def test_frozen_output_and_abort_are_scoped(qt_app, tmp_path):

@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields, replace
 from copy import deepcopy
-from math import ceil, isfinite, log10
+from math import ceil, floor, isfinite, log10
 from typing import Any, Mapping
 
 EXPERIMENT_ID = "single_pump_scan_burst"
 SCHEMA_VERSION = 1
+INSTALLED_QCL = 1
+PROBE_DUTY_CEILING = 0.30
 CONDITION_PROFILES = {
     "77K-HRP-G-S": {"protein": "HRP-CO", "architecture_id": "ARC-77-HRP-SPB",
                     "nominal_temperature_k": 77.0, "populations": ("sample-fitted HRP populations",)},
@@ -70,6 +72,7 @@ class Settings:
     qcl: int | None = None
     probe_rate_hz: float | None = None
     probe_pulse_width_s: float | None = None
+    mircat_internal_pulse_rate_hz: float | None = None
     probe_current_ma: float | None = None
     probe_reference_delay_s: float = 0.0
     pump_fire_to_q_s: float | None = None
@@ -156,6 +159,12 @@ class Capabilities:
     train_spacing_quantum_s: float = 20e-9
     frame_guard_s: float = 1e-6
     probe_duty_max: float = 0.30
+    probe_rate_max_hz: float | None = None
+    probe_pulse_width_max_s: float | None = None
+    mircat_internal_rate_max_hz: float | None = None
+    mircat_internal_width_max_s: float | None = None
+    probe_current_min_ma: float | None = None
+    probe_current_max_ma: float | None = None
     hf2_aggregate_rate_max_hz: float = 700000.0
     sample_rates_hz: tuple[float, ...] = ()
     reference_rates_hz: tuple[float, ...] = ()
@@ -202,7 +211,7 @@ AUTOMATIC_FIELDS = ("scan_interval_s", "first_scan_delay_s", "early_scan_count",
     "sample_rate_hz", "reference_rate_hz", "timing_rate_hz", "detector_matching_time_tolerance_s",
     "wavenumber_matching_tolerance_cm1", "hf2_filter_tc_s", "hf2_filter_order",
     "reference_filter_tc_s", "reference_filter_order", "sample_input_range_v", "reference_input_range_v",
-    "qcl", "probe_rate_hz", "probe_pulse_width_s", "probe_current_ma", "pump_fire_to_q_s",
+    "qcl", "probe_rate_hz", "probe_pulse_width_s", "mircat_internal_pulse_rate_hz", "probe_current_ma", "pump_fire_to_q_s",
     "pump_fire_width_s", "pump_q_width_s", "process_width_s", "configuration_time_s", "tuning_settling_time_s",
     "controls_time_s", "restoration_time_s", "processing_time_s", "upload_seconds_per_frame")
 
@@ -218,7 +227,8 @@ def resolve_settings(settings: Settings, *, capabilities: Capabilities | None = 
     """Resolve each automatic field independently, without qualification gates.
 
     Live operating readbacks take precedence over module configuration defaults.
-    Explicit non-None user values remain overrides. Legacy evidence and sample
+    Explicit non-None user values remain overrides except legacy QCL routing:
+    the installed single-channel MIRcat always resolves to QCL 1. Evidence and sample
     metadata are preserved but never consulted to choose numerical settings.
     The deprecated promoted_values argument is accepted for compatibility only.
     """
@@ -247,35 +257,46 @@ def resolve_settings(settings: Settings, *, capabilities: Capabilities | None = 
         values["settings_sources"][name] = f"automatic: {source}"
         return value
 
-    ranges = []
-    if _positive(values["scan_start_cm1"]) and _positive(values["scan_stop_cm1"]):
-        lo, hi = sorted((values["scan_start_cm1"], values["scan_stop_cm1"]))
-        ranges = [r for r in cap.qcl_ranges if r.get("minimum_cm1", float("inf")) <= lo and r.get("maximum_cm1", -float("inf")) >= hi]
-    selected_qcl = choose("qcl", int(ranges[0]["qcl"]) if ranges else 1,
-        "installed QCL covering both scan endpoints" if ranges else "provisional QCL 1 until installed range readback",
-        use_live=not bool(ranges))
-    # Current and pulse settings belong to a particular QCL. Preserve each
-    # installed channel's readback so changing spectral endpoints can resolve
-    # another channel without borrowing the previous channel's operating values.
+    values["qcl"] = INSTALLED_QCL
+    values["settings_sources"]["qcl"] = "installed single-QCL instrument: QCL 1"
+    # Historical multi-QCL caches may contain useful QCL 1 readbacks, but never
+    # select a channel or lend another channel's operating values to this device.
     qcl_parameters = live.get("qcl_parameters", ())
     if isinstance(qcl_parameters, Mapping):
-        qcl_parameters = [{"qcl": int(key), **record} for key, record in qcl_parameters.items()]
-    matching_qcl = next((record for record in qcl_parameters if record.get("qcl") == selected_qcl), None)
-    if live.get("qcl") is not None and live["qcl"] != selected_qcl:
-        for name in ("probe_rate_hz", "probe_pulse_width_s", "probe_current_ma"):
+        matching_qcl = qcl_parameters.get(INSTALLED_QCL, qcl_parameters.get(str(INSTALLED_QCL)))
+    else:
+        matching_qcl = next((record for record in qcl_parameters if isinstance(record, Mapping) and record.get("qcl") == INSTALLED_QCL), None)
+    if live.get("qcl") is not None and live["qcl"] != INSTALLED_QCL:
+        for name in ("probe_rate_hz", "probe_pulse_width_s", "mircat_internal_pulse_rate_hz", "probe_current_ma"):
             live.pop(name, None)
-    if matching_qcl is not None:
-        for source, target in (("pulse_rate_hz", "probe_rate_hz"), ("current_ma", "probe_current_ma")):
+    if isinstance(matching_qcl, Mapping):
+        for source, target in (("pulse_rate_hz", "mircat_internal_pulse_rate_hz"), ("current_ma", "probe_current_ma")):
             if matching_qcl.get(source) is not None:
                 live[target] = matching_qcl[source]
         if matching_qcl.get("pulse_width_ns") is not None:
-            live["probe_pulse_width_s"] = matching_qcl["pulse_width_ns"] * 1e-9
+            live["probe_pulse_width_s"] = matching_qcl["pulse_width_ns"] / 1e9
 
     # Standing installed pulse topology; each value may be replaced independently
     # by its live readback or explicit override. A missing laser current is kept
     # as None so the service preserves the device's existing current.
-    choose("probe_rate_hz", 2_000_000.0, "installed 2 MHz reference/probe configuration")
-    choose("probe_pulse_width_s", 150e-9, "installed 150 ns probe pulse configuration")
+    # The internal acceptance clock is not the external optical-opportunity
+    # rate. Connected readback always wins over historical saved rate metadata.
+    if live.get("mircat_internal_pulse_rate_hz") is not None:
+        values["mircat_internal_pulse_rate_hz"] = live["mircat_internal_pulse_rate_hz"]
+        values["settings_sources"]["mircat_internal_pulse_rate_hz"] = "preserved QCL 1 internal acceptance-rate readback"
+    internal_rate = choose("mircat_internal_pulse_rate_hz", 2_100_000.0, "installed 2.1 MHz MIRcat acceptance-clock configuration")
+    choose("probe_pulse_width_s", 142e-9, "installed 142 ns MIRcat optical pulse configuration")
+    external_target = live.get("probe_rate_hz", configured.get("probe_rate_hz", 2_000_000.0))
+    quantum = cap.synthesizer_quantum_hz
+    if _positive(internal_rate) and _positive(external_target) and _positive(quantum):
+        external_target = min(external_target, (ceil(internal_rate / quantum) - 1) * quantum)
+        if _positive(values["probe_pulse_width_s"]) and _positive(cap.probe_duty_max):
+            external_target = min(external_target, floor(min(PROBE_DUTY_CEILING, cap.probe_duty_max) / values["probe_pulse_width_s"] / quantum) * quantum)
+        if _positive(cap.probe_rate_max_hz):
+            external_target = min(external_target, floor(cap.probe_rate_max_hz / quantum) * quantum)
+    if values["probe_rate_hz"] is None:
+        values["probe_rate_hz"] = external_target
+        values["settings_sources"]["probe_rate_hz"] = "automatic external carrier within preserved internal acceptance clock and duty limits"
     choose("probe_current_ma", None, "preserve existing QCL current")
     choose("sample_input_range_v", 1.0, "installed HF2LI 1 V input range")
     choose("reference_input_range_v", 1.0, "installed HF2LI 1 V input range")

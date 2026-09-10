@@ -8,14 +8,14 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QTimer, Signal
-from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
-    QLineEdit, QWidget)
+from PySide6.QtWidgets import (QBoxLayout, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
+    QGridLayout, QLabel, QLineEdit, QWidget)
 
 from control_app.measurement_host import TabHandle
 from control_app.measurement_host.presentation import CompactMeasurementPanel, LinkedSliceControl, PlotPanel
 from .adapter import BurstScientificAdapter
 from .persistence import iter_chunks, json_value
-from .settings import Settings
+from .settings import AUTOMATIC_FIELDS, Settings
 
 
 ESSENTIALS = (
@@ -26,18 +26,19 @@ ESSENTIALS = (
     ("observation_limit_s", "Total observation", " s", 1200., .001, 100000000., 3),
 )
 ADVANCED = (
-    ("early_scan_count", "Early scans"), ("later_burst_count", "Later bursts"),
-    ("scans_per_burst", "Scans per burst"), ("scan_interval_s", "Scan spacing (s)"),
-    ("first_scan_delay_s", "First scan delay (s)"), ("first_later_burst_s", "First later burst (s)"),
-    ("final_scan_count", "Final scans"), ("sample_rate_hz", "Sample rate (Hz)"),
-    ("hf2_filter_tc_s", "Sample filter (s)"), ("hf2_filter_order", "Sample filter order"),
-    ("reference_rate_hz", "Reference rate (Hz)"), ("reference_filter_tc_s", "Reference filter (s)"),
-    ("reference_filter_order", "Reference filter order"), ("sample_input_range_v", "Sample range (V)"),
-    ("reference_input_range_v", "Reference range (V)"), ("timing_rate_hz", "Timing rate (Hz)"),
-    ("probe_rate_hz", "Probe rate (Hz)"), ("probe_pulse_width_s", "Probe width (s)"),
-    ("probe_current_ma", "Probe current (mA)"), ("qcl", "QCL"),
-    ("pump_fire_to_q_s", "Fire to Q-switch (s)"),
+    ("sample_rate_hz", "Sample rate (Hz)"), ("hf2_filter_order", "Filter order"),
+    ("hf2_filter_tc_s", "Time constant (s)"), ("reference_rate_hz", "Reference rate (Hz)"),
+    ("reference_filter_order", "Reference filter order"), ("reference_filter_tc_s", "Reference time constant (s)"),
+    ("probe_rate_hz", "Repetition rate (kHz)"), ("probe_pulse_width_s", "Pulse width (ns)"),
+    ("scans_per_burst", "Scans per burst"),
 )
+DISPLAY_SCALES = {"probe_rate_hz": 1e-3, "probe_pulse_width_s": 1e9}
+
+
+def _override_text(name, value):
+    if name in DISPLAY_SCALES:
+        return f"{value * DISPLAY_SCALES[name]:.12g}"
+    return str(value)
 
 
 class _NumberInput(QDoubleSpinBox):
@@ -54,11 +55,14 @@ class BurstSettingsWidget(QWidget):
         self.context = context
         self.controls = {}
         self._values = Settings(mode=context.mode).to_dict()
+        self._values["qcl"] = 1
         self._types = {field.name: str(field.type) for field in fields(Settings)}
+        self._labels = {name: label for name, label in ADVANCED}
+        self._capabilities = None
         self.automatic_settings_restored = False
         form = QFormLayout(self)
         form.setContentsMargins(0, 0, 0, 0)
-        form.setSpacing(8)
+        form.setSpacing(4)
         for name, label, unit, fallback, minimum, maximum, decimals in ESSENTIALS:
             control = _NumberInput()
             control.setObjectName(name)
@@ -72,9 +76,10 @@ class BurstSettingsWidget(QWidget):
             self.controls[name] = control
             form.addRow(label, control)
         self.advanced_widget = QWidget()
-        advanced = QFormLayout(self.advanced_widget)
+        advanced = QGridLayout(self.advanced_widget)
         advanced.setContentsMargins(0, 0, 0, 0)
-        advanced.setSpacing(6)
+        advanced.setHorizontalSpacing(5)
+        advanced.setVerticalSpacing(4)
         self.override_controls = {}
         for name, label in ADVANCED:
             if context.mode == "single" and name.startswith("reference_"):
@@ -85,12 +90,35 @@ class BurstSettingsWidget(QWidget):
             control.addItem("Automatic", None)
             value = self._values.get(name)
             if value is not None:
-                control.addItem(str(value), value)
+                control.addItem(_override_text(name, value), value)
                 control.setCurrentIndex(1)
             control.setToolTip("Automatic uses the current scan and device settings. Enter an independent supported override.")
             control.currentTextChanged.connect(self.changed)
             self.controls[name] = self.override_controls[name] = control
-            advanced.addRow(label, control)
+        row = 0
+        dual = context.mode == "dual"
+        if dual:
+            advanced.addWidget(QLabel("Sample"), row, 1)
+            advanced.addWidget(QLabel("Reference"), row, 2)
+            row += 1
+        for label, sample_name, reference_name in (("Sample rate (Hz)", "sample_rate_hz", "reference_rate_hz"),
+                ("Filter order", "hf2_filter_order", "reference_filter_order"),
+                ("Time constant (s)", "hf2_filter_tc_s", "reference_filter_tc_s")):
+            advanced.addWidget(QLabel(label), row, 0)
+            advanced.addWidget(self.override_controls[sample_name], row, 1)
+            if dual:
+                advanced.addWidget(self.override_controls[reference_name], row, 2)
+            row += 1
+        for name, label in ADVANCED[-3:]:
+            advanced.addWidget(QLabel(label), row, 0)
+            advanced.addWidget(self.override_controls[name], row, 1, 1, 2 if dual else 1)
+            row += 1
+        advanced.setColumnStretch(1, 1)
+        if dual:
+            advanced.setColumnStretch(2, 1)
+        for name in ("hf2_filter_order", "reference_filter_order"):
+            if name in self.override_controls:
+                self.override_controls[name].currentTextChanged.connect(self._refresh_timeconstant_choices)
         stored = context.preferences.value("settings", None)
         if stored:
             try:
@@ -109,12 +137,22 @@ class BurstSettingsWidget(QWidget):
                     value = None
                 else:
                     try:
-                        value = int(raw) if "int" in self._types.get(name, "") else float(raw)
+                        value = int(raw) if "int" in self._types.get(name, "") else float(raw) / DISPLAY_SCALES.get(name, 1.)
                     except ValueError as exc:
-                        raise ValueError(f"Enter a number for {name.replace('_', ' ')} or choose Automatic.") from exc
+                        raise ValueError(f"Enter a number for {self._labels.get(name, name)} or choose Automatic.") from exc
             result[name] = value
         result["mode"] = self.context.mode
-        return result
+        return self.normalize_settings(result)
+
+    def normalize_settings(self, settings):
+        values = deepcopy(settings)
+        for name in AUTOMATIC_FIELDS:
+            if name not in self.controls:
+                values[name] = None
+        values["qcl"] = 1
+        values["schedule_kind"] = "logarithmic"
+        values["later_burst_times_s"] = ()
+        return values
 
     def apply_settings(self, settings):
         if settings.get("mode", self.context.mode) != self.context.mode:
@@ -125,6 +163,7 @@ class BurstSettingsWidget(QWidget):
             # Old example files remain untouched. Carry requested coverage into
             # the live UI, then select current automatic device settings.
             settings = {key: settings[key] for key in ({item[0] for item in ESSENTIALS} | {"mode"}) if key in settings}
+        settings = self.normalize_settings(settings)
         values = Settings.from_dict({key: value for key, value in settings.items() if key in names}).to_dict()
         self._values = values
         for name, control in self.controls.items():
@@ -136,25 +175,46 @@ class BurstSettingsWidget(QWidget):
             else:
                 control.setCurrentIndex(0)
                 if value is not None:
-                    control.setEditText(str(value))
+                    control.setEditText(_override_text(name, value))
             control.blockSignals(False)
         self.changed.emit()
 
     def set_capabilities(self, capabilities):
+        self._capabilities = capabilities
         for name, attribute in (("sample_rate_hz", "sample_rates_hz"),
                                 ("reference_rate_hz", "reference_rates_hz"),
-                                ("timing_rate_hz", "timing_rates_hz")):
-            control = self.override_controls.get(name)
+                                ("hf2_filter_order", "sample_filter_orders"),
+                                ("reference_filter_order", "reference_filter_orders")):
+            self._set_choices(name, getattr(capabilities, attribute, ()))
+        self._refresh_timeconstant_choices()
+
+    def _set_choices(self, name, values):
+        control = self.override_controls.get(name)
+        if control is None:
+            return
+        text = control.currentText()
+        control.blockSignals(True)
+        control.clear()
+        control.addItem("Automatic", None)
+        for value in values:
+            control.addItem(_override_text(name, value), value)
+        control.setEditText(text)
+        control.blockSignals(False)
+
+    def _refresh_timeconstant_choices(self, *_):
+        if self._capabilities is None:
+            return
+        for order_name, tc_name, attribute in (("hf2_filter_order", "hf2_filter_tc_s", "sample_timeconstants_by_order"),
+                ("reference_filter_order", "reference_filter_tc_s", "reference_timeconstants_by_order")):
+            control = self.override_controls.get(order_name)
             if control is None:
                 continue
-            text = control.currentText()
-            control.blockSignals(True)
-            control.clear()
-            control.addItem("Automatic", None)
-            for value in getattr(capabilities, attribute, ()):
-                control.addItem(f"{value:g}", value)
-            control.setEditText(text)
-            control.blockSignals(False)
+            by_order = getattr(self._capabilities, attribute, {})
+            try:
+                order = int(control.currentText())
+            except ValueError:
+                order = min((int(key) for key in by_order), default=1)
+            self._set_choices(tc_name, by_order.get(order, by_order.get(str(order), ())))
 
 
 def _display_points(result, limit=100000, *, native_only=False):
@@ -398,6 +458,13 @@ class SinglePumpScanBurstWidget(CompactMeasurementPanel):
         self._initializing = True
         super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
         self._initializing = False
+        self.splitter.setSizes((390, 686))
+        self.settings_layout.setContentsMargins(6, 6, 6, 6)
+        self.settings_layout.setSpacing(4)
+        self.left_layout.setSpacing(4)
+        self.action_layout.setSpacing(4)
+        self.file_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+        self.blank_actions_layout.setDirection(QBoxLayout.Direction.LeftToRight)
         self._points = self._native_points = None
         self._next_root = context.save_root()
         self._capability_check_attempted = False

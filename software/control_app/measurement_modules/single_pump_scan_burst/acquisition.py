@@ -187,14 +187,16 @@ class ConnectedBurstAdapter:
         self.recipe["frame_input_frequency_hz"] = selected.get("probe_rate_hz", self.settings.probe_rate_hz)
         start, stop, speed = self.settings.scan_start_cm1, self.settings.scan_stop_cm1, self.settings.scan_speed_cm1_s
         trajectory = self.recipe.setdefault("trajectory", {})
-        trajectory.update(start_cm1=start, stop_cm1=stop, scan_speed_cm1_s=speed, qcl=self.settings.qcl)
+        trajectory.update(start_cm1=start, stop_cm1=stop, scan_speed_cm1_s=speed, qcl=1)
         if start is not None and stop is not None and speed:
             interval = abs(stop - start) / 10.
             trajectory.setdefault("marker_interval_cm1", interval)
             trajectory.setdefault("marker_width_us", max(1, min(65535, int(interval / speed * 1e6 / 4))))
         width = selected.get("probe_pulse_width_s", self.settings.probe_pulse_width_s)
-        self.recipe["qcl_pulse_parameters"] = {"qcl": self.settings.qcl,
-            "pulse_rate_hz": self.recipe["frame_input_frequency_hz"], "pulse_width_ns": None if width is None else width * 1e9,
+        internal_rate = field(field(self.plan.capabilities, "operating_values", {}), "mircat_internal_pulse_rate_hz",
+                              field(self.settings, "mircat_internal_pulse_rate_hz"))
+        self.recipe["qcl_pulse_parameters"] = {"qcl": 1,
+            "pulse_rate_hz": internal_rate, "pulse_width_ns": None if width is None else width * 1e9,
             "current_ma": self.settings.probe_current_ma}
         hf = self.recipe.setdefault("hf2li", {})
         hf.setdefault("aggregate_limit_sps", field(self.plan.capabilities, "hf2_aggregate_rate_max_hz", 700000.))
@@ -309,10 +311,12 @@ class ConnectedBurstAdapter:
             raise ReadinessError("T660-1 probe/reference/frame table must start inhibited with unwired D disabled")
         self.clock.apply_recipe(probe)
         pulse = self.recipe["qcl_pulse_parameters"]
+        self._validate_probe_parameters(pulse, external_rate_hz=self.recipe["frame_input_frequency_hz"])
         applied = self.qcl.set_qcl_pulse_params(**pulse)
         self.qcl_readbacks = {"qcl": pulse["qcl"], "pulse_rate_hz": applied["pulse_rate_hz"],
             "pulse_width_ns": applied["pulse_width_ns"], "current_ma": self.qcl.get_qcl_current(pulse["qcl"])}
         self.store.append_event("qcl_pulse_readback", {"requested": pulse, "actual": self.qcl_readbacks})
+        self._validate_probe_parameters(self.qcl_readbacks, external_rate_hz=self.recipe["frame_input_frequency_hz"])
         for key in ("pulse_rate_hz", "pulse_width_ns", "current_ma"):
             if pulse[key] is not None and not math.isclose(float(self.qcl_readbacks[key]), float(pulse[key]), rel_tol=1e-6, abs_tol=1e-5):
                 raise ReadinessError(f"MIRcat {key} readback differs from the selected setting")
@@ -353,25 +357,35 @@ class ConnectedBurstAdapter:
             record = nodes.get(f"/{self.hf.device_id}/sigins/{index}/range", {})
             if record.get("value") is not None:
                 values[name] = record["value"]
-        ranges = []
-        for qcl in range(1, self.qcl.get_num_installed_qcls() + 1):
-            interval = self.qcl.get_qcl_tuning_range(qcl)
-            ranges.append({"qcl": qcl, "minimum_cm1": interval["min_cm1"], "maximum_cm1": interval["max_cm1"]})
-        requested = field(self.plan, "requested_settings", None) or self.settings
-        active = field(requested, "qcl")
-        if active is None:
-            low, high = sorted((self.settings.scan_start_cm1, self.settings.scan_stop_cm1))
-            covered = [row["qcl"] for row in ranges if row["minimum_cm1"] <= low and row["maximum_cm1"] >= high]
-            active = covered[0] if covered else (self.qcl.get_active_qcl() or 1)
-        values.update(qcl=active, probe_current_ma=self.qcl.get_qcl_current(active),
-            probe_rate_hz=self.qcl.get_qcl_pulse_rate(active), probe_pulse_width_s=self.qcl.get_qcl_pulse_width(active) * 1e-9)
-        values["qcl_parameters"] = deepcopy(self.original["mircat"]["qcls"])
+        interval = self.qcl.get_qcl_tuning_range(1)
+        ranges = [{"qcl": 1, "minimum_cm1": interval["min_cm1"], "maximum_cm1": interval["max_cm1"]}]
+        frequency = self.original["t660_1"]["readback"]["queries"]["synth_frequency"]
+        if not frequency.get("ok"):
+            raise ReadinessError("Cannot read the external T660 probe repetition rate")
+        text = str(frequency["response"]).strip().lower()
+        scale = 1.
+        for suffix, factor in (("mhz", 1e6), ("khz", 1e3), ("hz", 1.)):
+            if text.endswith(suffix):
+                text, scale = text[:-len(suffix)], factor
+                break
+        external_rate = float(text) * scale
+        if not math.isfinite(external_rate) or external_rate <= 0:
+            raise ReadinessError("External T660 probe repetition readback must be finite and positive")
+        values.update(qcl=1, probe_current_ma=self.qcl.get_qcl_current(1), probe_rate_hz=external_rate,
+            probe_pulse_width_s=self.qcl.get_qcl_pulse_width(1) / 1e9,
+            mircat_internal_pulse_rate_hz=self.qcl.get_qcl_pulse_rate(1))
+        limits = self.original["mircat"]["pulse_limits"]
+        current_min, current_max = self.original["mircat"]["current_limits_ma"]
         raw = {"sample_rates_hz": tuple(sample["rates_sps"]), "reference_rates_hz": tuple(reference.get("rates_sps", ())),
             "timing_rates_hz": (float(observed["timing_rate_sps"]),), "detector_rates_verified": bool(observed["verified"]),
             "frame_capacity": int(self.timing.verified_frame_capacity()), "frame_feature_verified": True,
             "device_ids": {"hf2li": self.hf.device_id, "t660_2": self.timing.identify()},
             "actual_values": {"hf2li": observed, "operating_values": values}, "operating_values": values,
-            "qcl_ranges": tuple(ranges), "sample_filter_orders": tuple(sample.get("orders", ())),
+            "qcl_ranges": tuple(ranges), "mircat_internal_rate_max_hz": limits["max_pulse_rate_hz"],
+            "mircat_internal_width_max_s": limits["max_pulse_width_ns"] / 1e9,
+            "probe_current_min_ma": current_min, "probe_current_max_ma": current_max,
+            "probe_duty_max": min(.30, limits["max_duty_cycle"] / 100.),
+            "sample_filter_orders": tuple(sample.get("orders", ())),
             "reference_filter_orders": tuple(reference.get("orders", ())),
             "sample_timeconstants_by_order": sample.get("timeconstants_by_order", {}),
             "reference_timeconstants_by_order": reference.get("timeconstants_by_order", {})}
@@ -398,9 +412,10 @@ class ConnectedBurstAdapter:
             raise ReadinessError("Cannot preserve complete HF2LI original readbacks")
         self.original["mircat"] = {"trigger": self.qcl.get_wavelength_trigger_params(),
             "marker_width_us": self.qcl.get_wavelength_trigger_pulse_width_us(),
-            "qcls": [{"qcl": q, "pulse_rate_hz": self.qcl.get_qcl_pulse_rate(q),
-                      "pulse_width_ns": self.qcl.get_qcl_pulse_width(q), "current_ma": self.qcl.get_qcl_current(q)}
-                     for q in range(1, self.qcl.get_num_installed_qcls() + 1)]}
+            "qcls": [{"qcl": 1, "pulse_rate_hz": self.qcl.get_qcl_pulse_rate(1),
+                      "pulse_width_ns": self.qcl.get_qcl_pulse_width(1), "current_ma": self.qcl.get_qcl_current(1)}],
+            "pulse_limits": self.qcl.get_qcl_pulse_limits(1),
+            "current_limits_ma": self.qcl.get_qcl_current_limits(1)}
         for name in ("t660_1", "t660_2"):
             unit = self.devices[name]
             self.original[name] = {"readback": unit.read_active_settings(),
@@ -426,6 +441,35 @@ class ConnectedBurstAdapter:
                 resolve(edge)
             saved["absolute_edge_seconds"] = {str(k): v for k, v in absolute.items()}
         self.store.save_record("original-instrument-state", self.original)
+
+    def _validate_probe_parameters(self, pulse, *, external_rate_hz=None):
+        """Validate QCL1's internal pulse and independent external triggering."""
+        from .timing import duty_exceeds
+        if pulse.get("qcl") != 1:
+            raise ReadinessError("Only installed QCL 1 may receive pulse settings")
+        rate, width = float(pulse["pulse_rate_hz"]), float(pulse["pulse_width_ns"])
+        limits = self.original["mircat"]["pulse_limits"]
+        for value, maximum, label in ((rate, limits["max_pulse_rate_hz"], "internal pulse rate"),
+                (width, limits["max_pulse_width_ns"], "pulse width")):
+            if not math.isfinite(value) or value <= 0 or not math.isfinite(maximum) or maximum <= 0 or value > maximum:
+                raise ReadinessError(f"MIRcat {label} is outside the QCL1 vendor limit")
+        vendor_duty = float(limits["max_duty_cycle"]) / 100.
+        if not math.isfinite(vendor_duty) or vendor_duty <= 0:
+            raise ReadinessError("MIRcat QCL1 duty limit is invalid")
+        ceiling = min(.30, vendor_duty)
+        if duty_exceeds(rate, width / 1e9, ceiling):
+            raise ReadinessError("MIRcat internal pulse duty exceeds the QCL1 vendor/30% limit")
+        if external_rate_hz is not None:
+            external = float(external_rate_hz)
+            if not math.isfinite(external) or external <= 0 or external >= rate:
+                raise ReadinessError("MIRcat internal pulse rate must exceed the external repetition rate")
+            if duty_exceeds(external, width / 1e9, ceiling):
+                raise ReadinessError("External repetition rate times pulse width exceeds the vendor/30% limit")
+        current = pulse.get("current_ma")
+        if current is not None:
+            low, high = self.original["mircat"]["current_limits_ma"]
+            if not all(math.isfinite(float(v)) for v in (current, low, high)) or not low <= float(current) <= high:
+                raise ReadinessError("MIRcat current is outside the QCL1 vendor limits")
 
     def temperature(self):
         """Optional observation only; absent/stale temperature does not gate data."""
@@ -461,26 +505,30 @@ class ConnectedBurstAdapter:
         self.check()
         trajectory = self.recipe["trajectory"]
         start, stop = float(trajectory["start_cm1"]), float(trajectory["stop_cm1"])
-        self.qcl.tune_to_wavenumber(start, qcl=int(trajectory["qcl"]))
+        self.qcl.tune_to_wavenumber(start, qcl=1)
         self._wait(self.qcl.is_tuned, 45, "MIRcat tuning")
-        self.qcl.set_external_sweep_trigger_params(start_cm1=start, stop_cm1=stop,
+        trigger = self.qcl.set_external_sweep_trigger_params(start_cm1=start, stop_cm1=stop,
             wavelength_trigger_interval_cm1=float(trajectory["marker_interval_cm1"]), external_process_trigger=True)
+        self.store.append_event("mircat_trigger_mode", {"block_id": field(block, "block_id"), "actual": trigger})
+        from control_app.devices.mircat_service import PULSE_MODE_EXTERNAL_TRIGGER, PROC_TRIG_MODE_EXTERNAL
+        if trigger.get("pulse_mode") != PULSE_MODE_EXTERNAL_TRIGGER or trigger.get("process_trigger_mode") != PROC_TRIG_MODE_EXTERNAL:
+            raise ReadinessError("MIRcat did not accept external pulse and external process triggering")
         self.qcl.set_wavelength_trigger_pulse_width_us(int(trajectory["marker_width_us"]))
         # This explicit Blank/Sample/Start operation authorizes emission. The
         # installed service still enforces the actual key/interlock/TEC state.
         self.qcl.start_emission()
         self.qcl.cancel_manual_tune()
         expected = {"start_cm1": start, "stop_cm1": stop, "scan_rate_cm1_s": float(trajectory["scan_speed_cm1_s"]),
-                    "qcl": int(trajectory["qcl"]), "repetitions": int(field(block, "scan_count"))}
+                    "qcl": 1, "repetitions": int(field(block, "scan_count"))}
         self._call(lambda: self.qcl.start_sweep_scan(**expected))
         actual = self.qcl.get_sweep_parameters()
         for key in ("start_cm1", "stop_cm1", "scan_rate_cm1_s", "repetitions"):
             if not math.isclose(float(actual[key]), float(expected[key]), rel_tol=1e-6, abs_tol=1e-5):
                 raise ReadinessError(f"MIRcat rejected selected {key}")
-        identity = self.qcl.get_wavelength_trigger_channel_params(int(trajectory["qcl"]))
+        identity = self.qcl.get_wavelength_trigger_channel_params(1)
         direction = 1 if identity["stop"] >= identity["start"] else -1
         self.marker_targets = identity["start"] + direction * abs(identity["interval"]) * np.arange(int(identity["num_triggers"]))
-        if (identity.get("channel") != int(trajectory["qcl"]) or not len(self.marker_targets)
+        if (identity.get("channel") != 1 or not len(self.marker_targets)
                 or not math.isclose(self.marker_targets[-1], identity["stop"], abs_tol=1e-4)
                 or not math.isclose(identity["start"], start, abs_tol=1e-4)
                 or not math.isclose(identity["stop"], stop, abs_tol=1e-4)):
@@ -806,8 +854,13 @@ class ConnectedBurstAdapter:
                 attempt("hf2li-settings", restore_hf)
         if qcl and "mircat" in self.original:
             original = self.original["mircat"]
-            for item in original["qcls"]:
-                attempt(f"qcl-{item['qcl']}-settings", lambda p=item: qcl.set_qcl_pulse_params(**p))
+            original_pulse = next((item for item in original["qcls"] if item.get("qcl") == 1), None)
+            def restore_pulse():
+                if original_pulse is None:
+                    raise RuntimeError("Original installed QCL1 pulse settings are unavailable")
+                self._validate_probe_parameters(original_pulse)
+                return qcl.set_qcl_pulse_params(**{**original_pulse, "qcl": 1})
+            attempt("qcl-1-settings", restore_pulse)
             allowed = ("pulse_mode", "process_trigger_mode", "start", "stop", "interval", "units", "dwell_us", "after_off_us")
             attempt("qcl-trigger-settings", lambda: qcl.set_wavelength_trigger_params(**{k: v for k, v in original["trigger"].items() if k in allowed}))
             attempt("qcl-marker-width", lambda: qcl.set_wavelength_trigger_pulse_width_us(original["marker_width_us"]))
@@ -818,12 +871,17 @@ class ConnectedBurstAdapter:
                         raise RuntimeError(f"MIRcat original trigger setting {key} did not restore")
                 if qcl.get_wavelength_trigger_pulse_width_us() != original["marker_width_us"]:
                     raise RuntimeError("MIRcat original marker width did not restore")
-                for settings in original["qcls"]:
-                    index = settings["qcl"]
-                    for key, getter in (("pulse_rate_hz", qcl.get_qcl_pulse_rate), ("pulse_width_ns", qcl.get_qcl_pulse_width),
-                                        ("current_ma", qcl.get_qcl_current)):
-                        if not math.isclose(float(getter(index)), float(settings[key]), rel_tol=1e-6, abs_tol=1e-5):
-                            raise RuntimeError(f"QCL {index} original {key} did not restore")
+                if original_pulse is None:
+                    raise RuntimeError("Original installed QCL1 pulse settings are unavailable")
+                actual_pulse = {"qcl": 1}
+                for key, getter in (("pulse_rate_hz", qcl.get_qcl_pulse_rate), ("pulse_width_ns", qcl.get_qcl_pulse_width),
+                                    ("current_ma", qcl.get_qcl_current)):
+                    actual_pulse[key] = getter(1)
+                records["qcl-1-restored-pulse"] = actual_pulse
+                self._validate_probe_parameters(actual_pulse)
+                for key in ("pulse_rate_hz", "pulse_width_ns", "current_ma"):
+                    if not math.isclose(float(actual_pulse[key]), float(original_pulse[key]), rel_tol=1e-6, abs_tol=1e-5):
+                        raise RuntimeError(f"QCL 1 original {key} did not restore")
                 return {"trigger": actual, "marker_width_us": original["marker_width_us"]}
             attempt("qcl-settings-verification", verify_qcl_settings)
         for name in ("t660_1", "t660_2"):
@@ -886,7 +944,20 @@ class ConnectedBurstAdapter:
                 attempt(name + "-safe-verification", verify)
         if qcl:
             def verify_qcl():
-                actual = data(qcl.read_state())
+                # Broad read_state() also reads pulse settings of the SDK's
+                # reported active QCL. Use only these unindexed state getters;
+                # all operation pulse-parameter reads remain explicitly QCL1.
+                actual = {}
+                for label, getter in (("scan", qcl.get_scan_status), ("emission_on", qcl.is_emission_on),
+                        ("armed", qcl.is_laser_armed), ("scan_waiting_process_trigger", qcl.get_scan_waiting_process_trigger)):
+                    try:
+                        observed = data(getter())
+                        if label == "scan":
+                            actual.update(observed)
+                        else:
+                            actual[label] = observed
+                    except Exception as exc:
+                        actual.setdefault("read_errors", {})[label] = str(exc)
                 records["mircat-final-state"] = actual
                 required_off = ("emission_on", "armed", "scan_in_progress", "scan_active",
                                 "scan_paused", "scan_waiting_process_trigger")
