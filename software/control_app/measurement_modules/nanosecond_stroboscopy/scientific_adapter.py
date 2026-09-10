@@ -17,7 +17,7 @@ def _settings(value):
 class NanosecondScientificAdapter:
     """One mutable scientific session per detector tab; no shared device state."""
 
-    def __init__(self, context, settings_widget):
+    def __init__(self, context, settings_widget, *, runner_factory=None):
         self.context, self.settings_widget = context, settings_widget
         self.blank = None
         self.last_result = None
@@ -27,6 +27,8 @@ class NanosecondScientificAdapter:
         self.instrument_initial = {}
         self.active_runner = None
         self.frozen_inputs = None
+        self.runner_factory = runner_factory
+        self.capabilities = {}
 
     def read_settings(self):
         return self.settings_widget.read_settings()
@@ -37,60 +39,38 @@ class NanosecondScientificAdapter:
         self.settings_widget.apply_settings(settings)
 
     def make_plan(self, settings):
-        return build_plan(Settings.from_dict(settings))
+        return build_plan(Settings.from_dict(settings), capabilities=self.capabilities)
 
     def validate_plan(self, plan):
         return tuple(plan.errors)
 
     def summarize_plan(self, plan):
-        settings = _settings(plan.settings)
+        settings = _settings(getattr(plan, "resolved_settings", None) or plan.settings)
         budget = plan.budget
-        lines = [
-            "EXAMPLE ONLY — simulator settings; connected readiness is checked separately."
-            if settings.get("illustrative_only", False) else "Scientific plan; operating readiness must be established from retained evidence.",
-            f"{settings.get('profile_id', '')} · {self.context.mode} detector mode",
-            f"{len(settings['wavenumbers_cm1'])} selected wavenumbers × "
-            f"{len(settings['delays_ns'])} delays × {settings['repetitions']} technical repetitions",
-            "Delay schedule (requested ns): " + ", ".join(f"{v:g}" for v in settings["delays_ns"]),
-            "Selected command grid (ns): " + ", ".join(f"{v:g}" for v in plan.timing.get("quantized_delays_ns", [])),
-            "Programmed electrical intervals (ns): " + ", ".join(f"{v:g}" for v in plan.timing.get("electrical_delays_ns", [])),
-            plan.timing.get("resolution_statement", "No optical time resolution is established by command quantization."),
-            "Each wavenumber completes its entire delay/control series before retuning.",
-            "Kernel: phase-selected probe pulse → HF2LI integrated spectral value; "
-            "electrical commands, optical arrival, aperture and filter history remain distinct.",
-        ]
-        for key, value in budget.items():
-            if isinstance(value, (str, int, float)):
-                lines.append(f"{key.replace('_', ' ')}: {value:g}" if isinstance(value, (int, float)) else f"{key.replace('_', ' ')}: {value}")
-        lines += ["Readiness: " + str(item) for item in plan.readiness]
-        lines += ["Planning note: " + str(item) for item in plan.warnings]
-        return "\n".join(lines)
-
-    def evaluate_schedule(self, operation, plan, worker):
-        """Retained prospective simulation with cooperative cancellation."""
-        from .simulation import evaluate_schedule
-        from .persistence import NativeStore
-        settings = plan.settings
-        store = NativeStore(operation.output_path, mode=self.context.mode,
-                            settings=settings.to_dict(), kind="simulation_preview", operation=operation)
-        try:
-            worker.message.emit("Forward simulation: testing lifetime identifiability under entered IRF, aperture, jitter, noise and reset model.")
-            result = evaluate_schedule(
-                settings.delays_ns, settings.candidate_lifetime_ns, settings.expected_amplitude,
-                settings.kernel(), noise_sd=settings.noise_sd, repetitions=settings.repetitions,
-                trials=12, seed=settings.random_seed, cancel_check=worker.check_cancelled,
-            )
-            store.save_record("prospective_simulation", result)
-            store.finish("completed", result=result, restoration={"hardware_access": False})
-            result["output_path"] = str(operation.output_path)
-            return result
-        except InterruptedError as exc:
-            store.finish("cancelled", error=str(exc), restoration={"hardware_access": False})
-            raise InterruptedError("Acquisition stopped; prospective simulation cancellation retained.") from exc
-        except Exception as exc:
-            if not store.finished:
-                store.finish("failed", error=str(exc), restoration={"hardware_access": False})
-            raise
+        duration = budget.get("total_s")
+        duration_text = f"{duration / 60:.1f} min" if isinstance(duration, (int, float)) else "pending device check"
+        if isinstance(duration, (int, float)) and budget.get("capture_estimate_complete") is False:
+            duration_text = f"≥ {duration_text} · device check pending"
+        storage = budget.get("storage_bytes")
+        storage_text = f"{storage / 1e6:.1f} MB" if isinstance(storage, (int, float)) else "storage pending"
+        rate, tau = settings.get("hf2li_rate_hz"), settings.get("filter_time_constant_s")
+        detector = (f"{rate:g} Sa/s · {tau:g} s filter" if isinstance(rate, (int, float)) and isinstance(tau, (int, float))
+                    else "automatic after device check")
+        delays = settings["delays_ns"]
+        step = settings.get("timing_step_ns")
+        grid = f"{step:g} ns command grid" if isinstance(step, (int, float)) else "grid pending"
+        period = settings.get("probe_period_s")
+        cycle = f"{settings['cycle_interval_s']:g} s cycle"
+        if isinstance(period, (int, float)):
+            cycle += f" · {period:g} s probe period"
+        return (
+            ("Schedule", f"{len(settings['wavenumbers_cm1'])} wavelengths × {len(settings['delays_ns'])} delays × {settings['repetitions']} repeats"),
+            ("Delay", f"{min(delays):g}…{max(delays):g} ns · {grid}" if delays else "No delays selected"),
+            ("Cadence", cycle),
+            ("Sequence", f"{budget.get('event_count', 0):,} events · {storage_text}"),
+            ("Estimated duration", duration_text),
+            ("HF2LI impulse area", detector),
+        )
 
     def selected_records(self):
         return ScientificSelections(
@@ -99,12 +79,14 @@ class NanosecondScientificAdapter:
         )
 
     def hardware_required(self, kind, settings):
-        return settings.get("execution_mode", "simulation") == "connected"
+        if kind.startswith("load") or kind in ("save_plan", "export", "simulation_preview"):
+            return False
+        return settings.get("execution_mode", "connected") == "connected"
 
     def compatibility(self, record, plan, *, kind=None):
         from .processing import validate_native_baseline
         if not record:
-            return ["A complete compatible " + (kind or "preliminary") + " record is required."]
+            return ["Acquire or load a blank." if kind == "blank" else "Acquire or load an unpumped sample."]
         errors = validate_native_baseline(record, _settings(plan.settings), kind=kind or "preliminary")
         recorded = record.get("ui_instrument_state", {})
         for key, value in self.instrument_state.items():
@@ -112,34 +94,22 @@ class NanosecondScientificAdapter:
                 errors.append(f"Instrument configuration differs: {key}.")
         return errors
 
-    def validate_review(self, preliminary, plan):
+    def validate_preliminary(self, preliminary, plan):
         errors = self.compatibility(preliminary, plan, kind="preliminary")
         if self.context.mode == "single":
             errors += self.compatibility(self.blank, plan, kind="blank")
-        errors += self.selection_conflicts(_settings(plan.settings))
         return errors
 
-    def selection_conflicts(self, settings):
-        """Sample-derived selections remain condition data, never calibration."""
-        errors = []
-        for record in self.sample_records:
-            for name in ("sample_id", "condition_id"):
-                if record.get(name) != settings.get(name):
-                    errors.append(f"Accepted sample selection {name} differs from current settings.")
-            if record.get("selection_id") != settings.get("sample_selection_id"):
-                errors.append("Accepted sample selection ID differs from current settings.")
-            for name, value in record.get("condition", {}).items():
-                if name in settings and settings[name] is not None and settings[name] != value:
-                    errors.append(f"Accepted sample selection condition.{name} differs from current settings.")
-            windows = record.get("windows", [])
-            for wave in settings["wavenumbers_cm1"]:
-                if not any(window["lower_cm1"] <= wave <= window["upper_cm1"] for window in windows):
-                    errors.append(f"Selected wavenumber {wave:g} cm^-1 is outside accepted sample windows.")
-        return errors
+    def validate_operation(self, kind, plan, preliminary):
+        if kind == "preliminary" and self.context.mode == "single":
+            return self.compatibility(self.blank, plan, kind="blank")
+        if kind == "measurement":
+            return self.validate_preliminary(preliminary, plan)
+        return ()
 
     def _run(self, snapshot, worker, kind):
         from .runner import Runner
-        self.active_runner = Runner(self.context)
+        self.active_runner = (self.runner_factory or Runner)(self.context)
         frozen = self.frozen_inputs or {"blank": deepcopy(self.blank), "ui_instrument_state": deepcopy(self.instrument_state)}
         try:
             result = self.active_runner.run(
@@ -171,12 +141,7 @@ class NanosecondScientificAdapter:
         return self._run(snapshot, worker, "measurement")
 
     def summarize_preliminary(self, result):
-        quantity = "unpumped sample / sequential blank" if self.context.mode == "single" else "Q0 = unpumped sample / matched-buffer reference"
-        return (
-            f"Review {quantity}: {len(result.get('events', []))} retained events. "
-            "Inspect native support and quality flags before approving. "
-            "Approval permits the explicit Start action; it does not establish optical timing or reset qualification."
-        )
+        return f"Unpumped sample {'Q0 ' if self.context.mode == 'dual' else ''}ready · {len(result.get('events', []))} events"
 
     def request_abort(self, reason):
         # Host worker's event is the canonical cancellation token. This optional

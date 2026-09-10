@@ -14,6 +14,7 @@ from control_app.measurement_modules.nanosecond_stroboscopy.settings import Sett
 
 
 def plan(mode="single", **updates):
+    updates.setdefault("execution_mode", "simulation")
     return build_plan(replace(Settings(mode=mode), wavenumbers_cm1=(1942.,),
         delays_ns=(-300., -100., 0., 100., 400., 1600., 4000.), repetitions=1, **updates))
 
@@ -86,7 +87,9 @@ def connected_fixture(tmp_path, mode="dual"):
         calls.append(require_hardware_owner())
         return object()
     ctx, owner, factory_context = context(tmp_path, mode, real_device_factories={"hf2li": factory})
-    p = replace(plan(mode, execution_mode="connected"), readiness=())
+    simulated = plan(mode)
+    p = replace(simulated, settings=replace(simulated.settings, execution_mode="connected"),
+                resolved_settings=replace(simulated.resolved_settings, execution_mode="connected"), readiness=())
     return ctx, owner, factory_context, p, calls
 
 
@@ -165,23 +168,19 @@ def test_ns_acquisition_normal_abort_retains_completed_event(tmp_path):
     assert len(load_run(result["output_path"])["events"]) == 1
 
 
-def test_ns_acquisition_reset_failure_stops_without_retry(tmp_path):
+def test_ns_acquisition_reset_history_limits_claims_without_stopping_raw(tmp_path):
     ctx, _, _ = context(tmp_path, "dual")
     p = plan("dual", reset_residual_fraction=.2)
     baseline = execute(ctx, p, "preliminary")
     result = execute(ctx, p, "measurement", baseline=baseline)
-    assert result["status"] == "failed"
-    assert "reset_failed" in result["error"]
-    assert len(result["events"]) < len(p.events)
-    assert result["events"][-1]["reset_evidence"]["equivalent"] is False
+    assert result["status"] == "completed", result["error"]
+    assert any("reset_failed" in event["quality_flags"] for event in result["events"])
+    assert len(result["events"]) == len(p.events)
+    assert any(event["reset_evidence"]["equivalent"] is False for event in result["events"])
 
 
-def test_ns_installed_readiness_has_exact_missing_pulse_kernel_reasons():
-    reasons = installed_readiness({}, Settings().to_dict(), {})
-    assert any("sparse probe cadence" in r for r in reasons)
-    assert any("integration aperture" in r for r in reasons)
-    assert any("optical pump observation" in r for r in reasons)
-    assert not any("hash" in r for r in reasons)
+def test_ns_installed_readiness_does_not_gate_raw_on_scientific_metadata():
+    assert installed_readiness({}, Settings().to_dict(), {}) == ()
 
 
 def test_ns_installed_impulse_projection_retains_signed_observable_and_gaps():
@@ -222,8 +221,8 @@ def test_ns_installed_pending_table_uses_acknowledged_deltas_and_cancel():
             if command in ("TFRame:LOOP:FIRST?", "TFRame:LOOP:CouNT?"):
                 return "0"
             return ";".join("OK" for _ in command.split(";"))
-    p = plan()
-    timing = compile_timing(p.settings)
+    p = plan(overrides={"warmup_frames": 2})
+    timing = compile_timing(p.resolved_settings)
     unit = AckDevice()
     progress = []
     result = unit.preload_frame_table(list(p.events[0].frames), predivider=1,
@@ -275,147 +274,3 @@ def test_ns_acquisition_rejected_native_preserved_before_next_pump(tmp_path, bad
     assert result["status"] == "failed"
     assert len(result["events"]) == 1
     assert len(load_run(result["output_path"])["events"]) == 1
-
-
-def installed_extract_fixture(tmp_path):
-    """Retained LabOne poll shape: demod sample dictionaries with native ticks."""
-    from copy import deepcopy
-    from control_app.measurement_modules.nanosecond_stroboscopy.adapters import data
-    ctx, _, _ = context(tmp_path, "dual")
-    p = plan("dual", optical_delay_offset_ns=7.)
-    op = ctx.begin_operation(p.settings.to_dict())
-    adapter = InstalledAdapter(ctx, op, p)
-    ev = data(p.events[0])
-    count = len(ev["frames"])
-    t = np.arange(500, (count + 1) * 1000 + 1, dtype=float) / 1000
-    ticks = (t * 1000000).round().astype(np.uint64)
-    epochs = np.arange(1, count + 1, dtype=float)
-    impulse = np.zeros(len(t))
-    dio = np.zeros(len(t), dtype=np.uint32)
-    for epoch in epochs:
-        dt = t - epoch
-        pulse = dt >= 0
-        impulse[pulse] += np.exp(-dt[pulse]/.05)/.05
-        dio[(dt >= 0) & (dt < .004)] |= 1 << 19
-    relative = np.arange(0, 801)/1000
-    gain = np.trapezoid(np.exp(-relative/.05)/.05, relative)
-    calibration = {"projection_phase_rad": 0., "integration_window_s": [0., .8],
-        "baseline_window_s": [-.1, -.02], "impulse_area_gain": gain,
-        "maximum_sample_gap_s": .0011, "calibration_id": "injected-native-impulse-v1",
-        "integrated_variance": .001, "gain_relative_variance": .0001}
-    adapter.qualification = {"impulse_calibration": {"sample": calibration, "reference": deepcopy(calibration)},
-        "qualification_id": "injected-kernel-v1", "optical_delay_offset_ns": 7.,
-        "optical_timing_calibration_id": "injected-optical-v1", "sample_reference_covariance": .00001,
-        "probe_period_tolerance_s": .00001}
-    adapter.readbacks = {"clockbase": 1000000, "wavelength": {"value": 1942., "units": "cm^-1", "light_valid": True}}
-    native = {"timestamp_utc": "2026-09-09T00:00:00Z", "duration_s": float(t[-1]-t[0]), "data": {
-        "/dev18500/demods/0/sample": {"timestamp": ticks.copy(), "x": .2+3.5*impulse, "y": np.zeros(len(t))},
-        "/dev18500/demods/3/sample": {"timestamp": ticks.copy(), "x": .4+7.*impulse, "y": np.zeros(len(t))},
-        "/dev18500/demods/2/sample": {"timestamp": ticks.copy(), "dio": dio}}}
-    adapter.pending_native = [native]
-    return adapter, ev
-
-
-def test_ns_installed_extract_native_stream_observable_and_optical_provenance(tmp_path):
-    from copy import deepcopy
-    adapter, ev = installed_extract_fixture(tmp_path)
-    original = deepcopy(adapter.pending_native)
-    event = adapter._extract(ev, "measurement")
-    assert event["sample"]["value"][0] == pytest.approx(3.5, rel=.003)
-    assert event["reference"]["value"][0] == pytest.approx(7., rel=.003)
-    assert event["sample"]["timestamp_s"][0] == 3.
-    assert event["sample_reference_covariance"] == .00001
-    assert event["calibrated_optical_delay_ns"] == pytest.approx(ev["electrical_delay_ns"] + 7.)
-    assert event["observed_electrical_delay_ns"] is None
-    assert event["pump_evidence"]["optical_pulse_count"] is None
-    assert "per_event_optical_pump_unobserved" in event["quality_flags"]
-    for path, stream in original[0]["data"].items():
-        for field, values in stream.items():
-            np.testing.assert_array_equal(event["native_device_data"][0]["data"][path][field], values)
-    # Acquiring an unpumped sample does not invent a pump or label null optical
-    # counts as a failed pump observation.
-    unpumped = adapter._extract(ev, "preliminary")
-    assert unpumped["pump_evidence"]["optical_pulse_count"] == 0
-    assert not unpumped["quality_flags"]
-
-
-@pytest.mark.parametrize("mismatch", ["missing", "extra"])
-def test_ns_installed_extract_probe_count_mismatch_rejected(tmp_path, mismatch):
-    adapter, ev = installed_extract_fixture(tmp_path)
-    stream = adapter.pending_native[0]["data"]["/dev18500/demods/2/sample"]
-    if mismatch == "missing":
-        stream["dio"][stream["timestamp"] >= len(ev["frames"]) * 1000000] = 0
-    else:
-        stream["dio"][10:13] = 1 << 19
-    with pytest.raises(ValueError, match="probe pulse count differs"):
-        adapter._extract(ev, "measurement")
-
-
-def test_ns_installed_restore_attempts_every_inhibit_bank_and_device_after_failure(tmp_path):
-    adapter, _ = installed_extract_fixture(tmp_path)
-    calls = []
-    class Timing:
-        def __init__(self, name): self.name = name
-        def set_trigger_source(self, source): calls.append((self.name, "source", source))
-        def command(self, command, **kwargs):
-            calls.append((self.name, command))
-            if self.name == "t660_2" and command == "TFRame:STOp":
-                raise RuntimeError("injected failed frame stop")
-        def disable_channel(self, channel): calls.append((self.name, "disable", channel))
-        def configure_train(self, *, count, stage):
-            calls.append((self.name, "train", stage))
-            if stage == "ACTIVE": raise RuntimeError("injected active bank error")
-        def close(self): calls.append((self.name, "close"))
-    class QCL:
-        def turn_emission_off(self):
-            calls.append(("mircat", "off"))
-            raise RuntimeError("injected emission off error")
-        def disarm(self): calls.append(("mircat", "disarm"))
-        def deinitialize(self): calls.append(("mircat", "close"))
-    class HF:
-        def stop_acquisition(self): calls.append(("hf2li", "stop"))
-        def close(self): calls.append(("hf2li", "close"))
-    adapter.devices = {"t660_1": Timing("t660_1"), "t660_2": Timing("t660_2"), "hf2li": HF(), "mircat": QCL()}
-    report = adapter.restore()
-    assert report["safe_verified"] is False
-    assert len(report["errors"]) == 2
-    for bank in ("ACTIVE", "NEXT", "QUEUE"):
-        assert ("t660_2", "train", bank) in calls
-    for device in adapter.devices:
-        assert (device, "close") in calls
-    assert ("mircat", "disarm") in calls
-    assert ("hf2li", "stop") in calls
-
-def test_ns_installed_mircat_service_signature_and_actual_wavelength_shape(tmp_path):
-    from unittest.mock import create_autospec
-    from control_app.devices.mircat_service import MircatService
-    adapter, _ = installed_extract_fixture(tmp_path)
-    qcl = create_autospec(MircatService, instance=True)
-    qcl.is_tuned.return_value = True
-    qcl.is_laser_armed.return_value = False
-    qcl.get_actual_wavelength.return_value = {"value": 1942., "units": "cm^-1", "light_valid": True}
-    adapter.devices = {"mircat": qcl}
-    adapter.qualification.update(qcl_index=1, tune_timeout_s=1., settling_s=0., wavenumber_tolerance_cm1=.1)
-    adapter.tune(1942.)
-    qcl.set_external_trigger_params.assert_called_once_with(wavenumber_cm1=1942.)
-    qcl.tune_to_wavenumber.assert_called_once_with(1942., qcl=1)
-    qcl.turn_emission_on.assert_called_once_with(approved_laser_safety_condition=True)
-    assert adapter.readbacks["wavelength"]["units"] == "cm^-1"
-
-
-def test_ns_installed_mircat_trigger_readback_mismatch_is_restoration_failure(tmp_path):
-    from unittest.mock import create_autospec
-    from control_app.devices.mircat_service import MircatService
-    adapter, _ = installed_extract_fixture(tmp_path)
-    qcl = create_autospec(MircatService, instance=True)
-    trigger = {"pulse_mode": 0, "process_trigger_mode": 0, "start": 1942., "stop": 1942.,
-               "interval": 0., "units": 1, "dwell_us": 0, "after_off_us": 0}
-    qcl.get_wavelength_trigger_params.return_value = {**trigger, "pulse_mode": 1}
-    qcl.read_state.return_value = {"emission_on": False, "armed": False}
-    adapter.devices = {"mircat": qcl}
-    adapter.before["mircat"] = {"trigger": trigger, "qcl": 1, "pulse_rate_hz": 1., "pulse_width_ns": 20., "current_ma": 40.}
-    report = adapter.restore()
-    assert report["safe_verified"] is False
-    assert "trigger pulse_mode did not restore" in ";".join(report["errors"])
-    qcl.set_wavelength_trigger_params.assert_called_once_with(**trigger)
-    qcl.deinitialize.assert_called_once()

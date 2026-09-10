@@ -1,13 +1,14 @@
 """Deterministic installed-route recipes; electrical resolution is not optical IRF.
 
 T660 F5 manual pp. 5-6 specifies a 10 ps edge grid and 0.02 Hz DDS grid.
-Only sparse one-probe cycles with a calibrated HF2LI impulse-area estimator are
-represented. T660-2 C (process trigger) and both unwired D outputs remain OFF.
+Sparse one-probe cycles are retained by the HF2LI internal-zero-frequency
+lowpass/integral. Absolute optical calibration is optional metadata. T660-1 A,
+T660-2 C (process trigger), and both unwired D outputs remain OFF.
 """
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR
 import math
 from typing import Any
 
@@ -41,15 +42,15 @@ def inert_frame(settings: Settings, kind: str) -> dict[str, Any]:
 def event_frames(settings: Settings, requested_delay_ns: float, *, pump_on: bool) -> tuple[dict[str, Any], ...]:
     step = settings.timing_step_ns
     anchor = quantize_ns(settings.probe_anchor_ns, step)
-    # optical delay = probe command - Q command + calibrated route offset.
-    optical_offset = settings.optical_delay_offset_ns or 0.0
-    q = quantize_ns(anchor + optical_offset - requested_delay_ns, step)
+    # User delay is an electrical command difference. Optical calibration never
+    # changes hardware timing silently; it supplies a separate analysis axis.
+    q = quantize_ns(anchor - requested_delay_ns, step)
     fire = quantize_ns(q - settings.fire_to_q_ns, step)
     if min(q, fire) < 0:
-        raise ValueError("Probe anchor must accommodate largest delay and qualified FIRE-to-Q interval")
+        raise ValueError("Probe anchor must accommodate largest delay and selected FIRE-to-Q interval")
     event = inert_frame(settings, "pump_probe" if pump_on else "pump_blocked")
-    event["channels"]["A"] = _channel(pump_on, fire, quantize_ns(settings.pump_command_width_ns, step))
-    event["channels"]["B"] = _channel(pump_on, q, quantize_ns(settings.pump_command_width_ns, step))
+    event["channels"]["A"] = _channel(pump_on, fire, quantize_ns(settings.fire_command_width_ns, step))
+    event["channels"]["B"] = _channel(pump_on, q, quantize_ns(settings.q_command_width_ns, step))
     return tuple([inert_frame(settings, "reference_warmup") for _ in range(settings.warmup_frames)] + [event] +
                  [inert_frame(settings, "impulse_tail") for _ in range(settings.filter_tail_frames)] + [inert_frame(settings, "terminal")])
 
@@ -72,13 +73,17 @@ class TimingCompilation:
 
 def compile_timing(settings: Settings | dict[str, Any]) -> TimingCompilation:
     s = Settings.from_dict(settings)
+    required = ("probe_period_s", "probe_anchor_ns", "fire_to_q_ns", "fire_command_width_ns", "q_command_width_ns", "probe_command_width_ns", "reference_command_width_ns", "event_trigger_width_ns", "timing_step_ns", "warmup_frames", "filter_tail_frames")
+    missing = [name for name in required if getattr(s, name) is None]
+    if missing:
+        raise ValueError(f"Live numeric device settings pending: {', '.join(missing)}")
     if s.warmup_frames < 0 or s.filter_tail_frames < 0 or s.warmup_frames + s.filter_tail_frames + 2 > min(s.max_frame_capacity, 8192):
         raise ValueError("An explicitly planned event burst exceeds verified finite frame capacity")
     if s.probe_period_s <= 0 or not math.isfinite(s.probe_period_s):
         raise ValueError("Probe period must be finite and positive")
-    frequency = float((Decimal(str(1 / s.probe_period_s)) / Decimal(str(DDS_GRID_HZ))).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal(str(DDS_GRID_HZ)))
+    frequency = float((Decimal(str(1 / s.probe_period_s)) / Decimal(str(DDS_GRID_HZ))).quantize(Decimal("1"), rounding=ROUND_FLOOR) * Decimal(str(DDS_GRID_HZ)))
     if frequency <= 0 or frequency > 16000000:
-        raise ValueError("Requested period is outside documented T660 DDS frequency/grid; a qualified divided-clock kernel is required")
+        raise ValueError("Probe period is outside the documented 0.02 Hz..16 MHz T660 DDS range; use a supported probe cycle and the separate reset interval")
     period = 1 / frequency
     step = s.timing_step_ns
     anchor = quantize_ns(s.probe_anchor_ns, step)
@@ -87,10 +92,9 @@ def compile_timing(settings: Settings | dict[str, Any]) -> TimingCompilation:
         raise ValueError("Probe pulse must have positive width and finish within its hardware cycle")
     recipe = {"stop_first": True, "trigger_source": "OFF", "predivider": 1,
               "gate_mode": 0, "burst_enabled": False, "clock": {"frequency": f"{frequency:.12g}Hz", "shots": 0},
-              "channels": {"A": _channel(True, anchor, width), "B": _channel(True, anchor, width),
-                           "C": _channel(True, 0, width), "D": _channel(False, 0, width)}}
+              "channels": {"A": _channel(False, anchor, quantize_ns(s.reference_command_width_ns, step)), "B": _channel(True, anchor, width),
+                           "C": _channel(True, 0, quantize_ns(s.event_trigger_width_ns, step)), "D": _channel(False, 0, width)}}
     physical, electrical, frames = [], [], []
-    offset = s.optical_delay_offset_ns or 0.0
     for delay in s.delays_ns:
         f = event_frames(s, delay, pump_on=True)
         for frame in f:
@@ -100,7 +104,7 @@ def compile_timing(settings: Settings | dict[str, Any]) -> TimingCompilation:
                     raise ValueError("FIRE/Q command does not finish before next hardware cycle")
         q = float(f[s.warmup_frames]["channels"]["B"]["delay"][:-2])
         electrical.append(anchor - q)
-        physical.append(anchor - q + offset)
+        physical.append(anchor - q)
         frames.extend(f)
     return TimingCompilation(recipe, tuple(frames), period, frequency, 1, tuple(physical), tuple(electrical), s.probe_period_s,
-                             "0.01 ns is the documented electrical command grid only; optical resolution is set by measured IRF, jitter, probe aperture and qualified HF2LI impulse extraction.")
+                             "0.01 ns is the electrical command grid, not optical resolution. HF2LI DC pulse integrals retain raw/relative response; optical lifetime claims need separately supplied IRF and timing evidence.")

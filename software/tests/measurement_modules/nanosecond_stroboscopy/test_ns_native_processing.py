@@ -45,7 +45,21 @@ def test_ns_single_requires_complete_blank_and_missing_support_stays_missing():
     assert np.isnan(band_kinetics(missing, 1950., 1960.)["area_delta_a_cm1"]).all()
 
 
-@pytest.mark.parametrize("flag", ["clipped", "unlock", "missing_trigger", "count_mismatch", "reset_failed"])
+def test_ns_optional_measured_balance_needs_no_promotion_and_cannot_erase_relative_data():
+    balance = dict(kind="measured_path_balance", wavenumbers_cm1=[1950.], values=[.8])
+    measured = reconstruct([event(.8)], [event()], mode="dual", balance=balance)
+    assert measured["absolute_available"]
+    assert measured["absolute_absorbance"][0, 0] == pytest.approx(-np.log10(.4/.8))
+    for invalid in ({}, {**balance, "values": [0.]}, {**balance, "values": [np.nan]},
+                    {**balance, "wavenumbers_cm1": [1950., 1950.], "values": [1., 1.]}):
+        result = reconstruct([event(.8)], [event()], mode="dual", balance=invalid)
+        assert result["delta_a"][0, 0] == pytest.approx(-np.log10(.8))
+        assert result["ratio"][0, 0] == .4
+        assert not result["absolute_available"]
+        assert result["absolute_limitations"]
+
+
+@pytest.mark.parametrize("flag", ["clipped", "unlock", "missing_trigger", "count_mismatch", "baseline_instrument_mismatch"])
 def test_ns_invalid_events_retained_excluded(flag):
     record = event(.8, quality_flags=[flag])
     result = reconstruct([record], [event()], mode="dual")
@@ -54,12 +68,15 @@ def test_ns_invalid_events_retained_excluded(flag):
     assert result["event_results"][0]["observable"]["sample"] == .8
 
 
-def test_ns_bad_reference_and_unknown_optical_coordinate_cannot_be_kinetics():
+def test_ns_bad_reference_excluded_but_uncalibrated_optical_coordinate_retains_raw_change():
     record = event(.8, reference=0.)
     unknown = event(.8, delay=20.)
     unknown["calibrated_optical_delay_ns"] = None
     result = reconstruct([record, unknown], [event()], mode="dual")
-    assert result["coverage"].sum() == 0
+    assert result["coverage"].sum() == 1
+    assert result["optical_coverage"].sum() == 0
+    assert result["delta_a"][0, 1] == pytest.approx(-np.log10(.8))
+    assert np.isnan(result["optical_delay_ns"]).all()
     assert result["event_results"][0]["observable"]["flags"] == ["unsupported_reference"]
     assert "optical_delay_unresolved" in result["event_results"][1]["flags"]
 
@@ -85,6 +102,17 @@ def test_ns_pumped_native_event_cannot_be_relabeled_as_unpumped_q0():
     wrong = event(kernel_id=KERNEL_ID)
     record = dict(experiment_id="nanosecond_stroboscopy", mode="dual", kind="preliminary", status="completed", settings=settings.to_dict(), events=[wrong])
     assert any("pumped event" in error for error in validate_native_baseline(record, settings))
+
+
+def test_ns_previous_signed_calibrated_estimator_cannot_supply_dc_area_baseline():
+    from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings
+    from control_app.measurement_modules.nanosecond_stroboscopy.processing import validate_native_baseline
+    settings = Settings(mode="dual", wavenumbers_cm1=(1950.,))
+    old = event(kernel_id="sparse_single_probe_demod_impulse")
+    old.update(condition="unpumped", pump_evidence={"commanded": False, "optical_pulse_count": None})
+    record = dict(experiment_id="nanosecond_stroboscopy", mode="dual", kind="preliminary",
+                  status="completed", settings=settings.to_dict(), events=[old])
+    assert any("acquisition kernel differs" in error for error in validate_native_baseline(record, settings))
 
 
 def test_ns_baseline_uncertainty_does_not_average_down_with_technical_repetitions():
@@ -113,10 +141,10 @@ def test_ns_controls_reconstructed_separately_from_pumped_signal():
 
 
 def test_ns_population_comparison_consumes_only_standalone_selected_windows():
-    from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings
+    from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings, resolve_settings
     from control_app.measurement_modules.nanosecond_stroboscopy.simulation import convolved_response
     from control_app.measurement_modules.nanosecond_stroboscopy.processing import population_kinetics
-    settings = Settings()
+    settings = resolve_settings(Settings(execution_mode="simulation")).settings
     delay = np.array(settings.delays_ns)
     kernel = settings.kernel()
     result = dict(wavenumbers_cm1=[1930., 1945.], delays_ns=delay,
@@ -137,9 +165,9 @@ def test_ns_population_comparison_consumes_only_standalone_selected_windows():
 
 
 def test_ns_fully_retained_filter_history_is_unresolved_not_a_fit_crash():
-    from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings
+    from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings, resolve_settings
     from control_app.measurement_modules.nanosecond_stroboscopy.simulation import simulate_trace, identify_lifetime
-    settings = Settings()
+    settings = resolve_settings(Settings(execution_mode="simulation")).settings
     kernel = {**settings.kernel(), "filter_memory_fraction": 1.0}
     trace = simulate_trace(settings.delays_ns, 250., -.01, kernel, noise_sd=.0001, seed=17)
     fit = identify_lifetime(trace["delay_ns"], trace["delta_a"], trace["uncertainty"], kernel)
@@ -194,3 +222,60 @@ def test_ns_storage_failure_is_reported_without_overwriting_existing_record(tmp_
     monkeypatch.setattr(module.os, "fsync", failed)
     with pytest.raises(OSError, match="disk failure"):
         store.append_event(event())
+
+
+def test_ns_optional_metadata_and_analysis_priors_do_not_gate_baseline_reuse():
+    from dataclasses import replace
+    from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings
+    from control_app.measurement_modules.nanosecond_stroboscopy.persistence import acquisition_conflicts
+    before = Settings()
+    after = replace(before, profile_id="77K-HRP-G-F", temperature_k=77., matrix_id="matrix",
+                    sample_id="annotation", reset_equivalent=False, reset_record_id="",
+                    calibration_ids=("optional-record",), qualification={"anything": False},
+                    irf_sigma_ns=200., candidate_lifetime_ns=1000., repetitions=10,
+                    metadata={"temperature": "unmeasured"})
+    assert acquisition_conflicts(before, after) == []
+    assert acquisition_conflicts(before, replace(after, cycle_interval_s=2.))
+    assert acquisition_conflicts(before, replace(after, overrides={"hf2li_rate_hz": 200.}))
+    assert acquisition_conflicts(before, replace(after, overrides={"hf2li_rate_hz": None})) == []
+
+
+def test_ns_blank_support_reused_when_averages_or_annotations_change():
+    from dataclasses import replace
+    from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings, KERNEL_ID
+    from control_app.measurement_modules.nanosecond_stroboscopy.processing import validate_native_baseline
+    selected = Settings(wavenumbers_cm1=(1950.,), delays_ns=(-100., 100.), repetitions=1)
+    records = []
+    for delay in selected.delays_ns:
+        for condition in selected.conditions:
+            native = event(wave=1950., delay=delay, kernel_id=KERNEL_ID)
+            native.update(condition="unpumped", requested_condition=condition,
+                          pump_evidence={"commanded": False, "optical_pulse_count": None},
+                          calibrated_optical_delay_ns=None)
+            records.append(native)
+    retained = dict(experiment_id="nanosecond_stroboscopy", mode="single", kind="blank",
+                    status="completed", settings=selected.to_dict(), events=records)
+    requested = replace(selected, repetitions=10, temperature_k=77., profile_id="custom optional note")
+    assert validate_native_baseline(retained, requested, kind="blank") == []
+    assert validate_native_baseline(retained, replace(requested, delays_ns=(100.,)), kind="blank") == []
+    assert validate_native_baseline(retained, replace(requested, delays_ns=(100., -100.)), kind="blank") == []
+    assert any("support misses" in item for item in validate_native_baseline(
+        retained, replace(requested, delays_ns=(100., 200.)), kind="blank"))
+    retained["events"] = records[:-1]
+    assert any("incomplete" in item for item in validate_native_baseline(retained, requested, kind="blank"))
+
+
+def test_ns_raw_change_does_not_require_observed_pump_optics_or_temperature():
+    from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings
+    samples = []
+    for delay in Settings().delays_ns:
+        native = event(.9, delay=delay, quality_flags=["per_event_optical_pump_unobserved", "reset_failed", "temperature_invalid"])
+        native.update(calibrated_optical_delay_ns=None, observed_electrical_delay_ns=None,
+                      pump_evidence={"commanded": True, "optical_pulse_count": None})
+        samples.append(native)
+    result = reconstruct(samples, [event()], mode="dual", kernel={"irf_qualified": False})
+    assert result["coverage"].sum() == len(samples)
+    assert result["optical_coverage"].sum() == 0
+    assert np.allclose(result["delta_a"], -np.log10(.9))
+    assert result["fits"][0]["lifetime_ns"] is None
+    assert result["fits"][0]["outcome"] == "insufficient_support"

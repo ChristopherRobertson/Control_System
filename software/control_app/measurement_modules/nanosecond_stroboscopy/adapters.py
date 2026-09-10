@@ -1,8 +1,8 @@
-"""Installed sparse-probe adapters. Construction never opens a device.
+"""Owned installed-device acquisition of sparse-probe DC detector impulses.
 
-The HF2LI measures the signed area of its calibrated response to one selected IR
-pulse. Pulse isolation, reference lock, aperture and reset are qualifications, not
-consequences of programming a nanosecond delay. No optional DIO1 gate is assumed.
+HF2LI records both quadratures with a zero-frequency internal oscillator. Raw
+complex area is retained in V s. Missing optical calibration limits scientific
+interpretation and never prevents ordinary detector recording.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-KERNEL_ID = "sparse_single_probe_demod_impulse"
+from .settings import KERNEL_ID
 
 
 class ReadinessError(RuntimeError):
@@ -38,42 +38,21 @@ def settings_data(plan):
     return data(getattr(plan, "settings", plan))
 
 
-def installed_readiness(configuration, settings, qualification):
-    """Pure checks of installed routes and a promoted kernel's stated domain."""
+def installed_readiness(configuration, settings=None, qualification=None):
+    """Only concrete installed-route conflicts affect device configuration.
+
+    Missing calibration, sample metadata and scientific qualification are result
+    limitations. They do not prevent recording the installed detector signals.
+    """
     reasons = []
     devices = configuration.get("devices", {})
     expected = {"t660_1": {"A": "hf2li_extref", "B": "mircat_trig_in", "C": "t660_2_trig_in", "D": None},
                 "t660_2": {"A": "ndyag_fire", "B": "ndyag_q_switch", "C": "mircat_db9_pin_4_process_trigger", "D": None}}
     for unit, routes in expected.items():
         actual = devices.get(unit, {}).get("channel_map", {})
-        for channel, route in routes.items():
-            if channel not in actual or actual[channel] != route:
-                reasons.append(f"Installed {unit} {channel} route is not {route!r}; no alternative route is assumed")
-    requirements = {
-        "selected_probe_qualified": "One and only one MIRcat optical probe per selected cycle is unqualified",
-        "sparse_reference_lock_qualified": "HF2LI DIO0 reference lock at the selected sparse probe cadence is unqualified",
-        "impulse_area_qualified": "HF2LI signed impulse-area gain, integration aperture and filter history are unqualified",
-        "tee_transfer_qualified": "Installed sample/reference tee loading, receiver transfer and skew are unqualified (MS-02.1)",
-        "electrical_timing_qualified": "T660 route latency, trigger closure and electrical timing are unqualified",
-        "optical_timing_qualified": "Sample-plane optical time zero and IRF are unqualified",
-        "reset_equivalence_qualified": "Equivalent-state recovery at the selected cadence has not been demonstrated",
-        "probe_marker_qualified": "Observed MIRcat DIO19 pulse identity/count and HF2 timing-stream coverage are unqualified",
-    }
-    for key, reason in requirements.items():
-        if qualification.get(key) is not True:
-            reasons.append(reason)
-    if qualification.get("kernel_id") != KERNEL_ID:
-        reasons.append("A promoted sparse_single_probe_demod_impulse kernel is required; continuous slow averaging is not equivalent-time acquisition")
-    if not qualification.get("hf2li"):
-        reasons.append("Promoted independent HF2LI sample/reference settings and aggregate readout qualification are missing")
-    domain = {k: v for k, v in settings.items() if k not in ("qualification", "calibration_ids")}
-    if data(qualification.get("settings_domain")) != data(domain):
-        reasons.append("Promoted kernel settings_domain must match scientific settings excluding qualification and calibration_ids")
-    if str(settings.get("profile_id", settings.get("profile", ""))).startswith("77"):
-        reasons.append("Installed adapters have no cryogenic temperature readback or automatic qualified fresh-position/thermal reset; provide the missing commissioned host capability")
-    reasons.append("Normal installed detector wiring has no simultaneous sample-plane optical pump observation; no genuine per-event optical evidence adapter is available")
-    if not qualification.get("laser_safety_approved"):
-        reasons.append("Applicable laser safety authorization is absent from the promoted operating selection")
+        for channel, route in actual.items():
+            if channel in routes and route != routes[channel]:
+                reasons.append(f"Installed {unit} {channel} is routed to {route!r}; this kernel uses {routes[channel]!r}")
     return tuple(reasons)
 
 
@@ -104,6 +83,15 @@ def _flatten_native(records, demod):
     return {key: np.concatenate([np.asarray(c[key]).reshape(-1) for c in chunks if key in c]) for key in keys}
 
 
+def _relative_seconds(ticks, epoch_ticks, clockbase):
+    """Subtract integer device epochs before any floating-point conversion."""
+    values = np.asarray(ticks)
+    if values.dtype.kind in "ui":
+        delta = (values.astype(np.uint64) - np.uint64(epoch_ticks)).view(np.int64)
+        return delta.astype(np.float64)/float(clockbase)
+    return (values.astype(np.float64)-float(epoch_ticks))/float(clockbase)
+
+
 def integrate_impulse(stream, probe_epoch_s, *, clockbase, calibration):
     """Linear signed projection plus measured-aperture trapezoid integration.
 
@@ -115,7 +103,7 @@ def integrate_impulse(stream, probe_epoch_s, *, clockbase, calibration):
     x, y = np.asarray(stream.get("x", [])), np.asarray(stream.get("y", []))
     if len(ticks) < 3 or len(x) != len(ticks) or len(y) != len(ticks):
         raise ValueError("Incomplete native HF2LI impulse x/y/timestamp support")
-    t = ticks.astype(np.float64) / float(clockbase) - float(probe_epoch_s)
+    t = _relative_seconds(ticks, round(float(probe_epoch_s)*float(clockbase)), clockbase)
     if np.any(np.diff(t) <= 0):
         raise ValueError("Native HF2LI timestamps are duplicated or nonmonotonic")
     phase = float(calibration["projection_phase_rad"])
@@ -166,18 +154,25 @@ class InstalledAdapter:
         return self.context.hardware_scope(self.operation) if self.operation.hardware else nullcontext()
 
     def prepare(self):
+        """Resolve Auto choices from real devices while this operation owns them."""
+        from control_app.devices.hf2li_service import HF2LIPreset
+        from .planner import build_plan
         self.check()
-        # Loading a promoted bundle is read-only; no raw campaign data can grant
-        # connected readiness, and no hash is used as an operational gate.
-        for bundle_id in self.settings.get("calibration_ids", []):
-            bundle = self.context.promoted_bundle(bundle_id)
-            manifest = bundle.manifest if hasattr(bundle, "manifest") else bundle.get("manifest", bundle)
-            payload = manifest.get("nanosecond_stroboscopy")
-            if payload:
-                self.qualification.update(deepcopy(payload))
-        reasons = installed_readiness(data(self.operation.configuration), self.settings, self.qualification)
+        reasons = installed_readiness(data(self.operation.configuration), self.settings)
         if reasons:
-            raise ReadinessError("Connected Start is not ready:\n" + "\n".join(reasons))
+            raise ReadinessError("; ".join(reasons))
+        optional = self.settings.get("qualification", {})
+        self.qualification = dict(optional) if isinstance(optional, Mapping) else {}
+        # Optional calibration enriches results; unavailable records stay visible
+        # as provenance warnings rather than vetoing ordinary raw acquisition.
+        self.readbacks["calibration_warnings"] = []
+        for bundle_id in self.settings.get("calibration_ids", []):
+            try:
+                bundle = self.context.promoted_bundle(bundle_id)
+                manifest = bundle.manifest if hasattr(bundle, "manifest") else bundle.get("manifest", bundle)
+                self.qualification.update(deepcopy(manifest.get("nanosecond_stroboscopy", {})))
+            except Exception as exc:
+                self.readbacks["calibration_warnings"].append(f"{bundle_id}: {exc}")
         with self._scope():
             for name in ("t660_1", "t660_2", "hf2li", "mircat"):
                 self.check()
@@ -187,116 +182,208 @@ class InstalledAdapter:
                 (device.initialize if name == "mircat" else device.connect)()
             for name in ("t660_1", "t660_2"):
                 unit = self.devices[name]
-                saved = unit.read_active_settings()
-                refs = {i: int(unit.command(f"TIME:RELTo{i}?")) for i in range(1, 9)}
-                self.before[name] = {"readback": saved, "references": refs}
-                self._validate_clock(name, saved)
+                self.before[name] = {"readback": unit.read_active_settings(),
+                    "references": {i: int(unit.command(f"TIME:RELTo{i}?")) for i in range(1, 9)}}
+            self.before["t660_1"]["burst"] = {"pulses": int(self.devices["t660_1"].command("BURst:PULse?")),
+                "triggers": int(self.devices["t660_1"].command("BURst:TRIGger?"))}
             hf = self.devices["hf2li"]
-            from control_app.devices.hf2li_service import HF2LIPreset
-            cfg = self.qualification["hf2li"]
-            self.hf_snapshot_preset = HF2LIPreset("nanosecond_stroboscopy_restoration", {
-                **cfg, "demodulators": [{"index": i} for i in range(6)]})
+            self.hf_snapshot_preset = HF2LIPreset("nanosecond_stroboscopy_dc_restoration", {
+                "demodulators": [{"index": i, "sinc": False, "phaseshift": 0.0} for i in range(6)], "oscillators": [{"index": 0}],
+                "pll": {"index": 0}})
             self.before["hf2li"] = hf.export_settings_snapshot(preset=self.hf_snapshot_preset)
             if self.before["hf2li"].get("read_errors"):
-                raise ReadinessError("HF2LI initial settings preservation is incomplete")
+                raise ReadinessError("HF2LI settings could not be preserved before configuration: " + str(self.before["hf2li"]["read_errors"]))
             qcl = self.devices["mircat"]
-            index = int(self.qualification["qcl_index"])
-            self.before["mircat"] = {"trigger": qcl.get_wavelength_trigger_params(), "qcl": index,
-                "pulse_rate_hz": qcl.get_qcl_pulse_rate(index), "pulse_width_ns": qcl.get_qcl_pulse_width(index),
-                "current_ma": qcl.get_qcl_current(index), "state": data(qcl.read_state())}
+            qcls = []
+            for index in range(1, qcl.get_num_installed_qcls()+1):
+                qcls.append({"qcl": index, "pulse_rate_hz": qcl.get_qcl_pulse_rate(index),
+                    "pulse_width_ns": qcl.get_qcl_pulse_width(index), "current_ma": qcl.get_qcl_current(index),
+                    "range": qcl.get_qcl_tuning_range(index)})
+            self.before["mircat"] = {"trigger": qcl.get_wavelength_trigger_params(),
+                "qcls": qcls, "state": data(qcl.read_state())}
             self._inhibit()
-            cfg = self.qualification["hf2li"]
+            qcl.turn_emission_off()
+            self.capabilities = self._capabilities()
+            self.plan = build_plan(getattr(self.plan, "settings", self.settings), capabilities=self.capabilities)
+            if self.plan.errors:
+                raise ValueError("; ".join(self.plan.errors))
+            resolved = getattr(self.plan, "resolved_settings", None) or self.plan.settings
+            self.settings = data(resolved)
+            if not self.plan.timing or not self.plan.events:
+                raise ValueError("Installed numeric readbacks did not resolve a finite timing sequence: " + "; ".join(self.plan.readiness))
+            inputs = {f"ch{i+1}": {"index": i, "ac": False, "differential": False,
+                "impedance_50ohm": bool(self._hf_before(f"sigins/{i}/imp50")),
+                "range_v": float(self._hf_before(f"sigins/{i}/range"))} for i in (0, 1)}
+            active = [0, 3] if self.settings["mode"] == "dual" else [0]
+            tc, order, rate = (self.settings[k] for k in ("filter_time_constant_s", "filter_order", "hf2li_rate_hz"))
+            demods = [{"index": i, "enable": i in active,
+                **({"adcselect": 0 if i == 0 else 1, "oscselect": 0, "harmonic": 1,
+                    "order": order if i == 0 else self.settings.get("reference_filter_order") or self.capabilities["reference_filter_order"],
+                    "timeconstant_s": tc if i == 0 else self.settings.get("reference_filter_time_constant_s") or self.capabilities["reference_filter_time_constant_s"],
+                    "rate_sps": rate if i == 0 else self.settings.get("reference_hf2li_rate_hz") or self.capabilities["reference_hf2li_rate_hz"],
+                    "trigger": 0, "sinc": False} if i in active else {})} for i in range(6)]
             hf.configure_demodulators([{"index": i, "enable": False} for i in range(6)])
-            hf.configure_signal_inputs(cfg["signal_inputs"])
-            hf.configure_pll(cfg["pll"])
-            hf.configure_demodulators(cfg["demodulators"])
+            hf.configure_pll({"index": 0, "enable": False})
+            hf.configure_oscillators([{"index": 0, "frequency_hz": 0.0}])
+            hf.configure_signal_inputs(inputs)
+            hf.configure_demodulators(demods)
             hf.sync()
             after = hf.export_settings_snapshot(preset=self.hf_snapshot_preset)
-            self.readbacks["hf2li"] = after
-            self._validate_hf(after, cfg)
-            limits = qcl.get_qcl_pulse_limits(index)
-            rate, width = self.plan.timing["input_frequency_hz"], float(self.qualification["probe_width_ns"])
-            if rate > limits["max_pulse_rate_hz"] or width > limits["max_pulse_width_ns"] or rate * width * 1e-9 * 100 > limits["max_duty_cycle"]:
-                raise ReadinessError("Selected sparse probe exceeds installed MIRcat pulse or duty readback")
-            self.readbacks["mircat_pulse"] = qcl.set_qcl_pulse_params(qcl=index, pulse_rate_hz=rate,
-                pulse_width_ns=width, current_ma=float(self.qualification["probe_current_ma"]))
-            self.readbacks["clockbase"] = hf.get_clockbase()
-            self.readbacks["qualification"] = deepcopy(self.qualification)
+            if after.get("read_errors"):
+                raise ReadinessError("HF2LI configured readback failed: " + str(after["read_errors"]))
+            for index in (0, 1):
+                if after["nodes"][f"/{hf.device_id}/sigins/{index}/ac"]["value"] != 0:
+                    raise ReadinessError(f"HF2LI signal input {index} did not accept DC coupling")
+            if after["nodes"][f"/{hf.device_id}/plls/0/enable"]["value"] != 0:
+                raise ReadinessError("HF2LI external PLL did not disable for DC demodulation")
+            actual_frequency = float(hf.get_oscillator_frequency(0))
+            if actual_frequency != 0.0:
+                raise ReadinessError(f"HF2LI rejected internal DC demodulation: requested 0 Hz, read back {actual_frequency:g} Hz")
+            self.readbacks.update(hf2li=after, clockbase=hf.get_clockbase(), capabilities=self.capabilities,
+                resolved_settings=self.settings, resolved_plan=data(self.plan), demodulation="internal_zero_frequency",
+                actual_oscillator_hz=actual_frequency)
+            self.detector_settings = {}
+            for demod in active:
+                base = f"/{hf.device_id}/demods/{demod}/"
+                get = lambda key: after["nodes"][base+key]["value"]
+                self.detector_settings[demod] = {"timeconstant_s": float(get("timeconstant")), "order": int(get("order")), "rate_sps": float(get("rate"))}
+                if "sinc" not in {path.rsplit("/", 1)[-1] for path in after["nodes"] if path.startswith(base)}:
+                    raise ReadinessError("HF2LI service lacks public sinc-filter configuration/readback required for DC demodulation")
+                if int(get("sinc")) != 0:
+                    raise ReadinessError(f"HF2LI demodulator {demod} sinc filter did not disable at DC")
+                if any(int(get(key)) != expected for key, expected in (("oscselect", 0), ("harmonic", 1), ("trigger", 0))):
+                    raise ReadinessError(f"HF2LI demodulator {demod} rejected its internal DC oscillator/harmonic/free-running trigger settings")
+                measured = self.detector_settings[demod]
+                if measured["order"] not in range(1,9) or measured["timeconstant_s"]*measured["rate_sps"] < 4-1e-9:
+                    raise ReadinessError(f"HF2LI demodulator {demod} actual filter/rate has insufficient impulse-area sample support")
+                if .75*self.plan.timing["frame_period_s"] < 10*measured["order"]*measured["timeconstant_s"]:
+                    raise ReadinessError(f"HF2LI demodulator {demod} actual filter tail exceeds the selected acquisition aperture")
+                if int(get("enable")) != 1 or int(get("adcselect")) != (0 if demod == 0 else 1):
+                    raise ReadinessError(f"HF2LI demodulator {demod} did not accept its sample/reference input")
+            aggregate = sum(item["rate_sps"] for item in self.detector_settings.values())
+            if aggregate > 700000 or any(x["rate_sps"] <= 0 for x in self.detector_settings.values()):
+                raise ReadinessError("HF2LI actual aggregate readout exceeds the documented 700 kSa/s capacity")
+            self.readbacks["actual_detectors"] = deepcopy(self.detector_settings)
+            self.readbacks["raw_kernel"] = {"kernel_id": KERNEL_ID, "version": 2,
+                "demodulation": "internal_zero_frequency", "observable": "magnitude_of_baseline_subtracted_complex_impulse_area",
+                "units": "V s (uncalibrated demodulator scale)", "detectors": deepcopy(self.detector_settings),
+                "signal_inputs": {path: value for path, value in after["nodes"].items() if "/sigins/" in path},
+                "mircat_qcls": deepcopy(qcls),
+                "probe_trigger_width_ns": _seconds(self.plan.timing["t660_1_recipe"]["channels"]["B"]["width"])*1e9,
+                "probe_period_s": self.plan.timing["frame_period_s"], "optical_timing_qualified": False}
+            self._health("configured")
             self.retain("configuration", self.readbacks)
         return deepcopy(self.readbacks)
 
-    def _validate_clock(self, name, saved):
-        expected = "IN" if name == "t660_1" else "OUT"
-        if _query(saved["queries"], "clock_connector_mode").upper() != expected:
-            raise ReadinessError(f"{name} shared 10 MHz clock connector readback must be {expected}")
-        if name == "t660_1" and _query(saved["queries"], "clock_lock_status").upper() not in ("1", "LOCKED", "LOCK"):
-            raise ReadinessError("T660-1 shared clock lock is not observed")
+    def _hf_before(self, suffix):
+        path = f"/{self.devices['hf2li'].device_id}/{suffix}"
+        return self.before["hf2li"]["nodes"][path]["value"]
 
-    def _validate_hf(self, after, cfg):
-        if after.get("read_errors"):
-            raise ReadinessError("HF2LI configured readback incomplete")
+    def _capabilities(self):
+        """Only documented values actually read from the installed services."""
+        def absolute(name):
+            saved = self.before[name]
+            relative = {edge: _seconds(_query(saved["readback"]["channels"][c], key))
+                for c, edges in zip("ABCD", ((1, 2), (3, 4), (5, 6), (7, 8)))
+                for edge, key in zip(edges, ("delay_edge", "width_edge"))}
+            values = {0: 0.}
+            def resolve(edge, path=()):
+                if edge in values: return values[edge]
+                target = saved["references"][edge]
+                if edge in path or target not in range(9):
+                    raise ValueError(f"{name} has cyclic or invalid active timing references")
+                values[edge] = relative[edge] + resolve(target, (*path, edge))
+                return values[edge]
+            for edge in relative: resolve(edge)
+            return values
+        t1, t2 = absolute("t660_1"), absolute("t660_2")
+        return {"fire_to_q_ns": (t2[3]-t2[1])*1e9,
+            "pump_command_width_ns": (t2[2]-t2[1])*1e9,
+            "fire_command_width_ns": (t2[2]-t2[1])*1e9,
+            "q_command_width_ns": (t2[4]-t2[3])*1e9,
+            "probe_command_width_ns": (t1[4]-t1[3])*1e9,
+            "reference_command_width_ns": (t1[2]-t1[1])*1e9,
+            "event_trigger_width_ns": (t1[6]-t1[5])*1e9,
+            "filter_time_constant_s": float(self._hf_before("demods/0/timeconstant")),
+            "filter_order": int(self._hf_before("demods/0/order")),
+            "hf2li_rate_hz": float(self._hf_before("demods/0/rate")),
+            "reference_filter_time_constant_s": float(self._hf_before("demods/3/timeconstant")),
+            "reference_filter_order": int(self._hf_before("demods/3/order")),
+            "reference_hf2li_rate_hz": float(self._hf_before("demods/3/rate")),
+            "timing_step_ns": .01, "max_frame_capacity": self.devices["t660_2"].verified_frame_capacity(),
+            "source": "owned installed device readbacks"}
+
+    def _health(self, stage):
         hf = self.devices["hf2li"]
-        expected_indices = {0, 2, 3} if self.settings["mode"] == "dual" else {0, 2}
-        enabled = {d["index"] for d in cfg["demodulators"] if d.get("enable")}
-        if enabled != expected_indices:
-            raise ReadinessError("Maintained HF2 detector roles are sample demod 0, reference demod 3, timing demod 2")
-        total = 0.0
-        for d in cfg["demodulators"]:
-            if not d.get("enable"):
-                continue
-            for key, node in (("rate_sps", "rate"), ("timeconstant_s", "timeconstant"), ("order", "order"), ("adcselect", "adcselect")):
-                if key in d:
-                    actual = after["nodes"][f"/{hf.device_id}/demods/{d['index']}/{node}"]["value"]
-                    if not math.isclose(float(actual), float(d[key]), rel_tol=1e-9, abs_tol=1e-12):
-                        raise ReadinessError(f"HF2LI demod {d['index']} {key} differs from promoted selection")
-            total += float(d["rate_sps"])
-        if total > float(cfg["qualified_aggregate_rate_sps"]):
-            raise ReadinessError("HF2LI aggregate stream rate exceeds the jointly qualified readout")
-        # These are retained connected observations selected by the qualified
-        # device node map; no unsupported gate or receiver is manufactured.
-        for path, expected in cfg["required_readbacks"].items():
-            if path not in after["nodes"] or after["nodes"][path]["value"] != expected:
-                raise ReadinessError(f"Required HF2LI lock/clock/receiver readback failed: {path}")
+        health = hf.read_acquisition_health(input_indices=(0, 1) if self.settings["mode"] == "dual" else (0,))
+        self.readbacks.setdefault("health", []).append({"stage": stage, **health})
+        if health.get("overload") is True:
+            raise ReadinessError("HF2LI reports ADC overload; reduce detector signal or increase its input range")
+        if health.get("clock_locked") is False:
+            raise ReadinessError("HF2LI reports an internal clock-generation failure")
+        # PLL deliberately disabled at DC: reference_locked=None is expected.
+        # Unreadable status nodes remain unknown in retained health, not all-clear.
+        return health
 
     def tune(self, wavenumber):
         with self._scope():
             self.check()
             qcl = self.devices["mircat"]
             self._inhibit()
+            qcl.turn_emission_off()
+            if qcl.get_system_error_word():
+                raise ReadinessError("MIRcat reports a system fault")
+            if not qcl.is_interlock_set() or not qcl.is_key_switch_set():
+                raise ReadinessError("MIRcat interlock/key switch is not ready")
+            candidates = [x for x in self.before["mircat"]["qcls"] if x["range"]["min_cm1"] <= wavenumber <= x["range"]["max_cm1"]]
+            if not candidates:
+                raise ValueError(f"{wavenumber:g} cm^-1 is outside all installed MIRcat QCL tuning ranges")
+            index = candidates[0]["qcl"]
+            if not qcl.is_laser_armed(): qcl.arm()
+            deadline = time.monotonic() + 120.0
+            while not qcl.are_tecs_ready():
+                self.check()
+                if time.monotonic() >= deadline: raise ReadinessError("MIRcat TEC readiness timed out")
+                time.sleep(.05)
             qcl.set_external_trigger_params(wavenumber_cm1=wavenumber)
-            qcl.tune_to_wavenumber(wavenumber, qcl=int(self.qualification["qcl_index"]))
-            deadline = time.monotonic() + float(self.qualification["tune_timeout_s"])
+            qcl.tune_to_wavenumber(wavenumber, qcl=index)
             while not qcl.is_tuned():
                 self.check()
-                if time.monotonic() >= deadline:
-                    raise ReadinessError("MIRcat Tuned readiness deadline expired; no pump was retried")
+                if time.monotonic() >= deadline: raise ReadinessError("MIRcat Tuned readiness timed out")
                 time.sleep(.025)
-            self._wait(float(self.qualification["settling_s"]), "tuning/settling")
             actual = qcl.get_actual_wavelength()
-            if actual.get("units") not in ("cm-1", "cm^-1", "cm1", "wavenumber_cm1") or abs(float(actual["value"]) - wavenumber) > float(self.qualification["wavenumber_tolerance_cm1"]):
-                raise ReadinessError("MIRcat actual wavenumber does not satisfy the selected measured coordinate")
-            self.readbacks["wavelength"] = actual
-            if not qcl.is_laser_armed():
-                qcl.arm()
-            qcl.turn_emission_on(approved_laser_safety_condition=True)
+            value = float(actual["value"])
+            if actual.get("units") == "microns": value = 10000.0/value
+            elif actual.get("units") != "cm^-1": raise ReadinessError("MIRcat returned an unsupported wavelength unit")
+            if not math.isfinite(value): raise ReadinessError("MIRcat returned a nonfinite wavelength")
+            self.readbacks["wavelength"] = {**actual, "wavenumber_cm1": value, "qcl": index}
+            limits = qcl.get_qcl_pulse_limits(index)
+            width = float(qcl.get_qcl_pulse_width(index))
+            rate = self.plan.timing["input_frequency_hz"]
+            if rate > limits["max_pulse_rate_hz"] or width <= 0 or width > limits["max_pulse_width_ns"] or rate * width * 1e-9 * 100 > limits["max_duty_cycle"]:
+                raise ReadinessError("MIRcat current optical pulse width and selected cadence exceed the installed limits")
+            self.readbacks["mircat_pulse"] = {"qcl": index, "optical_pulse_width_ns": width,
+                "current_ma": qcl.get_qcl_current(index), "external_probe_rate_hz": rate,
+                "internal_rate_hz": qcl.get_qcl_pulse_rate(index), "source": "installed readback; preserved optical pulse parameters"}
+            qcl.start_emission()
+            settling = max(x["timeconstant_s"]*x["order"]*8 for x in self.detector_settings.values())
+            self._wait(settling, "detector settling")
 
     def _wait(self, duration, stage):
         deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
             self.check()
-            self.progress(stage, 0, 1, f"{max(0, deadline-time.monotonic()):.2f} s remaining; qualified minimum interval")
+            self.progress(stage, 0, 1, f"{max(0, deadline-time.monotonic()):.2f} s remaining; selected interval")
             time.sleep(min(.05, max(0, deadline-time.monotonic())))
 
     def acquire(self, event, *, kind="measurement"):
-        from .timing import compile_timing
         ev = data(event)
         self.pending_native = []
         with self._scope():
             self.check()
             if kind == "measurement" and ev["condition"] in ("pump_on", "pump_only"):
-                self._wait(float(self.settings["reset_interval_s"]), "recovery waits")
-            timing = compile_timing(getattr(self.plan, "settings", self.settings))
-            recipe = deepcopy(timing.t660_1_recipe)
+                self._wait(float(self.settings["reset_interval_s"]), "cycle recovery interval")
+            recipe = deepcopy(self.plan.timing["t660_1_recipe"])
             frames = deepcopy(ev["frames"])
             if kind != "measurement":
                 for frame in frames:
@@ -304,88 +391,224 @@ class InstalledAdapter:
                     frame["channels"]["B"]["enabled"] = False
             t1, t2, hf = (self.devices[k] for k in ("t660_1", "t660_2", "hf2li"))
             self._inhibit()
+            # Installed rising-edge references persist across workflows. The
+            # compiled electrical recipe is absolute to each synthesizer shot.
+            for edge in (1, 3, 5, 7):
+                t1.command(f"TIME:RELTo{edge} 0", expect_response=False)
             t1.apply_recipe(recipe)
+            configured = t1.read_active_settings()
+            for channel, edge in zip("ABCD", (1, 3, 5, 7)):
+                if int(t1.command(f"TIME:RELTo{edge}?")) != 0 or int(t1.command(f"TIME:RELTo{edge+1}?")) != edge:
+                    raise ReadinessError(f"T660-1 {channel} did not accept shot-relative delay/width references")
+                for key, setting in (("delay_edge", "delay"), ("width_edge", "width")):
+                    if not math.isclose(_seconds(_query(configured["channels"][channel], key)), _seconds(recipe["channels"][channel][setting]), abs_tol=1e-11, rel_tol=0):
+                        raise ReadinessError(f"T660-1 {channel} {setting} did not match the compiled electrical timing")
+            if not math.isclose(float(_query(configured["queries"], "synth_frequency")), self.plan.timing["input_frequency_hz"], rel_tol=1e-9):
+                raise ReadinessError("T660-1 actual synthesizer frequency differs from the compiled frame cadence")
+            # T660 remote gate mode 9 emits one finite N-of-M burst per
+            # GATE:EXECute. M=N+1 avoids the documented N=M repeat caveat.
+            # This bounds probe pulses in hardware while the host retrieves data.
+            for command in ("BURst:MODe OFF", f"BURst:PULse {len(frames)}", f"BURst:TRIGger {len(frames)+1}", "BURst:MODe ON", "GATE:MODe 9"):
+                t1.command(command, expect_response=False)
+            burst = {"pulses": int(t1.command("BURst:PULse?")), "triggers": int(t1.command("BURst:TRIGger?")),
+                "enabled": str(t1.command("BURst:MODe?")).strip().upper(), "gate_mode": int(t1.command("GATE:MODe?"))}
+            if burst["pulses"] != len(frames) or burst["triggers"] != len(frames)+1 or burst["enabled"] not in ("ON", "1") or burst["gate_mode"] != 9:
+                raise ReadinessError("T660-1 rejected the finite remote-gated probe burst")
+            configured["finite_remote_burst"] = burst
+            self.retain(f"probe-clock-{ev['event_id']}", configured)
             previous_counter = t2.get_shot_count()
-            upload = t2.preload_frame_table(frames, predivider=timing.predivider,
-                input_frequency_hz=timing.input_frequency_hz, cancel_check=self.check,
+            upload = t2.preload_frame_table(frames, predivider=self.plan.timing["predivider"],
+                input_frequency_hz=self.plan.timing["input_frequency_hz"], cancel_check=self.check,
                 progress=lambda done, total: self.progress("acknowledged timing-table upload", done, total, ev["event_id"]))
-            upload["counter_before_explicit_burst"] = previous_counter
-            upload["biological_event_identity"] = ev["event_id"]
+            upload.update(counter_before_explicit_burst=previous_counter, biological_event_identity=ev["event_id"])
             self.retain(f"upload-{ev['event_id']}", upload)
-            hf.start_acquisition(demodulators=[0, 2, 3] if self.settings["mode"] == "dual" else [0, 2])
-            try:
-                # Acquisition is subscribed before either precise edge source.
-                t2.start_frame_table()
-                t1.set_trigger_source("SYN")
-                t1.command("START", expect_response=False)
-                deadline = time.monotonic() + len(frames) * timing.frame_period_s + float(self.qualification["retrieval_timeout_s"])
-                while True:
-                    self.check()
-                    native = hf.read_acquisition(min(.1, timing.frame_period_s))
-                    self.pending_native.append(native)
-                    self.retain(f"native-{ev['event_id']}-{len(self.pending_native):06d}", native)
-                    state = t2.get_frames_status()
-                    if state == "DONE":
-                        break
-                    if state == "ERROR" or time.monotonic() >= deadline:
-                        raise ReadinessError(f"Finite event table {state}; retained partial native data; pump is never retried")
-                self._inhibit()
-                native = hf.read_acquisition(float(self.qualification["retrieval_tail_s"]))
+            hf.start_acquisition(demodulators=[0, 3] if self.settings["mode"] == "dual" else [0])
+            def poll(duration):
+                native = hf.read_acquisition(duration)
                 self.pending_native.append(native)
                 self.retain(f"native-{ev['event_id']}-{len(self.pending_native):06d}", native)
+                return native
+            try:
+                # A real pre-start baseline and whole native burst are retained.
+                # Host times only bracket commands; both pump/probe edges come
+                # from the preloaded T660 frame engine and synthesizer.
+                poll(min(.2, self.plan.timing["frame_period_s"]/4))
+                self._health("before_burst")
+                t2.start_frame_table()
+                start_before = time.monotonic()
+                t1.set_trigger_source("SYN")
+                t1.command("START", expect_response=False)
+                t1.command("GATE:EXECute", expect_response=False)
+                start_after = time.monotonic()
+                deadline = start_after + len(frames)*self.plan.timing["frame_period_s"] + 10.
+                counter_observations = []
+                while True:
+                    self.check()
+                    poll(min(.1, self.plan.timing["frame_period_s"]))
+                    state, shots = t2.get_frames_status(), t2.get_shot_count()
+                    counter_observations.append({"host_monotonic_s": time.monotonic(), "state": state, "shot_count": shots})
+                    self._health("acquisition")
+                    if state == "DONE": break
+                    if state == "ERROR" or time.monotonic() >= deadline:
+                        raise ReadinessError(f"Finite event table {state}; native data retained, no automatic pump retry")
+                tail = max(x["timeconstant_s"]*x["order"]*8 for x in self.detector_settings.values())
+                remaining = self.plan.timing["frame_period_s"] + tail
+                while remaining > 1e-9:
+                    self.check()
+                    duration = min(.1, remaining)
+                    poll(duration)
+                    remaining -= duration
+                self._inhibit()
+                self._health("retrieval")
                 shots = t2.get_shot_count()
+                probe_shots = t1.get_shot_count()
+                counts = {"t660_1_shot_counter": probe_shots, "t660_1_counter_basis": "diagnostic; counter may include burst-suppressed synthesizer shots", "t660_2_frame_shots": shots, "finite_probe_burst": burst, "expected": len(frames)}
+                self.readbacks["last_burst_counts"] = counts
+                self.retain(f"burst-counts-{ev['event_id']}", counts)
                 if shots != len(frames):
                     raise ValueError(f"T660 observed shot count {shots} differs from planned {len(frames)}")
-                result = self._extract(ev, kind)
-                result["readbacks"] = {"t660_shot_count": shots, "upload": upload, "wavelength": deepcopy(self.readbacks["wavelength"])}
+                result = self._extract_raw(ev, kind)
+                result["readbacks"] = {"t660_shot_count": shots, "t660_1_diagnostic_shot_count": probe_shots, "upload": upload,
+                    "counter_observations": counter_observations, "command_start_host_monotonic_s": [start_before, start_after],
+                    "wavelength": deepcopy(self.readbacks["wavelength"]), "health": deepcopy(self.readbacks.get("health", []))}
                 return result
             finally:
-                # Any stop failure propagates to runner cleanup, which tries
-                # every device independently and retains the actual outcome.
-                self._inhibit()
-                hf.stop_acquisition()
+                failures = []
+                for callback in (self._inhibit, hf.stop_acquisition):
+                    try: callback()
+                    except Exception as exc: failures.append(str(exc))
+                if failures: raise RuntimeError("; ".join(failures))
 
-    def _extract(self, ev, kind):
-        cb = self.readbacks["clockbase"]
-        timing = _flatten_native(self.pending_native, 2)
-        ticks = np.asarray(timing.get("timestamp", []))
-        dio = np.asarray(timing.get("dio", []), dtype=np.uint32)
-        if len(ticks) != len(dio) or len(ticks) < 2:
-            raise ValueError("Observed DIO19 probe identity stream is missing")
-        high = (dio & (1 << 19)) != 0
-        edges = np.flatnonzero(high[1:] & ~high[:-1]) + 1
-        frame_index = int(ev["frame_index"])
-        if len(edges) != len(ev["frames"]) or frame_index >= len(edges):
-            raise ValueError("Observed probe pulse count differs from the complete finite burst; no event-to-pulse assignment invented")
-        epochs = ticks[edges].astype(np.float64) / cb
+    def _extract_raw(self, ev, kind):
+        """Native DC impulse area; no calibration approval or narrow marker gate."""
+        cb = float(self.readbacks["clockbase"])
+        raw = {"sample": _flatten_native(self.pending_native, 0)}
+        if self.settings["mode"] == "dual": raw["reference"] = _flatten_native(self.pending_native, 3)
         period = float(self.plan.timing["frame_period_s"])
-        if np.any(np.abs(np.diff(epochs[:len(ev["frames"])]) - period) > float(self.qualification["probe_period_tolerance_s"])):
-            raise ValueError("Observed probe pulse epochs do not match the planned frame cadence")
-        epoch = float(epochs[frame_index])
+        flags, observed_peaks, epoch, assignment = [], [], None, "unassigned_native_burst"
+        starts = [int(np.asarray(stream.get("timestamp", []))[0]) for stream in raw.values() if len(np.asarray(stream.get("timestamp", [])))]
+        origin_tick = min(starts) if starts else 0
+        epoch_tick = None
+        # Detector-envelope peaks identify recorded probes at the slow recorder's
+        # resolution only; this is not electrical or chemical time zero.
+        for role, stream in reversed(tuple(raw.items())):
+            ticks = np.asarray(stream.get("timestamp", []))
+            x, y = np.asarray(stream.get("x", [])), np.asarray(stream.get("y", []))
+            if len(ticks) < 5 or len(x) != len(ticks) or len(y) != len(ticks): continue
+            times = _relative_seconds(ticks, origin_tick, cb)
+            if np.any(np.diff(times) <= 0): continue
+            signal = x+1j*y
+            baseline = np.median(signal[:max(3, min(len(signal)//10, 50))])
+            envelope = np.abs(signal-baseline)
+            noise = float(np.sqrt(np.mean(np.abs(signal[:max(3, min(len(signal)//10, 50))]-baseline)**2)))
+            threshold = max(np.finfo(float).eps, (np.max(envelope)-np.median(envelope))*.08, 8*noise)
+            separation = max(1, int(period/np.median(np.diff(times))*.6))
+            candidates = np.flatnonzero((envelope[1:-1] > envelope[:-2]) &
+                (envelope[1:-1] >= envelope[2:]) & (envelope[1:-1] > threshold))+1
+            retained = []
+            for candidate in candidates[np.argsort(envelope[candidates])[::-1]]:
+                if all(abs(int(candidate)-prior) >= separation for prior in retained):
+                    retained.append(int(candidate))
+            peaks = np.asarray(sorted(retained), dtype=int)
+            if len(peaks) == len(ev["frames"]):
+                cadence_tolerance = max(3*float(np.median(np.diff(times))), period*.002)
+                if np.any(np.abs(np.diff(times[peaks])-period) > cadence_tolerance):
+                    flags.append("probe_envelope_cadence_mismatch")
+                    continue
+                detector = self.detector_settings[3 if role == "reference" else 0]
+                observed_peaks = [int(ticks[index]) for index in peaks]
+                selected = peaks[int(ev["frame_index"])]
+                relative_epoch = float(times[selected]-(detector["order"]-1)*detector["timeconstant_s"])
+                epoch_tick = origin_tick + round(relative_epoch*cb)
+                epoch = epoch_tick/cb
+                assignment = "measured_detector_impulse_order_with_programmed_frame_index"
+                break
+            flags.append("probe_envelope_count_mismatch")
+        if epoch is None: flags.append("pulse_assignment_unresolved")
         result = {k: v for k, v in ev.items() if k != "frames"}
-        result.update(condition=ev["condition"] if kind == "measurement" else "unpumped",
-            sample=integrate_impulse(_flatten_native(self.pending_native, 0), epoch, clockbase=cb,
-                                     calibration=self.qualification["impulse_calibration"]["sample"]),
-            native_device_data=deepcopy(self.pending_native), quality_flags=[],
+        commanded = kind == "measurement" and ev["condition"] in ("pump_on", "pump_only")
+        offset = self.settings.get("optical_delay_offset_ns")
+        try:
+            optical = ev.get("electrical_delay_ns", ev["quantized_delay_ns"])+float(offset) if offset is not None else None
+            if optical is not None and not math.isfinite(optical): raise ValueError("Nonfinite optional offset")
+        except (TypeError, ValueError):
+            optical = None
+            flags.append("invalid_optional_optical_offset")
+        result.update(condition=ev["condition"] if kind == "measurement" else "unpumped", requested_condition=ev["condition"],
+            native_device_data=deepcopy(self.pending_native), quality_flags=flags,
+            acquisition_kernel=deepcopy(self.readbacks["raw_kernel"]),
             observed_electrical_delay_ns=None, calibrated_optical_delay_ns=None,
-            acquisition_kernel={"kernel_id": KERNEL_ID, "qualification": self.qualification["qualification_id"]},
-            pump_evidence={"commanded": kind == "measurement" and ev["condition"] == "pump_on",
-                           "optical_pulse_count": None if kind == "measurement" and ev["condition"] == "pump_on" else 0, "optical_observation": "No sample-plane pump detector in normal dual receiver topology"},
-            reset_evidence={"method": "qualified_passive_recovery_envelope", "wait_s": self.settings["reset_interval_s"],
-                            "qualification_id": self.qualification["qualification_id"], "equivalent": True},
-            measured_wavenumber_cm1=float(self.readbacks["wavelength"]["value"]))
-        if self.settings["mode"] == "dual":
-            result["reference"] = integrate_impulse(_flatten_native(self.pending_native, 3), epoch, clockbase=cb,
-                calibration=self.qualification["impulse_calibration"]["reference"])
-            if "sample_reference_covariance" in self.qualification:
-                result["sample_reference_covariance"] = self.qualification["sample_reference_covariance"]
-        # Calibration maps programmed delay only within its accepted domain; it
-        # is not relabelled as an independently observed optical event timestamp.
-        result["calibrated_optical_delay_ns"] = ev["electrical_delay_ns"] + float(self.qualification["optical_delay_offset_ns"])
-        result["optical_delay_source"] = self.qualification["optical_timing_calibration_id"]
-        if result["pump_evidence"]["commanded"]:
-            result["quality_flags"].append("per_event_optical_pump_unobserved")
+            estimated_optical_delay_ns=optical,
+            estimated_optical_delay_source="operator_supplied_route_offset" if offset is not None else "unavailable",
+            optical_delay_source="unavailable",
+            probe_assignment={"method": assignment, "detector_envelope_peak_ticks": observed_peaks, "clockbase": cb,
+                "filter_model_epoch_s": epoch, "optical_time_zero": False},
+            pump_evidence={"commanded": commanded, "optical_pulse_count": None if commanded else 0,
+                "observation": "electrical sequence commands retained; optical pump arrival is not independently observed"},
+            reset_evidence={"method": "operator_selected_cycle_interval", "wait_s": period, "description": "Cycle interval; sample equivalence unobserved",
+                "equivalent": None},
+            measured_wavenumber_cm1=float(self.readbacks["wavelength"]["wavenumber_cm1"]))
+        for role, stream in raw.items():
+            result[role] = self._raw_area(stream, epoch, period, cb, epoch_ticks=epoch_tick)
+        if commanded: result["quality_flags"].append("optical_delay_unresolved")
+        for role in raw:
+            result["quality_flags"].extend(result[role].get("quality_flags", []))
         return result
+
+    @staticmethod
+    def _raw_area(stream, epoch, period, clockbase, *, epoch_ticks=None):
+        """Integrate signed X/Y before taking magnitude; retain raw gain units."""
+        ticks = np.asarray(stream.get("timestamp", []))
+        x, y = np.asarray(stream.get("x", [])), np.asarray(stream.get("y", []))
+        output = {"timestamp_s": np.array([epoch if epoch is not None else 0.]), "value": np.array([np.nan]),
+            "valid": np.array([False]), "group_delay_s": 0., "estimator": "uncalibrated_complex_impulse_area",
+            "units": "V s (HF2 demodulator scale)", "variance": np.array([np.nan]),
+            "uncertainty_basis": "Filter-correlated integrated noise not yet estimated; no independent-sample assumption",
+            "quality_flags": []}
+        def unsupported(reason):
+            output["quality_flags"].append(reason)
+            return output
+        if epoch is None: return unsupported("pulse_assignment_unresolved")
+        if len(ticks) != len(x) or len(ticks) != len(y) or len(ticks) < 5: return unsupported("malformed_native_stream")
+        epoch_ticks = int(round(epoch*clockbase)) if epoch_ticks is None else int(epoch_ticks)
+        times = _relative_seconds(ticks, epoch_ticks, clockbase)
+        output["timestamp_ticks"] = np.array([epoch_ticks], dtype=np.uint64)
+        if np.any(np.diff(times) <= 0): return unsupported("nonmonotonic_native_timestamps")
+        base = (times >= -.2*period) & (times <= -.05*period)
+        signal = (times >= -.01*period) & (times <= .75*period)
+        if base.sum() < 3 or signal.sum() < 3: return unsupported("truncated_native_aperture")
+        support = times[signal]
+        step = float(np.median(np.diff(times)))
+        if np.max(np.diff(support)) > step*2.5 or np.max(np.diff(times[base])) > step*2.5:
+            return unsupported("native_sample_gap")
+        if (support[0]+.01*period > step*2.5 or .75*period-support[-1] > step*2.5
+                or times[base][0]+.2*period > step*2.5 or -.05*period-times[base][-1] > step*2.5):
+            return unsupported("truncated_native_aperture")
+        native = x+1j*y
+        if not np.isfinite(native[base | signal]).all(): return unsupported("nonfinite_native_signal")
+        background = np.mean(native[base])
+        integrated = np.trapezoid(native[signal]-background, support)
+        output.update(value=np.array([abs(integrated)]), valid=np.array([True]),
+            signed_area_x=float(integrated.real), signed_area_y=float(integrated.imag),
+            baseline_x=float(background.real), baseline_y=float(background.imag),
+            baseline_noise_rms_v=float(np.sqrt(np.mean(np.abs(native[base]-background)**2))),
+            integration_window_hf2_s=[float(epoch+support[0]), float(epoch+support[-1])])
+        tail = native[signal][-max(3, int(signal.sum()*.1)):] - background
+        tail_mean = abs(np.mean(tail))
+        tail_tolerance = max(5*output["baseline_noise_rms_v"], float(np.max(np.abs(native[signal]-background)))*.005, np.finfo(float).eps)
+        output["tail_support"] = {"mean_offset_v": float(tail_mean), "tolerance_v": float(tail_tolerance),
+            "returned_to_baseline": bool(tail_mean <= tail_tolerance)}
+        if tail_mean > tail_tolerance:
+            output["valid"][:] = False
+            output["quality_flags"].append("nonreturning_detector_tail")
+        # A conservative correlated-noise scale is retained rather than an
+        # independent-sample standard error. Norm integration is biased near zero.
+        noise_area = 2*output["baseline_noise_rms_v"]*(support[-1]-support[0])
+        output["conservative_noise_area_v_s"] = float(noise_area)
+        if abs(integrated) <= max(5*noise_area, np.finfo(float).tiny):
+            output["valid"][:] = False
+            output["quality_flags"].append("low_snr_integrated_signal")
+        return output
 
     def _inhibit(self):
         errors = []
@@ -430,7 +653,9 @@ class InstalledAdapter:
                 if "mircat" in self.before:
                     def restore_qcl():
                         before = self.before["mircat"]
-                        qcl.set_qcl_pulse_params(**{k: before[k] for k in ("qcl", "pulse_rate_hz", "pulse_width_ns", "current_ma")})
+                        retained_qcls = before.get("qcls") or [before]
+                        for original in retained_qcls:
+                            qcl.set_qcl_pulse_params(**{k: original[k] for k in ("qcl", "pulse_rate_hz", "pulse_width_ns", "current_ma")})
                         allowed = ("pulse_mode", "process_trigger_mode", "start", "stop", "interval", "units", "dwell_us", "after_off_us")
                         qcl.set_wavelength_trigger_params(**{k: v for k, v in before["trigger"].items() if k in allowed})
                         after = {"trigger": qcl.get_wavelength_trigger_params(), "state": data(qcl.read_state())}
@@ -443,9 +668,10 @@ class InstalledAdapter:
                                 raise RuntimeError(f"MIRcat trigger {key} did not restore: {actual!r} != {expected!r}")
                         if qcl.is_emission_on() or qcl.is_laser_armed():
                             raise RuntimeError("MIRcat safe idle readback failed")
-                        for key, method in (("pulse_rate_hz", qcl.get_qcl_pulse_rate), ("pulse_width_ns", qcl.get_qcl_pulse_width), ("current_ma", qcl.get_qcl_current)):
-                            if not math.isclose(method(before["qcl"]), before[key], rel_tol=1e-6):
-                                raise RuntimeError(f"MIRcat {key} did not restore")
+                        for original in retained_qcls:
+                            for key, method in (("pulse_rate_hz", qcl.get_qcl_pulse_rate), ("pulse_width_ns", qcl.get_qcl_pulse_width), ("current_ma", qcl.get_qcl_current)):
+                                if not math.isclose(method(original["qcl"]), original[key], rel_tol=1e-6):
+                                    raise RuntimeError(f"MIRcat QCL {original['qcl']} {key} did not restore")
                         return {"before": before, "after": after}
                     attempt("mircat_settings", restore_qcl)
             hf = self.devices.get("hf2li")
@@ -461,7 +687,10 @@ class InstalledAdapter:
                         hf.reload_settings_snapshot({"nodes": enables})
                         after = hf.export_settings_snapshot(preset=self.hf_snapshot_preset)
                         check = deepcopy(self.before["hf2li"])
-                        check["nodes"] = {k: v for k, v in check["nodes"].items() if "/oscs/" not in k}
+                        if int(self.before["hf2li"]["nodes"][f"/{hf.device_id}/plls/0/enable"]["value"]) == 1:
+                            # An enabled restored PLL owns the instantaneous
+                            # oscillator frequency; the saved scalar is dynamic.
+                            check["nodes"] = {k: v for k, v in check["nodes"].items() if "/oscs/" not in k}
                         comparison = hf.compare_settings_snapshots(check, after)
                         if not comparison["match"] or after.get("read_errors"):
                             raise RuntimeError(f"HF2LI restoration readback failed: {comparison}")
@@ -508,7 +737,17 @@ class InstalledAdapter:
                   "channels": {c: {"enabled": False, "polarity": _query(v, "polarity"),
                        "termination": _query(v, "termination"), "timing_mode": _query(v, "timing_mode")} for c, v in saved["channels"].items()}}
         unit.apply_recipe(recipe)
+        if "burst" in before:
+            for command in (f"BURst:PULse {before['burst']['pulses']}", f"BURst:TRIGger {before['burst']['triggers']}"):
+                unit.command(command, expect_response=False)
+            if int(unit.command("BURst:PULse?")) != before["burst"]["pulses"] or int(unit.command("BURst:TRIGger?")) != before["burst"]["triggers"]:
+                raise RuntimeError("T660 original burst pulse/trigger counts did not restore")
+        unit.command(f"GATE:MODe {_query(saved['queries'], 'gate_mode')}", expect_response=False)
+        unit.command(f"BURst:MODe {_query(saved['queries'], 'burst')}", expect_response=False)
         after = unit.read_active_settings()
+        for key in ("gate_mode", "burst"):
+            if _query(after["queries"], key).upper() != _query(saved["queries"], key).upper():
+                raise RuntimeError(f"T660 original {key} did not restore")
         if _query(after["queries"], "trigger_source").upper() != "OFF":
             raise RuntimeError("T660 trigger source is not inhibited")
         for channel in "ABCD":

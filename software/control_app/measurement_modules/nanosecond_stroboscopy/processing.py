@@ -7,11 +7,10 @@ from copy import deepcopy
 
 import numpy as np
 
-ANALYSIS_VERSION = "ns-native-support-1"
+ANALYSIS_VERSION = "ns-native-support-2"
 FATAL_FLAGS = {"clipped", "clipping", "overload", "unlock", "unlocked", "missing_trigger",
-               "trigger_count_error", "count_mismatch", "reset_failed", "reset_failure",
-               "temperature_invalid", "tuning_failed", "unsupported_reference", "missing_pump",
-               "per_event_optical_pump_unobserved", "unsupported_sample", "invalid_detector_covariance"}
+               "trigger_count_error", "count_mismatch", "tuning_failed", "unsupported_reference",
+               "unsupported_sample", "invalid_detector_covariance", "baseline_instrument_mismatch"}
 
 
 def _stream(stream):
@@ -124,8 +123,7 @@ def _baselines(record, mode):
 def validate_native_baseline(record, settings, kind="preliminary"):
     """Require complete wavelength support, and the full blank event schedule."""
     from .settings import Settings, KERNEL_ID
-    from .planner import build_plan
-    from .persistence import compatibility_conflicts
+    from .persistence import acquisition_conflicts
     selected = Settings.from_dict(settings)
     if not isinstance(record, dict):
         return [f"A completed compatible {kind} record is required"]
@@ -134,12 +132,12 @@ def validate_native_baseline(record, settings, kind="preliminary"):
                             ("kind", kind), ("status", "completed")):
         if record.get(field) != expected:
             errors.append(f"{kind}.{field}: expected {expected!r}, got {record.get(field)!r}")
-    errors.extend(compatibility_conflicts(record.get("settings", {}), selected.to_dict()))
+    errors.extend(acquisition_conflicts(record.get("settings", {}), selected.to_dict()))
     events = record.get("events", [])
     accepted = []
     for event in events:
         pump = event.get("pump_evidence", {})
-        if event.get("condition") not in ("unpumped", "pump_blocked", "blank", "preliminary") or pump.get("optical_pulse_count") != 0 or pump.get("commanded") is True:
+        if event.get("condition") not in ("unpumped", "pump_blocked", "blank", "preliminary") or pump.get("optical_pulse_count") not in (None, 0) or pump.get("commanded") is True:
             errors.append(f"{kind} event {event.get('event_id')}: unpumped native evidence is required; a pumped event cannot supply blank or Q0")
             continue
         try:
@@ -154,8 +152,7 @@ def validate_native_baseline(record, settings, kind="preliminary"):
             errors.append(f"{kind} event {event.get('event_id')}: invalid native detector support or quality")
             continue
         accepted.append(event)
-    plan = build_plan(selected)
-    required_waves = {e.wavenumber_cm1 for e in plan.events}
+    required_waves = set((*selected.wavenumbers_cm1, *selected.off_band_wavenumbers_cm1))
     missing = required_waves - {e.get("wavenumber_cm1") for e in accepted}
     if missing:
         errors.append(f"{kind}: missing valid measured wavenumbers_cm1 {sorted(missing)}")
@@ -163,15 +160,14 @@ def validate_native_baseline(record, settings, kind="preliminary"):
         errors.append(f"{kind}: no valid native events")
     if kind == "blank":
         def key(event):
-            return (event.get("wavenumber_cm1"), event.get("requested_delay_ns"), event.get("repetition"),
+            return (event.get("wavenumber_cm1"), event.get("requested_delay_ns"),
                     event.get("requested_condition", event.get("condition")))
-        from dataclasses import asdict
-        from collections import Counter
-        required = Counter(key(asdict(event)) for event in plan.events)
-        retained = Counter(key(event) for event in accepted)
+        required = {(wave, delay, condition) for wave in required_waves
+                    for delay in selected.delays_ns for condition in selected.conditions}
+        retained = {key(event) for event in accepted}
         missing_events = required - retained
         if missing_events:
-            errors.append(f"blank: incomplete sequential delay/control schedule ({sum(missing_events.values())} required events missing)")
+            errors.append(f"blank: incomplete sequential delay/control schedule ({len(missing_events)} required points missing)")
     return errors
 
 
@@ -184,7 +180,7 @@ def _log_ratio(value, base, variance, base_variance):
 
 
 def reconstruct(events, baseline, *, mode, blank=None, balance=None, cancel=None, kernel=None):
-    """Reconstruct command bins with independently calibrated optical coordinates.
+    """Reconstruct raw relative measurements on hardware-command delay bins.
 
     No point is filled across a missing wavelength, delay, reference or baseline.
     Technical repetitions are averaged, never counted as independent preparations.
@@ -193,11 +189,28 @@ def reconstruct(events, baseline, *, mode, blank=None, balance=None, cancel=None
     events = list(events)
     q0 = _baselines(baseline, mode)
     backgrounds = _baselines(blank, "single") if mode == "single" else {}
+    balances, absolute_limitations = {}, []
+    if mode == "dual" and balance is not None:
+        try:
+            if not isinstance(balance, dict) or balance.get("kind") != "measured_path_balance":
+                raise ValueError("Absolute absorbance needs a measured path-balance record")
+            if balance.get("mode", mode) != mode:
+                raise ValueError("Path-balance detector mode differs")
+            bw = [float(wave) for wave in balance.get("wavenumbers_cm1", [])]
+            bv = [float(value) for value in balance.get("values", [])]
+            if not bw or len(bw) != len(bv) or len(set(bw)) != len(bw):
+                raise ValueError("Path balance needs unique wavelength/value pairs")
+            if not all(math.isfinite(wave) and math.isfinite(value) and value > 0 for wave, value in zip(bw, bv)):
+                raise ValueError("Path-balance values must be finite and positive")
+            balances = dict(zip(bw, bv))
+        except (ValueError, TypeError) as exc:
+            absolute_limitations.append(str(exc))
     waves = sorted({float(e["wavenumber_cm1"]) for e in events})
     delays = sorted({float(e["quantized_delay_ns"]) for e in events})
     shape = len(waves), len(delays)
     arrays = {key: np.full(shape, np.nan) for key in ("delta_a", "uncertainty", "ratio", "absolute_absorbance", "optical_delay_ns", "measured_wavenumber_cm1", "baseline_uncertainty")}
     coverage = np.zeros(shape, dtype=np.int64)
+    optical_coverage = np.zeros(shape, dtype=np.int64)
     groups, outputs = defaultdict(list), []
     for event in events:
         if cancel:
@@ -217,7 +230,7 @@ def reconstruct(events, baseline, *, mode, blank=None, balance=None, cancel=None
             flags.append("missing_pump")
         base, base_var = q0.get(wave, (float("nan"), float("nan")))
         value, uncertainty = _log_ratio(obs["value"], base, obs["variance"], base_var)
-        fatal = set(flags) & (FATAL_FLAGS | {"optical_delay_unresolved", "missing_unpumped_baseline", "missing_sequential_blank", "invalid_detector_covariance"})
+        fatal = set(flags) & (FATAL_FLAGS | {"missing_unpumped_baseline", "missing_sequential_blank", "invalid_detector_covariance"})
         if fatal:
             value = uncertainty = float("nan")
         output = dict(event_id=event.get("event_id"), wavenumber_cm1=wave, quantized_delay_ns=delay,
@@ -237,20 +250,20 @@ def reconstruct(events, baseline, *, mode, blank=None, balance=None, cancel=None
         arrays["delta_a"][i, j], arrays["uncertainty"][i, j] = delta, std
         arrays["ratio"][i, j] = observable
         arrays["baseline_uncertainty"][i, j] = math.sqrt(base_var)/base/math.log(10.) if math.isfinite(base_var) else np.nan
-        arrays["optical_delay_ns"][i, j] = np.mean([o["calibrated_optical_delay_ns"] for o in observations])
+        optical_values = [o["calibrated_optical_delay_ns"] for o in observations
+                          if o["calibrated_optical_delay_ns"] is not None and np.isfinite(o["calibrated_optical_delay_ns"])]
+        optical_coverage[i, j] = len(optical_values)
+        if len(optical_values) == len(observations):
+            arrays["optical_delay_ns"][i, j] = np.mean(optical_values)
         if all(o["measured_wavenumber_cm1"] is not None for o in observations):
             arrays["measured_wavenumber_cm1"][i, j] = np.mean([o["measured_wavenumber_cm1"] for o in observations])
         coverage[i, j] = len(observations)
         if mode == "single" and wave in backgrounds:
             arrays["absolute_absorbance"][i, j] = _log_ratio(observable, backgrounds[wave][0], variance, backgrounds[wave][1])[0]
-        if mode == "dual" and balance is not None:
-            # The caller loads a separately validated promoted B; Q0 cannot be B.
-            if balance.get("kind") != "measured_path_balance" or not balance.get("calibration_id") or not balance.get("bundle_id"):
-                raise ValueError("Absolute absorbance requires a measured, applicable path-balance B record")
-            bw = list(balance.get("wavenumbers_cm1", []))
-            if wave in bw:
-                b = float(balance["values"][bw.index(wave)])
-                arrays["absolute_absorbance"][i, j] = _log_ratio(observable, b, variance, float("nan"))[0]
+        if mode == "dual" and wave in balances:
+            # Measured B is separate from Q0. An unavailable optional B only
+            # limits absolute absorbance; raw Q and relative delta-A remain.
+            arrays["absolute_absorbance"][i, j] = _log_ratio(observable, balances[wave], variance, float("nan"))[0]
     fits = []
     if kernel is not None:
         from .simulation import identify_lifetime
@@ -278,11 +291,12 @@ def reconstruct(events, baseline, *, mode, blank=None, balance=None, cancel=None
         controls[condition] = dict(delta_a=control_map, coverage=control_count)
     return dict(analysis_version=ANALYSIS_VERSION, mode=mode, wavenumbers_cm1=waves, delays_ns=delays,
                 delay_axis="Quantized command bins (ns); calibrated optical coordinates stored separately",
-                **arrays, coverage=coverage, event_results=outputs, fits=fits, controls=controls,
+                **arrays, coverage=coverage, optical_coverage=optical_coverage, event_results=outputs, fits=fits, controls=controls,
                 signal_label="Sample/reference ratio Q" if mode == "dual" else "Sample spectral signal",
-                absolute_available=bool(mode == "single" and backgrounds or mode == "dual" and balance),
+                absolute_available=bool(np.isfinite(arrays["absolute_absorbance"]).any()),
+                absolute_limitations=absolute_limitations,
                 uncertainty_basis="Delta method including detector covariance and common unpumped baseline; technical repeats only",
-                claim="Instrument-supported Delta A; molecular pathway, temperature and resolved lifetime require independent qualifications")
+                claim="Relative change versus unpumped sample; command delays are not measured optical arrival times")
 
 
 def population_kinetics(result, selection, kernel, *, cancel=None):

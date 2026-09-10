@@ -87,6 +87,39 @@ def compatibility_conflicts(left, right, prefix="settings"):
     return []
 
 
+def acquisition_settings(settings):
+    """The acquisition contract excludes optional annotations and analysis priors.
+
+    Blank/sample compatibility is not approval of a biological condition. Saved
+    detector readbacks are checked separately after connected configuration.
+    """
+    from .settings import Settings
+    selected = Settings.from_dict(settings).to_dict()
+    fields = ("experiment_id", "mode", "execution_mode", "wavenumbers_cm1",
+              "off_band_wavenumbers_cm1", "delays_ns", "conditions", "cycle_interval_s")
+    contract = {key: selected[key] for key in fields if key in selected}
+    contract["overrides"] = {key: value for key, value in selected.get("overrides", {}).items()
+                             if value not in (None, "Auto", "auto")}
+    return contract
+
+
+def acquisition_conflicts(retained, selected):
+    old, new = acquisition_settings(retained), acquisition_settings(selected)
+    errors = []
+    # Measured support may contain additional points or a different order. Only
+    # missing requested support makes an otherwise identical baseline unusable.
+    old_waves = set(old.pop("wavenumbers_cm1", ())) | set(old.pop("off_band_wavenumbers_cm1", ()))
+    new_waves = set(new.pop("wavenumbers_cm1", ())) | set(new.pop("off_band_wavenumbers_cm1", ()))
+    for key, available, required in (
+        ("wavenumbers_cm1", old_waves, new_waves),
+        ("delays_ns", set(old.pop("delays_ns", ())), set(new.pop("delays_ns", ()))),
+        ("conditions", set(old.pop("conditions", ())), set(new.pop("conditions", ()))),
+    ):
+        if required - available:
+            errors.append(f"settings.{key}: retained support misses {sorted(required - available)}")
+    return errors + compatibility_conflicts(old, new)
+
+
 def _validate_envelope(record, expected_mode=None):
     if record.get("experiment_id") != EXPERIMENT_ID:
         raise ValueError("Incompatible experiment_id; expected nanosecond_stroboscopy")
@@ -165,7 +198,7 @@ def load_run(path, expected_mode=None, expected_settings=None):
     record = read_json(path / "manifest.json")
     _validate_envelope(record, expected_mode)
     if expected_settings is not None:
-        conflicts = compatibility_conflicts(record["settings"], expected_settings)
+        conflicts = acquisition_conflicts(record["settings"], expected_settings)
         if conflicts:
             raise ValueError("Incompatible retained settings: " + "; ".join(conflicts))
     events, journal_errors = [], []

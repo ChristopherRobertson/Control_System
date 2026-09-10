@@ -14,7 +14,7 @@ class SimulationAdapter:
     def __init__(self, context, operation, plan, *, check=lambda: None, progress=lambda *a: None, retain=lambda *a: None):
         self.context, self.operation, self.plan = context, operation, plan
         self.check, self.progress = check, progress
-        self.settings = settings_data(plan)
+        self.settings = data(getattr(plan, "resolved_settings", None) or plan.settings)
         self.epoch_s, self.index = 0.0, 0
         self.filter_previous = 0.0
         self.pending_native = []
@@ -34,7 +34,7 @@ class SimulationAdapter:
         s, ev = self.settings, data(event)
         rng = np.random.default_rng(s["random_seed"] + self.index)
         delay = ev["quantized_delay_ns"]
-        kernel = self.plan.settings.kernel()
+        kernel = (getattr(self.plan, "resolved_settings", None) or self.plan.settings).kernel()
         response = float(np.asarray(convolved_response(np.array([delay]), s["candidate_lifetime_ns"], kernel)).reshape(-1)[0])
         center = float(np.mean(s["wavenumbers_cm1"]))
         spectral = float(np.exp(-.5 * ((ev["wavenumber_cm1"] - center) / 2.0) ** 2))
@@ -161,17 +161,10 @@ class Runner:
             if plan.errors:
                 raise ValueError("; ".join(plan.errors))
             selection = next((data(r) for r in operation.sample_records
-                if data(r).get("record_kind") == "sample_spectral_selection"
+                if isinstance(data(r), dict) and data(r).get("record_kind") == "sample_spectral_selection"
                 and data(r).get("selection_id") == settings.get("sample_selection_id")), None)
-            if settings.get("sample_selection_id"):
-                if selection is None:
-                    raise ReadinessError("Selected sample spectral-selection record is absent from the immutable operation")
-                from control_app.measurement_host.interchange import sample_selection_from_dict
-                parsed = sample_selection_from_dict(selection)
-                if parsed.sample_id != settings.get("sample_id") or parsed.condition_id != settings.get("condition_id"):
-                    raise ReadinessError("Accepted spectral selection belongs to another sample or condition")
-            if operation.hardware and plan.readiness:
-                raise ReadinessError("Connected Start is not ready:\n" + "\n".join(plan.readiness))
+            # Optional sample/calibration records affect interpretation only.
+            # Actual device values are resolved under ownership in prepare().
             if kind in ("measurement", "preliminary") and self.context.mode == "single":
                 self._validate_baseline(blank, settings, "blank")
             if kind == "measurement":
@@ -179,6 +172,11 @@ class Runner:
             factory = self.adapter_factory or (InstalledAdapter if operation.hardware else SimulationAdapter)
             adapter = factory(self.context, operation, plan, check=check, progress=progress, retain=retain)
             result["readbacks"] = adapter.prepare()
+            plan = adapter.plan
+            resolved_settings = getattr(plan, "resolved_settings", None) or plan.settings
+            result["resolved_settings"] = data(resolved_settings)
+            store.save_record("resolved_plan", data(plan))
+            result["baseline_comparison"] = self._compare_readbacks(result["readbacks"], baseline, blank)
             if kind == "preliminary":
                 selected = []
                 covered = set()
@@ -198,6 +196,8 @@ class Runner:
                 progress("acquisition", index, len(selected), f"{event.event_id}: {event.requested_delay_ns:g} ns")
                 acquired = adapter.acquire(event, kind=kind)
                 acquired.setdefault("requested_condition", event.condition)
+                if result.get("baseline_comparison"):
+                    acquired.setdefault("quality_flags", []).append("baseline_instrument_mismatch")
                 acquired.update(sample_id=settings.get("sample_id"), condition_id=settings.get("condition_id"),
                     preparation_id=settings.get("preparation_id"), cell_id=settings.get("cell_id"), temperature_record_id=settings.get("temperature_record_id"))
                 from .processing import spectral_observable, FATAL_FLAGS
@@ -215,9 +215,9 @@ class Runner:
                     retention_failed.append(str(exc))
                     raise
                 progress("retrieval", index + 1, len(selected), f"retained {len(result['events'])} events")
-                fatal = (FATAL_FLAGS | {"reset_failed", "clipped", "unlock", "trigger_count_error", "invalid_reference", "missing_support", "unsupported_sample", "unsupported_reference", "invalid_detector_covariance"}).intersection(acquired.get("quality_flags", []))
-                if fatal or acquired.get("reset_evidence", {}).get("equivalent") is False:
-                    raise ReadinessError("Retained rejected event; stopping before another biological pump: " + ", ".join(sorted(fatal or {"reset_failed"})))
+                fatal = {"clipped", "clipping", "overload", "unlock", "unlocked", "clock_unlocked", "trigger_count_error", "unsupported_reference", "unsupported_sample", "missing_support"}.intersection(acquired.get("quality_flags", []))
+                if fatal:
+                    raise ReadinessError("Retained hardware fault; stopping before another pulse: " + ", ".join(sorted(fatal)))
             result["status"] = "completed"
         except InterruptedError as exc:
             primary = exc
@@ -255,12 +255,18 @@ class Runner:
                     from .processing import reconstruct
                     if kind == "measurement":
                         result["result"] = reconstruct(result["events"], self._events(baseline), mode=self.context.mode,
-                            blank=self._events(blank), kernel=plan.settings.kernel(), cancel=check,
+                            blank=self._events(blank), kernel=resolved_settings.kernel(), cancel=check,
                             balance=self._balance(adapter, settings))
+                        result["result"].setdefault("absolute_limitations", []).extend(getattr(adapter, "balance_limitations", []))
                         if selection is not None:
-                            from .processing import population_kinetics
-                            result["result"]["population_analysis"] = population_kinetics(
-                                result["result"], selection, plan.settings.kernel(), cancel=check)
+                            try:
+                                from .processing import population_kinetics
+                                result["result"]["population_analysis"] = population_kinetics(
+                                    result["result"], selection, resolved_settings.kernel(), cancel=check)
+                            except InterruptedError:
+                                raise
+                            except (ValueError, TypeError, KeyError) as exc:
+                                result["result"]["population_analysis"] = {"status": "unavailable", "limitation": str(exc)}
                     else:
                         result["result"] = {"kind": kind, "events": deepcopy(result["events"]),
                             "quantity": "sequential blank" if kind == "blank" else ("Q0 = S/R" if self.context.mode == "dual" else "unpumped sample")}
@@ -271,6 +277,8 @@ class Runner:
                 except Exception as exc:
                     result["status"] = "failed"
                     result["error"] += f" | Analysis failed: {type(exc).__name__}: {exc}"
+            if adapter is not None and hasattr(adapter, "readbacks"):
+                result["readbacks"] = deepcopy(adapter.readbacks)
             progress("saving")
             result["elapsed_s"] = time.monotonic() - started
             try:
@@ -281,7 +289,8 @@ class Runner:
                 if retention_failed and result["events"]:
                     store.save_record("emergency_native_events", result["events"])
                 store.finish(result["status"], restoration=result["restoration"], result=result["result"], error=result["error"],
-                    elapsed_s=result["elapsed_s"], readbacks=result.get("readbacks", {}), **deepcopy(scientific_context or {}))
+                    elapsed_s=result["elapsed_s"], readbacks=result.get("readbacks", {}),
+                    resolved_settings=result.get("resolved_settings"), baseline_comparison=result.get("baseline_comparison", []), **deepcopy(scientific_context or {}))
                 preserved = not retention_failed
                 if retention_failed:
                     result["error"] += " | Required native retention failed: " + "; ".join(retention_failed)
@@ -305,16 +314,28 @@ class Runner:
         return result
 
     @staticmethod
+    def _compare_readbacks(current, baseline, blank):
+        """Changed actual instrument kernels invalidate normalization, not raw recording."""
+        from .persistence import compatibility_conflicts
+        messages = []
+        for label, record in (("sample baseline", baseline), ("blank", blank)):
+            if not isinstance(record, dict): continue
+            previous = record.get("readbacks", {}).get("raw_kernel")
+            now = current.get("raw_kernel")
+            if previous is not None and now is not None:
+                messages.extend(f"{label}: {msg}" for msg in compatibility_conflicts(previous, now, prefix="actual_kernel"))
+        return messages
+
+    @staticmethod
     def _balance(adapter, settings):
         qualification = getattr(adapter, "qualification", {})
         value = qualification.get("path_balance")
-        if value is None:
+        if not isinstance(value, dict):
             return None
-        if (value.get("mode") != settings["mode"] or value.get("condition_id") != settings.get("condition_id")
-                or value.get("kind") != "measured_path_balance" or not value.get("calibration_id")
-                or value.get("bundle_id") not in settings.get("calibration_ids", ())
-                or not set(settings["wavenumbers_cm1"]) <= set(value.get("wavenumbers_cm1", []))):
-            raise ValueError("Measured path-balance B does not cover this mode, condition, wavelengths and promoted bundle")
+        for key in ("mode", "condition_id"):
+            if value.get(key) is not None and value[key] != settings.get(key):
+                adapter.balance_limitations = [f"Optional measured path balance {key} does not apply to this acquisition"]
+                return None
         return deepcopy(value)
 
     @staticmethod

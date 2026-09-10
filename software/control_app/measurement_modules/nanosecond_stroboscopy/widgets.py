@@ -10,42 +10,48 @@ import time
 import numpy as np
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
-    QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
-    QScrollArea, QSpinBox, QSplitter, QVBoxLayout, QWidget,
+    QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
+    QHBoxLayout, QLabel, QLineEdit, QPushButton, QSpinBox, QWidget,
 )
 
 from control_app.measurement_host import TabHandle
 from control_app.measurement_host.presentation import (
-    GuidedMeasurementPanel, LinkedSliceControl, PlotPanel, StartSnapshot,
+    CompactMeasurementPanel, LinkedSliceControl, PlotPanel,
 )
 from .scientific_adapter import NanosecondScientificAdapter
-from .settings import Settings
+from .settings import Settings, ADVANCED_FIELDS, INTEGER_ADVANCED_FIELDS
 
 
 class NanosecondSettingsWidget(QWidget):
-    """Concise primary controls plus editable supported scientific overrides."""
+    """Essential acquisition inputs; independent explicit overrides default to Auto."""
 
     changed = Signal()
-    PROFILE_IDS = ("RT-HRP-G", "RT-Mb-G", "77K-HRP-G-F", "77K-Mb-G-F")
-    FIELD_LABELS = {
-        "sample_id": "Sample identity", "preparation_id": "Preparation identity",
-        "cell_id": "Cell / path identity", "position_ids": "Position identities (comma separated)",
-        "wavenumbers_cm1": "Measured wavenumbers (cm⁻¹)", "delays_ns": "Requested delays (ns)",
-        "selected_populations": "Quantified sample populations", "conditions": "Control conditions",
-        "temperature_k": "Measured sample temperature (K)",
-        "temperature_uncertainty_k": "Temperature uncertainty (K)",
-        "repetitions": "Technical repetitions", "reset_interval_s": "Equivalent-state reset interval (s)",
-        "irf_sigma_ns": "IRF σ (ns)", "timing_jitter_ns": "Timing jitter σ (ns)",
-        "integration_aperture_ns": "Optical integration aperture (ns)",
-        "noise_sd": "Predicted detector noise SD",
-    }
+    OVERRIDES = (
+        ("probe_period_s", "Probe period", "s"),
+        ("fire_to_q_ns", "Fire to Q-switch", "ns"),
+        ("fire_command_width_ns", "Fire pulse width", "ns"),
+        ("q_command_width_ns", "Q-switch width", "ns"),
+        ("probe_command_width_ns", "Probe trigger width", "ns"),
+        ("reference_command_width_ns", "Reference width", "ns"),
+        ("event_trigger_width_ns", "Event trigger width", "ns"),
+        ("probe_anchor_ns", "Probe anchor", "ns"),
+        ("timing_step_ns", "Delay step", "ns"),
+        ("warmup_frames", "Warmup frames", ""),
+        ("filter_tail_frames", "Filter-tail frames", ""),
+        ("filter_time_constant_s", "HF2LI time constant", "s"),
+        ("filter_order", "HF2LI filter order", ""),
+        ("hf2li_rate_hz", "HF2LI sample rate", "Sa/s"),
+        ("reference_filter_time_constant_s", "Reference time constant", "s"),
+        ("reference_filter_order", "Reference filter order", ""),
+        ("reference_hf2li_rate_hz", "Reference sample rate", "Sa/s"),
+    )
+    INTEGER_OVERRIDES = INTEGER_ADVANCED_FIELDS
 
-    def __init__(self, mode, preferences, parent=None):
+    def __init__(self, mode, preferences, parent=None, *, execution_mode="connected"):
         super().__init__(parent)
-        self.mode, self.preferences = mode, preferences
-        self.controls = {}
-        self._values = Settings(mode=mode).to_dict()
+        self.mode, self.preferences, self.execution_mode = mode, preferences, execution_mode
+        self.controls, self.override_inputs = {}, {}
+        self._values = Settings(mode=mode, execution_mode=execution_mode).to_dict()
         saved = preferences.value("settings_json", "")
         if saved:
             try:
@@ -53,64 +59,63 @@ class NanosecondSettingsWidget(QWidget):
                 if restored["mode"] == mode:
                     self._values = restored
             except (ValueError, TypeError, KeyError):
-                pass  # A malformed preference never blocks fresh planning.
-        layout = QVBoxLayout(self)
-        note = QLabel("EXAMPLE ONLY: simulator values are editable planning examples. "
-                      "Connected operation requires promoted, configuration-specific evidence. "
-                      "A numerical delay step is not the measured temporal resolution.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        form = QFormLayout()
-        self.execution = QComboBox()
-        self.execution.addItems(["simulation", "connected"])
-        self.profile = QComboBox()
-        self.profile.addItems(self.PROFILE_IDS)
-        form.addRow("Execution", self.execution)
-        form.addRow("Condition profile", self.profile)
-        self.controls.update(execution_mode=self.execution, profile_id=self.profile)
-        for key, label in self.FIELD_LABELS.items():
-            if key not in self._values:
-                continue
-            value = self._values[key]
-            if key == "repetitions":
-                control = QSpinBox()
-                control.setRange(1, 1000000)
-                control.valueChanged.connect(self._changed)
-            elif isinstance(value, (float, int)) and not isinstance(value, bool):
-                control = QDoubleSpinBox()
-                control.setRange(0, 1e12)
-                control.setDecimals(9 if key == "noise_sd" else 6)
-                control.setKeyboardTracking(False)
-                control.valueChanged.connect(self._changed)
-            else:
-                control = QLineEdit()
-                control.editingFinished.connect(self._changed)
+                pass
+        self._values["execution_mode"] = execution_mode
+        layout = QFormLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        for key, label in (("wavenumbers_cm1", "Wavenumbers (cm⁻¹)"), ("delays_ns", "Delays (ns)")):
+            control = QLineEdit()
+            control.setObjectName(key)
+            control.setToolTip("Comma-separated values")
+            control.editingFinished.connect(self._changed)
             self.controls[key] = control
-            form.addRow(label, control)
-        layout.addLayout(form)
-        advanced = QGroupBox("Advanced scientific settings (versioned JSON)")
-        advanced_layout = QVBoxLayout(advanced)
-        self.advanced = QPlainTextEdit()
-        self.advanced.setMinimumHeight(150)
-        self.advanced.setToolTip("Edit supported Settings fields, then Apply. Unknown or incompatible values produce explicit planning errors.")
-        self.apply_advanced_button = QPushButton("Apply advanced settings")
-        self.advanced_status = QLabel()
-        self.advanced_status.setWordWrap(True)
-        advanced_layout.addWidget(self.advanced)
-        advanced_layout.addWidget(self.apply_advanced_button)
-        advanced_layout.addWidget(self.advanced_status)
-        layout.addWidget(advanced)
-        layout.addStretch()
+            layout.addRow(label, control)
+        repetitions = QSpinBox()
+        repetitions.setRange(1, 100000)
+        repetitions.valueChanged.connect(self._changed)
+        self.controls["repetitions"] = repetitions
+        layout.addRow("Averages", repetitions)
+        for key, label in (("cycle_interval_s", "Cycle interval"),):
+            control = QDoubleSpinBox()
+            control.setDecimals(6)
+            control.setRange(.000001, 86400.)
+            control.setSuffix(" s")
+            control.setKeyboardTracking(False)
+            control.valueChanged.connect(self._changed)
+            self.controls[key] = control
+            layout.addRow(label, control)
+        self.advanced_widget = QWidget()
+        advanced = QFormLayout(self.advanced_widget)
+        advanced.setContentsMargins(0, 0, 0, 0)
+        for key, label, unit in self.OVERRIDES:
+            if key not in ADVANCED_FIELDS or mode == "single" and key in ("reference_filter_time_constant_s", "reference_filter_order", "reference_hf2li_rate_hz"):
+                continue
+            if mode == "dual" and key in ("filter_time_constant_s", "filter_order", "hf2li_rate_hz"):
+                label = label.replace("HF2LI", "Sample")
+            control = QComboBox()
+            control.setObjectName("override_" + key)
+            control.setEditable(True)
+            control.addItem("Auto", None)
+            control.setToolTip(f"Automatic selection; enter an explicit {unit or 'value'} override if needed.")
+            control.currentTextChanged.connect(self._changed)
+            self.override_inputs[key] = control
+            advanced.addRow(label + (f" ({unit})" if unit else ""), control)
+        self.restore_auto_button = QPushButton("Restore Auto")
+        self.restore_auto_button.clicked.connect(self.restore_auto)
+        advanced.addRow(self.restore_auto_button)
+        self.run_label = QLineEdit()
+        self.run_label.setPlaceholderText("Optional")
+        self.notes = QLineEdit()
+        self.notes.setPlaceholderText("Optional")
+        for control in (self.run_label, self.notes):
+            control.editingFinished.connect(self._changed)
+        advanced.addRow("Run label", self.run_label)
+        advanced.addRow("Notes", self.notes)
         self.apply_settings(self._values)
-        self.execution.currentTextChanged.connect(self._changed)
-        self.profile.currentTextChanged.connect(self._changed)
-        self.apply_advanced_button.clicked.connect(self._apply_advanced)
 
     def _changed(self, *_):
         try:
-            values = self.read_settings()
-            self.preferences.setValue("settings_json", json.dumps(values))
-            self.advanced.setPlainText(json.dumps(values, indent=2))
+            self.preferences.setValue("settings_json", json.dumps(self.read_settings()))
         except (ValueError, TypeError):
             pass
         self.changed.emit()
@@ -118,120 +123,152 @@ class NanosecondSettingsWidget(QWidget):
     def read_settings(self):
         values = deepcopy(self._values)
         for key, control in self.controls.items():
-            if isinstance(control, QComboBox):
-                value = control.currentText()
-            elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
-                value = control.value()
+            if isinstance(control, QLineEdit):
+                values[key] = tuple(float(item.strip()) for item in control.text().split(",") if item.strip())
             else:
-                value = control.text().strip()
-                if key in ("temperature_k", "temperature_uncertainty_k"):
-                    value = float(value) if value else None
-                elif isinstance(self._values[key], (list, tuple)):
-                    value = [item.strip() for item in value.split(",") if item.strip()]
-                    if key in ("wavenumbers_cm1", "delays_ns"):
-                        value = [float(item) for item in value]
-            values[key] = value
-        values["mode"] = self.mode
+                values[key] = control.value()
+        overrides = {}
+        for key, control in self.override_inputs.items():
+            text = control.currentText().strip()
+            if text.lower() == "auto" or not text:
+                continue
+            value = float(text)
+            if key in self.INTEGER_OVERRIDES:
+                if value != int(value):
+                    raise ValueError(key.replace("_", " ") + " must be an integer")
+                value = int(value)
+            overrides[key] = value
+        values.update(mode=self.mode, execution_mode=self.execution_mode, overrides=overrides)
+        metadata = deepcopy(values.get("metadata", {}))
+        for key, control in (("run_label", self.run_label), ("notes", self.notes)):
+            if control.text().strip():
+                metadata[key] = control.text().strip()
+            else:
+                metadata.pop(key, None)
+        values["metadata"] = metadata
         return Settings.from_dict(values).to_dict()
 
     def apply_settings(self, values):
         values = Settings.from_dict(values).to_dict()
         if values["mode"] != self.mode:
-            raise ValueError("Settings detector mode differs from this tab")
+            raise ValueError("Plan belongs to the other detector mode")
+        values["execution_mode"] = self.execution_mode
         self._values = deepcopy(values)
         for key, control in self.controls.items():
             control.blockSignals(True)
-            value = values[key]
-            if isinstance(control, QComboBox):
-                control.setCurrentText(str(value))
-            elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
-                control.setValue(value)
+            value = values.get(key, values.get("probe_period_s", 1.))
+            if isinstance(control, QLineEdit):
+                control.setText(", ".join(f"{item:g}" for item in value))
+                control.setCursorPosition(0)
+                control.setToolTip(control.text() + (" ns" if key == "delays_ns" else " cm⁻¹"))
             else:
-                control.setText(", ".join(map(str, value)) if isinstance(value, (list, tuple)) else ("" if value is None else str(value)))
+                control.setValue(value)
             control.blockSignals(False)
-        self.advanced.setPlainText(json.dumps(values, indent=2))
+        overrides = values.get("overrides", {})
+        for key, control in self.override_inputs.items():
+            control.blockSignals(True)
+            value = overrides.get(key)
+            control.setCurrentText("Auto" if value is None else f"{value:g}")
+            control.blockSignals(False)
+        self.run_label.setText(str(values.get("metadata", {}).get("run_label", "")))
+        self.notes.setText(str(values.get("metadata", {}).get("notes", "")))
         self.preferences.setValue("settings_json", json.dumps(values))
 
-    def _apply_advanced(self):
-        try:
-            self.apply_settings(json.loads(self.advanced.toPlainText()))
-            self.advanced_status.clear()
-            self.changed.emit()
-        except Exception as exc:
-            self.advanced_status.setText(str(exc))
+    def set_resolved(self, plan):
+        settings = getattr(plan, "resolved_settings", None)
+        if settings is None:
+            return
+        values = settings.to_dict()
+        sources = getattr(plan, "resolution_sources", {}) or {}
+        for key, control in self.override_inputs.items():
+            value = values.get(key)
+            control.setToolTip(f"Selected: {value if value is not None else 'pending device check'}; {sources.get(key, 'automatic')}")
+
+    def restore_auto(self):
+        for control in self.override_inputs.values():
+            control.blockSignals(True)
+            control.setCurrentText("Auto")
+            control.blockSignals(False)
+        self._changed()
 
 
 class NanosecondPlotAdapter:
-    """Native support, reconstruction and actual nearest slices; no gap filling."""
+    """Native support and linked slices, with optical and programmed time distinct."""
 
     def __init__(self):
-        self.time_index = 0
-        self.wavenumber_index = 0
-        self.quantity = "delta_a"
-        self.condition = "pump_on"
+        self.time_index = self.wavenumber_index = 0
+        self.quantity, self.condition, self.view = "delta_a", "pump_on", "reconstruction"
 
     def draw(self, figure, run):
+        from .processing import spectral_observable
+        events = run.get("events", [])
+        dual = run.get("mode") == "dual"
         reconstructed = run.get("result") or {}
+        if self.view == "native":
+            axes = figure.add_subplot(111)
+            axes.plot([_native_mean(event, "sample") for event in events], ".", label="Sample")
+            if dual:
+                axes.plot([_native_mean(event, "reference") for event in events], ".", label="Reference")
+            axes.set(xlabel="Event", ylabel="Integrated response (V·s)")
+            if events:
+                axes.legend(fontsize=8)
+            figure.subplots_adjust(left=.12, right=.96, bottom=.15, top=.94)
+            return
+        if self.view == "sample" or not reconstructed.get("wavenumbers_cm1"):
+            axes = figure.add_subplot(111)
+            observable = [spectral_observable(event, "dual" if dual else "single")["value"] for event in events]
+            axes.plot([event.get("wavenumber_cm1", np.nan) for event in events], observable, ".")
+            axes.set(xlabel="Wavenumber (cm⁻¹)", ylabel="Q = S/R" if dual else "Integrated response (V·s)")
+            figure.subplots_adjust(left=.12, right=.96, bottom=.15, top=.94)
+            return
         if self.condition != "pump_on":
             control = reconstructed.get("controls", {}).get(self.condition, {})
             reconstructed = {**reconstructed, **control, "fits": [], "uncertainty": [], "optical_delay_ns": []}
         waves = np.asarray(reconstructed.get("wavenumbers_cm1", []), dtype=float)
         delays = np.asarray(reconstructed.get("delays_ns", []), dtype=float)
-        data = np.asarray(reconstructed.get(self.quantity, []), dtype=float)
-        native = figure.add_subplot(224)
-        events = run.get("events", [])
-        samples, references = [], []
-        for event in events:
-            samples.append(_native_mean(event, "sample"))
-            references.append(_native_mean(event, "reference"))
-        native.plot(samples, ".", markersize=2, label="HF2LI sample")
-        if any(np.isfinite(references)):
-            native.plot(references, ".", markersize=2, label="HF2LI reference")
-        native.set(xlabel="Retained native event index", ylabel="Native detector signal", title="Native records (including rejected)")
-        if events:
-            native.legend(fontsize=7)
-        if not waves.size or not delays.size or data.shape != (waves.size, delays.size):
-            from .processing import spectral_observable
-            quantity = "Q0 = unpumped S/R" if run.get("mode") == "dual" else "Unpumped HF2LI sample signal"
-            observables = [spectral_observable(event, run.get("mode", "single"))["value"] for event in events]
-            axes = figure.add_subplot(211)
-            axes.plot([event.get("wavenumber_cm1", np.nan) for event in events], observables, ".")
-            axes.set(xlabel="Measured wavenumber (cm⁻¹)", ylabel=quantity,
-                     title="Preliminary / native data; reconstructed optical support unavailable")
-            figure.subplots_adjust(hspace=.65, wspace=.4, bottom=.13)
+        values = np.asarray(reconstructed.get(self.quantity, []), dtype=float)
+        if not waves.size or not delays.size or values.shape != (waves.size, delays.size):
+            axes = figure.add_subplot(111)
+            axes.set(xlabel="Delay (ns)", ylabel="Wavenumber (cm⁻¹)")
             return
-        ti = min(self.time_index, delays.size - 1)
-        wi = min(self.wavenumber_index, waves.size - 1)
-        dual = run.get("mode") == "dual"
-        label = {"delta_a": "ΔA = −log₁₀(Q/Q₀)" if dual else "ΔA = −log₁₀(S/S₀)",
-                 "ratio": "Reference-normalized Q = S/R" if dual else "HF2LI sample signal",
-                 "absolute_absorbance": "Absolute absorbance (measured B required)",
-                 "coverage": "Accepted matched observations"}[self.quantity]
-        surface = figure.add_subplot(221)
-        image = surface.pcolormesh(delays, waves, np.ma.masked_invalid(data), shading="nearest", cmap="viridis")
-        figure.colorbar(image, ax=surface, pad=.02)
+        ti = min(self.time_index, len(delays) - 1)
+        wi = min(self.wavenumber_index, len(waves) - 1)
+        label = {"delta_a": "ΔA", "ratio": "Q = S/R" if dual else "Response (V·s)",
+                 "absolute_absorbance": "Absorbance", "coverage": "Count"}[self.quantity]
+        grid = figure.add_gridspec(2, 2, height_ratios=(1.2, 1))
+        surface = figure.add_subplot(grid[0, :])
+        image = surface.pcolormesh(delays, waves, np.ma.masked_invalid(values), shading="nearest", cmap="viridis")
+        figure.colorbar(image, ax=surface, label=label, pad=.015)
         surface.axvline(delays[ti], color="white", linewidth=.6)
         surface.axhline(waves[wi], color="white", linewidth=.6)
-        surface.set(xlabel="Quantized command delay bin (ns)", ylabel="Wavenumber (cm⁻¹)", title=label)
-        spectrum = figure.add_subplot(222)
-        spectrum.plot(waves, data[:, ti], ".-")
-        spectrum.set(xlabel="Wavenumber (cm⁻¹)", ylabel=label,
-                     title=f"Local spectrum at {delays[ti]:g} ns")
+        surface.set(xlabel="Programmed delay (ns)", ylabel="Wavenumber (cm⁻¹)")
+        if len(delays) > 1:
+            surface.set_xlim(float(np.min(delays)), float(np.max(delays)))
+        if len(waves) > 1:
+            surface.set_ylim(float(np.min(waves)), float(np.max(waves)))
+        spectrum = figure.add_subplot(grid[1, 0])
+        spectrum.plot(waves, values[:, ti], ".-")
+        spectrum.set(xlabel="Wavenumber (cm⁻¹)", ylabel=label, title=f"{delays[ti]:g} ns")
         spectrum.invert_xaxis()
-        kinetic = figure.add_subplot(223)
+        kinetic = figure.add_subplot(grid[1, 1])
         optical = np.asarray(reconstructed.get("optical_delay_ns", []), dtype=float)
-        kinetic_delays = optical[wi] if optical.shape == data.shape else delays
-        kinetic.plot(kinetic_delays, data[wi], ".-", label="Measured")
-        kinetic.set(xlabel="Calibrated optical delay (ns)" if optical.shape == data.shape else "Quantized command delay bin (ns)", ylabel=label,
-                    title=f"Point kinetics at {waves[wi]:g} cm⁻¹")
+        optical_present = optical.shape == values.shape and np.any(np.isfinite(optical[wi]))
+        times = optical[wi] if optical_present else delays
+        kinetic.plot(times, values[wi], ".-")
+        kinetic.set(xlabel="Optical delay (ns)" if optical_present else "Programmed delay (ns)",
+                    ylabel=label, title=f"{waves[wi]:g} cm⁻¹")
         uncertainty = np.asarray(reconstructed.get("uncertainty", []), dtype=float)
-        if self.quantity == "delta_a" and uncertainty.shape == data.shape:
-            kinetic.fill_between(kinetic_delays, data[wi] - uncertainty[wi], data[wi] + uncertainty[wi], alpha=.2)
+        if self.quantity == "delta_a" and uncertainty.shape == values.shape:
+            kinetic.fill_between(times, values[wi] - uncertainty[wi], values[wi] + uncertainty[wi], alpha=.2)
             fit = next((item for item in reconstructed.get("fits", []) if item.get("wavenumber_cm1") == waves[wi]), {})
             if fit.get("predicted"):
-                kinetic.plot(fit.get("supported_delay_ns", []), fit["predicted"], "--", label="IRF-convolved fit")
-                kinetic.legend(fontsize=7)
-        figure.subplots_adjust(hspace=.75, wspace=.6, bottom=.13, top=.9)
+                kinetic.plot(fit.get("supported_delay_ns", []), fit["predicted"], "--")
+        for axes in (surface, spectrum, kinetic):
+            axes.tick_params(labelsize=8)
+            axes.xaxis.label.set_size(8)
+            axes.yaxis.label.set_size(8)
+            axes.title.set_size(9)
+        figure.subplots_adjust(left=.12, right=.95, bottom=.13, top=.97, hspace=.65, wspace=.45)
 
 
 def _native_mean(event, role):
@@ -249,388 +286,179 @@ def _native_mean(event, role):
         return np.nan
 
 
-class NanosecondPanel(GuidedMeasurementPanel):
-    """Single blank or dual Q0 workflow, with independently invalidated review."""
+class NanosecondPanel(CompactMeasurementPanel):
+    """Compact live acquisition tab with automatic baseline compatibility."""
 
-    def __init__(self, context, parent=None):
-        self._candidate_preliminary = None
+    def __init__(self, context, parent=None, *, execution_mode="connected", runner_factory=None):
         self._next_root = None
         self._started = None
-        settings = NanosecondSettingsWidget(context.mode, context.preferences)
-        adapter = NanosecondScientificAdapter(context, settings)
-        super().__init__(settings, adapter, context, parent)
-        splitter = self.findChild(QSplitter)
-        summary_box = splitter.widget(1)
-        summary_layout = summary_box.layout()
-        summary_layout.removeWidget(self.summary)
-        summary_layout.removeWidget(self.validation)
-        self._summary_scroll = QScrollArea(summary_box)
-        self._summary_scroll.setWidgetResizable(True)
-        self._summary_contents = QWidget()
-        details_layout = QVBoxLayout(self._summary_contents)
-        details_layout.addWidget(self.summary)
-        details_layout.addWidget(self.validation)
-        details_layout.addStretch()
-        self._summary_scroll.setWidget(self._summary_contents)
-        summary_layout.insertWidget(0, self._summary_scroll, 1)
-        self.save_root_provider = lambda: self._next_root or self.context.save_root()
+        settings = NanosecondSettingsWidget(context.mode, context.preferences, execution_mode=execution_mode)
+        adapter = NanosecondScientificAdapter(context, settings, runner_factory=runner_factory)
+        super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
         settings.changed.connect(self.refresh_plan)
-        self.blank_status = QLabel()
-        self.blank_status.setWordWrap(True)
-        self.acquire_blank_button = QPushButton("1 · Acquire complete blank/control")
-        self.load_blank_button = QPushButton("Load blank/control…")
-        self.load_preliminary_button = QPushButton("Load preliminary / Q0…")
-        self.load_selection_button = QPushButton("Load accepted spectral selection…")
-        self.load_calibration_button = QPushButton("Load promoted bundle")
-        self.bundle_id = QLineEdit()
-        self.bundle_id.setPlaceholderText("Promoted instrument bundle ID")
-        self.simulation_button = QPushButton("Evaluate schedule (simulation)")
-        self.plan_details_button = QPushButton("View complete frame/channel plan")
-        preview_row = QHBoxLayout()
-        preview_row.addWidget(self.simulation_button)
-        preview_row.addWidget(self.plan_details_button)
-        self.layout().insertLayout(2, preview_row)
-        actions = QHBoxLayout()
+        self.save_root_provider = lambda: self._next_root or self.context.save_root()
+        self.preliminary_button.setText("Acquire unpumped sample")
+        self.start_button.setText("Start pump–probe scan")
+        self.abort_button.setText("Abort")
+        self.new_run_button.setText("New run")
         if context.mode == "single":
-            actions.addWidget(self.acquire_blank_button)
-            actions.addWidget(self.load_blank_button)
-            self.preliminary_button.setText("2 · Acquire sample preliminary (pump OFF)")
+            self.acquire_blank_button = self.add_blank_action("Acquire blank", self.begin_blank)
+            self.load_blank_button = self.add_blank_action("Load blank…", lambda: self._choose_reference("blank"))
         else:
+            self.acquire_blank_button = QPushButton("Acquire blank", self)
+            self.load_blank_button = QPushButton("Load blank…", self)
             self.acquire_blank_button.hide()
             self.load_blank_button.hide()
-            self.preliminary_button.setText("1 · Acquire sample + reference Q0 (pump OFF)")
-        actions.addWidget(self.load_preliminary_button)
-        actions.addWidget(self.load_selection_button)
-        self.layout().insertLayout(2, actions)
-        self.layout().insertWidget(3, self.blank_status)
-        bundle_row = QHBoxLayout()
-        bundle_row.addWidget(self.bundle_id)
-        bundle_row.addWidget(self.load_calibration_button)
-        self.layout().insertLayout(4, bundle_row)
-        self.start_button.setText("Start pumped reconstruction")
-        self.abort_button.setText("Abort acquisition")
-        self.elapsed = QLabel("Elapsed 0 s · remaining estimate includes preparation, reset, restoration and analysis.")
-        self.layout().insertWidget(self.layout().count() - 1, self.elapsed)
+        self.load_preliminary_button = self.add_action("Load unpumped sample…", lambda: self._choose_reference("preliminary"))
+        self.action_layout.insertWidget(1, self.load_preliminary_button)
+        self.record_status = QLabel()
+        self.record_status.setWordWrap(True)
+        self.settings_extras_layout.addWidget(self.record_status)
         self.plot_adapter = NanosecondPlotAdapter()
         self.plot = PlotPanel(self.plot_adapter)
+        self.plot.canvas.setMinimumHeight(260)
         self.quantity = QComboBox()
-        self.quantity.addItem("ΔAbsorbance", "delta_a")
-        self.quantity.addItem("Reference-normalized signal Q" if context.mode == "dual" else "HF2LI sample signal", "ratio")
+        self.quantity.addItem("ΔA", "delta_a")
+        self.quantity.addItem("Q = S/R" if context.mode == "dual" else "Sample signal", "ratio")
         self.quantity.addItem("Coverage", "coverage")
-        self.plot.toolbar.addWidget(self.quantity)
         self.condition = QComboBox()
         self.condition.addItem("Pump on", "pump_on")
-        self.plot.toolbar.addWidget(self.condition)
-        self.time_slice = LinkedSliceControl(label="Command delay bin selects spectrum", unit="ns", decimals=2)
-        self.wavenumber_slice = LinkedSliceControl(label="Wavenumber selects kinetics", unit="cm⁻¹", decimals=4)
+        self.view = QComboBox()
+        self.view.addItem("Reconstruction", "reconstruction")
+        self.view.addItem("Sample", "sample")
+        self.view.addItem("Native", "native")
+        for control in (self.view, self.quantity, self.condition):
+            self.plot.toolbar.addWidget(control)
+        self.time_slice = LinkedSliceControl(label="Delay", unit="ns", decimals=2)
+        self.wavenumber_slice = LinkedSliceControl(label="Wavenumber", unit="cm⁻¹", decimals=3)
         self.result_note = QLabel()
         self.result_note.setWordWrap(True)
-        self.result_layout.addWidget(self.result_note)
-        self.result_layout.addWidget(self.plot)
+        self.result_layout.addWidget(self.plot, 1)
         self.result_layout.addWidget(self.time_slice)
         self.result_layout.addWidget(self.wavenumber_slice)
+        self.result_layout.addWidget(self.result_note)
+        self.result_ready.connect(self.show_result)
+        self.run_loaded.connect(lambda result, _path: self.show_result(result))
+        self.plot.error.connect(self.set_status)
         self.time_slice.index_changed.connect(self._slice_changed)
         self.wavenumber_slice.index_changed.connect(self._slice_changed)
         self.quantity.currentIndexChanged.connect(self._quantity_changed)
         self.condition.currentIndexChanged.connect(self._condition_changed)
-        self.result_ready.connect(self.show_result)
-        self.run_loaded.connect(lambda result, _path: self.show_result(result))
-        self.plot.error.connect(self.status.setText)
-        self.acquire_blank_button.clicked.connect(lambda: self._user_action(self.begin_blank))
-        self.load_blank_button.clicked.connect(lambda: self._choose_reference("blank"))
-        self.load_preliminary_button.clicked.connect(lambda: self._choose_reference("preliminary"))
-        self.load_selection_button.clicked.connect(self._choose_selection)
-        self.load_calibration_button.clicked.connect(lambda: self._user_action(self.load_bundle))
-        self.simulation_button.clicked.connect(lambda: self._user_action(self.evaluate_schedule))
-        self.plan_details_button.clicked.connect(lambda: self._user_action(self.show_plan_details))
+        self.view.currentIndexChanged.connect(self._view_changed)
+        self.operation_finished.connect(self._operation_finished)
         self.new_run_requested.connect(self._clear_results)
         self.busy_changed.connect(self._busy_transition)
+        self.elapsed = QLabel("Idle")
+        self.result_layout.addWidget(self.elapsed)
         self.clock_timer = QTimer(self)
-        self.clock_timer.setInterval(250)
+        self.clock_timer.setInterval(500)
         self.clock_timer.timeout.connect(self._elapsed)
-        self._update_controls()
+        self.refresh_readiness()
 
     def refresh_plan(self, *_):
-        if self._busy:
-            return
-        self._candidate_preliminary = self.preliminary or self._candidate_preliminary
         super().refresh_plan()
         if self.plan is not None:
-            errors = self.adapter.selection_conflicts(self.adapter.read_settings())
-            if self.adapter.blank:
-                errors += self.adapter.compatibility(self.adapter.blank, self.plan, kind="blank")
-            if self._candidate_preliminary:
-                conflicts = self.adapter.validate_review(self._candidate_preliminary, self.plan)
-                errors += conflicts
-                if not conflicts:
-                    self.preliminary = self._candidate_preliminary
-                    self.review_summary.setText(self.adapter.summarize_preliminary(self.preliminary))
-            self.validation.setText("\n".join(dict.fromkeys(errors)))
-        self._update_controls()
+            self.settings_widget.set_resolved(self.plan)
 
-    def _update_controls(self, *_):
-        super()._update_controls()
-        if not hasattr(self, "blank_status"):
+    def refresh_readiness(self, *_):
+        super().refresh_readiness()
+        if not hasattr(self, "record_status"):
             return
-        idle, valid = not self._busy, self.plan is not None
-        if self.context.mode == "single":
-            conflicts = self.adapter.compatibility(self.adapter.blank, self.plan, kind="blank") if valid else ["A valid plan is required."]
-            self.preliminary_button.setEnabled(idle and valid and not conflicts)
-            self.blank_status.setText("Sequential blank/control: " + ("complete and compatible. Load the sample before preliminary acquisition." if not conflicts else "; ".join(conflicts[:3])))
-        else:
-            self.blank_status.setText("Keep matched buffer/matrix in the reference path. The preliminary records simultaneous S, R and unpumped Q0.")
-        if self.preliminary is not None and valid:
-            self.start_button.setEnabled(idle and self.review.isChecked() and not self.adapter.validate_review(self.preliminary, self.plan))
-        for button in (self.acquire_blank_button, self.load_blank_button, self.load_preliminary_button,
-                       self.load_selection_button, self.load_calibration_button,
-                       self.simulation_button, self.plan_details_button):
+        idle = not self.command_running()
+        valid = self.plan is not None
+        for button in (self.acquire_blank_button, self.load_blank_button, self.load_preliminary_button):
             button.setEnabled(idle and valid)
-        self.bundle_id.setEnabled(idle)
+        blank_ready = bool(valid and self.adapter.blank and not self.adapter.compatibility(self.adapter.blank, self.plan, kind="blank"))
+        sample_ready = bool(valid and self.preliminary and not self.adapter.validate_preliminary(self.preliminary, self.plan))
+        states = ["Blank ready"] if self.context.mode == "single" and blank_ready else []
+        if sample_ready:
+            states.append("Unpumped sample ready")
+        self.record_status.setText(" · ".join(states))
+        self.record_status.setVisible(bool(states))
+        if self.context.mode == "single":
+            self.preliminary_button.setEnabled(idle and valid and blank_ready)
 
     def begin(self, kind):
-        if kind == "preliminary" and self.context.mode == "single":
-            conflicts = self.adapter.compatibility(self.adapter.blank, self.plan, kind="blank")
-            if conflicts:
-                raise ValueError("Acquire/load a compatible complete sequential blank first: " + "; ".join(conflicts))
-        if kind == "measurement" and self.preliminary is not None:
-            conflicts = self.adapter.validate_review(self.preliminary, self.plan)
-            if conflicts:
-                self.review.setChecked(False)
-                self.validation.setText("\n".join(conflicts))
-                return
         self.adapter.freeze_inputs()
-        super().begin(kind)
+        return super().begin(kind)
 
     def begin_blank(self):
-        if self.context.mode != "single" or self._busy or self.plan is None:
-            raise ValueError("A valid idle single-detector plan is required")
-        self.review.setChecked(False)
-        self.preliminary = self._candidate_preliminary = None
+        if self.context.mode != "single":
+            raise ValueError("Dual mode uses simultaneous reference acquisition")
         self.adapter.freeze_inputs()
-        selected = self.adapter.selected_records()
-        operation = self.context.begin_operation(
-            plan=self._host_plan, calibration_records=selected.calibration_records,
-            sample_records=selected.sample_records,
-            hardware=self.adapter.hardware_required("blank", self._host_plan.settings),
-            purpose="blank", cancel=self.request_abort,
-        )
-        snapshot = StartSnapshot(operation, "blank", deepcopy(self.plan), None)
-        self.snapshot = snapshot
-        def run(worker):
-            if operation.hardware:
-                with self.context.hardware_scope(operation):
-                    return self.adapter.run_blank(snapshot, worker)
-            return self.adapter.run_blank(snapshot, worker)
-        try:
-            self._launch(run, "blank")
-        except Exception:
-            if operation.hardware and not (self.worker and self.worker.isRunning()):
-                self.context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True,
-                                               detail="Blank dispatch failed before hardware access")
-            raise
-
-    def _finished(self, worker, kind, path):
-        presentation_error = None
-        try:
-            self._finish_scientific_presentation(worker, kind)
-        except Exception as exc:
-            presentation_error = f"Scientific display failed: {type(exc).__name__}: {exc}"
-        finally:
-            super()._finished(worker, kind, path)
-        if self.preliminary is not None and self.plan is not None:
-            conflicts = self.adapter.validate_review(self.preliminary, self.plan)
-            self.validation.setText("\n".join(conflicts))
-        if presentation_error:
-            self.status.setText(presentation_error)
-
-    def _finish_scientific_presentation(self, worker, kind):
-        if self.worker is worker and worker.outcome.state == "completed":
-            if kind in ("blank", "load_blank"):
-                self.adapter.blank = worker.outcome.result
-                self.preliminary = self._candidate_preliminary = None
-                self.review.setChecked(False)
-                self.show_result(worker.outcome.result)
-            elif kind in ("preliminary", "load_preliminary"):
-                self.preliminary = self._candidate_preliminary = worker.outcome.result
-                self.review.setChecked(False)
-                self.review_summary.setText(self.adapter.summarize_preliminary(worker.outcome.result))
-                self.validation.clear()
-                self.show_result(worker.outcome.result)
-            elif kind == "simulation_preview":
-                simulation = worker.outcome.result
-                bias = simulation.get("relative_bias")
-                self.result_note.setText(
-                    f"Prospective known-truth simulation: {simulation['resolved_fraction']:.0%} resolved across "
-                    f"{simulation['trials']} trials; interval coverage {simulation['interval_coverage']:.0%}; "
-                    + (f"relative bias {bias:.1%}. " if bias is not None else "No resolved lifetime estimates. ")
-                    + "This is conditional on entered IRF/noise/reset assumptions and does not grant commissioning or review approval.\n"
-                    + simulation["output_path"]
-                )
-        elif self.worker is worker and kind in ("blank", "preliminary", "measurement"):
-            if self.adapter.last_result:
-                self.result = self.adapter.last_result
-                self.show_result(self.result)
-    def evaluate_schedule(self):
-        if self._busy or self.plan is None:
-            raise ValueError("A valid idle plan is required for prospective simulation")
-        operation = self.context.begin_operation(plan=self._host_plan, hardware=False,
-                                                  purpose="prospective simulation", cancel=self.request_abort)
-        plan = deepcopy(self.plan)
-        self._launch(lambda worker: self.adapter.evaluate_schedule(operation, plan, worker), "simulation_preview")
-
-    def show_plan_details(self):
-        if self.plan is None:
-            raise ValueError("A valid plan is required")
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Nanosecond plan — every event, frame and channel")
-        dialog.resize(900, 650)
-        layout = QVBoxLayout(dialog)
-        label = QLabel("Deterministic requested/quantized electrical plan only. Native observations and optical delay calibration are recorded during acquisition. Save Plan preserves this complete schedule.")
-        label.setWordWrap(True)
-        layout.addWidget(label)
-        content = QPlainTextEdit()
-        content.setReadOnly(True)
-        content.setPlainText(json.dumps(self.plan.to_dict(), indent=2))
-        layout.addWidget(content)
-        dialog.show()
-        self._plan_dialog = dialog
+        self.begin_operation("blank", self.adapter.run_blank)
 
     def load_reference(self, path, kind):
-        if kind not in ("blank", "preliminary") or (kind == "blank" and self.context.mode != "single"):
-            raise ValueError("Unsupported baseline kind for this detector mode")
-        plan = deepcopy(self.plan)
-        def load(_worker):
-            result = self.adapter.load_run(Path(path))
-            conflicts = self.adapter.compatibility(result, plan, kind=kind)
+        if kind not in ("blank", "preliminary") or kind == "blank" and self.context.mode != "single":
+            raise ValueError("Unsupported baseline kind")
+        def load(snapshot, worker):
+            worker.check_cancelled()
+            record = self.adapter.load_run(Path(path))
+            conflicts = self.adapter.compatibility(record, snapshot.plan, kind=kind)
             if conflicts:
-                raise ValueError("Incompatible baseline: " + "; ".join(conflicts))
-            return result
-        self._launch(load, "load_" + kind, path)
+                raise ValueError("; ".join(conflicts))
+            return record
+        self.begin_operation("load_" + kind, load)
 
     def _choose_reference(self, kind):
-        path = QFileDialog.getExistingDirectory(self, "Load compatible " + kind, str(self.save_root_provider()))
+        path = QFileDialog.getExistingDirectory(self, "Load blank" if kind == "blank" else "Load unpumped sample", str(self.save_root_provider()))
         if path:
             self._user_action(lambda: self.load_reference(path, kind))
 
-    def _choose_selection(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Load accepted sample spectral selection", str(self.save_root_provider()), "JSON (*.json)")
-        if path:
-            self._user_action(lambda: self.load_selection(Path(path)))
-
-    def load_selection(self, path):
-        from control_app.measurement_host.interchange import load_sample_selection
-        record = load_sample_selection(path)
-        settings = self.adapter.read_settings()
-        if settings["sample_id"] and record.sample_id != settings["sample_id"]:
-            raise ValueError("Spectral selection sample identity differs from entered sample")
-        if settings["condition_id"] and record.condition_id != settings["condition_id"]:
-            raise ValueError("Spectral selection condition identity differs from entered condition")
-        settings["sample_id"] = record.sample_id
-        settings["condition_id"] = record.condition_id
-        settings["sample_selection_id"] = record.selection_id
-        selected = record.to_dict()
-        for name, value in selected["condition"].items():
-            if name in settings:
-                if settings[name] not in (None, "", (), []) and settings[name] != value:
-                    raise ValueError(f"Spectral selection condition.{name} differs from entered condition")
-                settings[name] = value
-        if not all(any(window.lower_cm1 <= wave <= window.upper_cm1 for window in record.windows)
-                   for wave in settings["wavenumbers_cm1"]):
-            centers = [window.center_cm1 for window in record.windows]
-            if any(center is None for center in centers):
-                raise ValueError("Select measured wavelengths inside the accepted windows; no measured centers were supplied")
-            settings["wavenumbers_cm1"] = tuple(dict.fromkeys(centers))
-        settings["qualification"] = {**settings["qualification"], "spectral_selection_accepted": True}
-        self.adapter.sample_records = [selected]
-        self.adapter.apply_settings(settings)
-        self.refresh_plan()
-        self.status.setText("Accepted sample selection loaded. Review selected measured wavelengths and condition applicability.")
-
-    def load_bundle(self):
-        bundle_id = self.bundle_id.text().strip()
-        if not bundle_id:
-            raise ValueError("Enter an applicable promoted instrument bundle ID")
-        bundle = self.context.promoted_bundle(bundle_id)
-        manifest = bundle.manifest if hasattr(bundle, "manifest") else bundle.get("manifest", bundle)
-        payload = manifest.get("nanosecond_stroboscopy")
-        if not isinstance(payload, dict) or not isinstance(payload.get("settings_domain"), dict):
-            raise ValueError("Promoted bundle lacks a nanosecond_stroboscopy settings_domain")
-        domain = payload["settings_domain"]
-        settings = self.adapter.read_settings()
-        if domain.get("experiment_id", "nanosecond_stroboscopy") != "nanosecond_stroboscopy":
-            raise ValueError("Promoted bundle experiment identity differs")
-        if domain.get("mode", self.context.mode) != self.context.mode:
-            raise ValueError("Promoted bundle detector mode differs")
-        identities = {"sample_id", "condition_id", "preparation_id", "cell_id", "matrix_id", "day_id",
-                      "position_ids", "sample_selection_id", "temperature_record_id"}
-        for name in identities:
-            if settings.get(name) and domain.get(name) not in (None, settings[name], list(settings[name]) if isinstance(settings[name], tuple) else settings[name]):
-                raise ValueError(f"Promoted bundle domain {name} differs from entered sample/condition identity")
-        for name, value in domain.items():
-            if name in settings and name not in identities | {"mode", "execution_mode", "qualification", "calibration_ids"}:
-                settings[name] = value
-        qualifications = dict(settings["qualification"])
-        qualifications.update(payload.get("qualification", {}))
-        qualifications.update({name: value for name, value in payload.items() if name.endswith("_qualified")})
-        aliases = {"selected_probe_qualified": "pulse_selection_qualified",
-                   "sparse_reference_lock_qualified": "reference_lock_qualified",
-                   "impulse_area_qualified": "hf2li_impulse_qualified",
-                   "optical_timing_qualified": "irf_qualified"}
-        for source, target in aliases.items():
-            if source in payload:
-                qualifications[target] = payload[source]
-        settings["qualification"] = qualifications
-        settings["calibration_ids"] = tuple(dict.fromkeys((*settings["calibration_ids"], bundle_id)))
-        conflicts = self.adapter.selection_conflicts(settings)
-        if conflicts:
-            raise ValueError("Promoted domain conflicts with selected sample: " + "; ".join(conflicts))
-        self.adapter.calibration_records.append(bundle)
-        self.adapter.apply_settings(settings)
-        self.preliminary = self._candidate_preliminary = None
-        self.adapter.blank = None
-        self.refresh_plan()
-        self.status.setText("Promoted bundle loaded; reacquire compatible baseline and preliminary records before review.")
+    def _operation_finished(self, kind, outcome):
+        if outcome.state == "completed":
+            result = outcome.result
+            capabilities = result.get("readbacks", {}).get("capabilities") if isinstance(result, dict) else None
+            if capabilities:
+                self.adapter.capabilities = deepcopy(capabilities)
+                QTimer.singleShot(0, self.refresh_plan)
+            if kind in ("blank", "load_blank"):
+                self.adapter.blank = result
+                self.show_result(result)
+            elif kind in ("preliminary", "load_preliminary"):
+                self.preliminary = result
+                self.show_result(result)
+        elif kind in ("blank", "preliminary", "measurement") and self.adapter.last_result:
+            self.result = self.adapter.last_result
+            self.show_result(self.result)
 
     def show_result(self, result):
         reconstructed = result.get("result") or {}
-        command_step = float(result.get("settings", {}).get("timing_step_ns", .01))
-        if command_step > 0:
-            self.time_slice.input.setDecimals(max(0, min(9, math.ceil(-math.log10(command_step)))))
-        previous_condition = self.condition.currentData()
+        command_step = float(result.get("settings", {}).get("timing_step_ns", .01) or .01)
+        self.time_slice.input.setDecimals(max(0, min(9, math.ceil(-math.log10(command_step)))))
+        self.time_slice.set_coordinates(reconstructed.get("delays_ns", []))
+        self.wavenumber_slice.set_coordinates(reconstructed.get("wavenumbers_cm1", []))
         self.condition.blockSignals(True)
         self.condition.clear()
         self.condition.addItem("Pump on", "pump_on")
         for condition in reconstructed.get("controls", {}):
             self.condition.addItem(condition.replace("_", " ").title(), condition)
-        self.condition.setCurrentIndex(max(0, self.condition.findData(previous_condition)))
         self.condition.blockSignals(False)
         self.plot_adapter.condition = self.condition.currentData()
-        self.time_slice.set_coordinates(reconstructed.get("delays_ns", []))
-        self.wavenumber_slice.set_coordinates(reconstructed.get("wavenumbers_cm1", []))
         absolute_index = self.quantity.findData("absolute_absorbance")
         if reconstructed.get("absolute_available", False) and absolute_index < 0:
-            self.quantity.addItem("Absolute absorbance (measured balance B)", "absolute_absorbance")
+            self.quantity.addItem("Absorbance", "absolute_absorbance")
         elif not reconstructed.get("absolute_available", False) and absolute_index >= 0:
             self.quantity.removeItem(absolute_index)
         self.plot_adapter.time_index = self.time_slice.index
         self.plot_adapter.wavenumber_index = self.wavenumber_slice.index
+        is_sample = result.get("kind") in ("blank", "preliminary")
+        self.view.setCurrentIndex(self.view.findData("sample" if is_sample else "reconstruction"))
         self.plot.set_result(result)
         self._condition_changed()
-        fit_notes = [f"{item['wavenumber_cm1']:g} cm⁻¹: {item.get('outcome', 'unresolved')}" +
-                     (f", τ = {item['lifetime_ns']:.3g} ns" if item.get("lifetime_ns") is not None else "")
-                     + (f", 95% interval {item['lifetime_interval_ns'][0]:.3g}–{item['lifetime_interval_ns'][1]:.3g} ns" if item.get("lifetime_interval_ns") else "")
-                     + (" (" + "; ".join(item.get("reasons", [])) + ")" if item.get("reasons") else "")
-                     for item in reconstructed.get("fits", [])]
-        populations = reconstructed.get("population_analysis")
-        if populations:
-            fit_notes.append("Sample-population analysis: " + str(populations.get("point_comparison", {}).get("outcome", "retained")))
-        self.result_note.setText(
-            f"{result.get('status', 'loaded')} · {result.get('output_path', '')}\n"
-            "Native gaps and exclusions are preserved. Delay bins are displayed in ns; "
-            "calibrated optical coordinates and measured IRF determine time resolution. "
-            "Q is reference-normalized signal; absolute absorbance requires a sequential blank or applicable measured B.\n" +
-            "; ".join(fit_notes)
-        )
+        outcomes = reconstructed.get("fits", [])
+        resolved = [item for item in outcomes if item.get("lifetime_ns") is not None]
+        if resolved:
+            self.result_note.setText(" · ".join(f"{item['wavenumber_cm1']:g} cm⁻¹: τ {item['lifetime_ns']:.3g} ns" for item in resolved))
+        elif outcomes:
+            self.result_note.setText("Lifetime unresolved")
+        else:
+            self.result_note.clear()
+        if (result.get("settings", {}).get("execution_mode") == "simulation"
+                or result.get("readbacks", {}).get("execution") == "simulation"):
+            detail = self.result_note.text()
+            self.result_note.setText("Example data" + (f" · {detail}" if detail else ""))
+        self.result_note.setToolTip(str(result.get("output_path", result.get("native_path", ""))))
 
     def _slice_changed(self, *_):
         self.plot_adapter.time_index = self.time_slice.index
@@ -653,28 +481,35 @@ class NanosecondPanel(GuidedMeasurementPanel):
         if self.plot.result is not None:
             self.plot.reset_view()
 
+    def _view_changed(self, *_):
+        self.plot_adapter.view = self.view.currentData()
+        reconstruction = self.plot_adapter.view == "reconstruction"
+        self.time_slice.setVisible(reconstruction)
+        self.wavenumber_slice.setVisible(reconstruction)
+        self.quantity.setVisible(reconstruction)
+        self.condition.setVisible(reconstruction)
+        if self.plot.result is not None:
+            self.plot.reset_view()
+
     def _clear_results(self):
-        self._candidate_preliminary = None
         self.plot.clear_result()
         self.time_slice.set_coordinates([])
         self.wavenumber_slice.set_coordinates([])
         self.result_note.clear()
 
-    def new_run(self):
-        self._candidate_preliminary = None
-        super().new_run()
-
     def instrument_state_changed(self, change):
         details = self.adapter.note_instrument_change(change)
-        self.review.setChecked(False)
-        if not self._busy:
-            self.refresh_plan()
-        self.status.setText("Preliminary review invalidated by instrument change: " + details)
+        self.refresh_readiness()
+        if self.preliminary is not None and self.plan is not None:
+            conflicts = self.adapter.validate_preliminary(self.preliminary, self.plan)
+            if conflicts:
+                self.set_status("Baseline changed: " + details)
+            elif not self.command_running():
+                self.status.setText("Ready")
 
     def output_location_changed(self, path):
         self._next_root = Path(path)
-        # The host owns the root provider; an active operation keeps its frozen
-        # output_path. This value is only for the next file selection dialog.
+        super().output_location_changed(path)
 
     def _busy_transition(self, busy):
         if busy:
@@ -686,10 +521,12 @@ class NanosecondPanel(GuidedMeasurementPanel):
 
     def _elapsed(self):
         elapsed = 0 if self._started is None else time.monotonic() - self._started
-        budget = self.plan.budget if self.plan else {}
-        estimate = next((budget[key] for key in ("total_s", "wall_time_s", "wall_clock_s", "estimated_wall_time_s", "wall_seconds") if key in budget), None)
-        remaining = "0 s (operation finished)" if not self._busy else (f"{max(0, float(estimate) - elapsed):.1f} s" if estimate is not None else "stage-dependent")
-        self.elapsed.setText(f"Elapsed {elapsed:.1f} s · estimated remaining {remaining}. Basis: planned preparation, tuning, controls, reset, acquisition and final processing; simulation may execute faster.")
+        if not self.command_running():
+            self.elapsed.setText(f"Elapsed {elapsed:.1f} s")
+            return
+        estimate = (self.plan.budget if self.plan else {}).get("total_s")
+        remaining = f" · remaining ≈ {max(0, estimate - elapsed):.1f} s" if isinstance(estimate, (int, float)) else ""
+        self.elapsed.setText(f"Elapsed {elapsed:.1f} s{remaining}")
 
 
 def make_handle(context, *, title):
