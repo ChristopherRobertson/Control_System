@@ -1,13 +1,18 @@
-"""Dedicated single-scan phase-delay planner. Construction never accesses hardware."""
+"""Regular phase-scan acquisition and reconstruction. Construction is hardware-free."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from dataclasses import replace
 import json
 import math
 from pathlib import Path
 from control_app.paths import get_save_location
-from control_app.workflows.phase_scan_runner import PhaseScanRunner, OPTICAL_ADAPTER_BLOCKER
+from control_app.workflows.phase_scan_runner import OPTICAL_ADAPTER_BLOCKER
+from control_app.workflows.regular_phase_scan import (
+    HF2Capabilities, RegularPhaseScanSettings, build_regular_phase_scan_plan, select_hf2_settings,
+)
+from control_app.workflows.regular_phase_scan_runner import RegularPhaseScanRunner
 
 from control_app.workflows.phase_scan import (
     PHASE_SCAN_EXECUTION_BLOCKER,
@@ -18,10 +23,10 @@ from control_app.workflows.phase_scan import (
 )
 
 try:
-    from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QThread
+    from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QThread, QTimer
     from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
     from PySide6.QtWidgets import (
-        QAbstractItemView, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
+        QAbstractItemView, QCheckBox, QTabWidget, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
         QHBoxLayout, QHeaderView, QLabel, QMessageBox, QPushButton, QScrollArea,
         QSpinBox, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
     )
@@ -35,7 +40,9 @@ if PYSIDE6_AVAILABLE:
     class _PhaseWorker(QThread):
         message = Signal(str)
         scan = Signal(object, object, str)
+        configured = Signal(object)
         result = Signal(object)
+        stopped = Signal(str)
         failed = Signal(str)
 
         def __init__(self, operation, parent=None):
@@ -45,11 +52,15 @@ if PYSIDE6_AVAILABLE:
         def run(self):
             try:
                 self.result.emit(self.operation(self))
+            except InterruptedError as exc:
+                message = str(exc)
+                self.stopped.emit(message if message.startswith("Acquisition stopped.")
+                                  else f"Acquisition stopped. {message}")
             except Exception as exc:
                 self.failed.emit(f"{type(exc).__name__}: {exc}")
 
-    class _LatestScanCanvas(QWidget):
-        """Display only the latest supplied absorption spectrum, in native order."""
+    class _PreliminarySpectrumCanvas(QWidget):
+        """Display the unpumped preliminary spectrum in native order, with gaps."""
 
         def __init__(self, parent=None):
             super().__init__(parent)
@@ -116,7 +127,7 @@ if PYSIDE6_AVAILABLE:
             painter.drawText(QRectF(-height / 2, -12, height, 24), Qt.AlignmentFlag.AlignCenter, self.y_label)
             painter.restore()
             if not finite_points:
-                message = "Waiting for latest scan" if not self.points else "Latest scan has no valid absorption points"
+                message = "Acquire an unpumped sample spectrum for review" if not self.points else f"Spectrum has no valid {self.y_label.lower()} points"
                 painter.drawText(plot_rect, Qt.AlignmentFlag.AlignCenter, message)
                 return
 
@@ -151,504 +162,733 @@ if PYSIDE6_AVAILABLE:
             painter.restore()
 
 
+
+def _brief_setting_error(message):
+    rules = (
+        ("unsupported for the selected filter order", "Time constant conflicts with Filter order; choose a listed time constant for that order."),
+        ("Sa/s is unsupported", "CH1 sample rate is incompatible; choose a supported rate or set it to Automatic."),
+        ("two-stream transfer capacity", "CH1 sample rate exceeds transfer capacity; choose a lower supported rate."),
+        ("timing-table", "Reconstruction before/after times exceed timing-table capacity; shorten either time or increase Phase-delay spacing."),
+        ("retention budget", "Reconstruction before/after times and CH1 sample rate exceed record capacity; shorten either time or reduce CH1 sample rate."),
+        ("cadence", "Reconstruction before/after times exceed the pump cadence with this sweep; shorten either time or lower Pump repetition rate."),
+        ("single installed", "Start/Stop wavenumber exceed one QCL’s tuning range; choose endpoints within the same QCL."),
+        ("Filter order", "Filter order is unsupported; choose a listed order or Automatic."),
+        ("shorter than two", "Sweep duration is too short; lower Scan speed or widen the wavenumber span."),
+        ("markers are too short", "Scan speed makes wavelength markers too short; lower Scan speed."),
+        ("16-million-cell", "Timing window and Phase-delay spacing exceed reconstruction capacity; shorten the window or increase Phase-delay spacing."),
+        ("pre_pump_ms", "Reconstruct before pump must be finite and nonnegative; enter a duration of zero or greater."),
+        ("post_pump_ms", "Reconstruct after pump must be finite and positive; enter a duration greater than zero."),
+    )
+    for match, brief in rules:
+        if match in message:
+            return brief
+    return message.split(";", 1)[0].split(". ", 1)[0].rstrip(".") + "; revise the indicated setting."
+
+
 class PhaseScanWidget(QWidget):
-    """Editable controls, derived plan and export; execution is visibly unavailable.
-
-    No synthetic acquisition is attached to Start Scan. Hardware integration must
-    supply a cancellable workflow with shared instrument ownership and safe abort
-    before those two controls can be enabled.
-    """
-
+    """App-only regular CH1 blank, preliminary review, and pumped phase scan."""
     if PYSIDE6_AVAILABLE:
-        latest_scan_received = Signal(object, object, str)
+        latest_scan_received = Signal(object, object, str)  # compatibility with spectrum providers
         busy_changed = Signal(bool)
 
-    def __init__(self, parent=None, *, runner=None, diagnostic=None, before_start=None):
+    def __init__(self, parent=None, *, runner=None, diagnostic=None, before_start=None, preferences=None, dual_detector=False):
         if not PYSIDE6_AVAILABLE:
             raise RuntimeError("PySide6 is required to instantiate PhaseScanWidget")
         super().__init__(parent)
-        self.runner = runner or PhaseScanRunner()
-        self.diagnostic = diagnostic
+        self.dual_detector = dual_detector
+        if dual_detector:
+            from control_app.workflows.dual_detector_phase_scan_runner import DualDetectorPhaseScanRunner
+            from control_app.workflows.dual_detector_phase_scan import DualDetectorPhaseScanSettings, DualHF2Capabilities, select_dual_hf2_settings
+            self.settings_type, self.capabilities_type = DualDetectorPhaseScanSettings, DualHF2Capabilities
+            self._select_hf2 = select_dual_hf2_settings
+            self.runner = runner or DualDetectorPhaseScanRunner()
+        else:
+            self.settings_type, self.capabilities_type = RegularPhaseScanSettings, HF2Capabilities
+            self._select_hf2 = select_hf2_settings
+            self.runner = runner or RegularPhaseScanRunner()
+        self.preference_key = "dual_detector_phase_scan" if dual_detector else "regular_phase_scan"
+        self.plan_method = "dual_detector_phase_scan" if dual_detector else "regular_single_detector_phase_scan"
         self.before_start = before_start or (lambda: None)
-        self.worker = None
-        self._latest = None
-        self._surface = None
-        self._pending_result = None
-        self.inputs = {}
-        self.plan: PhaseScanPlan | None = None
-        self.summary_values = {}
-        self.start_button = QPushButton("Start Scan")
-        self.abort_button = QPushButton("Abort Scan")
-        self.abort_button.setProperty("danger", True)
-        self.save_button = QPushButton("Save Plan…")
-        self.background_button = QPushButton("Capture Background")
-        self.test_button = QPushButton("Capture Test Scan (pump OFF)")
-        self.show_background_button = QPushButton("Show Background")
-        self.show_latest_button = QPushButton("Latest Scan")
-        self.show_map_button = QPushButton("Completed 3D Map")
-        self.diagnostic_button = QPushButton("Capture Inhibited Diagnostic")
-        self.start_button.setEnabled(False)
-        self.abort_button.setEnabled(False)
-        self.start_button.setToolTip(PHASE_SCAN_EXECUTION_BLOCKER)
-        self.abort_button.setToolTip("No Phase Scan acquisition is running. This is not a global emergency stop.")
-        self.validation = QLabel()
-        self.validation.setWordWrap(True)
-        self.save_status = QLabel()
-        self.save_status.setWordWrap(True)
-        self.phase_table = QTableWidget(0, 4)
-        self.phase_table.setHorizontalHeaderLabels(["Scan in set", "Condition", "Start after pump", "End after pump"])
-        self.phase_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.phase_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        self.phase_table.verticalHeader().setVisible(False)
-        self.phase_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.phase_table.setMinimumHeight(255)
-        self.canvas = _LatestScanCanvas()
-        self.scan_status = QLabel("No scan data received.")
-        self.scan_status.setWordWrap(True)
-        self.scan_status.setTextFormat(Qt.TextFormat.PlainText)
-        self.latest_scan_received.connect(self.set_latest_scan)
+        self.preferences = preferences
+        self.worker, self.plan, self._pending_result, self._current_kind = None, None, None, None
+        self.inputs, self.summary_values, self.override_inputs, self._overrides = {}, {}, {}, {}
+        self._restoring = False
+        self._capability_check_attempted = False
         self._build()
-        self.background_button.clicked.connect(lambda: self._begin("background"))
-        self.test_button.clicked.connect(lambda: self._begin("test"))
-        self.start_button.clicked.connect(lambda: self._begin("run"))
-        self.abort_button.clicked.connect(self._abort)
-        self.diagnostic_button.clicked.connect(lambda: self._begin("diagnostic"))
-        self.show_background_button.clicked.connect(self._show_background)
-        self.show_latest_button.clicked.connect(self._show_latest)
-        self.show_map_button.clicked.connect(self._show_map)
+        self._restore_capability_preferences()
+        self._restore_preferences()
+        self._populate_override_choices()
         self._refresh_plan()
 
-    def _build(self):
-        root = QVBoxLayout(self)
-        heading = QLabel("<b>Phase-delay acquisition</b> · Room-temperature MbCO")
-        root.addWidget(heading)
-        intro = QLabel("One unpumped baseline, then one frame at each nominal phase. The complete timing table is preloaded; finite Sweep Active captures are retained and saved together after acquisition.")
-        intro.setWordWrap(True)
-        root.addWidget(intro)
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        # Construction remains hardware-free. Opening the tab checks the
+        # connected device automatically; stored choices are already usable.
+        QTimer.singleShot(0, self._ensure_connected_capabilities)
 
-        controls = QGroupBox("Controls")
-        controls_layout = QVBoxLayout(controls)
+    def _ensure_connected_capabilities(self):
+        if (not self.isVisible() or self._capability_check_attempted or
+                not self.runner.available or self.command_running() or self._capabilities().get("verified")):
+            return
+        self._begin("capabilities")
+
+    def _build(self):
+        from control_app.ui.widgets.phase_scan_surface import PhaseScanReconstructionWidget
+        root = QVBoxLayout(self)
+        heading = ("<b>Dual-Detector Phase Scan</b> · Sample: Signal 1 (+) · Reference: Signal 2 (+)"
+                   if self.dual_detector else "<b>Regular single-detector phase scan</b> · HF2LI CH1 SIG IN +")
+        root.addWidget(QLabel(heading))
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        panel = QWidget()
+        panel_layout = QVBoxLayout(panel)
+        controls = QWidget()
+        control_layout = QVBoxLayout(controls)
         form = QFormLayout()
-        defaults = PhaseScanSettings()
+        defaults = self.settings_type()
         fields = (
-            ("probe_repetition_rate_hz", "T660-1 Trigger Rate", " Hz", 2_000_000.0, 2_000_000.0, 0, 1000.0,
-             "Continuous train: T660-1 A drives HF2LI DIO0 reference, B drives MIRcat TRIG IN, and C drives the externally predivided T660-2 frame input."),
-            ("probe_pulse_width_ns", "T660-1 Trigger Width", " ns", 0.001, 1_000_000.0, 3, 1.0,
-             "Width of the external T660-1 A/B/C TTL pulses, not the MIRcat internal laser pulse width."),
-            ("mircat_internal_repetition_rate_hz", "MIRcat Internal Rate", " Hz", 1.0, 10_000_000.0, 0, 1000.0,
-             "Must exceed the T660-1 trigger rate to avoid MIRcat trigger blocking. The operator-reported tested pair is 2.1 MHz internal versus 2 MHz external (100 kHz margin). MIRcat remains externally triggered."),
-            ("mircat_internal_pulse_width_ns", "MIRcat Internal Width", " ns", 0.001, 1_000_000.0, 3, 1.0,
-             "MIRcat QCL pulse-width setting. 2.1 MHz × 142 ns is 29.82% internal duty, below the 30% ceiling; hardware limits and readbacks are checked separately."),
-            ("start_wavenumber_cm1", "Start Wavenumber", " cm⁻¹", 1.0, 10_000.0, 3, 1.0,
-             "Requested sweep start. The instrument preset must confirm QCL coverage."),
-            ("stop_wavenumber_cm1", "Stop Wavenumber", " cm⁻¹", 1.0, 10_000.0, 3, 1.0,
-             "Requested sweep stop. Direction follows Start → Stop; no separate direction control is needed."),
-            ("scan_speed_cm1_s", "Scan Speed", " cm⁻¹/s", 0.001, 1_000_000.0, 3, 100.0,
-             "Requested speed, not a measured trajectory. Actual supported speeds require instrument readback."),
-            ("phase_delay_us", "Phase Delay", " µs", 0.001, 1_000_000_000.0, 3, 1.0,
-             "Increment between signed scan-start offsets. Negative offsets start the scan before its pump."),
-            ("pre_pump_ms", "Before Pump", " ms", 0.0, 1_000_000.0, 3, .5,
-             "Requested pre-pump reconstruction interval at every wavenumber. Hardware phase bounds require the calibrated sweep trajectory."),
-            ("post_pump_ms", "After Pump", " ms", .001, 1_000_000.0, 3, .5,
-             "Requested post-pump observation window at every wavenumber."),
-            ("rest_period_s", "Frame Period", " s", 0.3, 0.3, 6, 0.1,
-             "Spacing between preloaded frames. The qualified 2 MHz input and external predivider of 600,000 give a 300 ms frame period."),
+            ("pump_repetition_rate_hz", "Pump repetition rate", " Hz", .000001, 10., 6, 1.),
+            ("start_wavenumber_cm1", "Start wavenumber", " cm⁻¹", 1650., 2050., 3, 1.),
+            ("stop_wavenumber_cm1", "Stop wavenumber", " cm⁻¹", 1650., 2050., 3, 1.),
+            ("scan_speed_cm1_s", "Scan speed", " cm⁻¹/s", 1., 10000., 3, 100.),
+            ("pre_pump_ms", "Reconstruct before pump", " ms", 0., 1e6, 3, .1),
+            ("post_pump_ms", "Reconstruct after pump", " ms", .001, 1e6, 3, .1),
+            ("phase_delay_us", "Phase-delay spacing", " µs", 1., 1000., 3, 1.),
         )
-        for key, label, suffix, minimum, maximum, decimals, step, tooltip in fields:
+        for key, label, suffix, low, high, decimals, step in fields:
             spin = QDoubleSpinBox()
             spin.setObjectName(key)
             spin.setDecimals(decimals)
-            spin.setRange(minimum, maximum)
+            spin.setRange(low, high)
             spin.setSingleStep(step)
             spin.setSuffix(suffix)
             spin.setValue(getattr(defaults, key))
             spin.setKeyboardTracking(False)
-            spin.setToolTip(tooltip)
             spin.valueChanged.connect(self._refresh_plan)
             self.inputs[key] = spin
             form.addRow(label, spin)
-        repetitions = QSpinBox()
-        repetitions.setObjectName("repetitions")
-        repetitions.setRange(1, 1_000_000)
-        repetitions.setValue(defaults.repetitions)
-        repetitions.setToolTip("Acquire one baseline for the run, then repeat the complete nominal phase series and average matching phases across sets.")
-        repetitions.setKeyboardTracking(False)
-        repetitions.valueChanged.connect(self._refresh_plan)
-        self.inputs["repetitions"] = repetitions
-        form.addRow("Repetitions", repetitions)
-        reference = QComboBox()
-        reference.addItem("Electrical sync · DIO17", "electrical_sync")
-        reference.setToolTip("Synchronized DIO17 pump-event timestamps retain electrical timing even when the pump occurs outside the short Sweep Active detector record.")
-        reference.currentIndexChanged.connect(self._refresh_plan)
-        self.inputs["pump_reference"] = reference
-        form.addRow("Pump Timing Reference", reference)
-        controls_layout.addLayout(form)
-        note = QLabel("<b>EXPLORATORY PROOF OF CONCEPT - NOT FOR PUBLICATION.</b><br>Phase Delay sets the nominal phase increment. The reconstruction window is relative to the observed pump; the calibrated sweep trajectory determines the hardware delay range.<br>T660-1 provides the continuous probe train. T660-2 provides preloaded pump/process frames. HF2LI captures Sweep Active on DIO21 and synchronized pump events on DIO17. Test scans keep the pump off.")
-        note.setWordWrap(True)
-        controls_layout.addWidget(note)
-        controls_layout.addWidget(self.validation)
-        controls_layout.addWidget(self.save_button)
-        controls_layout.addWidget(self.diagnostic_button)
-        controls_layout.addStretch(1)
-        control_panel = QWidget()
-        panel_layout = QVBoxLayout(control_panel)
-        panel_layout.setContentsMargins(0, 0, 0, 0)
-        controls_scroll = QScrollArea()
-        controls_scroll.setWidgetResizable(True)
-        controls_scroll.setMinimumWidth(365)
-        controls_scroll.setWidget(controls)
-        panel_layout.addWidget(controls_scroll, 1)
-        # Acquisition/Abort controls stay visible while parameters scroll.
-        panel_layout.addWidget(self.background_button)
-        panel_layout.addWidget(self.test_button)
-        buttons = QHBoxLayout()
-        buttons.addWidget(self.start_button)
-        buttons.addWidget(self.abort_button)
-        panel_layout.addLayout(buttons)
+        control_layout.addLayout(form)
+        self.validation = QLabel()
+        self.validation.setWordWrap(True)
+        self.validation.setTextFormat(Qt.TextFormat.PlainText)
+        control_layout.addWidget(self.validation)
+        self.refresh_capabilities_button = QPushButton("Check connected device")
+        self.refresh_capabilities_button.setToolTip("The device is checked automatically when this tab opens. Use this to retry or check a newly connected device. Existing choices remain available; no laser emission or acquisition.")
+        self.refresh_capabilities_button.clicked.connect(lambda: self._begin("capabilities"))
+        control_layout.addWidget(self.refresh_capabilities_button)
+        self.hf2_status = QLabel()
+        self.hf2_status.setWordWrap(True)
+        self.hf2_status.setTextFormat(Qt.TextFormat.PlainText)
+        control_layout.addWidget(self.hf2_status)
+        advanced = QGroupBox("Advanced HF2LI overrides")
+        advanced.setCheckable(True)
+        advanced.setChecked(False)
+        self.advanced_group = advanced
+        advanced_layout = QVBoxLayout(advanced)
+        advanced_form = QFormLayout()
+        override_fields = (("order", "Filter order"), ("timeconstant_s", "Time constant"), ("rate_sps", "CH1 sample rate"))
+        if self.dual_detector:
+            override_fields = tuple((f"{role}_{key}", f"{role.title()} {label}")
+                                    for role in ("sample", "reference")
+                                    for key, label in (("order", "filter order"), ("timeconstant_s", "time constant"), ("rate_sps", "rate")))
+        for key, label in override_fields:
+            combo = QComboBox()
+            combo.setObjectName("hf2_" + key)
+            combo.addItem("Automatic", None)
+            combo.currentIndexChanged.connect(lambda _index, field=key: self._override_changed(field))
+            self.override_inputs[key] = combo
+            advanced_form.addRow(label, combo)
+        advanced_layout.addLayout(advanced_form)
+        self.restore_auto_button = QPushButton("Restore automatic settings")
+        self.restore_auto_button.clicked.connect(self._restore_automatic)
+        advanced_layout.addWidget(self.restore_auto_button)
+        advanced.toggled.connect(self._advanced_toggled)
+        control_layout.addWidget(advanced)
+        self.actual_settings = QLabel("")
+        self.actual_settings.setWordWrap(True)
+        self.actual_settings.setTextFormat(Qt.TextFormat.PlainText)
+        control_layout.addWidget(self.actual_settings)
+        self.save_button = QPushButton("Save plan…")
         self.save_button.clicked.connect(self._save_plan)
-        panel_layout.addWidget(self.save_status)
-        self.execution = QLabel()
-        self.execution.setWordWrap(True)
-        self.execution.setTextFormat(Qt.TextFormat.PlainText)
-        panel_layout.addWidget(self.execution)
-        splitter.addWidget(control_panel)
-
+        control_layout.addWidget(self.save_button)
+        self.load_plan_button = QPushButton("Load plan…")
+        self.load_plan_button.clicked.connect(self._load_plan)
+        control_layout.addWidget(self.load_plan_button)
+        control_layout.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(controls)
+        panel_layout.addWidget(scroll, 1)
+        self.background_button = QPushButton("1 · Acquire buffer blank sequence")
+        self.load_background_button = QPushButton("Select saved buffer blank…")
+        self.test_button = QPushButton("2 · Acquire preliminary sample (pump OFF)")
+        self.review_checkbox = QCheckBox("I reviewed the preliminary unpumped spectrum")
+        self.start_button = QPushButton("3 · Start pumped phase scan")
+        if self.dual_detector:
+            self.background_button.hide()
+            self.load_background_button.hide()
+            self.test_button.setText("2 · Acquire preliminary sample/reference (pump OFF)")
+            self.review_checkbox.setText("I reviewed the preliminary sample/reference spectrum")
+        self.abort_button = QPushButton("Abort acquisition")
+        self.abort_button.setProperty("danger", True)
+        self.new_run_button = QPushButton("New run")
+        self.new_run_button.clicked.connect(self._new_run)
+        self.background_button.clicked.connect(lambda: self._begin("background"))
+        self.load_background_button.clicked.connect(self._load_background)
+        self.test_button.clicked.connect(lambda: self._begin("test"))
+        self.review_checkbox.toggled.connect(self._reviewed)
+        self.start_button.clicked.connect(lambda: self._begin("run"))
+        self.abort_button.clicked.connect(self._abort)
+        if self.dual_detector:
+            instruction = QLabel("1 · Load the sample; keep the matched buffer blank in the reference path.")
+            instruction.setWordWrap(True)
+            panel_layout.addWidget(instruction)
+        workflow_controls = (self.test_button, self.review_checkbox, self.start_button, self.abort_button)
+        if not self.dual_detector:
+            workflow_controls = (self.background_button, self.load_background_button) + workflow_controls
+        for control in workflow_controls:
+            panel_layout.addWidget(control)
+        panel_layout.addWidget(self.new_run_button)
+        self.execution, self.save_status = QLabel(), QLabel()
+        for label in (self.execution, self.save_status):
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            panel_layout.addWidget(label)
+        splitter.addWidget(panel)
         preview = QWidget()
         preview_layout = QVBoxLayout(preview)
-        summary = QGroupBox("Derived plan")
+        summary = QGroupBox("Derived experiment and effective settings")
         summary_form = QFormLayout(summary)
-        for key, label in (
-            ("duration", "Sweep duration preview"), ("window", "Reconstruction interval"),
-            ("phases", "Pumped phases / set"),
-            ("total", "Total records"), ("pump", "Pump events / cadence"),
-            ("probe", "T660-1 continuous train"), ("mircat", "MIRcat internal settings"),
-            ("elapsed", "Nominal elapsed time"),
-        ):
+        for key, label in (("duration", "Sweep duration"), ("window", "Reconstruction window"), ("delays", "Required sweep-start range"), ("total", "Sequence scan count"), ("pump", "Pump cadence"), ("elapsed", "Sequence duration"), ("probe", "Fixed probe configuration"), ("capacity", "Preflight capacity"), ("hf2", "Selected HF2LI"), ("resolution", "Effective resolution")):
             value = QLabel()
             value.setWordWrap(True)
             self.summary_values[key] = value
             summary_form.addRow(label, value)
         preview_layout.addWidget(summary)
-        scan_group = QGroupBox("Latest scan")
-        scan_layout = QVBoxLayout(scan_group)
-        self.plot_stack = QStackedWidget()
-        self.plot_stack.addWidget(self.canvas)
-        scan_layout.addWidget(self.plot_stack, 1)
-        views = QHBoxLayout()
-        for button in (self.show_latest_button, self.show_background_button, self.show_map_button):
-            views.addWidget(button)
-        scan_layout.addLayout(views)
-        scan_layout.addWidget(self.scan_status)
-        preview_layout.addWidget(scan_group, 1)
-        sequence_button = QPushButton("Show phase sequence")
-        sequence_button.setCheckable(True)
-        sequence_button.toggled.connect(self.phase_table.setVisible)
-        sequence_button.toggled.connect(
-            lambda visible: sequence_button.setText("Hide phase sequence" if visible else "Show phase sequence")
-        )
-        preview_layout.addWidget(sequence_button)
+        self.views = QTabWidget()
+        self.reconstruction = (PhaseScanReconstructionWidget(detector_mode="dual_detector") if self.dual_detector
+                               else PhaseScanReconstructionWidget())
+        self._surface = self.reconstruction
+        self.reconstruction.run_loaded.connect(lambda _r, p: self.scan_status.setText(f"Loaded reconstruction: {p}"))
+        self.views.addTab(self.reconstruction, "Reconstructed phase-scan data")
+        review = QWidget()
+        review_layout = QVBoxLayout(review)
+        self.canvas = _PreliminarySpectrumCanvas()
+        self.canvas.y_label = "Sample/reference ratio" if self.dual_detector else "Absorbance"
+        review_layout.addWidget(self.canvas, 1)
+        self.preliminary_status = QLabel("Preliminary review is separate from pumped reconstructed data.")
+        self.preliminary_status.setWordWrap(True)
+        review_layout.addWidget(self.preliminary_status)
+        self.views.addTab(review, "Preliminary spectral review")
+        preview_layout.addWidget(self.views, 1)
+        self.scan_status = QLabel("No acquisition running.")
+        self.scan_status.setWordWrap(True)
+        self.scan_status.setTextFormat(Qt.TextFormat.PlainText)
+        preview_layout.addWidget(self.scan_status)
+        self.phase_table = QTableWidget(0, 4)
+        self.phase_table.setHorizontalHeaderLabels(["Position", "Sample condition", "Start relative to sync", "End relative to sync"])
+        self.phase_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.phase_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.phase_table.hide()
+        sequence = QPushButton("Show phase sequence")
+        sequence.setCheckable(True)
+        sequence.toggled.connect(self.phase_table.setVisible)
+        preview_layout.addWidget(sequence)
         preview_layout.addWidget(self.phase_table)
-        preview_scroll = QScrollArea()
-        preview_scroll.setWidgetResizable(True)
-        preview_scroll.setWidget(preview)
-        splitter.addWidget(preview_scroll)
-        splitter.setSizes([385, 655])
+        splitter.addWidget(preview)
+        splitter.setSizes([420, 900])
         root.addWidget(splitter, 1)
+        self.latest_scan_received.connect(self.set_latest_scan)
 
-    def settings(self) -> PhaseScanSettings:
-        return PhaseScanSettings(**{key: widget.currentData() if key == "pump_reference" else widget.value()
-                                    for key, widget in self.inputs.items()})
+    def settings(self):
+        return self.settings_type(**{key: widget.value() for key, widget in self.inputs.items()})
 
-    def _refresh_plan(self, *_args):
-        self.save_status.clear()
-        try:
-            self.plan = build_phase_scan_plan(self.settings())
-        except PhaseScanPlanError as exc:
-            self.plan = None
-            self.validation.setText(f"<b>Check settings:</b> {exc}")
-            for value in self.summary_values.values():
-                value.setText("—")
-            self.phase_table.setRowCount(0)
-            self.save_button.setEnabled(False)
+    def _capabilities(self):
+        caps = getattr(self.runner, "capabilities", None)
+        return caps.to_dict() if hasattr(caps, "to_dict") else caps or self.capabilities_type().to_dict()
+
+    def _populate_override_choices(self):
+        caps = self._capabilities()
+        for key, combo in self.override_inputs.items():
+            role, field = key.split("_", 1) if self.dual_detector else (None, key)
+            profile = caps.get(role, {}) if role else caps
+            order_key = f"{role}_order" if role else "order"
+            order = self._overrides.get(order_key)
+            constants = profile.get("timeconstants_by_order", {})
+            # Menus remain usable even when the current combination is invalid.
+            timeconstants = (sorted({value for group in constants.values() for value in group}) if order is None
+                             else constants.get(order, constants.get(str(order), ())))
+            values = {"order": profile.get("orders", ()), "timeconstant_s": timeconstants, "rate_sps": profile.get("rates_sps", ())}[field]
+            combo.blockSignals(True)
+            combo.clear()
+            wanted = self._overrides.get(key)
+            combo.addItem("Automatic", None)
+            for value in values:
+                text = str(value) if field == "order" else f"{value*1e6:.9g} µs" if field == "timeconstant_s" else f"{value:.12g} Sa/s"
+                combo.addItem(text, value)
+            if wanted is not None and wanted not in values:
+                label = (f"{wanted*1e6:.9g} µs" if field == "timeconstant_s" and isinstance(wanted, (int, float)) else
+                         f"{wanted:.12g} Sa/s" if field == "rate_sps" and isinstance(wanted, (int, float)) else str(wanted))
+                combo.addItem(f"{label} — unsupported; choose another value", wanted)
+                combo.model().item(combo.count()-1).setEnabled(False)
+            combo.setCurrentIndex(max(0, combo.findData(wanted)))
+            combo.blockSignals(False)
+            combo.setEnabled(self.advanced_group.isChecked() and
+                             (not self.command_running() or self._current_kind == "capabilities"))
+
+    def _override_changed(self, key):
+        value = self.override_inputs[key].currentData()
+        if value is None:
+            self._overrides.pop(key, None)
         else:
-            plan = self.plan
-            self.validation.setText("Planning preview. Acquisition requires a qualified sweep trajectory, frame capacity, and capture readbacks.")
-            self.summary_values["duration"].setText(f"{plan.scan_duration_s * 1000:,.6g} ms")
-            self.summary_values["duration"].setToolTip(
-                "The qualified Sweep Active interval and acquisition readback determine detector capture duration during preflight."
-            )
-            self.summary_values["window"].setText(
-                f"{-plan.settings.pre_pump_ms:g} to +{plan.settings.post_pump_ms:g} ms relative to pump sync"
-            )
-            self.summary_values["phases"].setText(
-                f"{plan.phases_per_repetition:,} · {plan.first_phase_delay_us:,.9g} → {plan.last_phase_delay_us:,.9g} µs"
-            )
-            self.summary_values["total"].setText(
-                f"{plan.total_scans:,} = 1 unpumped baseline + "
-                f"{plan.phases_per_repetition:,} / set × {plan.settings.repetitions:,} sets"
-            )
-            self.summary_values["pump"].setText(
-                f"{plan.total_pump_events:,} · at most {plan.pump_rate_hz:,.6g} Hz"
-            )
-            self.summary_values["probe"].setText(
-                f"{plan.settings.probe_repetition_rate_hz:,.9g} Hz / {plan.settings.probe_pulse_width_ns:g} ns · "
-                f"{plan.probe_duty_cycle:.3%} TTL duty · ≈ {plan.nominal_probe_pulses_per_scan:,.9g} opportunities / scan"
-            )
-            self.summary_values["mircat"].setText(
-                f"{plan.settings.mircat_internal_repetition_rate_hz:,.9g} Hz / "
-                f"{plan.settings.mircat_internal_pulse_width_ns:g} ns · "
-                f"{plan.mircat_internal_duty_cycle:.3%} duty · "
-                f"+{plan.mircat_internal_rate_margin_hz:,.9g} Hz headroom · external pulse triggering"
-            )
-            self.summary_values["elapsed"].setText(
-                f"{_duration_text(plan.nominal_duration_s)} + setup / settling"
-            )
-            self.summary_values["elapsed"].setToolTip(
-                "One preloaded frame slot per record, including baselines; no trailing frame interval. "
-                "This cadence budget is not a measured runtime or a guaranteed reset time."
-            )
-            self._populate_sequence(plan)
-            self.save_button.setEnabled(True)
-        if self.plan is not None:
-            self.canvas.requested_range = (
-                self.plan.settings.start_wavenumber_cm1, self.plan.settings.stop_wavenumber_cm1,
-            )
-        self.canvas.update()
+            self._overrides[key] = value
+        # Keep an incompatible explicit override for validation; never silently
+        # rewrite the requested pair when the selected order changes.
+        self._refresh_plan()
+        self._populate_override_choices()
+
+    def _restore_automatic(self):
+        self._overrides.clear()
+        self._refresh_plan()
+        self._populate_override_choices()
+
+    def _advanced_toggled(self, checked):
+        if not checked and self._overrides:
+            self._restore_automatic()
+        elif not self._restoring:
+            self._update_buttons()
+
+    def _refresh_plan(self, *_):
+        if self._restoring:
+            return
+        self.save_status.clear()
+        self.actual_settings.clear()
+        try:
+            self.plan = self.runner.configuration_preview(self.settings(), overrides=self._overrides)
+        except (ValueError, RuntimeError) as exc:
+            self.plan = None
+            self.validation.setText(_brief_setting_error(str(exc)))
+            for label in self.summary_values.values():
+                label.setText("—")
+            self.hf2_status.clear()
+            self.phase_table.setRowCount(0)
+        else:
+            p, s = self.plan, self.plan.hf2_selection
+            self.validation.setText(p.capacity.get("warning", ""))
+            self.summary_values["duration"].setText(f"{p.scan_duration_s*1000:.6g} ms; capture {p.capture_window.get('duration_s', p.scan_duration_s)*1000:.6g} ms")
+            self.summary_values["window"].setText(f"−{p.settings.pre_pump_ms:g} to +{p.settings.post_pump_ms:g} ms · electrical pump sync")
+            self.summary_values["delays"].setText(f"{p.first_phase_delay_us/1000:g} to +{p.last_phase_delay_us/1000:g} ms")
+            self.summary_values["total"].setText(f"{p.total_scans:,} per blank / sample sequence; sample includes one unpumped baseline + {p.total_pump_events:,} pumped phases")
+            self.summary_values["pump"].setText(f"{p.settings.pump_repetition_rate_hz:g} Hz · {p.frame_period_s*1000:.9g} ms cadence · FIRE→Q-switch 250 µs")
+            self.summary_values["elapsed"].setText(f"{p.nominal_duration_s:.3f} s per sequence, plus setup, settling and retrieval")
+            self.summary_values["probe"].setText("2 MHz external probe triggering, 150 ns TTL; MIRcat internal 2.1 MHz / 142 ns; CH1 SIG IN +")
+            capacity = p.capacity
+            self.summary_values["capacity"].setText(f"{capacity.get('estimated_retained_bytes', 0)/1e6:.1f} MB estimated · {capacity.get('max_retained_bytes', 0)/1e6:.1f} MB advisory · {p.total_scans:,} timing entries")
+            self.summary_values["hf2"].setText(f"Order {s['order']} · τ {s['timeconstant_s']*1e6:.4g} µs · {s['rate_sps']/1000:.4g} kSa/s")
+            self.summary_values["resolution"].setText(f"{s['temporal_resolution_s']*1e6:.4g} µs · broadening {s['spectral_broadening_cm1']:.4g} cm⁻¹ (estimated)")
+            self.actual_settings.setText(f"Selected: order {s['order']} · τ {s['timeconstant_s']*1e6:.6g} µs · {s['rate_sps']/1000:.6g} kSa/s; estimated resolution {s['temporal_resolution_s']*1e6:.6g} µs.")
+            self.hf2_status.setText("Aliasing advisory: increase CH1 sample rate or Time constant to improve filtering margin." if not s.get("anti_alias_guideline_met", True) else "")
+            if self.dual_detector:
+                self.summary_values["total"].setText(f"{p.total_scans:,} simultaneous detector scans; one unpumped + {p.total_pump_events:,} pumped phases")
+                self.summary_values["probe"].setText("2 MHz external probe triggering, 150 ns TTL; MIRcat internal 2.1 MHz / 142 ns; sample + reference")
+                channel_text = "\n".join(self._channel_settings_text(role, s[role]) for role in ("sample", "reference"))
+                self.summary_values["hf2"].setText(channel_text + f"\nTiming: {s['timing_rate_sps']/1000:.6g} kSa/s")
+                self.summary_values["resolution"].setText(f"Both channels: {s['temporal_resolution_s']*1e6:.6g} µs · {s.get('effective_spectral_resolution_cm1', 0):.6g} cm⁻¹ (estimated)")
+                self.actual_settings.setText("Selected: " + channel_text)
+                self.hf2_status.setText("Aliasing advisory: increase the affected detector’s sample rate or time constant." if not s.get("anti_alias_guideline_met", True) else "")
+            self._populate_sequence(p)
+            self.canvas.requested_range = (p.settings.start_wavenumber_cm1, p.settings.stop_wavenumber_cm1)
+        self._save_preferences()
         self._update_buttons()
 
-    def set_latest_scan(self, wavenumbers_cm1, absorption, scan_label: str = "Latest scan"):
-        """Replace, never average, the displayed spectrum with supplied data.
+    @staticmethod
+    def _channel_settings_text(role, values):
+        text = (f"{role.title()}: order {values['order']} · τ {values['timeconstant_s']*1e6:.6g} µs · "
+                f"{values['rate_sps']/1000:.6g} kSa/s")
+        if "filter_group_delay_s" in values:
+            text += f" · delay {values['filter_group_delay_s']*1e6:.6g} µs"
+        return text
 
-        Supply processed absorption, not raw Sample/Reference voltages. No
-        normalization, baseline subtraction, or absorption conversion is guessed
-        here. Call on the GUI thread; workers can emit latest_scan_received.
-        Non-finite pairs remain explicit gaps in the displayed trace.
-        """
-        xs = tuple(float(value) for value in wavenumbers_cm1)
-        ys = tuple(float(value) for value in absorption)
-        if len(xs) != len(ys) or not xs:
-            raise ValueError("Latest scan requires equally sized, non-empty wavenumber and absorption arrays")
-        self.canvas.points = tuple(zip(xs, ys))
-        self.canvas.y_label = "Absorbance"
-        self._latest = (xs, ys, scan_label)
-        self.show_latest_button.setEnabled(not self.command_running())
-        self.plot_stack.setCurrentWidget(self.canvas)
-        valid_count = sum(math.isfinite(x) and math.isfinite(y) for x, y in self.canvas.points)
-        gaps = len(xs) - valid_count
-        self.scan_status.setText(
-            f"{scan_label} · {valid_count:,} valid points"
-            + (f" · {gaps:,} invalid points shown as gaps" if gaps else "")
-        )
-        self.canvas.update()
-
-    def _populate_sequence(self, plan: PhaseScanPlan):
-        # Keep UI work bounded even when a fine phase grid represents millions
-        # of scans. All actual indices remain available in the compact plan.
-        count = 1 + plan.phases_per_repetition
-        indices = list(range(min(4, count)))
-        if count > 6:
-            indices.append(None)
-        indices.extend(index for index in range(max(4, count - 2), count))
+    def _populate_sequence(self, plan):
+        count = plan.total_scans
+        indices = list(range(min(4, count))) + ([None] if count > 6 else []) + list(range(max(4, count-2), count))
         self.phase_table.setRowCount(len(indices))
         for row, index in enumerate(indices):
             if index is None:
-                cells = ("…", f"{count - 6:,} more phases", "…", "…")
+                cells = ("…", f"{count-6:,} more scans", "…", "…")
             else:
                 event = plan.event_at(index)
-                if not event.pump_enabled:
-                    cells = (str(index + 1), "Baseline · pump OFF", "No pump", "No pump")
-                else:
-                    delay = event.phase_delay_us
-                    cells = (
-                        f"{index + 1:,}", f"Phase {event.phase_index + 1:,}",
-                        f"{delay:,.9g} µs", f"{delay + plan.scan_duration_s * 1_000_000:,.9g} µs",
-                    )
-            for column, text in enumerate(cells):
-                self.phase_table.setItem(row, column, QTableWidgetItem(text))
-
-    def _save_plan(self):
-        if self.plan is None:
-            return
-        path, _ = QFileDialog.getSaveFileName(self, "Save Phase Scan Plan", str(get_save_location() / "phase_scan_plan.json"), "JSON (*.json)")
-        if not path:
-            return
-        try:
-            payload = self.plan.to_dict()
-            payload["saved_at_utc"] = datetime.now(UTC).isoformat(timespec="seconds")
-            Path(path).write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-        except OSError as exc:
-            QMessageBox.warning(self, "Save Phase Scan Plan", str(exc))
-            return
-        self.save_status.setText(f"Plan saved: {path}")
-
-    def command_running(self) -> bool:
-        return self.worker is not None
-
-    def output_location_changed(self):
-        self.runner.invalidate_background()
-        self._update_buttons()
+                cells = (str(index+1), "Unpumped baseline", "No pump", "No pump") if not event.pump_enabled else (str(index+1), "Pumped phase", f"{event.phase_delay_us:g} µs", f"{event.phase_delay_us+plan.scan_duration_s*1e6:g} µs")
+            for col, value in enumerate(cells):
+                self.phase_table.setItem(row, col, QTableWidgetItem(value))
 
     def _update_buttons(self):
-        busy = self.command_running()
-        valid = self.plan is not None
-        background = valid and self.runner.background_matches(self.settings())
-        self.background_button.setEnabled(valid and self.runner.available and not busy)
-        self.test_button.setEnabled(valid and background and self.runner.available and not busy)
-        self.start_button.setEnabled(valid and background and self.runner.available and not busy)
-        self.start_button.setToolTip("Capture a compatible optical background before Start Scan.")
-        self.background_button.setToolTip(OPTICAL_ADAPTER_BLOCKER if not self.runner.available else
-                                         "One unpumped sweep; QCL current 750 mA; exploratory Phase-Scan HF2LI preset.")
-        self.abort_button.setEnabled(busy)
-        self.diagnostic_button.setEnabled(self.diagnostic is not None and not busy)
-        self.show_background_button.setEnabled(bool(background) and not busy)
-        self.show_latest_button.setEnabled(self._latest is not None and not busy)
-        self.show_map_button.setEnabled(self._surface is not None and not busy)
+        busy, valid = self.command_running(), self.plan is not None
+        acquiring = busy and self._current_kind != "capabilities"
+        conflicts = self.runner.background_conflicts(self.plan or self.settings())
+        blank = valid and not conflicts and self.runner.background is not None
+        preliminary = valid and (self.dual_detector or blank) and self.runner.preliminary_matches(self.plan)
+        verified = valid and self.plan.hf2_selection.get("capability_verified", False)
+        ready = valid and verified and self.runner.available and not busy
+        self.background_button.setEnabled(ready and not self.dual_detector)
+        self.load_background_button.setEnabled(valid and not busy and not self.dual_detector)
+        self.test_button.setEnabled(ready and (self.dual_detector or blank))
+        self.review_checkbox.setEnabled(bool(preliminary) and not busy)
+        if not preliminary:
+            self.review_checkbox.blockSignals(True)
+            self.review_checkbox.setChecked(False)
+            self.review_checkbox.blockSignals(False)
+            if self.dual_detector:
+                self.runner.preliminary_reviewed = False
+        self.start_button.setEnabled(ready and preliminary and self.review_checkbox.isChecked() and self.runner.preliminary_reviewed)
+        self.abort_button.setEnabled(busy and self._current_kind != "capabilities")
+        self.refresh_capabilities_button.setEnabled(self.runner.available and not busy)
         self.save_button.setEnabled(valid and not busy)
-        for widget in self.inputs.values():
-            widget.setEnabled(not busy)
-        self.execution.setText(
-            "EXPLORATORY PROOF OF CONCEPT - NOT FOR PUBLICATION. QCL: 750 mA, externally triggered. MIRcat internal rate/width settings provide trigger-acceptance headroom. T660-1 supplies the continuous 2 MHz reference/probe train; externally predivided T660-2 supplies the preloaded pump/process frames. Finite HF2LI Sweep Active records and synchronized DIO17 pump events are saved after acquisition.\n"
-            + ("An acquisition is running. Abort requests safe shutdown." if busy else
-               OPTICAL_ADAPTER_BLOCKER if not self.runner.available else
-               "Background ready. One scan per phase per set." if background else
-               "Capture Background before starting a run; changing scan/probe settings requires a new background.")
-        )
+        self.load_plan_button.setEnabled(not busy)
+        self.new_run_button.setEnabled(not busy)
+        self.reconstruction.load_button.setEnabled(not busy)
+        self.advanced_group.setEnabled(not acquiring)
+        self._populate_override_choices()
+        for control in self.inputs.values():
+            control.setEnabled(not acquiring)
+        if acquiring:
+            text = "Acquisition running; requested settings are frozen."
+        elif busy:
+            text = "Checking the connected device. You can continue editing the experiment and overrides."
+        elif not valid:
+            text = "Correct the conflict shown above. The acquisition parameters and override dropdowns remain editable."
+        elif not self.runner.available:
+            text = OPTICAL_ADAPTER_BLOCKER
+        elif not verified:
+            text = "Device verification is pending or unsuccessful. You can edit saved choices; use Check connected device to retry before acquisition."
+        elif self.dual_detector and not preliminary:
+            text = ("Load the sample and keep the matched buffer blank in the reference path. Acquire the preliminary sample/reference spectrum."
+                    + (" Baseline incompatible: " + "; ".join(conflicts) if self.runner.preliminary is not None and conflicts else ""))
+        elif not blank and not self.dual_detector:
+            text = "Load a buffer blank and acquire the matching full sequence. " + ("Blank compatibility: " + "; ".join(conflicts) if self.runner.background else "")
+        elif not preliminary:
+            text = "Compatible blank ready. Load the sample and acquire its preliminary unpumped spectrum."
+        elif not self.review_checkbox.isChecked():
+            text = "Review the preliminary spectrum and check the review box before starting the pumped scan."
+        else:
+            text = "Preliminary spectrum reviewed. Start pumped phase scan explicitly when ready."
+        self.execution.setText(text)
+
+    def _reviewed(self, checked):
+        if checked:
+            try:
+                self.runner.mark_preliminary_reviewed()
+            except (ValueError, RuntimeError) as exc:
+                self.scan_status.setText(str(exc))
+                self.review_checkbox.setChecked(False)
+        elif self.dual_detector:
+            self.runner.preliminary_reviewed = False
+        self._update_buttons()
 
     def _begin(self, kind):
-        if self.command_running() or (kind != "diagnostic" and self.plan is None):
+        if self.command_running() or (kind != "capabilities" and self.plan is None):
             return
         blocker = self.before_start()
         if blocker:
             self.scan_status.setText(str(blocker))
             return
-        description = (
-            "Capture three dark timing records. MIRcat must remain interlocked, unarmed and OFF. "
-            "A/B/D outputs remain disabled; only C timing outputs are exercised. HF2LI settings "
-            "are restored afterward. This does not capture an optical background."
-            if kind == "diagnostic" else
-            "Acquire one unpumped background sweep at 750 mA using the displayed probe/scan settings and the exploratory Phase-Scan HF2LI preset."
-            if kind == "background" else
-            "Acquire one probe-only test sweep at 750 mA and calculate absorbance against the captured background. The pump remains OFF."
-            if kind == "test" else
-            f"Acquire {self.plan.total_scans:,} scans and {self.plan.total_pump_events:,} pump events "
-            "at the displayed settings, using the captured optical background. This enables the Nd:YAG Fire and Q-switch outputs. "
-            "Both DDGs remain armed during each preloaded block. HF2LI records Sweep Active on DIO21 and pump synchronization on DIO17. The pump must already be configured "
-            "for external operation and the beam path made safe."
-        )
-        if kind != "diagnostic":
-            settings = self.plan.settings
-            description += (
-                f" T660-1 A/B/C: {settings.probe_repetition_rate_hz:g} Hz / {settings.probe_pulse_width_ns:g} ns; "
-                f"MIRcat internal settings: {settings.mircat_internal_repetition_rate_hz:g} Hz / "
-                f"{settings.mircat_internal_pulse_width_ns:g} ns. Optical triggering remains external."
-            )
-        if QMessageBox.question(self, "Confirm acquisition", description,
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
-            return
+        if kind == "capabilities":
+            self._capability_check_attempted = True
+        if kind != "capabilities":
+            descriptions = {
+                "background": f"Load the buffer blank. Acquire {self.plan.total_scans:,} CH1 scans with the pump inhibited, matching the full sample sequence and its cadence. Probe emission will be enabled.",
+                "test": "Load the sample. Acquire an unpumped preliminary CH1 absorption spectrum using the matching buffer blank. Probe emission will be enabled; the pump stays inhibited.",
+                "run": f"Start {self.plan.total_scans:,} sample scans including {self.plan.total_pump_events:,} pumped phases at {self.plan.settings.pump_repetition_rate_hz:g} Hz. This enables the pump FIRE and Q-switch outputs with 250 µs separation. Confirm the sample is loaded and the instrument is ready.",
+            }
+            if self.dual_detector:
+                descriptions["test"] = "Load the sample and keep the matched buffer blank in the reference path. Acquire both detectors simultaneously for preliminary review. Probe emission will be enabled; the pump stays inhibited."
+                descriptions["run"] = (f"Start {self.plan.total_scans:,} simultaneous sample/reference scans, including {self.plan.total_pump_events:,} pumped phases at {self.plan.settings.pump_repetition_rate_hz:g} Hz. FIRE→Q-switch separation is 250 µs. Confirm the sample and reference blank are loaded and the instrument is ready.")
+            if QMessageBox.question(self, "Start acquisition", descriptions[kind], QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+                return
         self.runner.cancel.clear()
-        self._pending_result = None
-        root, plan = get_save_location(), self.plan
-        if kind == "diagnostic":
+        self._pending_result, self._current_kind = None, kind
+        plan = self.plan
+        if kind == "capabilities":
             def operation(worker):
-                path = self.diagnostic(root, cancel=self.runner.cancel, progress=worker.message.emit)
-                return {"kind": "diagnostic", "path": path}
+                worker.message.emit("Discovering connected supported settings and restoring instruments; no laser acquisition…")
+                return {"kind": "capabilities", "capabilities": self.runner.refresh_capabilities()}
         else:
             def operation(worker):
-                return self.runner.execute(kind, root, plan, on_scan=worker.scan.emit, progress=worker.message.emit,
-                                           laser_authorized=True)
+                def progress(message):
+                    worker.message.emit(message)
+                    if self.runner.last_readback:
+                        worker.configured.emit(self.runner.last_readback)
+                return self.runner.execute(kind, get_save_location(), plan, on_scan=worker.scan.emit, progress=progress, laser_authorized=True)
         self.worker = _PhaseWorker(operation, self)
         self.worker.message.connect(self.scan_status.setText)
-        self.worker.scan.connect(self.set_latest_scan)
-        self.worker.result.connect(self._receive_result)
+        self.worker.scan.connect(self._receive_spectrum)
+        self.worker.configured.connect(self._show_actual_readback)
+        self.worker.result.connect(lambda result: setattr(self, "_pending_result", result))
+        self.worker.stopped.connect(self.scan_status.setText)
         self.worker.failed.connect(self.scan_status.setText)
         self.worker.finished.connect(self._worker_finished)
         self.busy_changed.emit(True)
         self._update_buttons()
         self.worker.start()
 
-    def _abort(self):
-        self.runner.abort()
-        self.abort_button.setEnabled(False)
-        self.scan_status.setText("Abort requested. Waiting for safe shutdown and partial data to finish saving…")
+    def _receive_spectrum(self, wn, values, label):
+        if self._current_kind == "test":
+            self.set_latest_scan(wn, values, label if self.dual_detector else "Preliminary unpumped sample")
 
-    def _receive_result(self, result):
-        self._pending_result = result
+    def set_latest_scan(self, wavenumbers_cm1, absorption, scan_label="Preliminary unpumped sample"):
+        xs, ys = tuple(map(float, wavenumbers_cm1)), tuple(map(float, absorption))
+        if len(xs) != len(ys) or not xs:
+            raise ValueError("Spectrum needs equally sized, nonempty wavelength and signal arrays")
+        self.canvas.points = tuple(zip(xs, ys))
+        if self.dual_detector:
+            mode = getattr(self, "_preliminary_display_mode", "sample_reference_ratio")
+            self.canvas.y_label = "Absorbance" if mode == "absorbance" else "Sample/reference ratio"
+            self.preliminary_status.setText("Preliminary unpumped sample/reference spectrum · " +
+                ("Absorbance = −log10[(S/R)/B], using the retained channel-balance calibration." if mode == "absorbance" else
+                 "Q₀ = S/R; reference path contains the matched buffer blank. Invalid points remain gaps."))
+        else:
+            self.canvas.y_label = "Absorbance"
+            self.preliminary_status.setText(scan_label + " · Transmission = CH1 sample / matched CH1 buffer blank; absorbance = −log10(transmission). Invalid points remain gaps.")
+        self.canvas.update()
+        self.views.setCurrentIndex(1)
 
     def _worker_finished(self):
         self.worker.deleteLater()
         self.worker = None
         self.busy_changed.emit(False)
-        self._update_buttons()
         result = self._pending_result
-        if result is None:
-            return
-        self.save_status.setText(f"Saved: {result['path']}")
-        if result["kind"] == "background":
-            self._show_background()
-        elif result["kind"] == "test":
-            self.scan_status.setText("Test scan complete · pump OFF. " + " ".join(result.get("warnings", [])))
-        elif result["kind"] == "diagnostic":
-            try:
-                summary = json.loads((Path(result["path"]) / "result.json").read_text(encoding="utf-8"))
-                warning = (" HF2LI restoration has readback differences; inspect the restoration comparison."
-                           if summary.get("restoration_differences") else "")
-            except (OSError, ValueError):
-                warning = " Result summary could not be read; inspect the saved folder."
-            self.scan_status.setText("Inhibited diagnostic saved. No optical background, wavelength sweep or absorbance was measured." + warning)
-        else:
-            try:
-                self.show_reconstruction(result["reconstruction"], result["path"])
-            except Exception as exc:
-                self.scan_status.setText(f"Data saved; 3D display failed: {exc}")
-
-    def _show_background(self):
-        background = self.runner.background
-        if background is None:
-            return
-        spectrum = background.spectrum
-        self.canvas.points = tuple(zip(spectrum.wavenumber_cm1, spectrum.ratio()))
-        self.canvas.y_label = "Background S₀/R₀"
-        self.plot_stack.setCurrentWidget(self.canvas)
-        self.scan_status.setText("Captured background · sample/reference ratio (I₀). Used for absolute absorbance; self-normalization would be A = 0.")
-        if spectrum.metadata.get("provisional"):
-            self.scan_status.setText(self.scan_status.text() + " PROVISIONAL wavenumber axis; inspect the saved marker data.")
-        self.canvas.update()
-
-    def _show_latest(self):
-        if self._latest is not None:
-            self.set_latest_scan(*self._latest)
-
-    def _show_map(self):
-        if self._surface is not None:
-            self.plot_stack.setCurrentWidget(self._surface)
-            self.scan_status.setText("Exploratory proof-of-concept run - reconstructed absorbance map - NOT FOR PUBLICATION. This view is not a live acquisition.")
+        if result is not None:
+            if result["kind"] == "capabilities":
+                self._save_capability_preferences()
+                self.scan_status.setText("Connected device checked; supported choices updated and instrument settings restored.")
+            else:
+                self.save_status.setText(f"Saved: {result['path']}")
+                if result["kind"] == "test":
+                    if self.dual_detector:
+                        self._preliminary_display_mode = result.get("display_mode", "sample_reference_ratio")
+                    self.set_latest_scan(result["spectrum"].wavenumber_cm1, result["values"] if self.dual_detector else result["absorbance"])
+                    self.review_checkbox.setChecked(False)
+                    self.scan_status.setText("Preliminary acquisition complete, pump OFF. Review the spectrum before starting the pumped phase scan.")
+                elif result["kind"] == "background":
+                    self.scan_status.setText("Full buffer blank sequence retained. Load the sample for preliminary spectral review.")
+                elif result["kind"] == "run":
+                    try:
+                        self.show_reconstruction(result["reconstruction"], result["path"])
+                    except Exception as exc:
+                        self.scan_status.setText(f"Data saved; display failed: {exc}")
+        readback = getattr(self.runner, "last_readback", None)
+        if readback:
+            self._show_actual_readback(readback)
+        self._refresh_plan()
+        if result is not None and "path" in result:
+            self.save_status.setText(f"Saved: {result['path']}")
+            if readback:
+                self._show_actual_readback(readback)
 
     def show_reconstruction(self, result, run_path=None):
-        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-        from control_app.ui.widgets.phase_scan_surface import make_surface_figure
-        figure = make_surface_figure(result)
-        if run_path is not None:
-            target = Path(run_path) / "processed" / "absorbance_map.png"
-            if not target.exists():
-                figure.savefig(target, dpi=180)
-        if self._surface is not None:
-            self.plot_stack.removeWidget(self._surface)
-            self._surface.deleteLater()
-        self._surface = FigureCanvasQTAgg(figure)
-        self.plot_stack.addWidget(self._surface)
-        self.show_map_button.setEnabled(not self.command_running())
-        timing = "electrical pump-sync reference" if "electrical_sync" in result.get("pump_reference_bases", []) else "observed pump reference"
-        self.scan_status.setText(f"Exploratory proof of concept complete - NOT FOR PUBLICATION - absorbance vs wavenumber and {timing}. "
-            "Unsupported regions are left empty; phase increment is not time resolution. "
-            + ("PROVISIONAL wavenumber axis. " if result.get("provisional") else ""))
-        self.plot_stack.setCurrentWidget(self._surface)
-        self._surface.draw_idle()
+        self.reconstruction.set_result(result, run_path)
+        self.views.setCurrentIndex(0)
+        self.scan_status.setText("Reconstruction ready. Rotate or zoom the 3D view; select exact-coordinate spectral/time slices. Unsupported regions remain missing.")
 
+    def _show_actual_readback(self, readback):
+        actual = readback.get("hf2li_resolution", {}).get("actual", {})
+        if self.dual_detector:
+            if all(isinstance(actual.get(role), dict) and {"order", "timeconstant_s", "rate_sps"} <= actual[role].keys()
+                   for role in ("sample", "reference")):
+                resolution = readback.get("hf2li_resolution", {})
+                channels = {role: {**actual[role], **resolution.get(role, {}).get("actual_estimates", {})}
+                            for role in ("sample", "reference")}
+                self.actual_settings.setText("Actual HF2LI readbacks:\n" + "\n".join(
+                    self._channel_settings_text(role, channels[role]) for role in ("sample", "reference")) +
+                    f"\nTiming: {actual.get('timing_rate_sps', 0):.12g} Sa/s. Requested, selected and actual settings are retained.")
+                if all("temporal_resolution_s" in channel for channel in channels.values()):
+                    combined = math.hypot(*(channel["temporal_resolution_s"] for channel in channels.values()))
+                    self.actual_settings.setText(self.actual_settings.text() + f" Combined estimated resolution: {combined*1e6:.6g} µs.")
+            else:
+                self.actual_settings.setText("Both detector and timing readbacks are retained with the acquisition.")
+            return
+        required = ("order", "timeconstant_s", "rate_sps", "timing_rate_sps")
+        if all(key in actual for key in required):
+            from control_app.workflows.regular_phase_scan import filter_response
+            speed = readback.get("requested_settings", {}).get("scan_speed_cm1_s", self.settings().scan_speed_cm1_s)
+            response = filter_response(actual["order"], actual["timeconstant_s"], actual["rate_sps"], actual["timing_rate_sps"], speed)
+            self.actual_settings.setText(
+                f"Actual HF2LI readbacks: order {actual['order']}; τ {actual['timeconstant_s']*1e6:.9g} µs; "
+                f"CH1 {actual['rate_sps']:.12g} Sa/s; timing {actual['timing_rate_sps']:.12g} Sa/s.\n"
+                f"Estimated actual resolution {response['temporal_resolution_s']*1e6:.6g} µs; "
+                f"filter spectral broadening {response['spectral_broadening_cm1']:.6g} cm⁻¹. "
+                "Requested, selected and actual values are retained with the acquisition.")
+        else:
+            self.actual_settings.setText("Acquisition readbacks retained; this record does not provide all four resolved HF2LI values.")
 
-def _duration_text(seconds: float) -> str:
-    hours, remainder = divmod(seconds, 3600)
-    minutes, remaining = divmod(remainder, 60)
-    return f"{int(hours):,} h {int(minutes):02d} min {remaining:06.3f} s"
+    def _abort(self):
+        self.runner.abort()
+        self.abort_button.setEnabled(False)
+        self.scan_status.setText("Abort requested. Retaining partial records and restoring safe idle state…")
+
+    def _load_background(self):
+        path = QFileDialog.getExistingDirectory(self, "Select a saved buffer blank sequence", str(get_save_location()))
+        if path:
+            self._pending_background_path = Path(path)
+            try:
+                self.runner.load_background(Path(path), self.plan)
+                self._pending_background_path = None
+                self.scan_status.setText(f"Compatible buffer blank selected: {path}")
+                self._show_actual_readback(self.runner.last_readback)
+            except Exception as exc:
+                self.scan_status.setText(f"Blank cannot be used: {exc}")
+            self._update_buttons()
+
+    def command_running(self):
+        return self.worker is not None
+
+    def output_location_changed(self):
+        # Moving the destination does not alter the saved blank's experiment.
+        self._update_buttons()
+
+    def _new_run(self):
+        if self.command_running():
+            return
+        self.runner.invalidate_background()
+        self._pending_background_path = None
+        self.runner.last_readback = {}
+        self.runner.cancel.clear()
+        self._pending_result = None
+        self.review_checkbox.setChecked(False)
+        self.canvas.points = ()
+        self.canvas.update()
+        self.reconstruction.clear_result()
+        self.preliminary_status.setText("No preliminary spectrum for this run.")
+        self._refresh_plan()
+        self.scan_status.setText("Ready for a new run; acquire a preliminary sample/reference spectrum." if self.dual_detector else "Ready for a new run; acquire or select a buffer blank.")
+
+    def load_plan(self, path):
+        if self.command_running():
+            raise RuntimeError("Wait for acquisition to finish before loading a plan")
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        if payload.get("method") != self.plan_method:
+            raise ValueError("Select a Dual-Detector Phase Scan plan; single-detector plans are incompatible." if self.dual_detector else "Select a regular single-detector phase-scan plan; dual-detector plans are incompatible.")
+        settings = self.settings_type(**payload["settings"])
+        for key, control in self.inputs.items():
+            value = getattr(settings, key)
+            if not isinstance(value, (int, float)) or not math.isfinite(value) or not control.minimum() <= value <= control.maximum():
+                raise ValueError(f"Saved {key} is outside the editable range")
+        overrides = payload.get("hf2_selection", {}).get("requested", {})
+        if not isinstance(overrides, dict) or set(overrides)-set(self.override_inputs):
+            raise ValueError("Saved HF2LI overrides are invalid")
+        calibration = payload.get("channel_balance_calibration", {})
+        if self.dual_detector and (not isinstance(calibration, dict) or
+                                  (calibration and not isinstance(calibration.get("bundle_id"), str))):
+            raise ValueError("Saved channel-balance selection must identify a promoted bundle")
+        # Recalculate from current device capabilities; saved derived values
+        # and verification flags never grant acquisition authority.
+        self._restoring = True
+        try:
+            for key, control in self.inputs.items():
+                control.setValue(getattr(settings, key))
+            self._overrides = dict(overrides)
+            if self.dual_detector:
+                self.runner.requested_channel_balance = dict(calibration)
+            self.advanced_group.setChecked(bool(overrides))
+        finally:
+            self._restoring = False
+        self._refresh_plan()
+        self.save_status.setText(f"Plan loaded: {path}")
+        pending_blank = getattr(self, "_pending_background_path", None)
+        if self.plan is None:
+            self.scan_status.setText(self.validation.text())
+        elif self.dual_detector:
+            conflicts = self.runner.background_conflicts(self.plan)
+            self.scan_status.setText(("Baseline incompatible: " + "; ".join(conflicts) if conflicts else "Plan and preliminary baseline match; review the spectrum before starting.")
+                                     if self.runner.preliminary is not None else "Plan loaded; acquire a preliminary sample/reference spectrum.")
+        elif pending_blank is not None:
+            # A previously rejected folder is still the user's requested
+            # blank. Revalidate it against the newly loaded plan.
+            try:
+                self.runner.load_background(pending_blank, self.plan)
+                self._pending_background_path = None
+                self.scan_status.setText("Plan and selected buffer blank match.")
+            except Exception as exc:
+                self.scan_status.setText(f"Blank cannot be used: {exc}")
+        elif self.runner.background is not None:
+            conflicts = self.runner.background_conflicts(self.plan)
+            self.scan_status.setText(
+                "Blank incompatible: " + "; ".join(conflicts) if conflicts
+                else "Plan and selected buffer blank match.")
+        else:
+            self.scan_status.setText("Plan loaded; acquire or select a buffer blank.")
+        self._update_buttons()
+
+    def _load_plan(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Load phase-scan plan", str(get_save_location()), "JSON (*.json)")
+        if path:
+            try:
+                self.load_plan(path)
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                QMessageBox.warning(self, "Load phase-scan plan", str(exc))
+
+    def _save_plan(self):
+        if self.plan is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save phase-scan plan", str(get_save_location() / ("dual_detector_phase_scan_plan.json" if self.dual_detector else "phase_scan_plan.json")), "JSON (*.json)")
+        if path:
+            try:
+                payload = self.plan.to_dict()
+                payload["saved_at_utc"] = datetime.now(UTC).isoformat()
+                with Path(path).open("x", encoding="utf-8") as handle:
+                    json.dump(payload, handle, indent=2, allow_nan=False)
+                self.save_status.setText(f"Plan saved: {path}")
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(self, "Save phase-scan plan", str(exc))
+
+    def _restore_preferences(self):
+        if self.preferences is None:
+            return
+        self._restoring = True
+        try:
+            payload = json.loads(str(self.preferences.value(self.preference_key, "{}")))
+            for key, value in payload.get("inputs", {}).items():
+                if key in self.inputs and isinstance(value, (int, float)) and self.inputs[key].minimum() <= value <= self.inputs[key].maximum():
+                    self.inputs[key].setValue(value)
+            self._overrides = {key: value for key, value in payload.get("overrides", {}).items() if key in self.override_inputs}
+            if self.dual_detector:
+                calibration = payload.get("channel_balance_calibration", {})
+                if isinstance(calibration, dict) and (not calibration or isinstance(calibration.get("bundle_id"), str)):
+                    self.runner.requested_channel_balance = dict(calibration)
+            self.advanced_group.setChecked(bool(self._overrides))
+        except (ValueError, TypeError):
+            pass
+        finally:
+            self._restoring = False
+
+    def _restore_capability_preferences(self):
+        if self.preferences is None or self.runner.capabilities is not None:
+            return
+        try:
+            payload = json.loads(str(self.preferences.value(self.preference_key + "_hf2_choices", "null")))
+            if not payload:
+                return
+            caps = replace(self.capabilities_type.from_dict(payload), verified=False)
+            # Reject malformed caches. A cache is only a menu of recorded
+            # choices, never authority to acquire from an unchecked device.
+            self._select_hf2(self.settings_type(), caps)
+            self.runner.set_capabilities(caps)
+        except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+            return
+
+    def _save_capability_preferences(self):
+        caps = self._capabilities()
+        if self.preferences is not None and caps.get("verified"):
+            payload = dict(caps)
+            payload["verified"] = False
+            payload["readback_records"] = []  # cache menu choices; each acquisition records its actual settings
+            if self.dual_detector:
+                for role in ("sample", "reference"):
+                    payload[role] = {**payload[role], "verified": False, "readback_records": []}
+            self.preferences.setValue(self.preference_key + "_hf2_choices", json.dumps(payload, allow_nan=False))
+
+    def _save_preferences(self):
+        if self.preferences is not None:
+            payload = {"inputs": {key: control.value() for key, control in self.inputs.items()}, "overrides": self._overrides}
+            if self.dual_detector:
+                payload["channel_balance_calibration"] = getattr(self.runner, "requested_channel_balance", {})
+            self.preferences.setValue(self.preference_key, json.dumps(payload))

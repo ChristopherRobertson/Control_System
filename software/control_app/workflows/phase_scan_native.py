@@ -7,7 +7,25 @@ from __future__ import annotations
 
 import numpy as np
 
-from control_app.workflows.phase_scan_data import Spectrum, interpolate_supported
+from control_app.workflows.phase_scan_data import (
+    DETECTOR_INPUT, DUAL_DETECTOR_MODE, SINGLE_DETECTOR_MODE, Spectrum, interpolate_supported,
+)
+from control_app.workflows.single_detector_marker_identity import controller_marker_identity
+
+
+def _detector_metadata(record):
+    mode = record.get("detector_mode", DUAL_DETECTOR_MODE)
+    if mode not in {SINGLE_DETECTOR_MODE, DUAL_DETECTOR_MODE}:
+        raise ValueError(f"Unknown detector mode: {mode}")
+    metadata = {"detector_mode": mode}
+    if mode == SINGLE_DETECTOR_MODE:
+        metadata.update(detector_input=record.get("detector_input", DETECTOR_INPUT),
+                        sample_demodulator=0, reference_demodulator=None)
+    for key in ("record_role", "acquisition_settings", "hf2li_detector_settings", "hf2li_device",
+                "scan_profile", "mircat_marker_channel_checks"):
+        if key in record:
+            metadata[key] = record[key]
+    return metadata
 
 
 def demodulator_samples(record: dict, index: int) -> dict:
@@ -104,14 +122,23 @@ def spectrum_from_sweep(record, *, start_cm1, stop_cm1, targets_cm1, origin_tick
     ticks, dio = timing["timestamp"], timing["dio"].astype(np.uint32)
     (start, stop), markers, intervals, ancillary = select_sweep_active_interval(ticks, dio)
     targets = np.asarray(targets_cm1, dtype=float)
-    identified = len(markers) == len(targets) and len(markers) >= 2
+    controller = controller_marker_identity(record, len(markers))
+    # Historical records without the new observation field retain their legacy
+    # decoding. New captures cannot promote matching nominal counts to measured
+    # wavelength calibration when the SDK marker identity was unavailable.
+    legacy_identified = ("mircat_marker_channel_checks" not in record and
+                         len(markers) == len(targets) and len(markers) >= 2)
+    identified = controller is not None or legacy_identified
     warnings = ["Optical timing, filter response, and wavelength accuracy have not been qualified."]
     if ancillary:
         warnings.append(
             f"Ignored {len(ancillary)} complete ancillary DIO21 interval(s) without wavelength markers; "
             "all intervals remain preserved in native data."
         )
-    if identified:
+    if controller is not None:
+        map_ticks, map_wn = markers, np.asarray(controller["wavenumbers_cm1"], dtype=float)
+        warnings.append("Marker wavelengths are controller-reported setpoints; absolute wavelength accuracy is not independently calibrated.")
+    elif legacy_identified:
         map_ticks, map_wn = markers, targets
     else:
         map_ticks = np.array([start, stop], dtype=np.uint64)
@@ -122,16 +149,23 @@ def spectrum_from_sweep(record, *, start_cm1, stop_cm1, targets_cm1, origin_tick
         raise ValueError("Invalid HF2LI clockbase")
     def seconds(values):
         return np.asarray([(int(t)-int(origin_tick))/clockbase for t in values])
-    sample, reference = demodulator_samples(record, 0), demodulator_samples(record, 3)
-    sample_t, ref_t = seconds(sample["timestamp"]), seconds(reference["timestamp"])
+    detector_metadata = _detector_metadata(record)
+    sample = demodulator_samples(record, 0)
+    sample_t = seconds(sample["timestamp"])
     selected = (sample["timestamp"] >= map_ticks[0]) & (sample["timestamp"] <= map_ticks[-1])
     if np.count_nonzero(selected) < 2:
         raise ValueError("Fewer than two detector samples within the sweep; reduce scan speed or increase detector readout rate")
-    aligned = interpolate_supported(ref_t, np.hypot(reference["x"], reference["y"]), sample_t[selected],
-                                    max_gap=float(np.median(np.diff(ref_t)))*1.75)
+    aligned = None
+    if detector_metadata["detector_mode"] == DUAL_DETECTOR_MODE:
+        reference = demodulator_samples(record, 3)
+        ref_t = seconds(reference["timestamp"])
+        aligned = interpolate_supported(ref_t, np.hypot(reference["x"], reference["y"]), sample_t[selected],
+                                        max_gap=float(np.median(np.diff(ref_t)))*1.75)
     tick_spacing = float(np.median(np.diff(ticks).astype(float))) / clockbase
-    metadata = {"optical_valid": True, "wavenumber_basis": "measured" if identified else "nominal_sweep_bounds",
-                "provisional": not identified, "trajectory_method": "identified_markers" if identified else "observed_sweep_bounds_preview",
+    metadata = {**detector_metadata, "optical_valid": True,
+                "wavenumber_basis": "controller_markers" if controller is not None else "measured" if identified else "nominal_sweep_bounds",
+                "provisional": controller is not None or not identified,
+                "trajectory_method": "controller_markers" if controller is not None else "identified_markers" if identified else "observed_sweep_bounds_preview",
                 "pump_time_basis": ("unpumped" if pump_tick is None else "electrical_sync" if pump_reference == "electrical_sync" else "aux_input"),
                 "pump_reference": pump_reference, "timestamp_origin_ticks": int(origin_tick), "clockbase_hz": clockbase,
                 "timing_sample_interval_s": tick_spacing, "marker_ticks": markers.tolist(),
@@ -139,6 +173,9 @@ def spectrum_from_sweep(record, *, start_cm1, stop_cm1, targets_cm1, origin_tick
                 "observed_dio21_intervals": [list(value) for value in intervals],
                 "ancillary_dio21_intervals_ignored": [list(value) for value in ancillary],
                 "warnings": warnings}
+    if controller is not None:
+        metadata.update(marker_identity_basis=controller["marker_identity_basis"],
+                        marker_wavenumbers_cm1=controller["wavenumbers_cm1"], independently_calibrated=False)
     if pump_tick is not None and pump_reference == "electrical_sync":
         warnings.append("Time zero is observed Nd:YAG electrical sync, not measured optical arrival at the sample.")
     return Spectrum(interpolate_supported(seconds(map_ticks), map_wn, sample_t[selected]),
@@ -148,7 +185,7 @@ def spectrum_from_sweep(record, *, start_cm1, stop_cm1, targets_cm1, origin_tick
 
 def marker_spectrum(record: dict, *, marker_ticks, marker_wavenumbers_cm1,
                     pump_tick: int | None, sample_demod=0, reference_demod=3) -> Spectrum:
-    """Align detectors in device time, then map samples between measured markers.
+    """Map CH1 samples (or align legacy detectors) between measured markers.
 
     Input marker ticks must be validated observations, in chronological order,
     from a single sweep segment. Absolute marker wavelengths must be identified
@@ -156,7 +193,12 @@ def marker_spectrum(record: dict, *, marker_ticks, marker_wavenumbers_cm1,
     """
     if not record.get("optical_valid"):
         raise ValueError("An inhibited/dark record cannot become an optical spectrum")
-    sample, reference = demodulator_samples(record, sample_demod), demodulator_samples(record, reference_demod)
+    detector_metadata = _detector_metadata(record)
+    single = detector_metadata["detector_mode"] == SINGLE_DETECTOR_MODE
+    if single and sample_demod != 0:
+        raise ValueError("Single-detector mode requires CH1 demodulator 0")
+    sample = demodulator_samples(record, sample_demod)
+    reference = None if single else demodulator_samples(record, reference_demod)
     ticks, wn = np.asarray(marker_ticks), np.asarray(marker_wavenumbers_cm1, dtype=float)
     if ticks.ndim != 1 or wn.ndim != 1 or len(ticks) != len(wn) or len(ticks) < 2:
         raise ValueError("At least two identified, observed wavelength markers are required")
@@ -167,7 +209,7 @@ def marker_spectrum(record: dict, *, marker_ticks, marker_wavenumbers_cm1,
     clockbase = float(record["clockbase_hz"])
     if not np.isfinite(clockbase) or clockbase <= 0:
         raise ValueError("A positive measured clockbase is required")
-    origin = min(int(sample["timestamp"][0]), int(reference["timestamp"][0]), int(ticks[0]),
+    origin = min(int(sample["timestamp"][0]), int(reference["timestamp"][0]) if reference is not None else int(ticks[0]), int(ticks[0]),
                  int(pump_tick) if pump_tick is not None else int(ticks[0]))
 
     def seconds(values):
@@ -175,19 +217,22 @@ def marker_spectrum(record: dict, *, marker_ticks, marker_wavenumbers_cm1,
         # and avoid unsigned wraparound for pre-pump samples.
         return np.asarray([(int(t)-origin)/clockbase for t in values])
 
-    sample_t, reference_t, marker_t = seconds(sample["timestamp"]), seconds(reference["timestamp"]), seconds(ticks)
+    sample_t, marker_t = seconds(sample["timestamp"]), seconds(ticks)
     selected = (sample_t >= marker_t[0]) & (sample_t <= marker_t[-1])
-    reference_r = np.hypot(reference["x"], reference["y"])
-    aligned_ref = interpolate_supported(reference_t, reference_r, sample_t[selected],
-                                        max_gap=float(np.median(np.diff(reference_t))) * 1.5)
+    aligned_ref = None
+    if reference is not None:
+        reference_t = seconds(reference["timestamp"])
+        reference_r = np.hypot(reference["x"], reference["y"])
+        aligned_ref = interpolate_supported(reference_t, reference_r, sample_t[selected],
+                                            max_gap=float(np.median(np.diff(reference_t))) * 1.5)
     result = Spectrum(
         interpolate_supported(marker_t, wn, sample_t[selected]),
         np.hypot(sample["x"], sample["y"])[selected], aligned_ref, sample_t[selected],
         (int(pump_tick)-origin)/clockbase if pump_tick is not None else None,
-        {"optical_valid": True, "wavenumber_basis": "measured", "trajectory_method": "identified_markers",
+        {**detector_metadata, "optical_valid": True, "wavenumber_basis": "measured", "trajectory_method": "identified_markers",
          "pump_time_basis": "measured" if pump_tick is not None else "unpumped",
          "timestamp_origin_ticks": origin, "clockbase_hz": clockbase,
          "marker_ticks": ticks.tolist(), "marker_wavenumbers_cm1": wn.tolist(),
-         "sample_demodulator": sample_demod, "reference_demodulator": reference_demod},
+         "sample_demodulator": sample_demod, "reference_demodulator": None if single else reference_demod},
     )
     return result.validate()

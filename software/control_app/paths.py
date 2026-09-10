@@ -8,6 +8,7 @@ run manifests and operator scripts.
 from __future__ import annotations
 
 import os
+from datetime import date
 from pathlib import Path
 
 
@@ -48,8 +49,13 @@ PROMOTED_BUNDLE_ROOT = _configured_root(
 _selected_save_location: Path | None = None
 
 
+def default_save_location() -> Path:
+    """Group new data under the local calendar date without creating folders."""
+    return RUN_ROOT / date.today().isoformat()
+
+
 def get_save_location() -> Path:
-    return _selected_save_location or RUN_ROOT
+    return _selected_save_location or default_save_location()
 
 
 def set_save_location(value: str | Path) -> Path:

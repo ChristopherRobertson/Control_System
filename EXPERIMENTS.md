@@ -57,14 +57,14 @@ and requires the additional tests specified in this document.
 
 ## 2. Executive architecture assignment
 
-| Condition | Assigned primary architecture | Supporting architecture | Principal claim boundary |
-|---|---|---|---|
-| Room-temperature HRP–CO geminate | **Nanosecond stroboscopic reconstruction** | Local fixed-wavenumber discovery kinetics and off-band controls | A lifetime is conditional on IRF-convolved identifiability; otherwise report a prompt component or upper bound |
-| Room-temperature HRP–CO non-geminate | **Repeated rapid-scan phase-delay reconstruction** | Selected-band continuous recovery traces | Use the many consecutive scans after each rare pump event; do not treat an individual scan as instantaneous |
-| Room-temperature MbCO geminate | **Nanosecond stroboscopic reconstruction** | A₁-first fixed-wavenumber discovery and optional A₀/A₃ extension | The historical approximately 4%, 180 ns result is a prior, not a fit constraint |
-| Room-temperature MbCO recovery/non-geminate candidate | **Microsecond stroboscopic reconstruction** | **Single-scan phase-delay reconstruction** for spectral support | The approximately 185 µs and 1 ms literature components are phenomenological until mechanism tests support an assignment |
-| 77 K HRP–CO geminate/intrapocket | **Nanosecond stroboscopic reconstruction** for the fast branch | **Single-pump rapid-scan and logarithmic scan-burst reconstruction** for slower branches | Repeated-event phase reconstruction is allowed only after an equivalent-state reset is demonstrated |
-| 77 K MbCO geminate/intrapocket | **Nanosecond/microsecond stroboscopic reconstruction** for resolvable fast A-state recovery | **Single-pump rapid-scan and logarithmic scan-burst reconstruction** for slow recovery | Slow scanning alone cannot establish fast A-state kinetics; repeated pumping cannot be assumed to reset a cryogenic sample |
+| Condition                                             | Assigned primary architecture                                                                     | Supporting architecture                                                                        | Principal claim boundary                                                                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Room-temperature HRP–CO geminate                     | **Nanosecond stroboscopic reconstruction**                                                  | Local fixed-wavenumber discovery kinetics and off-band controls                                | A lifetime is conditional on IRF-convolved identifiability; otherwise report a prompt component or upper bound             |
+| Room-temperature HRP–CO non-geminate                 | **Repeated rapid-scan phase-delay reconstruction**                                          | Selected-band continuous recovery traces                                                       | Use the many consecutive scans after each rare pump event; do not treat an individual scan as instantaneous                |
+| Room-temperature MbCO geminate                        | **Nanosecond stroboscopic reconstruction**                                                  | A₁-first fixed-wavenumber discovery and optional A₀/A₃ extension                            | The historical approximately 4%, 180 ns result is a prior, not a fit constraint                                            |
+| Room-temperature MbCO recovery/non-geminate candidate | **Microsecond stroboscopic reconstruction**                                                 | **Single-scan phase-delay reconstruction** for spectral support                          | The approximately 185 µs and 1 ms literature components are phenomenological until mechanism tests support an assignment  |
+| 77 K HRP–CO geminate/intrapocket                     | **Nanosecond stroboscopic reconstruction** for the fast branch                              | **Single-pump rapid-scan and logarithmic scan-burst reconstruction** for slower branches | Repeated-event phase reconstruction is allowed only after an equivalent-state reset is demonstrated                        |
+| 77 K MbCO geminate/intrapocket                        | **Nanosecond/microsecond stroboscopic reconstruction** for resolvable fast A-state recovery | **Single-pump rapid-scan and logarithmic scan-burst reconstruction** for slow recovery   | Slow scanning alone cannot establish fast A-state kinetics; repeated pumping cannot be assumed to reset a cryogenic sample |
 
 No dedicated 77 K process is initially labeled non-geminate. Below the glass
 transition, ligand escape and bulk-solvent return are suppressed. Slow recovery
@@ -307,25 +307,25 @@ verify sample behavior but do not calibrate the instrument.
 
 ### 6.2 Calibration quantities that must be systematically determined
 
-| Quantity | Required determination and output | Claims supported |
-|---|---|---|
-| Installed identities and topology | Device, detector, cable, adapter, splitter/tee, connector, termination, firmware/software, and routing identities; reference planes and configuration ID | Reproducibility and traceability |
-| Spectral axis | MIRcat commanded/readback wavenumber versus independently assigned reference features across every HRP/MbCO window; correction, residuals, uncertainty, and validity range | Peak centers, band shifts, component fitting |
-| Scan trajectory | Actual \(\tilde\nu(t)\) for every retained scan speed, direction, width, start condition, and module transition; trigger/status alignment and uncertainty | Phase-delay reconstruction and spectral timing |
-| Discrete tuning | Command-to-tune transition, `Tuned` assertion, optical settling, direction/history dependence, failures, and uncertainty | Stroboscopic wavelength stepping and dwell |
-| T660 routes | Programmed-to-observed edge delay, width, polarity, amplitude, termination, jitter, route interaction, and uncertainty for each used path | Pump–probe delay and trigger closure |
-| Pump arrival | Electrical command to post-iris 540 nm optical arrival at the sample plane, with event-to-event jitter | Chemical time zero |
-| Probe arrival | MIRcat trigger/reference to MIR optical arrival at the sample plane for every retained probe mode and relevant wavenumber | Pump–probe delay and IRF |
-| PicoScope channels | Timebase, sampling interval returned by the API, channel skew, external-trigger latency, threshold behavior, amplitude scale, bandwidth, and uncertainty at the used settings | Independent timing and waveform validation |
-| Split detector branches | Tee/adapter/cable attenuation, loading, reflection/ringing, bandwidth, and skew to HF2LI and PicoScope; repeat after material rewiring | Cross-instrument comparisons and IRF |
-| Detector transfer | Dark offset, gain, bandwidth, impulse response, latency, linearity, saturation and recovery for sample and reference detectors | Normalization, timing, SNR, artifact rejection |
-| Dual-detector normalization | Wavelength-dependent sample/reference transfer ratio, covariance, common-mode rejection, residual baseline, and uncertainty | Absorbance and difference absorbance |
-| HF2LI response | External-reference phase, demodulator mapping, filter impulse/step response for retained order/time-constant combinations, sample timestamps, actual stream rate, and settling | Kinetic convolution and scan fidelity |
-| Average optical power | Working-reference identity, zero/range/stability, wavelength response, sample-plane transfer, and uncertainty for pump and probe measurements | Dose and heating bounds |
-| Pump wavelength | Independent 540 nm center/status measurement with uncertainty and native response records; residual spectral content assessed by the appropriate source characterization | Pump identity and reproducibility |
-| Cell path length | Assembled optical path with uncertainty, including temperature dependence where material | Quantitative absorbance and concentration comparisons |
-| Temperature | Sensor calibration, location, repeatability, gradient from sensor to sample, stability, and uncertainty at room temperature and 77 K | Temperature-dependent spectral and kinetic claims |
-| Complete IRF | Sample-plane pump/probe envelopes, relative jitter, detector responses, branch latencies, acquisition apertures, HF2 effects, and scan history combined and validated | Resolved lifetimes, fractions, and upper bounds |
+| Quantity                          | Required determination and output                                                                                                                                              | Claims supported                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Installed identities and topology | Device, detector, cable, adapter, splitter/tee, connector, termination, firmware/software, and routing identities; reference planes and configuration ID                       | Reproducibility and traceability                      |
+| Spectral axis                     | MIRcat commanded/readback wavenumber versus independently assigned reference features across every HRP/MbCO window; correction, residuals, uncertainty, and validity range     | Peak centers, band shifts, component fitting          |
+| Scan trajectory                   | Actual\(\tilde\nu(t)\) for every retained scan speed, direction, width, start condition, and module transition; trigger/status alignment and uncertainty                       | Phase-delay reconstruction and spectral timing        |
+| Discrete tuning                   | Command-to-tune transition,`Tuned` assertion, optical settling, direction/history dependence, failures, and uncertainty                                                      | Stroboscopic wavelength stepping and dwell            |
+| T660 routes                       | Programmed-to-observed edge delay, width, polarity, amplitude, termination, jitter, route interaction, and uncertainty for each used path                                      | Pump–probe delay and trigger closure                 |
+| Pump arrival                      | Electrical command to post-iris 540 nm optical arrival at the sample plane, with event-to-event jitter                                                                         | Chemical time zero                                    |
+| Probe arrival                     | MIRcat trigger/reference to MIR optical arrival at the sample plane for every retained probe mode and relevant wavenumber                                                      | Pump–probe delay and IRF                             |
+| PicoScope channels                | Timebase, sampling interval returned by the API, channel skew, external-trigger latency, threshold behavior, amplitude scale, bandwidth, and uncertainty at the used settings  | Independent timing and waveform validation            |
+| Split detector branches           | Tee/adapter/cable attenuation, loading, reflection/ringing, bandwidth, and skew to HF2LI and PicoScope; repeat after material rewiring                                         | Cross-instrument comparisons and IRF                  |
+| Detector transfer                 | Dark offset, gain, bandwidth, impulse response, latency, linearity, saturation and recovery for sample and reference detectors                                                 | Normalization, timing, SNR, artifact rejection        |
+| Dual-detector normalization       | Wavelength-dependent sample/reference transfer ratio, covariance, common-mode rejection, residual baseline, and uncertainty                                                    | Absorbance and difference absorbance                  |
+| HF2LI response                    | External-reference phase, demodulator mapping, filter impulse/step response for retained order/time-constant combinations, sample timestamps, actual stream rate, and settling | Kinetic convolution and scan fidelity                 |
+| Average optical power             | Working-reference identity, zero/range/stability, wavelength response, sample-plane transfer, and uncertainty for pump and probe measurements                                  | Dose and heating bounds                               |
+| Pump wavelength                   | Independent 540 nm center/status measurement with uncertainty and native response records; residual spectral content assessed by the appropriate source characterization       | Pump identity and reproducibility                     |
+| Cell path length                  | Assembled optical path with uncertainty, including temperature dependence where material                                                                                       | Quantitative absorbance and concentration comparisons |
+| Temperature                       | Sensor calibration, location, repeatability, gradient from sensor to sample, stability, and uncertainty at room temperature and 77 K                                           | Temperature-dependent spectral and kinetic claims     |
+| Complete IRF                      | Sample-plane pump/probe envelopes, relative jitter, detector responses, branch latencies, acquisition apertures, HF2 effects, and scan history combined and validated          | Resolved lifetimes, fractions, and upper bounds       |
 
 Calibration results must be linked by stable human-readable configuration and
 condition identifiers. A changed cable, splitter, detector, filter topology,
@@ -1431,17 +1431,17 @@ records, and producer/source records carry operational provenance.
 
 ## 21. Claim table
 
-| Proposed claim | Minimum supporting evidence | Required limitation when evidence is absent |
-|---|---|---|
-| Exact band center at a condition | Accepted initial slow scan, calibrated axis, line-shape/baseline uncertainty, independent repeat | Report only an approximate observed feature or no assignment |
-| Pump photolyzes bound CO | Negative bound-band \(\Delta A\), pump-blocked/off-band/cell controls, reversible state, dose response | Describe pump-correlated signal without molecular assignment |
-| Resolved geminate lifetime | Optical time zero, narrow/stable IRF, sufficient SNR, convolved identifiability, reset equivalence, independent replication | Prompt component or upper/lower bound only |
-| Geminate fraction | Resolved fast and total photolyzed amplitudes, spectral coverage, IRF correction, dose/overlap model, uncertainty | Instrument-resolved fraction only or no quantitative fraction |
-| Room-temperature solvent recombination | Complete recovery, concentration/mass-balance or other escape support, artifact controls, appropriate kinetics | Apparent room-temperature recovery component |
-| Different conformer/A-state kinetics | Quantified local spectra, comparable sensitivity, global/shared-vs-separate model, correction for overlap and latency | State-dependent amplitudes without rate distinction |
-| 77 K intrapocket recovery | Verified cryogenic state/matrix, suppressed-escape rationale, one-pump or equivalent-reset kinetics, temperature uncertainty | Cryogenic recovery without microscopic pathway claim |
-| Room-temperature versus 77 K comparison | Independently calibrated conditions, actual temperatures, matrix/cell differences represented, preparation replication | Descriptive comparison only; no isolated temperature effect |
-| No damage or accumulation | Dose/cadence ladder, pre/post state spectra, cumulative trend tests, recovery/reset criteria within detection limit | “No damage detected within the stated tests,” never absolute absence |
+| Proposed claim                          | Minimum supporting evidence                                                                                                  | Required limitation when evidence is absent                            |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Exact band center at a condition        | Accepted initial slow scan, calibrated axis, line-shape/baseline uncertainty, independent repeat                             | Report only an approximate observed feature or no assignment           |
+| Pump photolyzes bound CO                | Negative bound-band\(\Delta A\), pump-blocked/off-band/cell controls, reversible state, dose response                        | Describe pump-correlated signal without molecular assignment           |
+| Resolved geminate lifetime              | Optical time zero, narrow/stable IRF, sufficient SNR, convolved identifiability, reset equivalence, independent replication  | Prompt component or upper/lower bound only                             |
+| Geminate fraction                       | Resolved fast and total photolyzed amplitudes, spectral coverage, IRF correction, dose/overlap model, uncertainty            | Instrument-resolved fraction only or no quantitative fraction          |
+| Room-temperature solvent recombination  | Complete recovery, concentration/mass-balance or other escape support, artifact controls, appropriate kinetics               | Apparent room-temperature recovery component                           |
+| Different conformer/A-state kinetics    | Quantified local spectra, comparable sensitivity, global/shared-vs-separate model, correction for overlap and latency        | State-dependent amplitudes without rate distinction                    |
+| 77 K intrapocket recovery               | Verified cryogenic state/matrix, suppressed-escape rationale, one-pump or equivalent-reset kinetics, temperature uncertainty | Cryogenic recovery without microscopic pathway claim                   |
+| Room-temperature versus 77 K comparison | Independently calibrated conditions, actual temperatures, matrix/cell differences represented, preparation replication       | Descriptive comparison only; no isolated temperature effect            |
+| No damage or accumulation               | Dose/cadence ladder, pre/post state spectra, cumulative trend tests, recovery/reset criteria within detection limit          | “No damage detected within the stated tests,” never absolute absence |
 
 ## 22. Sources and traceability
 
@@ -1513,7 +1513,7 @@ from calibrated scanning or wavelength-by-wavelength reconstruction.
 
 ### 22.4 Device and repository authorities
 
-- [Daylight Solutions MIRcat manual](references/manuals/MIRcat/Daylight%20Solutions%20MIRcat%20Manual.pdf)
+- [Daylight Solutions MIRcat manual](<references/manuals/MIRcat/Daylight%20Solutions%20MIRcat%20Manual.pdf>)
   and [installed-system process-trigger correspondence](references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md).
 - [Zurich Instruments HF2LI user manual](https://docs.zhinst.com/hf2_user_manual/index.html)
   and the repository copy under `references/manuals/HF2LI/`.

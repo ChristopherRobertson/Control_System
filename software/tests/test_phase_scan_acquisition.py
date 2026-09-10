@@ -6,6 +6,8 @@ from threading import Event
 from types import SimpleNamespace
 from control_app.workflows.phase_scan import PhaseScanEvent, PhaseScanSettings, build_phase_scan_plan
 from control_app.workflows.phase_scan_acquisition import LivePhaseScanAcquirer, event_timing
+from control_app.workflows.phase_scan_data import DETECTOR_INPUT, SINGLE_DETECTOR_MODE
+from control_app.workflows.single_detector_marker_identity import controller_marker_identity
 from control_app.workflows.phase_scan_labone import (
     FinitePhaseDAQ, AcquisitionCapacityError, AcquisitionIntegrityError,
     ResidentCapacityReservation, estimate_capture_bytes,
@@ -102,6 +104,7 @@ class FakeModule:
         self.hf, self.settings, self.paths = hf, {}, []
         self.executed = self.cleared = False
         self.read_count = 0
+        self.events = None
 
     def set(self, node, value): self.settings[node] = value
     def subscribe(self, path): self.paths.append(path)
@@ -117,21 +120,28 @@ class FakeModule:
     @property
     def rate(self):
         return max(self.hf.rates[int(path.split("/demods/")[1].split("/")[0])] for path in self.paths)
-    def execute(self): self.executed = True; self.hf.calls.append("daq_arm")
+    def execute(self):
+        assert not self.cleared
+        self.executed = True
+        self.events = tuple(self.hf.events)
+        self.hf.calls.append("daq_arm")
     def finished(self): return False  # The extra integrity guard remains armed.
     def progress(self):
         return [len(self.selected_events) / self.settings["count"]]
     @property
     def selected_events(self):
-        return [e for e in self.hf.events if e.pump_enabled] if self.settings["bits"] == 1 << 17 else self.hf.events
+        events = self.events if self.events is not None else self.hf.events
+        return [e for e in events if e.pump_enabled] if self.settings["bits"] == 1 << 17 else events
     def read(self, flat):
-        assert flat and self.executed
+        assert flat and self.executed and not self.cleared
         self.read_count += 1
         self.hf.calls.append("daq_read")
         if self.hf.read_failure and self.paths[0].endswith(".x"):
             raise RuntimeError("sample loss detected by installed DAQ")
         if self.hf.payloads is not None:
             return self.hf.payloads[id(self)]
+        if self.read_count > 1:
+            return {}  # Running read() consumes complete native records.
         result = {path: [] for path in self.paths}
         for event in self.selected_events:
             recipe, _ = event_timing(event)
@@ -143,7 +153,7 @@ class FakeModule:
             relative = self.settings["delay"] + np.arange(self.settings["grid/cols"])/self.rate
             ticks = np.array([self.hf.origin+round((trigger+t)*self.hf.get_clockbase()) for t in relative], dtype=np.uint64)
             for path in self.paths:
-                if path.endswith(".bits"):
+                if path.endswith(".dio"):
                     bits = np.zeros(len(ticks), np.uint32)
                     if self.settings["bits"] == 1 << 17:
                         bits[relative >= -1e-12] |= 1 << 17
@@ -166,13 +176,17 @@ class FakeHF:
     origin = 2**60
     def __init__(self, events):
         self.events = list(events)
-        self.rates = {0: 20_000., 2: 50_000., 3: 20_000.}
+        self.rates = {0: 20_000., 2: 50_000.}
         self.modules, self.calls = [], []
         self.shrink_history = self.read_failure = False
         self.payloads = None
+        self.clipping = {0: 0, 1: 1}  # CH2 status must never block CH1 acquisition.
+        self.snapshot_overrides = {}
     def get_clockbase(self): return 100_000_000
     def _get_node(self, kind, path):
-        if "adcclip" in path: return 0
+        if "adcclip" in path:
+            self.calls.append(path)
+            return self.clipping[int(path.rsplit("/", 1)[1])]
         return self.rates[int(path.split("/demods/")[1].split("/")[0])]
     def create_daq_module(self):
         module = FakeModule(self)
@@ -182,17 +196,28 @@ class FakeHF:
     def connect(self): pass
     def get_oscillator_frequency(self, index): return 2_000_000.
     def load_preset(self, name):
-        from control_app.devices.hf2li_service import HF2LIPreset
-        return HF2LIPreset(name, {"signal_inputs": {}, "pll": {"freqcenter_hz": 2e6},
-            "demodulators": [{"index": i, "enable": True, "rate_sps": self.rates[i],
-                             "timeconstant_s": 50e-6, "order": 4} for i in (0, 2, 3)]})
+        from control_app.devices.hf2li_service import HF2LIService
+        return HF2LIService.load_preset(self, name)
     def apply_preset(self, preset):
+        if hasattr(self, 'verify_reference_only'):
+            self.verify_reference_only()
         self.preset = preset
         for demod in preset.settings["demodulators"]:
             if "rate_sps" in demod: self.rates[demod["index"]] = demod["rate_sps"]
     def export_settings_snapshot(self, **kwargs):
-        return {"device_id": self.device_id, "read_errors": {}, "nodes": {
-            f"/{self.device_id}/demods/{i}/rate": {"type": "double", "value": self.rates[i]} for i in self.rates}}
+        nodes = {}
+        rename = {"rate_sps": "rate", "timeconstant_s": "timeconstant", "freqcenter_hz": "freqcenter",
+                  "impedance_50ohm": "imp50", "differential": "diff", "range_v": "range"}
+        for group, configurations in (("sigins", self.preset.settings["signal_inputs"].values()),
+                                      ("demods", self.preset.settings["demodulators"]),
+                                      ("plls", [self.preset.settings["pll"]])):
+            for config in configurations:
+                for key, value in config.items():
+                    if key != "index":
+                        path = f"/{self.device_id}/{group}/{config['index']}/{rename.get(key, key)}"
+                        actual = self.snapshot_overrides.get(path, int(value) if isinstance(value, bool) else value)
+                        nodes[path] = {"type": "double" if isinstance(value, float) else "int", "value": actual}
+        return {"device_id": self.device_id, "read_errors": {}, "nodes": nodes}
 
 
 def fake_reservation(hf, modules, readbacks, required):
@@ -221,14 +246,15 @@ def test_finite_sweep_active_trigger_history_retention_and_minimal_subscriptions
     for module, expected in zip(hf.modules, (3, 3, 2)):
         assert module.settings["type"] == 2
         assert module.settings["edge"] == 1
-        assert module.settings["triggernode"].endswith("/demods/2/sample.bits")
+        assert module.settings["triggernode"].endswith("/demods/2/sample.dio")
         assert module.settings["count"] == module.settings["historylength"] == expected + 1
         assert module.settings["grid/overwrite"] == module.settings["grid/waterfall"] == 0
         assert module.settings["endless"] == module.settings["save/saveonread"] == 0
         assert module.settings["flags"] == 0xC
     assert hf.modules[0].settings["bits"] == hf.modules[1].settings["bits"] == 1 << 21
     assert hf.modules[2].settings["bits"] == 1 << 17
-    assert list(map(lambda m: len(m.paths), hf.modules)) == [4, 1, 1]
+    assert list(map(lambda m: len(m.paths), hf.modules)) == [2, 1, 1]
+    assert all("/demods/3/" not in path for module in hf.modules for path in module.paths)
     assert .0026 <= hf.modules[0].getDouble("duration") <= .0027
     assert hf.modules[2].settings["grid/cols"] == 4
     daq.arm()
@@ -239,24 +265,25 @@ def test_finite_sweep_active_trigger_history_retention_and_minimal_subscriptions
 def test_capacity_size_is_readback_grid_plus_representation_metadata_and_margin():
     hf, daq = daq_fixture()
     estimates = daq.capacity["modules"]
-    assert estimates[0]["payload_bytes"] == 4 * 53 * 4 * 16
-    assert estimates[0]["metadata_bytes"] == 4 * 4 * 4096
+    assert estimates[0]["payload_bytes"] == 2 * 53 * 4 * 16
+    assert estimates[0]["metadata_bytes"] == 2 * 4 * 4096
     assert daq.capacity["required_bytes"] == sum(m["estimated_bytes"] for m in estimates)
-    assert daq.capacity["required_bytes"] == 145440
+    assert daq.capacity["required_bytes"] == 96000
     direct = estimate_capture_bytes(signal_paths=["sample.x"], grid_cols=10, count=2, duration_s=.001, rate_sps=10_000.)
     assert direct["estimated_bytes"] == (320+8192)*1.25
 
 
-@pytest.mark.parametrize("failure", ["unavailable", "small", "history", "invalid_provider"])
+@pytest.mark.parametrize("failure", ["host_budget", "small", "history", "invalid_provider"])
 def test_capacity_fails_before_arming_or_emission(failure):
     hf = FakeHF(nominal_events())
     verifier = fake_reservation
-    if failure == "unavailable": verifier = None
+    if failure == "host_budget": verifier = None
     if failure == "small": verifier = lambda *a: ResidentCapacityReservation(10, "too-small", "test allocator")
     if failure == "history": hf.shrink_history = True
     if failure == "invalid_provider": verifier = lambda *a: {"capacity_ok": True}
     with pytest.raises(AcquisitionCapacityError):
-        FinitePhaseDAQ(hf, events=hf.events, duration_s=.0026, pretrigger_s=.0001, capacity_verifier=verifier)
+        FinitePhaseDAQ(hf, events=hf.events, duration_s=.0026, pretrigger_s=.0001,
+                       capacity_verifier=verifier, host_capacity_bytes=1 if failure == "host_budget" else 64*1024*1024)
     assert not any(m.executed for m in hf.modules)
     assert all(m.cleared for m in hf.modules)
 
@@ -269,6 +296,9 @@ def test_independent_pump_timestamps_are_kept_before_and_after_detector_window()
     assert records[1][1]["pump_event_tick"] > records[1][1]["sweep_event_tick"] + 260000
     assert records[2][1]["pump_event_tick"] < records[2][1]["sweep_event_tick"] - 10000
     assert all(len(record[1]["native_chunks"]) == 1 for record in records)
+    assert all(record[1]["detector_mode"] == SINGLE_DETECTOR_MODE for record in records)
+    assert all(record[1]["detector_input"] == DETECTOR_INPUT for record in records)
+    assert all(len(record[1]["native_chunks"][0]["data"]) == 2 for record in records)
     assert all(m.read_count == 1 for m in hf.modules)
 
 
@@ -363,14 +393,28 @@ class BlockTimer(Timer):
         return {"physical_frame_count": max(2, len(frames)), "acquisition_frame_count": len(frames)}
     def start_frame_table(self):
         assert all(m.executed for m in self.world.hf.modules)
+        assert self.world.units['t660_1'].source == 'SYN'
+        assert not self.world.units['t660_1'].channels['C']['enabled']
         self.world.trace.append("frames_start")
-        self.world.running = True
+        self.world.frame_armed = True
         self.source = "EXT"
-        self.shots += max(2, len(self.frames))
     def start_continuous_clock(self):
-        assert self.world.running
+        assert self.channels['A']['enabled']
+        assert all(not self.channels[channel]['enabled'] for channel in 'BCD')
+        assert not self.world.running and not any(m.executed for m in self.world.hf.modules)
         self.world.trace.append("clock_start")
         self.source = "SYN"
+    def enable_channel(self, channel):
+        if self.name == 't660_1' and channel in 'BC':
+            assert all(m.executed for m in self.world.hf.modules)
+            assert self.world.frame_armed
+            self.world.trace.append('probe_enable' if channel == 'B' else 'event_clock_enable')
+            if channel == 'C':
+                assert self.channels['B']['enabled']
+                self.world.running = True
+                timer = self.world.units['t660_2']
+                timer.shots += max(2, len(timer.frames))
+        return super().enable_channel(channel)
     def get_frames_status(self):
         self.world.trace.append("frame_status")
         if self.world.fault == "interlock": self.world.interlock = False
@@ -426,7 +470,10 @@ class BlockLaser:
     def is_tuned(self): return self.tuned
     def turn_emission_on(self, **kwargs):
         assert kwargs["approved_laser_safety_condition"]
-        assert all(m.executed for m in self.rig.hf.modules)
+        assert not self.rig.running
+        probe = self.rig.units['t660_1']
+        assert probe.source == 'SYN' and probe.channels['A']['enabled']
+        assert not probe.channels['B']['enabled'] and not probe.channels['C']['enabled']
         self.rig.trace.append("emission_enable")
         self.emission = True
     def is_emission_on(self): return self.emission
@@ -441,19 +488,86 @@ class BlockLaser:
         return SimpleNamespace(to_dict=lambda: {"emission_on": self.emission, "armed": self.armed, "scan_in_progress": False})
 
 
-def live_fixture(tmp_path, fault=None, capacity_verifier=fake_reservation):
+class RepeatingBlockTimer(BlockTimer):
+    """Model frame DONE/restoration and per-block counters across real captures."""
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.engine_state = "OFF"
+        self.engine_transitions = ["OFF"]
+        self.preload_states = []
+        self.pre_frame_channels = deepcopy(self.channels)
+
+    def preload_frame_table(self, frames, **kwargs):
+        probe = self.world.units["t660_1"]
+        assert probe.source == "SYN" and probe.channels["A"]["enabled"]
+        assert all(not probe.channels[c]["enabled"] for c in "BCD")
+        assert self.source == "OFF" and not self.world.running
+        active_modules = [m for m in self.world.hf.modules if not m.cleared]
+        assert len(active_modules) == 3 and not any(m.executed for m in active_modules)
+        self.preload_states.append((self.engine_state, self.shots))
+        # preload_frame_table inhibits the source, stops/restores the engine,
+        # then clears the shot counter before staging the next bounded table.
+        self.command("TFRame:STOp", expect_response=False)
+        self.shots = 0
+        return super().preload_frame_table(frames, **kwargs)
+
+    def start_frame_table(self):
+        assert self.engine_state == "OFF" and self.shots == 0
+        active_modules = [m for m in self.world.hf.modules if not m.cleared]
+        assert len(active_modules) == 3 and all(m.executed for m in active_modules)
+        self.pre_frame_channels = deepcopy(self.channels)
+        super().start_frame_table()
+        self.engine_state = "RUNNING"
+        self.engine_transitions.append(self.engine_state)
+
+    def get_frames_status(self):
+        assert self.engine_state in {"RUNNING", "DONE"}
+        state = super().get_frames_status()
+        if state != self.engine_state:
+            self.engine_transitions.append(state)
+        self.engine_state = state
+        self.channels = deepcopy(self.frames[-1]["channels"])
+        return state
+
+    def command(self, command, **kwargs):
+        if command == "TFRame:STOp":
+            assert self.source == "OFF" and not self.world.running
+            self.channels = deepcopy(self.pre_frame_channels)
+            self.engine_state = "OFF"
+            self.engine_transitions.append(self.engine_state)
+            self.world.frame_armed = False
+        return super().command(command, **kwargs)
+
+
+def live_fixture(tmp_path, fault=None, capacity_verifier=fake_reservation, settings=None, snapshot_overrides=None,
+                  prepare=True, timer_type=BlockTimer):
     rig = SimpleNamespace(units={}, running=False, trace=[], fail_stop=False, interlock=True,
                           fault=fault, cancel=Event())
     rig.hf = FakeHF(nominal_events())
+    rig.hf.snapshot_overrides = snapshot_overrides or {}
     rig.hf.calls = rig.trace
     rig.laser = BlockLaser(rig)
+    def verify_reference_only():
+        probe, pump = rig.units['t660_1'], rig.units['t660_2']
+        assert probe.source == 'SYN' and probe.channels['A']['enabled']
+        assert all(not probe.channels[channel]['enabled'] for channel in 'BCD')
+        assert pump.source == 'OFF' and all(not pump.channels[channel]['enabled'] for channel in 'ABCD')
+        assert not rig.laser.emission and not rig.running
+        assert not any(module.executed for module in rig.hf.modules)
+        rig.trace.append('hf_configuration_with_reference_only')
+        if rig.fault == 'hf_configuration':
+            raise RuntimeError('injected HF configuration failure')
+    rig.hf.verify_reference_only = verify_reference_only
     trajectory = {"source_id": "qualified-test-trajectory", "time_s": [0., .002], "wavenumber_cm1": [1950., 1940.]}
     adapter = LivePhaseScanAcquirer(laser_factory=lambda **kw: rig.laser,
-        hf_factory=lambda **kw: rig.hf, t660_factory=lambda name, **kw: BlockTimer(rig, name),
+        hf_factory=lambda **kw: rig.hf, t660_factory=lambda name, **kw: timer_type(rig, name),
         qualified_trajectory=trajectory, qualified_sweep_active_s=.00232,
         tec_ready_stability_s=0., capacity_verifier=capacity_verifier)
     adapter.authorize(True)
-    adapter.prepare(PhaseScanSettings(), SimpleNamespace(path=tmp_path), rig.cancel)
+    if prepare:
+        # The synthetic 2 ms waveform covers this explicit narrow range.
+        fixture_settings = settings or PhaseScanSettings(start_wavenumber_cm1=1950, stop_wavenumber_cm1=1940)
+        adapter.preparation_readback = adapter.prepare(fixture_settings, SimpleNamespace(path=tmp_path), rig.cancel)
     return rig, adapter
 
 
@@ -481,12 +595,17 @@ def test_live_block_is_preloaded_armed_once_and_never_serializes_during_frames(t
     assert rig.laser.repetitions == 3
     assert rig.trace.count("frame_table_preload") == rig.trace.count("frames_start") == 1
     assert rig.trace.index("frame_table_preload") < rig.trace.index("emission_enable") < rig.trace.index("frames_start")
+    assert rig.trace.index('clock_start') < rig.trace.index('hf_configuration_with_reference_only') < rig.trace.index('daq_arm')
+    assert rig.trace.index('frames_start') < rig.trace.index('probe_enable') < rig.trace.index('event_clock_enable')
+    assert rig.trace.count('clock_start') == 1
     assert max(i for i, value in enumerate(rig.trace) if value == "daq_read") < rig.trace.index("t660_1_safe_stop")
     assert rig.trace.index("t660_2_safe_stop") < rig.trace.index("spectrum_conversion")
     assert rig.hf.calls.count("daq_arm") == 3
     assert rig.hf.calls.count("daq_read") == 3
     assert not (tmp_path / "commands.txt").exists()
     assert raw["labone"]["modules"] and all(s.metadata["optical_valid"] for _, s in spectra)
+    assert all(s.reference_r is None and s.detector_mode == SINGLE_DETECTOR_MODE for _, s in spectra)
+    assert all("/adcclip/1" not in call for call in rig.trace)
     adapter.close(); adapter.close()
     assert all(rig.trace.count(name+"_safe_stop") == 1 for name in ("t660_1", "t660_2"))
     assert not rig.running and not rig.laser.armed and not rig.laser.emission
@@ -500,20 +619,250 @@ def test_live_fault_stops_immediately_preserves_block_and_close_is_idempotent(tm
     with pytest.raises((RuntimeError, InterruptedError)):
         adapter.capture_block(block, rig.cancel)
     assert not rig.running and not rig.laser.emission and not rig.laser.armed
-    assert adapter.partial_blocks[0]["labone"]["modules"]
+    if fault in {"cancel_tune", "reset_internal"}:
+        assert adapter.partial_blocks[0]["labone"]["capture_not_started"]
+        assert not any(module.executed for module in rig.hf.modules)
+    else:
+        assert adapter.partial_blocks[0]["labone"]["modules"]
     assert adapter.partial_blocks[0]["error"]
     adapter.close(); adapter.close()
     assert all(rig.trace.count(name+"_safe_stop") == 1 for name in ("t660_1", "t660_2"))
     assert rig.trace.count("frames_start") <= 1 and rig.laser.start_count <= 1
 
 
+@pytest.mark.parametrize("failure", ["missing_sweep_edge", "reconstruction"])
+def test_rejected_live_validation_never_marks_salvaged_block_optically_valid(tmp_path, monkeypatch, failure):
+    import control_app.workflows.phase_scan_acquisition as live
+    rig, adapter = live_fixture(tmp_path)
+    block = adapter.prepare_blocks(adapter.plan, rig.hf.events, rig.cancel)[0]
+    if failure == "missing_sweep_edge":
+        original_read = FakeModule.read
+        def read_without_sweep_edge(module, flat):
+            payload = original_read(module, flat)
+            if module.settings["bits"] == 1 << 21 and module.paths[0].endswith(".dio"):
+                for record in payload.get(module.paths[0], []):
+                    record["value"] &= np.uint32(~(1 << 21) & 0xffffffff)
+            return payload
+        monkeypatch.setattr(FakeModule, "read", read_without_sweep_edge)
+        expected_error = "Expected exactly one DIO21 rising event"
+    else:
+        def reject_reconstruction(*args, **kwargs):
+            raise ValueError("injected reconstruction rejection")
+        monkeypatch.setattr(live, "spectrum_from_sweep", reject_reconstruction)
+        expected_error = "injected reconstruction rejection"
+    with pytest.raises((AcquisitionIntegrityError, ValueError), match=expected_error):
+        adapter.capture_block(block, rig.cancel)
+    partial = adapter.partial_blocks[0]
+    assert partial["optical_valid"] is False
+    assert partial["labone"]["modules"] and partial["labone"]["read_chunks"]
+    assert not rig.running and not rig.laser.emission and not rig.laser.armed
+    assert all(m.cleared for m in rig.hf.modules)
+    adapter.close()
+
+
+@pytest.mark.parametrize("second_block_failure", [False, True])
+def test_incremental_capture_restarts_second_block_with_fresh_daq_and_safe_frame_state(
+        tmp_path, second_block_failure):
+    rig, adapter = live_fixture(tmp_path, capacity_verifier=None, timer_type=RepeatingBlockTimer)
+    events = [PhaseScanEvent(i, 1, i, True, 0.) for i in range(18)]
+    blocks = adapter.prepare_blocks(adapter.plan, events, rig.cancel)
+    assert [len(block["events"]) for block in blocks] == [16, 2]
+    assert blocks[1]["daq"] is None
+    rig.hf.events = blocks[0]["events"]
+    first, spectra = adapter.capture_block(blocks[0], rig.cancel)
+    assert first["optical_valid"] is True and len(spectra) == 16
+    assert (first["shot_counter_before"], first["shot_counter_after"]) == (0, 16)
+    probe, timer = rig.units["t660_1"], rig.units["t660_2"]
+    assert timer.engine_state == "DONE" and timer.source == "OFF"
+    assert probe.source == "SYN" and probe.channels["A"]["enabled"]
+    assert all(not probe.channels[c]["enabled"] for c in "BCD")
+    assert not rig.running and not rig.laser.emission and rig.laser.armed
+    assert all(m.cleared for m in rig.hf.modules) and adapter._active_daq is None
+    assert blocks[1]["daq"] is None
+    rig.hf.events = blocks[1]["events"]
+    if second_block_failure:
+        rig.fault = "engine"
+        with pytest.raises(AcquisitionIntegrityError, match="frame engine reported an error"):
+            adapter.capture_block(blocks[1], rig.cancel)
+        partial = adapter.partial_blocks[0]
+        assert partial["block_index"] == 1 and partial["optical_valid"] is False
+        assert partial["labone"]["modules"] and partial["labone"]["read_chunks"]
+        assert first["optical_valid"] is True
+    else:
+        second, spectra = adapter.capture_block(blocks[1], rig.cancel)
+        assert second["optical_valid"] is True and len(spectra) == 2
+        assert [event for event, _ in spectra] == list(blocks[1]["events"])
+        assert (second["shot_counter_before"], second["shot_counter_after"]) == (0, 2)
+        assert not adapter.partial_blocks
+    assert timer.preload_states == [("OFF", 0), ("DONE", 16)]
+    assert timer.engine_transitions == ["OFF", "OFF", "RUNNING", "DONE", "OFF", "RUNNING",
+                                        "ERROR" if second_block_failure else "DONE", "OFF"]
+    assert rig.trace.count("clock_start") == 1
+    assert rig.trace.count("frames_start") == rig.laser.start_count == 2
+    assert len(rig.hf.modules) == 6 and all(m.cleared for m in rig.hf.modules)
+    assert not rig.running and not rig.laser.emission and not rig.laser.armed
+    assert all(unit.source == "OFF" for unit in rig.units.values())
+    assert all(not unit.channels[c]["enabled"] for unit in rig.units.values() for c in "ABCD")
+    assert adapter._active_daq is None
+    adapter.close()
+
+
+def test_cleanup_disables_channels_after_frame_stop_restores_previous_configuration():
+    calls = []
+    class RestoringTimer:
+        name = "t660_2"
+        source = "EXT"
+        enabled = dict.fromkeys("ABCD", True)
+        def set_trigger_source(self, source):
+            self.source = source
+            calls.append("source_" + source)
+        def command(self, command, **kwargs):
+            calls.append(command)
+            if command == "TFRame:STOp":
+                assert self.source == "OFF" and "STOP" in calls
+                self.enabled = dict.fromkeys("ABCD", True)
+        def disable_channel(self, channel):
+            calls.append("disable_" + channel)
+            self.enabled[channel] = False
+    timer = RestoringTimer()
+    LivePhaseScanAcquirer._stop_unit(timer)
+    assert timer.source == "OFF" and not any(timer.enabled.values())
+    assert calls.index("TFRame:STOp") < min(calls.index("disable_" + c) for c in "ABCD")
+
+
+def controller_marker_record():
+    readback = {"channel": 1, "units": 2, "start": 1950., "stop": 1940., "interval": 5., "num_triggers": 3}
+    return {"scan_profile": {"qcl": 1, "start_cm1": 1950., "stop_cm1": 1940., "marker_interval_cm1": 5.},
+            "mircat_marker_channel_checks": [
+                {"source": "MIRcatSDK_GetWlTrigChanParams", "available": True, "channel": 1,
+                 "context": context, "timestamp_utc": "2026-09-06T00:00:00+00:00", "readback": deepcopy(readback)}
+                for context in ("configured", "after_sweep_setup")]}
+
+
+def test_controller_marker_identity_requires_observed_count_and_preserves_provisional_basis():
+    record = controller_marker_record()
+    identity = controller_marker_identity(record, 3)
+    assert identity["wavenumbers_cm1"] == [1950., 1945., 1940.]
+    assert identity["wavenumber_basis"] == "controller_markers"
+    assert identity["provisional"] and not identity["independently_calibrated"]
+    assert identity["marker_identity_basis"]["readback"] == record["mircat_marker_channel_checks"][-1]["readback"]
+    identity["marker_identity_basis"]["readback"]["start"] = 1
+    assert record["mircat_marker_channel_checks"][-1]["readback"]["start"] == 1950.
+    assert controller_marker_identity({}, 3) is None
+    record["mircat_marker_channel_checks"][-1] = {"context": "after_sweep_setup", "available": False, "error": "unsupported"}
+    assert controller_marker_identity(record, 3) is None
+
+
+@pytest.mark.parametrize("fault", ["observed_count", "endpoint", "configured_changed", "channel", "profile_interval", "nan"])
+def test_controller_marker_identity_rejects_conflicting_advertised_evidence(fault):
+    record = controller_marker_record()
+    readback = record["mircat_marker_channel_checks"][-1]["readback"]
+    count = 3
+    if fault == "observed_count": count = 2
+    if fault == "endpoint": readback["num_triggers"] = 4; count = 4
+    if fault == "configured_changed": record["mircat_marker_channel_checks"][0]["readback"]["interval"] = 4.
+    if fault == "channel": record["scan_profile"]["qcl"] = 2
+    if fault == "profile_interval": record["scan_profile"]["marker_interval_cm1"] = 10.
+    if fault == "nan": readback["start"] = float("nan")
+    with pytest.raises(ValueError):
+        controller_marker_identity(record, count)
+
+
+def test_controller_marker_identity_converts_native_micron_spacing_without_linear_cm1_guess():
+    record = controller_marker_record()
+    record.pop("scan_profile")
+    for observation in record["mircat_marker_channel_checks"]:
+        observation["readback"].update(units=1, start=5., stop=6., interval=.5)
+    identity = controller_marker_identity(record, 3)
+    np.testing.assert_allclose(identity["wavenumbers_cm1"], [2000., 10000/5.5, 10000/6.])
+
+
+@pytest.mark.parametrize("sdk_available", [True, False])
+def test_phase_capture_preserves_marker_readback_and_does_not_claim_absolute_calibration(tmp_path, monkeypatch, sdk_available):
+    def marker_readback(laser, channel):
+        assert channel == 1 and laser.start_count == 1
+        assert not any(module.executed for module in laser.rig.hf.modules)
+        return {"channel": 1, "units": 2, "start": 1950., "stop": 1940., "interval": 5., "num_triggers": 3}
+    if sdk_available:
+        monkeypatch.setattr(BlockLaser, "get_wavelength_trigger_channel_params", marker_readback, raising=False)
+    rig, adapter = live_fixture(tmp_path)
+    block = adapter.prepare_blocks(adapter.plan, rig.hf.events, rig.cancel)[0]
+    raw, spectra = adapter.capture_block(block, rig.cancel)
+    observation = raw["mircat_marker_channel_checks"][0]
+    assert observation["context"] == "after_block_setup" and observation["available"] is sdk_available
+    for _, spectrum in spectra:
+        assert spectrum.metadata["mircat_marker_channel_checks"] == raw["mircat_marker_channel_checks"]
+        assert spectrum.metadata["wavenumber_basis"] == ("controller_markers" if sdk_available else "nominal_sweep_bounds")
+        assert spectrum.metadata["provisional"]
+        if sdk_available:
+            assert not spectrum.metadata["independently_calibrated"]
+            assert spectrum.metadata["marker_identity_basis"]["readback"] == observation["readback"]
+    adapter.close()
+
+
 def test_live_insufficient_capacity_preflight_emits_nothing(tmp_path):
     rig, adapter = live_fixture(tmp_path, capacity_verifier=None)
-    with pytest.raises(AcquisitionCapacityError, match="resident-history capacity is unverified"):
+    adapter.max_retained_bytes = 1
+    with pytest.raises(AcquisitionCapacityError, match="Run retention estimate"):
         adapter.prepare_blocks(adapter.plan, rig.hf.events, rig.cancel)
     adapter.close()
     assert "emission_enable" not in rig.trace and "frames_start" not in rig.trace
-    assert not any(m.executed for m in rig.hf.modules)
+
+
+def test_default_host_capture_prepares_only_first_small_block(tmp_path):
+    rig, adapter = live_fixture(tmp_path, capacity_verifier=None)
+    events = [PhaseScanEvent(i, 1, i, True, 0.) for i in range(33)]
+    blocks = adapter.prepare_blocks(adapter.plan, events, rig.cancel)
+    assert [event for block in blocks for event in block["events"]] == events
+    assert all(len(block["events"]) <= 16 for block in blocks)
+    assert blocks[0]["daq"].incremental
+    assert all(block["daq"] is None for block in blocks[1:])
+    assert len(rig.hf.modules) == 3
+    assert not any(module.executed for module in rig.hf.modules)
+    assert "emission_enable" not in rig.trace and "frames_start" not in rig.trace
+    adapter.close()
+
+
+def test_incremental_service_waits_until_arm_and_stops_after_close():
+    calls = []
+    adapter = LivePhaseScanAcquirer()
+    adapter._active_daq = SimpleNamespace(incremental=True, armed=False, closed=False,
+                                          drain=lambda: calls.append("drained"))
+    adapter._service_daq()
+    assert not calls
+    adapter._active_daq.armed = True
+    adapter._service_daq()
+    assert calls == ["drained"]
+    adapter._active_daq.closed = True
+    adapter._service_daq()
+    assert calls == ["drained"]
+
+
+def test_reference_only_preflight_does_not_enable_optical_or_frame_outputs(tmp_path):
+    rig, adapter = live_fixture(tmp_path)
+    try:
+        probe, timer = rig.units['t660_1'], rig.units['t660_2']
+        assert probe.source == 'SYN' and probe.channels['A']['enabled']
+        assert all(not probe.channels[c]['enabled'] for c in 'BCD')
+        assert timer.source == 'OFF' and all(not timer.channels[c]['enabled'] for c in 'ABCD')
+        assert timer.shots == 0 and not rig.laser.emission
+        assert rig.trace.index('clock_start') < rig.trace.index('hf_configuration_with_reference_only')
+    finally:
+        adapter.close()
+    assert all(not unit.channels[c]['enabled'] for unit in rig.units.values() for c in 'ABCD')
+    assert all(unit.source == 'OFF' for unit in rig.units.values())
+
+
+def test_failed_hf_preparation_stops_the_already_running_reference_on_cleanup(tmp_path):
+    rig, adapter = live_fixture(tmp_path, fault='hf_configuration', prepare=False)
+    with pytest.raises(RuntimeError, match='injected HF configuration failure'):
+        adapter.prepare(PhaseScanSettings(start_wavenumber_cm1=1950, stop_wavenumber_cm1=1940),
+                        SimpleNamespace(path=tmp_path), rig.cancel)
+    adapter.close()
+    assert 'clock_start' in rig.trace and 'frames_start' not in rig.trace
+    assert 'emission_enable' not in rig.trace
+    assert all(unit.source == 'OFF' for unit in rig.units.values())
+    assert all(not unit.channels[c]['enabled'] for unit in rig.units.values() for c in 'ABCD')
 
 
 @pytest.mark.parametrize("trajectory,message", [
@@ -524,5 +873,45 @@ def test_contradictory_trajectory_and_active_interval_fail_before_devices(trajec
     adapter = LivePhaseScanAcquirer(qualified_trajectory={"source_id": "test", "wavenumber_cm1": [1950., 1940.],
                                                         **trajectory}, qualified_sweep_active_s=.00232)
     with pytest.raises(RuntimeError, match=message):
-        adapter.resolve_plan(build_phase_scan_plan(PhaseScanSettings()))
+        adapter.resolve_plan(build_phase_scan_plan(PhaseScanSettings(start_wavenumber_cm1=1950, stop_wavenumber_cm1=1940)))
     assert not adapter.units
+
+
+def test_blank_and_phase_step_changes_retain_identical_full_hf2_configuration(tmp_path):
+    first, blank = live_fixture(tmp_path / "blank")
+    second, phase = live_fixture(tmp_path / "phase", settings=PhaseScanSettings(
+        start_wavenumber_cm1=1950, stop_wavenumber_cm1=1940, phase_delay_us=100.))
+    try:
+        blank_settings = blank.preparation_readback["hf2li_detector_settings"]
+        assert blank_settings == phase.preparation_readback["hf2li_detector_settings"]
+        assert blank_settings["/dev1234/sigins/0/diff"]["value"] == 0
+        assert blank_settings["/dev1234/demods/0/adcselect"]["value"] == 0
+        assert blank_settings["/dev1234/demods/3/enable"]["value"] == 0
+        assert blank_settings["/dev1234/demods/2/enable"]["value"] == 1
+        assert blank_settings["/dev1234/demods/2/rate"]["value"] == 200000.
+        assert blank_settings["/dev1234/plls/0/adcselect"]["value"] == 4
+        assert all("/sigins/1/" not in path for path in blank_settings)
+    finally:
+        # This fixture does not create the runner's run directories.
+        blank.store = phase.store = None
+        blank.close(); phase.close()
+
+
+@pytest.mark.parametrize("node,value", [
+    ("sigins/0/diff", 1), ("demods/0/adcselect", 1),
+    ("demods/0/timeconstant", .001), ("demods/3/enable", 1),
+    ("demods/2/trigger", 1), ("plls/0/adcselect", 0),
+])
+def test_wrong_single_detector_or_timing_configuration_fails_preflight(tmp_path, node, value):
+    with pytest.raises(RuntimeError, match="readback differs"):
+        live_fixture(tmp_path, snapshot_overrides={f"/dev1234/{node}": value})
+
+
+def test_single_detector_clipping_still_rejects_acquisition(tmp_path):
+    rig, adapter = live_fixture(tmp_path)
+    try:
+        rig.hf.clipping[0] = 1
+        with pytest.raises(AcquisitionIntegrityError, match="input 1 clipping"):
+            adapter._input_integrity("test")
+    finally:
+        adapter.close()

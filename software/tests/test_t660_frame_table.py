@@ -1,5 +1,6 @@
 """Hardware-free protocol tests for the finite phase-delay timing architecture."""
 from copy import deepcopy
+from dataclasses import replace
 
 import pytest
 
@@ -14,6 +15,11 @@ class FrameDevice(T660Service):
         self.values = {}
         self.frames = []
         self.pending = {}
+        self.command_lines = []
+
+    def command_sequence(self, commands):
+        self.command_lines.append(list(commands))
+        return super().command_sequence(commands)
 
     def command(self, command, *, expect_response=True, delay_s=.04):
         if ";" in command:
@@ -45,6 +51,84 @@ def frame(*, pump_enabled, phase_us=0):
         "A": pulse(pump_s-.000180, .000010, pump_enabled),
         "B": pulse(pump_s-.000000170, .000010, pump_enabled),
         "C": pulse(process_s, .010), "D": pulse(0, 150e-9, False)}}
+
+
+def assert_complete_stored_frame(stored, requested):
+    """Check every independently observable pending field, including defaults."""
+    assert len(stored) == 20
+    for channel, rising in zip("ABCD", (1, 3, 5, 7)):
+        expected = requested["channels"][channel]
+        assert stored[f"TIME:QUEue{rising}"] == expected["delay"]
+        assert stored[f"TIME:QUEue{rising+1}"] == expected["width"]
+        assert stored[f"CHANnel:QUEue:MODe{channel}"] == f"{channel}, {'ON' if expected['enabled'] else 'OFF'}"
+        polarity = {"negative": "NEG", "positive": "POS"}[expected["polarity"]]
+        assert stored[f"CHANnel:QUEue:POLarity{channel}"] == f"{channel}, {polarity}"
+        assert stored[f"CHANnel:QUEue:TERMination{channel}"] == f"{channel}, {expected['termination']}"
+
+
+@pytest.mark.parametrize("blank", [False, True], ids=["pumped_sample", "matched_blank"])
+def test_delta_upload_retains_all_fields_of_1402_signed_regular_frames(blank):
+    from control_app.workflows.regular_phase_scan import RegularPhaseScanSettings, build_regular_phase_scan_plan
+    from control_app.workflows.regular_phase_scan_acquisition import regular_event_timing
+    plan = build_regular_phase_scan_plan(RegularPhaseScanSettings(
+        start_wavenumber_cm1=2000, stop_wavenumber_cm1=1900, scan_speed_cm1_s=10000,
+        phase_delay_us=10, pre_pump_ms=1, post_pump_ms=3))
+    assert plan.total_scans == 1402 and plan.first_phase_delay_us < 0 < plan.last_phase_delay_us
+    events = [plan.event_at(i) for i in range(plan.total_scans)]
+    if blank:
+        events = [replace(event, pump_enabled=False) for event in events]
+    requested = [regular_event_timing(event)[0] for event in events]
+    device = FrameDevice()
+    original = deepcopy(requested)
+    device.preload_frame_table(requested, predivider=200000)
+    assert requested == original
+    assert len(device.frames) == len(device.command_lines) == len(requested)
+    assert len(device.command_lines[0]) == 21
+    for index, (stored, expected, line) in enumerate(zip(device.frames, requested, device.command_lines)):
+        assert_complete_stored_frame(stored, expected)
+        assert line[-1] == f":TFRame:STORe {index}"
+        assert sum(command.startswith(":TFRame:STORe") for command in line) == 1
+        assert all(":QUEue" in command for command in line[:-1])
+    assert sum(map(len, device.command_lines)) < len(requested)*4
+    assert all(command not in device.commands for command in ("START", "TFRame:STArt", "TRIG:SOUR EXT"))
+
+
+def test_delta_upload_handles_every_changed_field_and_restores_prior_values():
+    initial = frame(pump_enabled=False)
+    changed = deepcopy(initial)
+    for position, channel in enumerate("ABCD"):
+        changed["channels"][channel].update(
+            delay=f"{position+2}ms", width=f"{position+1}us",
+            enabled=not initial["channels"][channel]["enabled"], polarity="positive", termination="LOWZ")
+    requested = [initial, changed, changed, initial]
+    device = FrameDevice()
+    device.preload_frame_table(requested)
+    for stored, expected in zip(device.frames, requested):
+        assert_complete_stored_frame(stored, expected)
+    assert [len(line) for line in device.command_lines] == [21, 21, 1, 21]
+    assert device.command_lines[2] == [":TFRame:STORe 2"]
+
+
+def test_repeated_preloads_fully_reinitialize_pending_configuration():
+    device = FrameDevice()
+    requested = [frame(pump_enabled=False)]*2
+    device.preload_frame_table(requested)
+    # Other actions/restoration can change pending state between acquisitions.
+    device.pending = {key: "unrelated prior instrument setting" for key in device.pending}
+    device.preload_frame_table(requested)
+    assert [len(line) for line in device.command_lines] == [21, 1, 21, 1]
+    for stored in device.frames[-2:]:
+        assert_complete_stored_frame(stored, requested[0])
+
+
+def test_invalid_later_frame_prevents_every_pending_write_and_store():
+    device = FrameDevice()
+    requested = [frame(pump_enabled=False)]*2+[deepcopy(frame(pump_enabled=True))]
+    requested[-1]["channels"]["D"]["width"] = "0s"
+    with pytest.raises(T660ConfigurationError, match="width"):
+        device.preload_frame_table(requested)
+    assert device.commands == ["FEATure:FRAMe?"]
+    assert not device.frames and not device.command_lines
 
 
 def test_preload_programs_one_unpumped_then_all_nominal_frames_with_no_emission():
@@ -85,6 +169,90 @@ def test_single_background_gets_inert_terminator_not_second_acquisition():
     assert result["inert_terminator_count"] == 1
     for channel in "ABCD":
         assert device.frames[1][f"CHANnel:QUEue:MODe{channel}"] == f"{channel}, OFF"
+    inert = deepcopy(frame(pump_enabled=False))
+    for settings in inert["channels"].values():
+        settings["enabled"] = False
+    assert_complete_stored_frame(device.frames[0], frame(pump_enabled=False))
+    assert_complete_stored_frame(device.frames[1], inert)
+    assert device.command_lines[1] == [":CHANnel:QUEue:MODe C, OFF", ":TFRame:STORe 1"]
+
+
+def test_preload_progress_reports_acknowledged_frames_without_protocol_changes():
+    requested = [frame(pump_enabled=False), frame(pump_enabled=True, phase_us=-2000)]
+    original = FrameDevice()
+    original.preload_frame_table(requested)
+    observed, progress = FrameDevice(), []
+
+    def report(loaded, total):
+        assert loaded == len(observed.frames)
+        progress.append((loaded, total))
+
+    result = observed.preload_frame_table(requested, progress=report, cancel_check=lambda: None)
+    assert progress == [(0, 2), (1, 2), (2, 2)]
+    assert result["physical_frame_count"] == 2
+    assert observed.commands == original.commands
+    assert observed.frames == original.frames
+
+
+def test_preload_cancel_after_acknowledged_frame_leaves_triggers_inhibited():
+    device = FrameDevice()
+    cancelled = False
+
+    def report(loaded, total):
+        nonlocal cancelled
+        if loaded == 1:
+            cancelled = True
+
+    def check():
+        if cancelled:
+            raise InterruptedError("operator aborted timing-table upload")
+
+    with pytest.raises(InterruptedError, match="aborted"):
+        device.preload_frame_table([frame(pump_enabled=False)]*20, progress=report, cancel_check=check)
+    assert len(device.frames) == 1
+    assert device.values["TRIG:SOUR"] == "OFF"
+    assert not any(command in device.commands for command in ("START", "TRIG:SOUR EXT", "TFRame:STArt"))
+    assert "TFRame:LOOP:FIRST 0" not in device.commands
+
+
+def test_preload_failed_frame_is_not_reported_as_loaded():
+    class FailedFrame(FrameDevice):
+        def command_sequence(self, commands):
+            if commands[-1] == ":TFRame:STORe 1":
+                raise T660CommandError("injected frame acknowledgement failure")
+            return super().command_sequence(commands)
+
+    device, progress = FailedFrame(), []
+    with pytest.raises(T660CommandError, match="acknowledgement"):
+        device.preload_frame_table([frame(pump_enabled=False)]*3,
+                                   progress=lambda loaded, total: progress.append((loaded, total)))
+    assert progress == [(0, 3), (1, 3)]
+    assert "START" not in device.commands
+
+
+def test_ack_failure_after_store_does_not_advance_progress_or_reuse_cache():
+    class LostAcknowledgement(FrameDevice):
+        fail = True
+
+        def command_sequence(self, commands):
+            responses = super().command_sequence(commands)
+            if self.fail and commands[-1] == ":TFRame:STORe 1":
+                self.fail = False
+                raise T660CommandError("injected lost acknowledgement after storage")
+            return responses
+
+    device, progress = LostAcknowledgement(), []
+    requested = [frame(pump_enabled=False)]*3
+    with pytest.raises(T660CommandError, match="acknowledgement"):
+        device.preload_frame_table(requested, progress=lambda done, total: progress.append((done, total)))
+    assert len(device.frames) == 2
+    assert progress == [(0, 3), (1, 3)]
+    assert "TFRame:LOOP:FIRST 0" not in device.commands
+    device.pending.clear()
+    device.preload_frame_table(requested)
+    assert len(device.command_lines[2]) == 21
+    assert all(len(line) == 1 for line in device.command_lines[3:])
+    assert_complete_stored_frame(device.frames[2], requested[0])
 
 
 def test_continuous_clock_roles_are_abc_on_d_off_without_starting_source():

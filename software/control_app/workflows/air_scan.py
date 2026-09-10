@@ -6,6 +6,7 @@ IR emission and timing outputs are stopped on completion, failure and Stop.
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event, Lock, Thread
@@ -20,7 +21,12 @@ from control_app.devices.hf2li_service import HF2LIService, HF2LIPreset
 from control_app.devices.mircat_service import MircatService
 from control_app.devices.picoscope_service import PicoScopeService
 from control_app.devices.t660_service import T660Service
-from control_app.workflows.phase_scan_data import write_json, save_native
+from control_app.workflows.phase_scan_data import (
+    DETECTOR_INPUT, HF2_PRESET, SINGLE_DETECTOR_MODE, write_json, save_native,
+)
+from control_app.workflows.phase_scan_acquisition import event_timing, verified_acquisition_settings
+from control_app.workflows.phase_scan import PhaseScanEvent
+from control_app.workflows.phase_scan_native import demodulator_samples, sweep_interval_observations
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
 
 # Operator-confirmed LabOne setting, verified on dev18500 by live SDK readback.
@@ -117,6 +123,54 @@ def air_scan_preset(external_rate_hz=2_000_000.):
     })
 
 
+def single_detector_scan_profile(parameters=None):
+    """One unpumped FTIR-comparison sweep, separate from full phase acquisition."""
+    profile = settings_from_mircat_controls({
+        'scan_start_cm1': 2000., 'scan_stop_cm1': 1900., 'scan_rate_cm1_s': 40.,
+        **(parameters or {}),
+    })
+    profile.update(detector_mode=SINGLE_DETECTOR_MODE, detector_input=DETECTOR_INPUT,
+                   hf2li_preset=HF2_PRESET, detector_rate_sps=28782.894736842107,
+                   timing_rate_sps=200000., timeconstant_s=.00005, hf2li_input_range_v=1.,
+                   clipping_policy='reject_ch1_clipping', channel_labels=[DETECTOR_INPUT],
+                   acquisition_mode='native_streaming_single_unpumped_sweep')
+    for key in ('marker_width_us', 'sweep_duration_bounds_s'):
+        if parameters is not None and key in parameters:
+            profile[key] = parameters[key]
+    for key in list(profile):
+        if key.startswith('picoscope_'):
+            del profile[key]
+    return profile
+
+
+def _scan_timing_limits(profile, *, timing_rehearsal):
+    """Validate marker separation and any explicit rehearsal envelope before I/O."""
+    start, stop, rate = (float(profile[key]) for key in ('start_cm1', 'stop_cm1', 'scan_rate_cm1_s'))
+    if not all(math.isfinite(value) for value in (start, stop, rate)) or rate <= 0 or start == stop:
+        raise ValueError('Scan endpoints and speed must define a positive finite duration')
+    nominal = abs(stop-start) / rate
+    interval = float(profile.get('marker_interval_cm1', 5.))
+    width = profile.get('marker_width_us', 500)
+    if (isinstance(width, bool) or not isinstance(width, (int, float)) or not math.isfinite(width)
+            or int(width) != width or not 1 <= width <= 65535):
+        raise ValueError('Marker width must be an integer from 1 through 65535 us')
+    if not math.isfinite(interval) or interval <= 0 or width * 1e-6 >= interval / rate:
+        raise ValueError('Marker width must be shorter than the wavelength-marker spacing at this scan speed')
+    bounds = profile.get('sweep_duration_bounds_s')
+    if bounds is not None:
+        if not timing_rehearsal:
+            raise ValueError('Explicit sweep-duration bounds are allowed only for timing_rehearsal')
+        if (not isinstance(bounds, (list, tuple)) or len(bounds) != 2
+                or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                       or not math.isfinite(value) or value <= 0 for value in bounds)
+                or not bounds[0] < bounds[1] or not bounds[0] <= nominal <= bounds[1]):
+            raise ValueError('Rehearsal sweep-duration bounds must be positive, finite, ordered and contain the nominal duration')
+        bounds = tuple(float(value) for value in bounds)
+    else:
+        bounds = (.5 * nominal, 1.5 * nominal)
+    return nominal, interval, int(width), bounds
+
+
 def verify_hf_settings(snapshot, device, external_rate_hz=2_000_000.):
     if snapshot.get('read_errors'):
         raise RuntimeError('HF2LI settings could not be read back')
@@ -144,10 +198,12 @@ def verify_hf_settings(snapshot, device, external_rate_hz=2_000_000.):
             raise RuntimeError(f'HF2LI {node}: read {actual}, expected {wanted}')
 
 
-def hf_input_status(hf):
+def hf_input_status(hf, *, single_detector=False):
     status = {}
     for node in ('status/adc0max', 'status/adc0min', 'status/adc1max', 'status/adc1min',
                  'status/flags/adcclip/0', 'status/flags/adcclip/1', 'status/flags/binary'):
+        if single_detector and ('adc1' in node or node.endswith('adcclip/1')):
+            continue
         try:
             status[node] = hf._get_node('int', f'/{hf.device_id}/{node}')
         except Exception as exc:
@@ -210,35 +266,84 @@ class AirScanRunner:
             self._lock.release()
 
 
-def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked=False,
+def run_single_pump_timing_rehearsal(root, *, cancel, progress, laser_authorized=False,
+                                   pump_authorized=False, settings=None, **kwargs):
+    """Acquire one authorized pump/sweep timing event with no automatic retry."""
+    if laser_authorized is not True or pump_authorized is not True:
+        raise PermissionError('Single pump timing rehearsal requires explicit laser and pump authorization')
+    if settings is None:
+        settings = single_detector_scan_profile({'scan_rate_cm1_s': 10000., 'marker_width_us': 125,
+                                                'sweep_duration_bounds_s': [.005, .020]})
+    return run_air_scan(root, cancel=cancel, progress=progress, laser_authorized=True,
+                        pump_authorized=True, single_detector=True, record_kind='pump_timing_rehearsal',
+                        settings=settings, **kwargs)
+
+
+def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked=False, pump_authorized=False,
                  config_path=None, laser_factory=MircatService.from_config,
                  hf_factory=HF2LIService.from_config, t660_factory=T660Service.from_config,
                  picoscope_factory=PicoScopeService, settings=None, on_state=lambda state: None,
-                 tec_ready_stability_s=None):
+                 tec_ready_stability_s=None, single_detector=False, record_kind='buffer_blank'):
     """One operator-started air sweep; settings remain, outputs always stop."""
-    if laser_authorized is not True or pump_blocked is not True:
+    if laser_authorized is not True or (not single_detector and pump_blocked is not True):
         raise PermissionError("Start Air Scan requires emission authorization and a blocked pump")
+    pump_rehearsal = record_kind == 'pump_timing_rehearsal'
+    if pump_rehearsal and (not single_detector or pump_authorized is not True):
+        raise PermissionError('Pump timing rehearsal requires single-detector mode and explicit pump authorization')
+    if single_detector and record_kind not in {'buffer_blank', 'sample', 'timing_rehearsal', 'pump_timing_rehearsal'}:
+        raise ValueError('Single-detector record_kind must be buffer_blank, sample or timing_rehearsal')
     if cancel.is_set():
         raise InterruptedError("Air Scan stopped before setup")
-    profile = dict(AIR_SCAN_PROFILE if settings is None else settings)
+    profile = dict((single_detector_scan_profile() if single_detector else AIR_SCAN_PROFILE) if settings is None else settings)
+    timing_rehearsal = single_detector and record_kind in {'timing_rehearsal', 'pump_timing_rehearsal'}
+    nominal, marker_interval, marker_width, sweep_duration_bounds = _scan_timing_limits(
+        profile, timing_rehearsal=timing_rehearsal)
+    profile['nominal_sweep_duration_s'] = nominal
     start_cm1, stop_cm1, rate = (profile[k] for k in ('start_cm1', 'stop_cm1', 'scan_rate_cm1_s'))
     current, qcl = profile['qcl_current_ma'], profile['qcl']
     external_rate, external_width = profile['external_rate_hz'], profile['external_width_ns']
     internal_rate, internal_width = profile['mircat_internal_rate_hz'], profile['mircat_internal_width_ns']
+    if pump_rehearsal:
+        if (not math.isclose(external_rate, 2_000_000., rel_tol=0., abs_tol=.01) or
+                not math.isclose(external_width, 150., rel_tol=0., abs_tol=1e-6) or
+                sweep_duration_bounds[1] >= .25):
+            raise ValueError('Pump timing rehearsal requires the 2 MHz/150 ns clock and a sweep envelope below 250 ms')
+        profile.update(pump_events=1, acquisition_mode='native_streaming_single_pump_timing_rehearsal')
+    pump_event = PhaseScanEvent(0, 1, 0, True, 0.) if pump_rehearsal else None
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     out = root / ('mircat_sweep_' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ'))
     out.mkdir()
     write_json(out / 'operation.json', {
-        **profile, 'authorization': 'Operator clicked MIRcat Sweep Scan Start Scan with Safety Approval',
-        'pump_physically_blocked': True, 'retain_scan_settings': True,
+        **profile, **({'authorization': 'User explicitly authorized one pump event and one MIRcat timing scan',
+                       'record_kind': record_kind, 'requested_pump_events': 1, 'picoscope_used': False,
+                       'timing_plan': 'One active T660-2 frame followed by one inert frame; no retries'} if pump_rehearsal else
+                     {'authorization': 'User authorized one unpumped MIRcat scan in chat',
+                      'record_kind': record_kind, 'pump_inhibition_plan': 'Disable T660-2 Fire and Q-switch outputs and verify readbacks before emission',
+                      'picoscope_used': False} if single_detector else
+                     {'authorization': 'Operator clicked MIRcat Sweep Scan Start Scan with Safety Approval',
+                      'pump_physically_blocked': True}), 'retain_scan_settings': True,
         'automatic_retries': 0, 'publication_eligible': False,
         'run_classification': 'EXPLORATORY_PROOF_OF_CONCEPT',
     })
     record = {'schema': 'standalone-air-scan/2', 'native_chunks': [], 'optical_valid': False, 'pump_events': 0, 'independent_of_phase_scan': True, 'scan_profile': profile, 'warnings': []}
+    if single_detector:
+        record.update(schema='single-detector-unpumped-scan/1', detector_mode=SINGLE_DETECTOR_MODE,
+                      detector_input=DETECTOR_INPUT, record_kind=record_kind,
+                       record_role=('single_pump_timing_rehearsal' if pump_rehearsal else 'pump_off_timing_rehearsal' if timing_rehearsal else
+                                   'buffer_blank' if record_kind == 'buffer_blank' else 'unpumped_sample_test'),
+                      picoscope_used=False)
+    if timing_rehearsal:
+        record.update(usable_as_background=False, usable_for_ratio=False, spectral_analysis_allowed=False,
+                       timing_rehearsal=True, applied_sweep_duration_bounds_s=list(sweep_duration_bounds))
+    if pump_rehearsal:
+        record.update(schema='single-pump-timing-rehearsal/1', pump_timing_rehearsal=True,
+                      pump_authorized=True, requested_pump_events=1, pump_events=None,
+                      event=asdict(pump_event), optical_pump_arrival_verified=False)
     units, laser, hf, pico, starter = {}, None, None, None, None
     cleanup_errors, error = [], None
     configured = None
+    stable_hf = None
     raw = None
     qcl_configured = False
     log = (out / 'commands.txt').open('x', encoding='utf-8', buffering=1)
@@ -270,13 +375,17 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
 
     def stop_unit(unit):
         failures = []
-        for fn in [lambda: unit.set_trigger_source('OFF'), lambda: unit.command('STOP', expect_response=False), *[lambda c=c: unit.disable_channel(c) for c in 'ABCD']]:
+        for fn in [lambda: unit.set_trigger_source('OFF'), lambda: unit.command('STOP', expect_response=False)]:
             try: fn()
             except Exception as exc: failures.append(str(exc))
         if unit.name == 't660_2':
             for command in ('TFRame:STOp', *(f'TRAin:{stage}:CouNT 0' for stage in ('ACTive', 'NEXT', 'QUEue'))):
                 try: unit.command(command, expect_response=False)
                 except Exception as exc: failures.append(str(exc))
+        # Frame STOP restores pre-frame channel state; disable after restoration.
+        for channel in 'ABCD':
+            try: unit.disable_channel(channel)
+            except Exception as exc: failures.append(str(exc))
         if failures: raise RuntimeError('; '.join(failures))
 
     def verify_unit(unit, recipe, name):
@@ -310,7 +419,7 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         # Check the real mode again after each SDK scan-mode transition.
         rb = laser.get_wavelength_trigger_params()
         expected = {'pulse_mode': 2, 'process_trigger_mode': 2, 'units': 2,
-                    'start': start_cm1, 'stop': stop_cm1, 'interval': 5,
+                    'start': start_cm1, 'stop': stop_cm1, 'interval': marker_interval,
                     'dwell_us': 0, 'after_off_us': 0}
         mismatch = {key: {'actual': rb.get(key), 'expected': value}
                     for key, value in expected.items()
@@ -325,10 +434,109 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
             raise RuntimeError(f'MIRcat external trigger settings changed at {context}: {mismatch}')
         return rb
 
+    def observe_marker_channel(context):
+        # Preserve the SDK's per-QCL target/count readback separately from the
+        # requested global range. Missing support is not an invented identity.
+        observation = {'context': context, 'timestamp_utc': datetime.now(timezone.utc).isoformat(),
+                       'channel': qcl, 'available': False,
+                       'source': 'MIRcatSDK_GetWlTrigChanParams'}
+        try:
+            getter = getattr(laser, 'get_wavelength_trigger_channel_params', None)
+            if not callable(getter):
+                raise RuntimeError('Per-QCL wavelength-trigger readback is unavailable')
+            observation['readback'] = getter(qcl)
+            observation['available'] = True
+        except Exception as exc:
+            observation['error'] = f'{type(exc).__name__}: {exc}'
+            record['warnings'].append(f'Per-QCL marker targets were not read at {context}: {exc}')
+        record.setdefault('mircat_marker_channel_checks', []).append(observation)
+        write_json(out / f'mircat_marker_channel_{context}.json', observation)
+        return observation
+
     def poll(seconds=.05, interlock=True):
         check_cancel()
         if interlock: check()
         record['native_chunks'].append(hf.read_acquisition(seconds))
+
+    def verify_config(snapshot):
+        if single_detector:
+            return verified_acquisition_settings(snapshot, hf.device_id, preset.settings)
+        verify_hf_settings(snapshot, hf.device_id, external_rate)
+
+    def verify_unpumped_sync(timing_stream, *, establish_baseline=False):
+        """Accept a stable idle level, while rejecting either transition polarity."""
+        dio = np.asarray(timing_stream['dio'], dtype=np.uint32)
+        pump_high = (dio & (1 << 17)) != 0
+        record['observed_pump_sync_high_samples'] = int(np.count_nonzero(pump_high))
+        record['observed_pump_sync_rising_edges'] = int(np.count_nonzero(~pump_high[:-1] & pump_high[1:]))
+        record['observed_pump_sync_falling_edges'] = int(np.count_nonzero(pump_high[:-1] & ~pump_high[1:]))
+        transitions = int(np.count_nonzero(pump_high[:-1] != pump_high[1:]))
+        record['observed_pump_sync_transitions'] = transitions
+        record['optical_pump_absence_verified'] = False
+        if establish_baseline:
+            record['pump_sync_baseline'] = {
+                'bit': 17, 'stable': transitions == 0, 'high': bool(pump_high[0]) if transitions == 0 else None,
+                'sample_count': len(pump_high), 'first_tick': int(timing_stream['timestamp'][0]),
+                'last_tick': int(timing_stream['timestamp'][-1]), 'observed_before_process_trigger': True,
+            }
+        baseline = record.get('pump_sync_baseline')
+        if transitions or not baseline or not baseline['stable'] or np.any(pump_high != baseline['high']):
+            record['pump_events'] = None  # Electrical transitions do not establish an optical event count.
+            context = 'before Process Trigger' if establish_baseline else 'during unpumped capture'
+            raise RuntimeError(f'Unexpected pump sync transition/change {context}')
+        if establish_baseline:
+            level = 'HIGH' if baseline['high'] else 'LOW'
+            warning = (f'DIO17 pretrigger baseline is stable {level}; the absence of electrical transitions '
+                       'does not verify optical pump absence.')
+            record['warnings'].append(warning)
+
+    def observed_sweeps():
+        timing_stream = demodulator_samples(record, 2)
+        if pump_rehearsal:
+            verify_single_pump_sync(timing_stream)
+        else:
+            verify_unpumped_sync(timing_stream)
+        dio = np.asarray(timing_stream['dio'], dtype=np.uint32)
+        intervals, marked, _ = sweep_interval_observations(timing_stream['timestamp'], dio)
+        record['observed_dio21_intervals'] = [list(item) for item in intervals]
+        cutoff = record.get('pre_process_last_timing_tick')
+        marked = [item for item in marked if cutoff is None or item[0] > cutoff]
+        record['ancillary_dio21_intervals'] = [list(item) for item in intervals if item not in marked]
+        for start_tick, stop_tick in marked:
+            duration = (stop_tick-start_tick)/record['clockbase_hz']
+            if not sweep_duration_bounds[0] <= duration <= sweep_duration_bounds[1]:
+                raise RuntimeError('Observed optical sweep duration is inconsistent with the requested scan')
+        return marked
+
+    def verify_single_pump_sync(timing_stream, *, complete=False):
+        """Retain either electrical edge; never substitute a programmed pump time."""
+        baseline = record.get('pump_sync_baseline')
+        cutoff = record.get('pre_process_last_timing_tick')
+        if not baseline or not baseline['stable'] or cutoff is None:
+            raise RuntimeError('Pump timing rehearsal has no observed stable pretrigger baseline')
+        ticks = np.asarray(timing_stream['timestamp'])
+        high = (np.asarray(timing_stream['dio'], dtype=np.uint32) & (1 << 17)) != 0
+        changes = np.flatnonzero(high[:-1] != high[1:]) + 1
+        rises = np.flatnonzero(~high[:-1] & high[1:]) + 1
+        falls = np.flatnonzero(high[:-1] & ~high[1:]) + 1
+        record.update(observed_pump_sync_high_samples=int(np.count_nonzero(high)),
+                      observed_pump_sync_rising_edges=len(rises), observed_pump_sync_falling_edges=len(falls),
+                      observed_pump_sync_transitions=len(changes),
+                      pump_sync_rising_ticks=[int(ticks[i]) for i in rises],
+                      pump_sync_falling_ticks=[int(ticks[i]) for i in falls])
+        if (np.any(high[ticks <= cutoff] != baseline['high']) or len(changes) > 2 or
+                any(int(ticks[i]) <= cutoff for i in changes)):
+            record['pump_events'] = None
+            raise RuntimeError('Unexpected additional or pretrigger pump-sync transition during one-pump rehearsal')
+        if complete:
+            if len(changes) != 2 or len(rises) != 1 or len(falls) != 1 or bool(high[-1]) != baseline['high']:
+                record['pump_events'] = None
+                raise RuntimeError('Expected exactly one complete electrical pump-sync excursion')
+            record['pump_sync_event'] = {'leading_tick': int(ticks[changes[0]]),
+                'trailing_tick': int(ticks[changes[1]]),
+                'leading_edge': 'falling' if baseline['high'] else 'rising',
+                'basis': 'observed electrical sync; optical pump arrival unverified'}
+            record['pump_events'] = 1
 
     def wait_for_stable_tecs(context):
         stability_s = float(profile.get('tec_ready_stability_s', 5.) if tec_ready_stability_s is None
@@ -359,19 +567,21 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
             cancel.wait(.25)
 
     try:
-        stage('Preparing PicoScope EXT capture and disabled pump timing')
-        cfg, _, _ = load_hardware_config(config_path)
-        pico_settings, expected_pico_interval_ns = picoscope_settings_for_profile(
-            profile, custom_profile=settings is not None)
-        pico = picoscope_factory(cfg['devices']['picoscope'], pico_settings, command_log=log)
-        pico.open_unit()
-        pico.apply_capture_settings()
-        timing = pico.validate_sample_timing()
-        if (not math.isclose(timing['sample_interval_ns'], expected_pico_interval_ns,
-                             rel_tol=0., abs_tol=1e-6) or
-                timing['max_samples'] < pico_settings['total_samples']):
-            raise RuntimeError(f'PicoScope memory/timing mismatch: {timing}')
-        write_json(out / 'picoscope_prepared.json', {'settings': pico_settings, 'timing': timing})
+        stage('Preparing CH1 native stream and disabled pump timing' if single_detector else
+              'Preparing PicoScope EXT capture and disabled pump timing')
+        if not single_detector:
+            cfg, _, _ = load_hardware_config(config_path)
+            pico_settings, expected_pico_interval_ns = picoscope_settings_for_profile(
+                profile, custom_profile=settings is not None)
+            pico = picoscope_factory(cfg['devices']['picoscope'], pico_settings, command_log=log)
+            pico.open_unit()
+            pico.apply_capture_settings()
+            timing = pico.validate_sample_timing()
+            if (not math.isclose(timing['sample_interval_ns'], expected_pico_interval_ns,
+                                 rel_tol=0., abs_tol=1e-6) or
+                    timing['max_samples'] < pico_settings['total_samples']):
+                raise RuntimeError(f'PicoScope memory/timing mismatch: {timing}')
+            write_json(out / 'picoscope_prepared.json', {'settings': pico_settings, 'timing': timing})
         for name in ('t660_2', 't660_1'):
             check_cancel()
             unit = t660_factory(name, config_path=config_path, command_log=log)
@@ -405,38 +615,69 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         stage(f"MIRcat initial current readback: {record['qcl_current_before_setting_ma']:g} mA; setting {current:g} mA")
         laser.set_qcl_pulse_params(qcl=qcl, pulse_rate_hz=internal_rate, pulse_width_ns=internal_width, current_ma=current)
         qcl_configured = True
-        trigger = laser.set_external_sweep_trigger_params(start_cm1=start_cm1, stop_cm1=stop_cm1, wavelength_trigger_interval_cm1=5, external_process_trigger=True)
-        for key, expected in {'pulse_mode': 2, 'process_trigger_mode': 2, 'units': 2, 'start': start_cm1, 'stop': stop_cm1, 'interval': 5}.items():
+        trigger = laser.set_external_sweep_trigger_params(start_cm1=start_cm1, stop_cm1=stop_cm1, wavelength_trigger_interval_cm1=marker_interval, external_process_trigger=True)
+        for key, expected in {'pulse_mode': 2, 'process_trigger_mode': 2, 'units': 2, 'start': start_cm1, 'stop': stop_cm1, 'interval': marker_interval}.items():
             if not math.isclose(trigger[key], expected, abs_tol=.001): raise RuntimeError(f'MIRcat trigger mismatch: {trigger}')
-        if laser.set_wavelength_trigger_pulse_width_us(500) != 500: raise RuntimeError('Marker width mismatch')
-        write_json(out / 'mircat_configured.json', {'trigger': trigger, 'qcl': verify_qcl(), 'limits': limits, 'range': coverage})
+        observed_marker_width = laser.set_wavelength_trigger_pulse_width_us(marker_width)
+        record['marker_width_us_readback'] = observed_marker_width
+        if observed_marker_width != marker_width: raise RuntimeError('Marker width mismatch')
+        marker_channel = observe_marker_channel('configured')
+        write_json(out / 'mircat_configured.json', {'trigger': trigger, 'qcl': verify_qcl(), 'limits': limits,
+                                                  'range': coverage, 'marker_channel': marker_channel})
         pulse = {'enabled': True, 'delay': '0ns', 'width': f'{external_width:g}ns', 'polarity': 'positive', 'termination': '50OHM'}
-        probe_recipe = {'stop_first': True, 'trigger_source': 'SYN', 'predivider': 1, 'gate_mode': 0, 'burst_enabled': False, 'clock': {'frequency': f'{external_rate:g}Hz'}, 'force_eod': True, 'channels': {'A': pulse, 'B': {**pulse, 'enabled': False}, 'C': {'enabled': False}, 'D': {'enabled': False}}}
+        probe_recipe = {'stop_first': True, 'trigger_source': 'SYN', 'predivider': 1, 'gate_mode': 0, 'burst_enabled': False, 'clock': {'frequency': f'{external_rate:g}Hz'}, 'force_eod': True, 'channels': {'A': pulse, 'B': {**pulse, 'enabled': False}, 'C': {**pulse, 'enabled': False} if pump_rehearsal else {'enabled': False}, 'D': {'enabled': False}}}
         units['t660_1'].apply_recipe(probe_recipe)
         verify_unit(units['t660_1'], probe_recipe, 't660_1_reference_prepared.json')
         units['t660_1'].command('START', expect_response=False)
-        timer_recipe = {'stop_first': True, 'trigger_source': 'REM', 'frames_engine': 'OFF', 'predivider': 1, 'gate_mode': 0, 'burst_enabled': False, 'force_eod': True, 'channels': {'A': {'enabled': False}, 'B': {'enabled': False}, 'C': {'enabled': True, 'delay': '1ms', 'width': '10ms', 'polarity': 'negative', 'termination': '50OHM'}, 'D': {'enabled': False}}}
-        units['t660_2'].apply_recipe(timer_recipe)
-        verify_unit(units['t660_2'], timer_recipe, 't660_2_process_only.json')
-        units['t660_2'].command('START', expect_response=False)
+        if pump_rehearsal:
+            active_frame, _ = event_timing(pump_event)
+            record['requested_active_frame'] = active_frame
+            record['timing_table'] = units['t660_2'].preload_frame_table([active_frame], predivider=600_000)
+            if (record['timing_table']['acquisition_frame_count'] != 1 or
+                    record['timing_table']['physical_frame_count'] != 2 or
+                    record['timing_table']['inert_terminator_count'] != 1):
+                raise RuntimeError('One pump rehearsal requires one active frame and one inert terminator')
+            timer_recipe = IDLE
+            verify_unit(units['t660_2'], timer_recipe, 't660_2_pump_frame_preloaded.json')
+            record['pump_outputs_initially_disabled_readback_verified'] = True
+        else:
+            timer_recipe = {'stop_first': True, 'trigger_source': 'REM', 'frames_engine': 'OFF', 'predivider': 1, 'gate_mode': 0, 'burst_enabled': False, 'force_eod': True, 'channels': {'A': {'enabled': False}, 'B': {'enabled': False}, 'C': {'enabled': True, 'delay': '1ms', 'width': '10ms', 'polarity': 'negative', 'termination': '50OHM'}, 'D': {'enabled': False}}}
+            units['t660_2'].apply_recipe(timer_recipe)
+            verify_unit(units['t660_2'], timer_recipe, 't660_2_process_only.json')
+            if single_detector:
+                record['pump_outputs_disabled_readback_verified'] = True
+            units['t660_2'].command('START', expect_response=False)
         record['shot_counter_before'] = units['t660_2'].get_shot_count()
         hf = hf_factory(config_path=config_path, command_log=log)
         hf.connect()
-        preset = air_scan_preset(external_rate)
+        if single_detector:
+            preset = hf.load_preset(HF2_PRESET)
+            preset = HF2LIPreset(preset.name, deepcopy(preset.settings))
+            preset.settings['pll']['freqcenter_hz'] = external_rate
+        else:
+            preset = air_scan_preset(external_rate)
         hf.apply_preset(preset)
         configured = hf.export_settings_snapshot(preset=preset)
         def read_input_status(context):
-            status = hf_input_status(hf)
+            status = hf_input_status(hf, single_detector=single_detector)
             record.setdefault('hf2li_input_checks', []).append({
                 'context': context, 'timestamp_utc': datetime.now(timezone.utc).isoformat(), 'status': status})
-            for warning in clipping_warnings(status):
+            if single_detector and status.get('status/flags/adcclip/0') != 0:
+                raise RuntimeError('HF2LI CH1 clipping or unreadable clipping status; native data retained')
+            for warning in ([] if single_detector else clipping_warnings(status)):
                 if warning not in record['warnings']:
                     record['warnings'].append(warning)
                     stage('Warning: ' + warning)
             return status
         record['hf2li_input_status_before'] = read_input_status('configured')
         write_json(out / 'hf2li_configured.json', configured)
-        verify_hf_settings(configured, hf.device_id, external_rate)
+        stable_hf = verify_config(configured)
+        if single_detector:
+            record.update(hf2li_device=hf.device_id, hf2li_detector_settings=stable_hf,
+                          acquisition_settings=profile)
+            actual_timing_rate = stable_hf[f'/{hf.device_id}/demods/2/rate']['value']
+            if marker_width * 1e-6 < 2 / actual_timing_rate:
+                raise RuntimeError('HF2LI timing readback cannot resolve the requested marker pulse width')
         # Preserve dark-input status without making clipping an acquisition gate.
         for index in range(3):
             check()
@@ -454,7 +695,7 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
             raise RuntimeError('HF2LI external reference lock was lost')
         record['clockbase_hz'] = hf.get_clockbase()
         check()
-        stage(f'HF2LI 2 V input ranges, rates and {external_rate:g} Hz reference verified; arming MIRcat')
+        stage(f'HF2LI input configuration, rates and {external_rate:g} Hz reference verified; arming MIRcat')
         laser.arm()
         publish_state()
         wait_for_stable_tecs('after_arm')
@@ -476,14 +717,14 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         # Reapply/read back external optical/process triggering after tuning.
         trigger_after_tune = laser.set_external_sweep_trigger_params(
             start_cm1=start_cm1, stop_cm1=stop_cm1,
-            wavelength_trigger_interval_cm1=5, external_process_trigger=True)
+            wavelength_trigger_interval_cm1=marker_interval, external_process_trigger=True)
         for key in ('pulse_mode', 'process_trigger_mode', 'units', 'start', 'stop', 'interval'):
             if not math.isclose(trigger_after_tune[key], trigger[key], abs_tol=.001):
                 raise RuntimeError(f'MIRcat trigger mismatch after tuning: {trigger_after_tune}')
         write_json(out / 'mircat_trigger_after_tune.json', trigger_after_tune)
         record['qcl_before_start'] = verify_qcl()
         read_input_status('before_sweep_setup')
-        hf.start_acquisition(demodulators=(0,2,3))
+        hf.start_acquisition(demodulators=(0,2) if single_detector else (0,2,3))
         poll(.2)
         # Always issue the SDK command: StartSweepScan can report emission on
         # without this explicit enable. CHB optical triggers are still disabled here.
@@ -508,9 +749,10 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         # then reject StartSweepScan while the sweep state re-establishes its TEC
         # setpoint. Require a fresh stable interval after leaving manual tune.
         wait_for_stable_tecs('after_manual_tune_cancel')
-        units['t660_1'].enable_channel('B')
-        probe_recipe['channels']['B']['enabled'] = True
-        verify_unit(units['t660_1'], probe_recipe, 't660_1_optical_trigger_prepared.json')
+        if not pump_rehearsal:
+            units['t660_1'].enable_channel('B')
+            probe_recipe['channels']['B']['enabled'] = True
+            verify_unit(units['t660_1'], probe_recipe, 't660_1_optical_trigger_prepared.json')
         start_errors=[]
         def start():
             try: laser.start_sweep_scan(start_cm1=start_cm1, stop_cm1=stop_cm1, scan_rate_cm1_s=rate, qcl=qcl, repetitions=1)
@@ -526,11 +768,12 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         check()
         if start_errors: raise start_errors[0]
         verify_external_trigger('after_sweep_setup')
+        observe_marker_channel('after_sweep_setup')
         end=time.monotonic()+30
         while not laser.get_scan_waiting_process_trigger():
             poll()
             if time.monotonic()>end: raise TimeoutError('No external process wait state')
-        verify_hf_settings(hf.export_settings_snapshot(preset=preset), hf.device_id, external_rate)
+        verify_config(hf.export_settings_snapshot(preset=preset))
         read_input_status('before_process_trigger')
         record['qcl_before_process'] = verify_qcl()
         write_json(out / 'mircat_waiting_process.json', publish_state())
@@ -549,10 +792,32 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
             if not laser.get_scan_waiting_process_trigger(): raise RuntimeError('MIRcat process wait lost')
             verify_external_trigger('before_process_trigger')
             verify_unit(units['t660_2'], timer_recipe, 't660_2_before_process.json')
-            units['t660_2'].fire_remote_trigger()
+            if pump_rehearsal:
+                units['t660_2'].start_frame_table()
+                record['first_active_frame_readback'] = verify_unit(units['t660_2'],
+                    {'trigger_source': 'EXT', 'predivider': 600_000, 'channels': active_frame['channels']},
+                    't660_2_first_active_frame.json')
+                record['first_active_frame_readback_verified'] = True
+                units['t660_1'].enable_channel('B')
+                probe_recipe['channels']['B']['enabled'] = True
+                verify_unit(units['t660_1'], probe_recipe, 't660_1_before_event_clock.json')
+            if single_detector:
+                poll(.05)
+                timing_stream = demodulator_samples(record, 2)
+                verify_unpumped_sync(timing_stream, establish_baseline=True)
+                record['pre_process_last_timing_tick'] = int(timing_stream['timestamp'][-1])
+            if pump_rehearsal:
+                check()
+                record['frame_trigger_source_enabled_utc'] = datetime.now(timezone.utc).isoformat()
+                units['t660_1'].enable_channel('C')
+            else:
+                units['t660_2'].fire_remote_trigger()
             fired.append(time.monotonic())
-            record['process_trigger_utc'] = datetime.now(timezone.utc).isoformat()
-            stage('PicoScope EXT armed; one process trigger sent, pump outputs disabled')
+            if not pump_rehearsal:
+                record['process_trigger_utc'] = datetime.now(timezone.utc).isoformat()
+            stage('HF2LI stream active; one pump/scan frame and inert terminator enabled' if pump_rehearsal else
+                  ('HF2LI stream active' if single_detector else 'PicoScope EXT armed') +
+                  '; one process trigger sent, pump outputs disabled')
         last_status=[0.]
         def service_capture():
             poll(.05)
@@ -564,17 +829,53 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
                 last_status[0]=time.monotonic()
         def before_transfer():
             check_cancel()
-            stage('Sweep captured; stopping IR before PicoScope transfer…')
+            stage('Sweep captured; stopping IR and timing outputs…' if single_detector else
+                  'Sweep captured; stopping IR before PicoScope transfer…')
             for unit in units.values():
                 stop_unit(unit)
             laser.stop_scan_if_needed()
             laser.turn_emission_off()
             laser.disarm()
-            stage('Transferring both PicoScope detector records…')
-        raw=pico.capture_block_data(after_arm=fire, while_waiting=service_capture,
-                                    before_transfer=before_transfer)
-        stage('PicoScope block transferred; collecting post-sweep HF2LI markers')
-        record['picoscope_metadata'] = {k:v for k,v in raw.items() if k not in ('ch_a_adc','ch_b_adc')}
+            if not single_detector:
+                stage('Transferring both PicoScope detector records…')
+        if single_detector:
+            # A short, continuously drained native capture does not use the
+            # full phase engine's finite resident-history reservation.
+            fire()
+            deadline = time.monotonic() + profile['nominal_sweep_duration_s'] + 20.
+            while True:
+                service_capture()
+                intervals = observed_sweeps()
+                if len(intervals) > 1:
+                    raise RuntimeError('More than one Sweep Active interval observed for one authorized scan')
+                frame_done = True
+                if pump_rehearsal:
+                    frame_state = units['t660_2'].get_frames_status()
+                    record.setdefault('frame_status_observations', []).append(
+                        {'timestamp_utc': datetime.now(timezone.utc).isoformat(), 'state': frame_state})
+                    if frame_state == 'ERROR':
+                        raise RuntimeError('T660 frame engine reported an error during pump rehearsal')
+                    frame_done = frame_state == 'DONE'
+                if len(intervals) == 1 and not laser.get_scan_status()['scan_in_progress'] and frame_done:
+                    break
+                if time.monotonic() >= deadline:
+                    raise TimeoutError('Single sweep did not produce complete Sweep Active and SDK completion')
+            record['observed_sweep_active_ticks'] = [list(item) for item in intervals]
+            if pump_rehearsal:
+                # DONE can be reported when the inert final frame is initiated.
+                # Retain a bounded tail before changing any frame-engine state.
+                service_capture()
+                verify_single_pump_sync(demodulator_samples(record, 2), complete=True)
+                record['shot_counter_before_shutdown'] = units['t660_2'].get_shot_count()
+                if (record['shot_counter_before_shutdown']-record['shot_counter_before']) % 2**32 != 2:
+                    raise RuntimeError('Expected two frame shots: one pump/scan and one inert terminator')
+            before_transfer()
+            stage('Single CH1 sweep complete; retaining post-sweep timing data')
+        else:
+            raw=pico.capture_block_data(after_arm=fire, while_waiting=service_capture,
+                                        before_transfer=before_transfer)
+            stage('PicoScope block transferred; collecting post-sweep HF2LI markers')
+            record['picoscope_metadata'] = {k:v for k,v in raw.items() if k not in ('ch_a_adc','ch_b_adc')}
         # Drain tail data even if Stop was pressed during the blocking USB transfer.
         record['native_chunks'].append(hf.read_acquisition(.3))
         record['scan_status_after_transfer'] = laser.get_scan_status()
@@ -582,11 +883,20 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         record['hf2li_input_status_after'] = read_input_status('after_transfer')
         record['reference_frequency_after_hz'] = hf.get_oscillator_frequency(0)
         record['shot_counter_after'] = units['t660_2'].get_shot_count()
-        if (record['shot_counter_after']-record['shot_counter_before'])%2**32 != 1: raise RuntimeError('Expected exactly one process event')
-        if raw['overflow']: record['picoscope_overflow_warning']=raw['overflow']
-        if raw['total_samples'] != pico_settings['total_samples']: raise RuntimeError('PicoScope partial transfer')
+        expected_shots = 2 if pump_rehearsal else 1
+        if (record['shot_counter_after']-record['shot_counter_before'])%2**32 != expected_shots:
+            raise RuntimeError('Unexpected process/frame shot count')
+        if single_detector:
+            if len(observed_sweeps()) != 1:
+                raise RuntimeError('Expected exactly one complete Sweep Active interval')
+            if pump_rehearsal:
+                verify_single_pump_sync(demodulator_samples(record, 2), complete=True)
+            record['optical_valid'] = True
+        else:
+            if raw['overflow']: record['picoscope_overflow_warning']=raw['overflow']
+            if raw['total_samples'] != pico_settings['total_samples']: raise RuntimeError('PicoScope partial transfer')
         record['capture_completed'] = True
-        verify_hf_settings(hf.export_settings_snapshot(preset=preset), hf.device_id, external_rate)
+        verify_config(hf.export_settings_snapshot(preset=preset))
         check_cancel()
     except Exception as exc:
         error=repr(exc)
@@ -639,7 +949,8 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
                 if configured is None:
                     write_json(out/'hf2li_retention_unverified.json',{'reason':'Preparation failed before configured snapshot; no restoration performed'})
                     return
-                before={'nodes':{p:v for p,v in configured['nodes'].items() if '/sigins/' in p or '/demods/' in p}}
+                before={'nodes':(stable_hf if stable_hf is not None else verify_config(configured)) if single_detector else
+                        {p:v for p,v in configured['nodes'].items() if '/sigins/' in p or '/demods/' in p}}
                 actual={'nodes':{p:{'type':v['type'],'value':hf._get_node(v['type'],p)} for p,v in before['nodes'].items()}}
                 write_json(out/'hf2li_retained_settings.json',actual)
                 comparison=hf.compare_settings_snapshots(before,actual,double_tolerance=1e-8)
@@ -649,6 +960,8 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
             attempt('HF2LI retained settings verification',verify_retained_hf)
             attempt('HF2LI close',hf.close)
         cleanup={'safe_state_and_retained_settings_verified':not cleanup_errors,'fast_hf2li_restoration_performed':False,'errors':cleanup_errors}
+        if single_detector and (error or cleanup_errors):
+            record['optical_valid'] = False
         write_json(out/'cleanup.json',cleanup)
         stage('Saving native data after shutdown')
         save_errors = []
@@ -672,7 +985,8 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
         result = {'path': str(out), 'acquisition_error': error,
                   'acquisition_error_message': record.get('error_message'),
                   'capture_completed': record.get('capture_completed', False), 'cleanup': cleanup,
-                  'native_chunk_count': len(record['native_chunks']), 'pump_events': 0,
+                  'native_chunk_count': len(record['native_chunks']), 'pump_events': record['pump_events'],
+                  'requested_pump_events': 1 if pump_rehearsal else 0,
                   'warnings': record['warnings'],
                   'cancelled': cancel.is_set(), 'publication_eligible': False, 'save_errors': save_errors}
         write_json(out/'result.json', result)
@@ -680,8 +994,18 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
     if record.get('capture_completed') and not save_errors:
         progress('Building detector plots and scan summary…')
         try:
-            from control_app.workflows.air_scan_analysis import analyze_air_scan
-            result['analysis'] = analyze_air_scan(out, record)
+            if pump_rehearsal:
+                from control_app.workflows.single_pump_timing_analysis import analyze_single_pump_timing_rehearsal
+                result['analysis'] = analyze_single_pump_timing_rehearsal(out, record)
+            elif timing_rehearsal:
+                from control_app.workflows.single_detector_timing_analysis import analyze_single_detector_timing_rehearsal
+                result['analysis'] = analyze_single_detector_timing_rehearsal(out, record)
+            elif single_detector:
+                from control_app.workflows.single_detector_scan_analysis import analyze_single_detector_scan
+                result['analysis'] = analyze_single_detector_scan(out, record)
+            else:
+                from control_app.workflows.air_scan_analysis import analyze_air_scan
+                result['analysis'] = analyze_air_scan(out, record)
         except Exception as exc:
             result['analysis_error'] = str(exc)
             write_json(out/'analysis_error.json', {'error': repr(exc)})

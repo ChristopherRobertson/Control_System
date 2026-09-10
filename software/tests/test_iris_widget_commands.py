@@ -123,27 +123,25 @@ def test_direct_entry_moves_down_and_rejects_out_of_range(tmp_path, monkeypatch)
     assert "1.00-11.50 mm" in blocked.message
 
 
-def test_ndyag_alignment_is_compatible_with_iris_motion(tmp_path):
+def test_idle_device_dispatch_allows_iris_motion(tmp_path):
     machine = WorkflowStateMachine(
         operator="test",
         inventory=_inventory(tmp_path),
         run_dir=tmp_path,
         hardware_access=False,
     )
-    machine._active_ui_workflow = SimpleNamespace(workflow_id="ndyag_alignment_10hz")
-
     assert machine.ui_iris_motion_blockers() == []
 
 
-def test_other_active_workflows_still_block_iris_motion(tmp_path):
+def test_mircat_alignment_still_blocks_iris_motion(tmp_path):
     machine = WorkflowStateMachine(
         operator="test",
         inventory=_inventory(tmp_path),
         run_dir=tmp_path,
         hardware_access=False,
     )
-    machine._active_ui_workflow = SimpleNamespace(workflow_id="mircat_detector_alignment")
+    machine._mircat_handler = SimpleNamespace(close_blockers=lambda: ["MIRcat detector alignment is running"])
 
     blockers = machine.ui_iris_motion_blockers()
     assert len(blockers) == 1
-    assert "mircat_detector_alignment" in blockers[0]
+    assert "MIRcat detector alignment" in blockers[0]

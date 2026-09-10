@@ -6,7 +6,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
-def test_eight_tab_gui_shell_instantiates_without_hardware():
+def test_seven_tab_gui_shell_instantiates_without_hardware():
     pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication
 
@@ -16,18 +16,19 @@ def test_eight_tab_gui_shell_instantiates_without_hardware():
     app = QApplication.instance() or QApplication([])
     window = ControlSystemMainWindow(blocked_handler("automated smoke test; no hardware"), persist_settings=False)
     assert window.windowTitle() == "IR Spectroscope Control System"
-    assert window.tabs.count() == 8
+    assert window.tabs.count() == 7
     assert window.save_location.objectName() == "save_location"
-    assert [window.tabs.tabText(index) for index in range(8)] == [
-        "Experiment Builder",
-        "Configured Workflows",
+    assert [window.tabs.tabText(index) for index in range(window.tabs.count())] == [
         "Phase Scan",
+        "Dual-Detector Phase Scan",
         "MIRcat",
         "T660-1",
         "Nd:YAG",
         "OPO Iris",
         "Plotter",
     ]
+    assert not hasattr(window, "experiment_builder_widget")
+    assert not hasattr(window, "workflow_selector_widget")
     assert window.iris_widget.current_diameter_label.text() == "-- mm"
     assert window.iris_widget.target_diameter.objectName() == "iris_target_diameter"
     window.deleteLater()

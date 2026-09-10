@@ -12,29 +12,35 @@ from control_app.workflows.phase_scan import (
 
 def test_requested_example_distinguishes_baseline_and_zero_delay_pump():
     plan = build_phase_scan_plan(PhaseScanSettings())
-    assert plan.scan_duration_s == pytest.approx(0.001)
-    assert plan.phases_per_repetition == 1401
-    assert plan.total_scans == 1402
-    assert plan.total_pump_events == 1401
-    assert plan.first_phase_delay_us == -2000
+    assert plan.settings.start_wavenumber_cm1 == 2000
+    assert plan.settings.stop_wavenumber_cm1 == 1900
+    assert plan.settings.scan_speed_cm1_s == 10_000
+    assert plan.settings.phase_delay_us == 50
+    assert plan.scan_duration_s == pytest.approx(0.010)
+    assert plan.phases_per_repetition == 321
+    assert plan.total_scans == 322
+    assert plan.total_pump_events == 321
+    assert plan.first_phase_delay_us == -11000
     assert plan.last_phase_delay_us == 5000
     assert plan.probe_duty_cycle == pytest.approx(0.30)
     assert plan.settings.mircat_internal_repetition_rate_hz == 2_100_000
     assert plan.settings.mircat_internal_pulse_width_ns == 142
     assert plan.mircat_internal_duty_cycle == pytest.approx(.2982)
     assert plan.mircat_internal_rate_margin_hz == 100_000
-    assert plan.nominal_probe_pulses_per_scan == pytest.approx(2_000)
+    assert plan.nominal_probe_pulses_per_scan == pytest.approx(20_000)
     timing = plan.to_dict()["sequence"]["probe_timing"]
+    assert plan.to_dict()["detector_mode"] == "single_ch1_buffer_blank"
+    assert plan.to_dict()["normalization"]["blank_included_in_total_scans"] is False
     assert timing["t660_1_repetition_rate_hz"] == 2_000_000
     assert timing["mircat_internal_repetition_rate_hz"] == 2_100_000
     assert timing["optical_pulse_trigger_mode"] == "external_trigger"
     assert plan.pump_rate_hz == pytest.approx(10/3)
-    baseline, first, last = (plan.event_at(i) for i in (0, 1, 1401))
+    baseline, first, last = (plan.event_at(i) for i in (0, 1, 321))
     assert not baseline.pump_enabled
     assert baseline.phase_delay_us is None
-    assert first.pump_enabled and first.phase_delay_us == -2000
+    assert first.pump_enabled and first.phase_delay_us == -11000
     assert last.pump_enabled and last.phase_delay_us == 5000
-    assert plan.event_at(401).pump_enabled and plan.event_at(401).phase_delay_us == 0
+    assert plan.event_at(221).pump_enabled and plan.event_at(221).phase_delay_us == 0
 
 
 def test_exploratory_current_and_fast_hf2li_preset_leave_campaign_candidate_unchanged():
@@ -42,14 +48,23 @@ def test_exploratory_current_and_fast_hf2li_preset_leave_campaign_candidate_unch
     from control_app.workflows.phase_scan_data import HF2_PRESET, QCL_CURRENT_MA
 
     assert QCL_CURRENT_MA == pytest.approx(750)
-    assert HF2_PRESET == "exploratory_phase_scan_poc"
+    assert HF2_PRESET == "exploratory_phase_scan_single_detector"
     path = Path(__file__).resolve().parents[2] / "instrument" / "recipes" / "hf2li_presets.yaml"
     presets = yaml.safe_load(path.read_text(encoding="utf-8"))["presets"]
     exploratory = presets[HF2_PRESET]
-    detectors = {item["index"]: item for item in exploratory["demodulators"] if item["index"] in {0, 3}}
-    assert set(detectors) == {0, 3}
+    detectors = {item["index"]: item for item in exploratory["demodulators"] if item["enable"] and item["index"] != 2}
+    assert set(detectors) == {0}
+    assert detectors[0]["adcselect"] == 0
+    assert set(exploratory["signal_inputs"]) == {"ch1"}
+    assert exploratory["signal_inputs"]["ch1"]["differential"] is False
+    assert exploratory["acquisition"]["demodulators"] == [0]
+    assert {item["index"] for item in exploratory["demodulators"] if not item["enable"]} == {1, 3, 4, 5}
+    timing = next(item for item in exploratory["demodulators"] if item["index"] == 2)
+    assert timing["enable"] and timing["rate_sps"] == 200000.
     assert all(item["rate_sps"] == pytest.approx(28_782.894736842107) for item in detectors.values())
     assert all(item["timeconstant_s"] == pytest.approx(50e-6) for item in detectors.values())
+    previous = presets["exploratory_phase_scan_poc"]
+    assert previous["acquisition"]["demodulators"] == [0, 3]
     campaign = presets["campaign_sweep_qualification_candidate"]
     campaign_detectors = {item["index"]: item for item in campaign["demodulators"] if item["index"] in {0, 3}}
     assert all(item["rate_sps"] == pytest.approx(2_000) for item in campaign_detectors.values())
@@ -58,17 +73,17 @@ def test_exploratory_current_and_fast_hf2li_preset_leave_campaign_candidate_unch
 
 def test_repetitions_repeat_nominal_set_after_one_run_baseline():
     plan = build_phase_scan_plan(PhaseScanSettings(repetitions=3))
-    assert plan.total_scans == 4204
-    assert plan.total_pump_events == 4203
+    assert plan.total_scans == 964
+    assert plan.total_pump_events == 963
     assert not plan.event_at(0).pump_enabled
     for rep in range(3):
-        start = 1 + rep * 1401
+        start = 1 + rep * 321
         assert plan.event_at(start).repetition == rep + 1
         assert plan.event_at(start).pump_enabled
-        assert plan.event_at(start).phase_delay_us == -2000
-        assert plan.event_at(start + 1400).phase_delay_us == 5000
+        assert plan.event_at(start).phase_delay_us == -11000
+        assert plan.event_at(start + 320).phase_delay_us == 5000
     with pytest.raises(IndexError):
-        plan.event_at(4204)
+        plan.event_at(964)
     with pytest.raises(IndexError):
         plan.event_at(-1)
     with pytest.raises(FrozenInstanceError):
@@ -82,27 +97,27 @@ def test_internal_timing_is_independently_configurable_without_changing_opportun
     assert plan.mircat_internal_duty_cycle == pytest.approx(.298149)
     assert plan.settings.probe_repetition_rate_hz == 2_000_000
     assert plan.settings.probe_pulse_width_ns == 150
-    assert plan.nominal_probe_pulses_per_scan == 2000
-    assert plan.phases_per_repetition == 1401
+    assert plan.nominal_probe_pulses_per_scan == 20000
+    assert plan.phases_per_repetition == 321
 
 
 @pytest.mark.parametrize("increment,expected_count,last_delay", [
-    (0.1, 70_001, 5000),
-    (3, 2335, 5001),
-    (10_000, 3, 10000),
+    (0.1, 160_001, 5000),
+    (3, 5335, 5001),
+    (10_000, 4, 10000),
     (20_000, 3, 20000),
 ])
 def test_signed_grid_rounds_outward_without_float_rounding(increment, expected_count, last_delay):
     plan = build_phase_scan_plan(PhaseScanSettings(phase_delay_us=increment))
     assert plan.phases_per_repetition == expected_count
     assert plan.last_phase_delay_us == last_delay
-    assert plan.first_phase_delay_us <= -2_000
+    assert plan.first_phase_delay_us <= -11_000
     assert plan.last_phase_delay_us >= 5_000
 
 
 def test_increasing_and_decreasing_scans_have_same_count_but_keep_direction():
     descending = build_phase_scan_plan(PhaseScanSettings())
-    ascending = build_phase_scan_plan(PhaseScanSettings(start_wavenumber_cm1=1940, stop_wavenumber_cm1=1950))
+    ascending = build_phase_scan_plan(PhaseScanSettings(start_wavenumber_cm1=1900, stop_wavenumber_cm1=2000))
     assert descending.phases_per_repetition == ascending.phases_per_repetition
     assert ascending.to_dict()["derived"]["scan_direction"] == "increasing_wavenumber"
     assert descending.to_dict()["derived"]["scan_direction"] == "decreasing_wavenumber"
@@ -113,7 +128,7 @@ def test_increasing_and_decreasing_scans_have_same_count_but_keep_direction():
     ({"scan_speed_cm1_s": float("nan")}, "finite positive"),
     ({"rest_period_s": float("inf")}, "finite positive"),
     ({"probe_repetition_rate_hz": True}, "finite positive"),
-    ({"stop_wavenumber_cm1": 1950}, "must differ"),
+    ({"stop_wavenumber_cm1": 2000}, "must differ"),
     ({"probe_pulse_width_ns": 151}, "30% ceiling"),
     ({"mircat_internal_repetition_rate_hz": 2_000_000}, "higher than the T660-1"),
     ({"mircat_internal_repetition_rate_hz": 1_999_000}, "higher than the T660-1"),
@@ -132,8 +147,19 @@ def test_invalid_or_overlapping_plans_are_rejected(changes, match):
 
 def test_cadence_duration_does_not_add_rest_after_every_scan_or_a_trailing_rest():
     plan = build_phase_scan_plan(PhaseScanSettings())
-    # One baseline, 1401 pumped phases at 300 ms hardware cadence.
-    assert plan.nominal_duration_s == pytest.approx(420.30718)
+    # One sample baseline, 321 pumped phases; the separate buffer blank is excluded.
+    assert plan.frame_period_s == pytest.approx(.3)
+    assert plan.nominal_duration_s == pytest.approx(96.31618)
+    assert plan.nominal_duration_s / 60 == pytest.approx(1.6052696667)
+
+
+def test_explicit_five_microsecond_grid_retains_the_full_wide_range():
+    plan = build_phase_scan_plan(PhaseScanSettings(phase_delay_us=5))
+    assert plan.total_scans == 3202
+    assert plan.total_pump_events == 3201
+    assert plan.first_phase_delay_us == -11000
+    assert plan.last_phase_delay_us == 5000
+    assert plan.nominal_duration_s == pytest.approx(960.31618)
 
 
 def test_large_grid_export_remains_compact_and_never_claims_measurements():
@@ -150,7 +176,8 @@ def test_calibrated_hardware_bounds_use_requested_trajectory_not_output_window()
         "wavenumber_cm1": [1952., 1950., 1945., 1940., 1938.],
         "time_s": [.0001, .0003, .00085, .00145, .0019],
         "time_reference": "process_trigger", "scan_speed_cm1_s": 10000.}
-    plan = build_phase_scan_plan(PhaseScanSettings(), calibrated_trajectory=trajectory)
+    settings = PhaseScanSettings(start_wavenumber_cm1=1950, stop_wavenumber_cm1=1940, phase_delay_us=5)
+    plan = build_phase_scan_plan(settings, calibrated_trajectory=trajectory)
     assert plan.calibrated
     assert plan.trajectory_time_bounds_s == pytest.approx((.0003, .00145))
     assert plan.first_phase_delay_us == -2450
@@ -167,10 +194,11 @@ def test_calibrated_hardware_bounds_use_requested_trajectory_not_output_window()
 def test_sweep_active_trajectory_requires_measured_trigger_offset():
     trajectory = {"source_id": "synthetic-active-v1", "time_s": [0., .0012],
                   "wavenumber_cm1": [1950., 1940.], "time_reference": "sweep_active"}
+    settings = PhaseScanSettings(start_wavenumber_cm1=1950, stop_wavenumber_cm1=1940, phase_delay_us=5)
     with pytest.raises(PhaseScanPlanError, match="measured sweep_active_delay_s"):
-        build_phase_scan_plan(PhaseScanSettings(), calibrated_trajectory=trajectory)
+        build_phase_scan_plan(settings, calibrated_trajectory=trajectory)
     trajectory["sweep_active_delay_s"] = .0004
-    plan = build_phase_scan_plan(PhaseScanSettings(), calibrated_trajectory=trajectory)
+    plan = build_phase_scan_plan(settings, calibrated_trajectory=trajectory)
     assert plan.first_phase_delay_us == -2600
     assert plan.last_phase_delay_us == 4600
 
@@ -199,7 +227,7 @@ def test_partition_uses_fewest_documented_capacity_blocks_without_rescheduling()
     plan = build_phase_scan_plan(PhaseScanSettings(phase_delay_us=.5))
     events = tuple(plan.event_at(index) for index in range(plan.total_scans))
     blocks = partition_frame_blocks(events)
-    assert len(blocks) == 2
+    assert len(blocks) == 4
     assert len(blocks[0]) == 8192
     assert tuple(event for block in blocks for event in block) == events
     assert partition_frame_blocks([1, 2, 3], capacity=2) == ((1, 2), (3,))
@@ -221,25 +249,23 @@ def qt_app():
 def test_widget_updates_plan_and_clears_stale_preview_on_invalid_input(qt_app):
     from control_app.ui.widgets.phase_scan_widget import PhaseScanWidget
     widget = PhaseScanWidget()
-    assert set(widget.inputs) == set(PhaseScanSettings.__dataclass_fields__)
-    assert widget.plan.total_scans == 1402
-    assert "1,402" in widget.summary_values["total"].text()
-    assert widget.phase_table.item(0, 1).text() == "Baseline · pump OFF"
-    assert widget.phase_table.item(1, 2).text() == "-2,000 µs"
-    widget.inputs["repetitions"].setValue(2)
-    assert widget.plan.total_scans == 2803
-    assert "2,803" in widget.summary_values["total"].text()
-    widget.inputs["probe_pulse_width_ns"].setValue(151)
+    assert set(widget.inputs) == {"pump_repetition_rate_hz", "start_wavenumber_cm1", "stop_wavenumber_cm1", "scan_speed_cm1_s", "phase_delay_us", "pre_pump_ms", "post_pump_ms"}
+    assert widget.plan.total_scans == 322
+    assert "322" in widget.summary_values["total"].text()
+    assert widget.phase_table.item(0, 1).text() == "Unpumped baseline"
+    assert widget.phase_table.item(1, 2).text() == "-11000 µs"
+    widget.inputs["scan_speed_cm1_s"].setValue(1000)
     assert widget.plan is None
-    assert widget.canvas.points == ()
+    assert "cadence" in widget.validation.text()
     assert widget.phase_table.rowCount() == 0
     assert not widget.save_button.isEnabled()
-    widget.inputs["probe_pulse_width_ns"].setValue(150)
-    assert widget.plan.total_scans == 2803
+    widget.inputs["scan_speed_cm1_s"].setValue(10000)
+    assert widget.plan.total_scans == 322
     assert widget.save_button.isEnabled()
     assert not widget.start_button.isEnabled()
     assert not widget.abort_button.isEnabled()
     assert not widget.command_running()
+    assert not hasattr(widget, "diagnostic_button")
     widget.deleteLater()
 
 
@@ -255,78 +281,75 @@ def test_save_plan_records_corrected_probe_fields_and_no_hardware_authorization(
     assert payload["settings"]["probe_pulse_width_ns"] == 150
     assert payload["settings"]["mircat_internal_repetition_rate_hz"] == 2_100_000
     assert payload["settings"]["mircat_internal_pulse_width_ns"] == 142
-    assert "pump_repetition_rate_hz" not in payload["settings"]
-    assert payload["derived"]["total_scans"] == 1402
-    assert payload["status"] == "PLANNING_ONLY"
+    assert payload["settings"]["pump_repetition_rate_hz"] == 10
+    assert payload["settings"]["start_wavenumber_cm1"] == 2000
+    assert payload["settings"]["stop_wavenumber_cm1"] == 1900
+    assert payload["settings"]["phase_delay_us"] == 50
+    assert payload["derived"]["total_scans"] == 322
+    assert payload["sequence"]["fire_to_qswitch_us"] == 250
+    assert not payload["hf2_selection"]["capability_verified"]
     assert payload["saved_at_utc"].endswith("+00:00")
-    widget.inputs["repetitions"].setValue(2)
+    widget.inputs["phase_delay_us"].setValue(100)
     assert widget.save_status.text() == ""
-    assert payload["settings"]["repetitions"] == 1
     widget.deleteLater()
 
 
 def test_widget_exposes_internal_headroom_separately_from_t660_opportunities(qt_app):
     from control_app.ui.widgets.phase_scan_widget import PhaseScanWidget
     widget = PhaseScanWidget()
-    assert "2,000,000 Hz / 150 ns" in widget.summary_values["probe"].text()
-    assert "2,100,000 Hz / 142 ns" in widget.summary_values["mircat"].text()
-    assert "29.820%" in widget.summary_values["mircat"].text()
-    widget.inputs["mircat_internal_repetition_rate_hz"].setValue(2_000_000)
-    assert widget.plan is None
-    assert not widget.background_button.isEnabled()
-    widget.inputs["mircat_internal_repetition_rate_hz"].setValue(2_100_000)
-    widget.inputs["mircat_internal_pulse_width_ns"].setValue(143)
-    assert widget.plan is None
-    widget.inputs["mircat_internal_pulse_width_ns"].setValue(142)
-    assert widget.plan.nominal_probe_pulses_per_scan == 2000
+    assert "2 MHz external probe" in widget.summary_values["probe"].text()
+    assert "2.1 MHz / 142 ns" in widget.summary_values["probe"].text()
+    assert "250" in widget.summary_values["pump"].text()
+    assert "broadening" in widget.summary_values["resolution"].text()
+    assert "estimated" in widget.summary_values["resolution"].text()
+    assert widget.plan.hf2_selection["temporal_resolution_s"] > widget.settings().phase_delay_us*1e-6
+    assert not widget.hf2_status.text()
+    assert "probe_pulse_width_ns" not in widget.inputs
+    assert widget.plan.nominal_probe_pulses_per_scan == 20000
     widget.deleteLater()
 
 
 def test_background_worker_enables_start_only_after_success(qt_app, monkeypatch, tmp_path):
     import time
-    import numpy as np
+    from dataclasses import replace
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QMessageBox
     from control_app import paths
-    from control_app.workflows.phase_scan_data import Spectrum
-    from control_app.workflows.phase_scan_runner import PhaseScanRunner
+    from control_app.workflows.regular_phase_scan import HF2Capabilities
+    from control_app.workflows.regular_phase_scan_runner import RegularPhaseScanRunner
     from control_app.ui.widgets.phase_scan_widget import PhaseScanWidget
+    from test_regular_phase_scan_data import SimulatedAcquirer
     monkeypatch.setattr(paths, "_selected_save_location", tmp_path)
     monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
-
-    class Acquirer:
-        def prepare(self, *args):
-            return {"current_ma": 1000}
-
-        def prepare_blocks(self, plan, events, cancel):
-            return [tuple(events)]
-
-        def capture_block(self, block, cancel):
-            assert len(block) == 1 and not block[0].pump_enabled
-            spectrum = Spectrum(np.array([2000., 1900.]), np.array([2., 2.]),
-                np.ones(2), np.array([1., 1.01]), None,
-                {"optical_valid": True, "wavenumber_basis": "measured"})
-            return {"test_only": True}, [(block[0], spectrum)]
-
-        def close(self):
-            pass
-
-    widget = PhaseScanWidget(runner=PhaseScanRunner(Acquirer))
+    runner = RegularPhaseScanRunner(lambda: SimulatedAcquirer(blank=True), capabilities=replace(HF2Capabilities(), verified=True))
+    widget = PhaseScanWidget(runner=runner)
+    widget.inputs["stop_wavenumber_cm1"].setValue(1998)
+    widget.inputs["scan_speed_cm1_s"].setValue(1000)
+    widget.inputs["phase_delay_us"].setValue(500)
+    def finish_worker():
+        deadline = time.monotonic()+5
+        while widget.command_running() and time.monotonic() < deadline:
+            time.sleep(.01)
+            qt_app.processEvents()
+        assert not widget.command_running()
     assert widget.background_button.isEnabled()
     assert not widget.start_button.isEnabled()
     widget.background_button.click()
     assert widget.command_running() and widget.abort_button.isEnabled()
-    deadline = time.monotonic()+3
-    while widget.command_running() and time.monotonic() < deadline:
-        QTest.qWait(10)
-    assert not widget.command_running()
-    assert widget.start_button.isEnabled()
-    assert widget.canvas.y_label == "Background S₀/R₀"
-    assert "sample/reference ratio" in widget.scan_status.text()
-    widget.inputs["phase_delay_us"].setValue(10)
-    assert widget.start_button.isEnabled()
-    widget.inputs["probe_pulse_width_ns"].setValue(140)
+    finish_worker()
+    assert widget.test_button.isEnabled()
     assert not widget.start_button.isEnabled()
+    runner.acquirer_factory = SimulatedAcquirer
+    widget.test_button.click()
+    finish_worker()
+    assert widget.views.currentIndex() == 1
+    assert widget.review_checkbox.isEnabled()
+    assert not widget.start_button.isEnabled()
+    widget.review_checkbox.setChecked(True)
+    assert widget.start_button.isEnabled()
+    widget.inputs["phase_delay_us"].setValue(1000)
+    assert not widget.start_button.isEnabled()
+    assert "phase_delay_us" in widget.execution.text()
     widget.deleteLater()
 
 
@@ -364,7 +387,8 @@ def test_completed_surface_uses_absorbance_vertical_and_time_depth(qt_app):
     axes = widget._surface.figure.axes[0]
     assert axes.get_xlabel().startswith("Wavenumber")
     assert axes.get_ylabel() == "Absorbance"
-    assert axes.get_zlabel() == "Time after pump (ms)"
-    assert axes._vertical_axis == 1  # Matplotlib Y axis.
-    assert widget.plot_stack.currentWidget() is widget._surface
+    assert axes.get_zlabel() == "Electrical sync time (ms)"
+    assert axes._vertical_axis == 1
+    assert widget.views.currentWidget() is widget._surface
+    assert len(widget._surface.figure.axes) == 3
     widget.deleteLater()

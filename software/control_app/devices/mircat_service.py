@@ -428,6 +428,33 @@ class MircatService:
             "MIRcatSDK_StartSweepScan",
         )
 
+    def get_sweep_parameters(self) -> dict[str, Any]:
+        """Read the controller's accepted sweep without starting another scan.
+
+        Official MIRcatSDK.h SweepFunctions provides these getters but no
+        standalone sweep-speed setter. Read them after external-trigger sweep
+        setup, before enabling probe/frame triggers.
+        """
+        result = {}
+        for key, name in (("start_cm1", "MIRcatSDK_GetSweepStartWW"),
+                          ("stop_cm1", "MIRcatSDK_GetSweepStopWW"),
+                          ("scan_rate_cm1_s", "MIRcatSDK_GetSweepScanSpeed")):
+            if self._sdk is None or not callable(getattr(self._sdk, name, None)):
+                raise MircatConfigurationError(f"Installed MIRcat SDK does not provide {name}")
+            value, units = c_float(), c_uint8()
+            self._check(self._call(name, byref(value), byref(units)), name)
+            if units.value != UNITS_CM1:
+                raise MircatConfigurationError(f"{name} did not return cm^-1 units")
+            result[key] = float(value.value)
+        name = "MIRcatSDK_GetSweepNumScans"
+        if not callable(getattr(self._sdk, name, None)):
+            raise MircatConfigurationError(f"Installed MIRcat SDK does not provide {name}")
+        count = c_uint16()
+        self._check(self._call(name, byref(count)), name)
+        result.update(repetitions=int(count.value), units=UNITS_CM1,
+                      source="MIRcatSDK sweep parameter readbacks")
+        return result
+
     def wait_for_tuned(self, *, timeout_s: float, poll_interval_s: float) -> bool:
         """Poll tuned status until tuned or timeout."""
 
@@ -673,6 +700,26 @@ class MircatService:
             "MIRcatSDK_SetWlTrigParams",
         )
         return self.get_wavelength_trigger_params()
+
+    def get_wavelength_trigger_channel_params(self, channel: int) -> dict[str, Any]:
+        """Read a QCL's marker targets without changing trigger configuration.
+
+        Channels are one-based uint8 values; the SDK checks whether the channel
+        is installed. This optional entry point is absent from some SDK builds.
+        """
+        if isinstance(channel, bool) or not isinstance(channel, int) or not 1 <= channel <= 255:
+            raise ValueError("Wavelength-trigger channel must be an integer from 1 through 255")
+        name = "MIRcatSDK_GetWlTrigChanParams"
+        if self._sdk is None or not callable(getattr(self._sdk, name, None)):
+            raise MircatConfigurationError(f"Installed MIRcat SDK does not provide {name}")
+        units = c_uint8()
+        start, stop, interval = c_float(), c_float(), c_float()
+        count = c_uint16()  # MIRcatSDK.h:2234-2235; return code is uint32, count is uint16.
+        self._check(self._call(name, c_uint8(channel), byref(units), byref(start),
+                               byref(stop), byref(interval), byref(count)), name)
+        return {"channel": channel, "units": int(units.value), "units_name": units_name(int(units.value)),
+                "start": float(start.value), "stop": float(stop.value), "interval": float(interval.value),
+                "num_triggers": int(count.value)}
 
     def get_wavelength_trigger_pulse_width_us(self) -> int:
         """Return the DB9 wavelength-trigger output pulse width in microseconds."""
@@ -989,6 +1036,15 @@ class MircatService:
             c_uint8,
         ]
         sdk.MIRcatSDK_StartSweepScan.restype = c_uint32
+        for name in ("MIRcatSDK_GetSweepStartWW", "MIRcatSDK_GetSweepStopWW", "MIRcatSDK_GetSweepScanSpeed"):
+            function = getattr(sdk, name, None)
+            if function is not None:
+                function.argtypes = [POINTER(c_float), POINTER(c_uint8)]
+                function.restype = c_uint32
+        function = getattr(sdk, "MIRcatSDK_GetSweepNumScans", None)
+        if function is not None:
+            function.argtypes = [POINTER(c_uint16)]
+            function.restype = c_uint32
         sdk.MIRcatSDK_TuneToWW.argtypes = [c_float, c_uint8, c_uint8]
         sdk.MIRcatSDK_TuneToWW.restype = c_uint32
         sdk.MIRcatSDK_GetTuneWW.argtypes = [POINTER(c_float), POINTER(c_uint8), POINTER(c_uint8)]
@@ -1028,6 +1084,11 @@ class MircatService:
             POINTER(c_uint32),
         ]
         sdk.MIRcatSDK_GetWlTrigParams.restype = c_uint32
+        channel_trigger = getattr(sdk, "MIRcatSDK_GetWlTrigChanParams", None)
+        if channel_trigger is not None:
+            channel_trigger.argtypes = [c_uint8, POINTER(c_uint8), POINTER(c_float),
+                                        POINTER(c_float), POINTER(c_float), POINTER(c_uint16)]
+            channel_trigger.restype = c_uint32
         sdk.MIRcatSDK_SetWlTrigParams.argtypes = [
             c_uint8,
             c_uint8,

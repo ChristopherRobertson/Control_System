@@ -52,26 +52,20 @@ trains/frames, and the separate T660-2 10 MHz clock distribution. MIRcat Sweep
 Active feeds HF2LI DIO21 and PicoScope EXT. Both D outputs and HF2LI DIO1 are
 unwired; no workflow automatically assigns a spare channel.
 
-The recipe-driven Workflows tab exposes only entries declared in
-`instrument/recipes/ui_workflows.yaml`. A workflow must validate and save an
-immutable configured snapshot before Run becomes available. Changing an exposed
-setting invalidates that configured state. Workflows requiring MIRcat control
-also require manufacturer-GUI ownership to be released before the application
-opens the SDK connection.
+The desktop exposes Phase Scan, Dual-Detector Phase Scan, MIRcat, T660-1,
+Nd:YAG, OPO Iris, and Plotter. These tabs share command routing, exclusive
+instrument ownership, and safe shutdown. Device communication stays in
+`software/control_app/devices/`; widgets do not duplicate SDK or serial behavior.
+MIRcat control requires manufacturer-GUI ownership to be released before the
+application opens the SDK connection.
 
-The experiment builder uses versioned definitions, a capability registry,
-cross-device constraints, and registered service adapters. Loading, validating,
-editing, and configuring a definition do not access hardware. Execution remains
-gated until the engine has explicit device adapters and a valid immutable plan.
-Device communication stays in `software/control_app/devices/`; definitions and
-widgets do not duplicate SDK or serial behavior.
-
-The [Phase Scan tab](operating_procedures/phase_scan_tab.md) plans and executes
-bounded single-scan phase-series acquisitions using preloaded T660-2 frames,
-Sweep-Active-triggered LabOne histories, and synchronized pump-event records.
-Live acquisition requires promoted timing qualification, verified frame and
-LabOne resident capacity, exclusive ownership, and successful preflight. Its
-operational output classification does not establish campaign readiness.
+The [Phase Scan](operating_procedures/phase_scan_tab.md) and
+[Dual-Detector Phase Scan](operating_procedures/dual_detector_phase_scan_tab.md)
+tabs retain their own acquisition plans, preliminary review, and saved data.
+They execute continuous sequences using preloaded T660-2 frames,
+Sweep-Active-triggered LabOne histories, and electrical pump-sync records.
+Acquisition requires supported settings, verified capacity, exclusive ownership,
+and successful preflight. Operational output does not establish campaign readiness.
 
 Every executable workflow must define stop, abort-to-safe, and failure-recovery
 behavior. Reserved or disconnected routes cannot become selectable merely because

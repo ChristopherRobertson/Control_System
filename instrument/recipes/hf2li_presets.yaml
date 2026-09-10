@@ -363,6 +363,127 @@ presets:
       fields: ["x", "y", "r"]
       expected_output: "USER_INPUT_REQUIRED_APPROVED_PHASE_DIRECTORY"
 
+  regular_phase_scan_single_detector:
+    purpose: "Regular single-detector phase scan. Filter/order/rates are resolved from connected HF2LI capabilities and frozen for the complete blank/sample sequence."
+    operator_checks:
+      - "Connect the detector to HF2LI CH1 SIG IN +; load the buffer blank and acquire the complete matching sequence with pump inhibited."
+      - "Load the sample, acquire and review the preliminary unpumped absorption spectrum, then explicitly start the pumped scan."
+      - "Use 250 us FIRE-to-Q-switch timing. Time is relative to recorded electrical pump sync; optical arrival is not calibrated."
+      - "Retain controller markers and native CH1/DIO records; unsupported coverage remains missing."
+      - "Seed filter values below are retained readbacks for preview. The maintained regular executor replaces them with supported resolved values and verifies actual readbacks."
+    signal_inputs:
+      ch1:
+        index: 0
+        ac: false
+        impedance_50ohm: true
+        differential: false
+        range_v: 1.0
+    pll:
+      index: 0
+      enable: true
+      adcselect: 4
+      freqcenter_hz: 2000000.0
+      harmonic: 1
+      order: 4
+      adcthreshold: 0
+    demodulators:
+      - index: 0
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.00004999538607626059
+        rate_sps: 28782.894736842107
+        trigger: 0
+        enable: true
+      - index: 2
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.0010018887078828383
+        rate_sps: 230263.15789473685
+        trigger: 0
+        enable: true
+      - index: 1
+        enable: false
+      - index: 3
+        enable: false
+      - index: 4
+        enable: false
+      - index: 5
+        enable: false
+    acquisition:
+      demodulators: [0]
+      timing_demodulator_api_index: 2
+      fields: ["x", "y", "r"]
+      detector_mode: single_ch1_buffer_blank
+      reference_source: sequence_matched_buffer_blank
+      read_policy: deferred
+      expected_output: "Phase Scan/<UTC date>/<run id>"
+
+  exploratory_phase_scan_single_detector:
+    purpose: "Temporary single-detector phase reconstruction; CH1 signal divided by a previously acquired buffer-blank spectrum. Exploratory only."
+    operator_checks:
+      - "Connect the single detector to HF2LI CH1 SIG IN + (API signal input 0); CH2 is unused."
+      - "Capture a pump-blocked buffer blank before installing the sample, with identical scan range, direction, speed and HF2LI settings."
+      - "Inspect positive, unsaturated CH1 signal and retain the native buffer blank as the spectral ratio denominator."
+      - "Retain the unpumped sample baseline separately; current output is absorbance relative to the buffer blank, without baseline subtraction."
+      - "Keep the T660 probe clock and DIO0 reference, DIO17 pump sync, DIO21 Sweep Active and DIO22 marker wiring unchanged."
+      - "Verify CH1 detector readback at 28782.894736842107 Sa/s; retain actual timing rate after LabOne quantization."
+    signal_inputs:
+      ch1:
+        index: 0
+        ac: false
+        impedance_50ohm: true
+        differential: false
+        range_v: 1.0
+    pll:
+      index: 0
+      enable: true
+      adcselect: 4
+      freqcenter_hz: 2000000.0
+      harmonic: 1
+      order: 4
+      adcthreshold: 0
+    demodulators:
+      - index: 0
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.00005
+        rate_sps: 28782.894736842107
+        trigger: 0
+        enable: true
+      # DIO observation remains independent of the single optical stream.
+      # Fixed for blank and sample; changing phase increment never changes it.
+      - index: 2
+        adcselect: 0
+        oscselect: 0
+        harmonic: 1
+        order: 4
+        timeconstant_s: 0.001
+        rate_sps: 200000.0
+        trigger: 0
+        enable: true
+      - index: 1
+        enable: false
+      - index: 3
+        enable: false
+      - index: 4
+        enable: false
+      - index: 5
+        enable: false
+    acquisition:
+      duration_s: 5.0
+      demodulators: [0]
+      timing_demodulator_api_index: 2
+      fields: ["x", "y", "r"]
+      detector_mode: single_ch1_buffer_blank
+      reference_source: prior_buffer_blank
+      expected_output: "EXPLORATORY_PHASE_SCAN_RUN_DIRECTORY"
+
   exploratory_phase_scan_poc:
     purpose: "Disposable MbCO single-scan phase-delay proof of concept; not a campaign-qualified detector configuration and not eligible for publication."
     operator_checks:
