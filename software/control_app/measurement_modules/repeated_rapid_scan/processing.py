@@ -362,7 +362,7 @@ def build_baseline(movie: NativeMovie, *, kind: str | None = None,
     return SpectralBaseline(record_id or f"{movie.movie_id}-{kind or 'baseline'}", movie.mode, movie.condition_id,
                             tuple(spectra), kind or ("q0" if movie.mode == "dual" else "single_baseline"),
                             movie.status == "complete" and reconstructed.status != "rejected" and bool(spectra) and complete_support, accepted,
-                            movie.metadata.get("compatibility", {}), {"source_movie_id": movie.movie_id,
+                            movie.metadata.get("compatibility_contract", movie.metadata.get("compatibility", {})), {"source_movie_id": movie.movie_id,
                             "pre_pump_only": pre_pump_only, "analysis_version": ANALYSIS_VERSION,
                             "trajectory_calibration_ids_by_direction":{
                                 direction:tuple(dict.fromkeys(s.trajectory.calibration_id for s in movie.scans if s.trajectory.direction==direction))
