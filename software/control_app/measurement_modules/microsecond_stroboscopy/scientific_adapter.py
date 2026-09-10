@@ -176,6 +176,11 @@ class MicrosecondScientificAdapter:
             # unobserved state of records retained before that first event.
             for key, value in self._instrument_original.items():
                 actual["instrument_state"].setdefault(key, value)
+            if kind in ("blank","preliminary"):
+                # Keep a candidate until acquisition can compare the actual SDK
+                # optical width at each wavelength. This plan is only a request.
+                for entry in (expected,actual):
+                    entry.get("settings",{}).get("timing",{}).pop("mircat_pulse_width_ns",None)
             errors.extend(compatibility_mismatches(expected, actual))
         return errors
 

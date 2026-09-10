@@ -106,22 +106,26 @@ class Timer:
 
 class Laser:
     def __init__(self,bus):
-        self.bus=bus;self.emission=False;self.armed=False;self.wave=1945.;self.rate=1e6;self.width=100.;self.current=100.
+        self.bus=bus;self.emission=False;self.armed=False;self.wave=1945.;self.rate=getattr(bus,"internal_rate_hz",2e6);self.width=getattr(bus,"internal_width_ns",100.);self.current=100.
         bus.laser=self;self.initialized=False;self.deinitialized=False;self.scanning=False
+        self.qcl_calls=[];self.pulse_writes=[];self.tunes=[];self.emission_starts=0
         self.trigger={"pulse_mode":0,"process_trigger_mode":0,"start":1945.,"stop":1945.,"interval":0.,"units":1,"dwell_us":0,"after_off_us":0}
     def initialize(self):self.initialized=True
     def deinitialize(self):self.deinitialized=True
     def read_state(self):return {"armed":self.armed,"emission_on":self.emission,
         "scan_in_progress":self.scanning,"scan_active":self.scanning,"scan_paused":False,"scan_waiting_process_trigger":False}
+    def is_laser_armed(self):return self.armed
+    def get_scan_status(self):return {"scan_in_progress":self.scanning,"scan_active":self.scanning,"scan_paused":False}
+    def get_scan_waiting_process_trigger(self):return False
     def get_wavelength_trigger_params(self):return deepcopy(self.trigger)
     def stop_scan_if_needed(self):self.scanning=False;return 0
     def turn_emission_off(self):self.emission=False
-    def get_num_installed_qcls(self):return 1
-    def get_qcl_tuning_range(self,qcl):return {"qcl":qcl,"min_cm1":1900.,"max_cm1":2000.}
-    def get_qcl_pulse_rate(self,qcl):return self.rate
-    def get_qcl_pulse_width(self,qcl):return self.width
-    def get_qcl_current(self,qcl):return self.current
-    def get_qcl_current_limits(self,qcl):return 0.,500.
+    def get_num_installed_qcls(self):return getattr(self.bus,"reported_qcl_count",1)
+    def get_qcl_tuning_range(self,qcl):self.qcl_calls.append(("tuning_range",qcl));return {"qcl":getattr(self.bus,"reported_qcl_id",qcl),"min_cm1":1900.,"max_cm1":2000.}
+    def get_qcl_pulse_rate(self,qcl):self.qcl_calls.append(("pulse_rate",qcl));return self.rate
+    def get_qcl_pulse_width(self,qcl):self.qcl_calls.append(("pulse_width",qcl));return self.width
+    def get_qcl_current(self,qcl):self.qcl_calls.append(("current",qcl));return self.current
+    def get_qcl_current_limits(self,qcl):self.qcl_calls.append(("current_limits",qcl));return getattr(self.bus,"current_limits",(0.,500.))
     def is_interlock_set(self):return self.bus.interlock
     def is_key_switch_set(self):return True
     def get_system_error_word(self):return 0
@@ -129,8 +133,12 @@ class Laser:
     def arm(self):self.armed=True
     def disarm(self):self.armed=False
     def are_tecs_ready(self):return True
-    def get_qcl_pulse_limits(self,qcl):return {"max_pulse_rate_hz":2e6,"max_pulse_width_ns":500.,"max_duty_cycle":30.}
+    def get_qcl_pulse_limits(self,qcl):
+        self.qcl_calls.append(("pulse_limits",qcl))
+        return getattr(self.bus,"pulse_limits",{"max_pulse_rate_hz":2e6,"max_pulse_width_ns":500.,"max_duty_cycle":30.})
     def set_qcl_pulse_params(self,*,qcl,pulse_rate_hz,pulse_width_ns,current_ma=None):
+        self.qcl_calls.append(("set_pulse",qcl))
+        self.pulse_writes.append({"qcl":qcl,"pulse_rate_hz":pulse_rate_hz,"pulse_width_ns":pulse_width_ns,"current_ma":current_ma})
         self.rate,self.width=pulse_rate_hz,pulse_width_ns
         if current_ma is not None:self.current=current_ma
     def set_external_trigger_params(self,*,wavenumber_cm1):
@@ -138,8 +146,8 @@ class Laser:
         self.trigger.update(pulse_mode=PULSE_MODE_EXTERNAL_TRIGGER,process_trigger_mode=PROC_TRIG_MODE_INTERNAL)
         return deepcopy(self.trigger)
     def set_wavelength_trigger_params(self,**kwargs):self.trigger.update(kwargs);return deepcopy(self.trigger)
-    def tune_to_wavenumber(self,wavenumber_cm1,*,qcl):self.wave=wavenumber_cm1
-    def start_emission(self):self.emission=True
+    def tune_to_wavenumber(self,wavenumber_cm1,*,qcl):self.qcl_calls.append(("tune",qcl));self.tunes.append((qcl,wavenumber_cm1));self.wave=wavenumber_cm1
+    def start_emission(self):self.emission_starts+=1;self.emission=True
     def get_actual_wavelength(self):return {"value":self.wave,"units":"cm^-1","light_valid":self.emission}
     def is_emission_on(self):return self.emission
 
@@ -189,7 +197,7 @@ class HF:
                 node={"impedance_50ohm":"imp50","differential":"diff","range_v":"range"}.get(key,key)
                 self._set_node("setDouble",f"/{self.device_id}/sigins/{entry['index']}/{node}",int(value) if isinstance(value,bool) else value)
     def get_clockbase(self):return 1_000_000
-    def get_oscillator_frequency(self,index):return 1e6
+    def get_oscillator_frequency(self,index):return float(str(self.bus.probe.recipe["clock"]["frequency"]).lower().removesuffix("hz"))
     def start_acquisition(self,*,demodulators,**kwargs):self.demods=demodulators
     def stop_acquisition(self):self.demods=[]
     def read_acquisition(self,duration_s):
@@ -639,3 +647,250 @@ def test_us_successful_edge_reference_restore_verifies_every_captured_edge(tmp_p
         assert set(observed)==set(restoration["original"][name]["edge_references"])
         assert queries[name]==list(range(1,9))
         assert all(item=={"expected":edge-1,"actual":edge-1} for edge,item in ((int(key),value) for key,value in observed.items()))
+
+
+def _external_probe_settings(rate,width,trigger_width=100.):
+    s=inputs()
+    return replace(s,timing=replace(s.timing,probe_rate_hz=rate,mircat_pulse_width_ns=width,probe_width_ns=trigger_width),
+        manual_overrides=s.manual_overrides+("timing.probe_rate_hz","timing.probe_width_ns","timing.mircat_pulse_width_ns"))
+
+
+def test_us_qcl1_only_despite_reported_channels_and_historical_channel_hints(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    def forbidden_state(self):raise AssertionError("Widget state can read a historical active QCL")
+    monkeypatch.setattr(Laser,"read_state",forbidden_state)
+    context,_,bus,_=setup(tmp_path,installed=True,runtime={"qcl":2,"preferred_qcl":2,
+        "qcl_parameters":[{"qcl":2,"current_ma":400.}],"qcl_current_ma":125.})
+    bus.reported_qcl_count=3;bus.reported_qcl_id=2
+    record=execute(context,inputs(),"preliminary",hardware=True)
+    assert record["disposition"]=="complete"
+    assert bus.laser.qcl_calls and all(qcl==1 for _,qcl in bus.laser.qcl_calls)
+    assert bus.laser.tunes==[(1,1945.)]
+    assert [item["qcl"] for item in record["restoration"]["original"]["mircat"]["qcls"]]==[1]
+    assert bus.laser.pulse_writes[0]["current_ma"]==125.
+    assert record["readbacks"]["mircat_qcl"]==1
+
+
+@pytest.mark.parametrize("rate,width",[(500_000.,150.),(1_000_000.,200.)])
+def test_us_external_probe_parameters_reach_timing_and_optical_width_reaches_sdk(tmp_path,monkeypatch,rate,width):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,_,bus,_=setup(tmp_path,installed=True)
+    bus.internal_rate_hz=1_100_000.;bus.internal_width_ns=100.
+    record=execute(context,_external_probe_settings(rate,width),"preliminary",hardware=True)
+    assert record["disposition"]=="complete" and bus.laser.emission_starts==1
+    for written in bus.laser.pulse_writes:
+        assert written["qcl"]==1 and written["pulse_rate_hz"]==1_100_000.
+    assert bus.laser.pulse_writes[0]["pulse_width_ns"]==width
+    assert bus.laser.pulse_writes[-1]["pulse_width_ns"]==100.
+    actual=record["readbacks"]["mircat_pulse_parameters"]
+    assert actual["external_probe_rate_hz"]==rate and actual["probe_trigger_width_ns"]==100.
+    assert actual["pulse_rate_hz"]==1_100_000. and actual["pulse_width_ns"]==width
+    assert record["readbacks"]["probe_reference_only"]["queries"]["synth_frequency"]["response"]==f"{rate:g}Hz"
+    probe_channels=record["readbacks"]["probe_reference_only"]["channels"]
+    assert _seconds_value(probe_channels["B"]["width_edge"]["response"])==pytest.approx(100.e-9)
+    assert record["actual_settings"]["timing"]["probe_rate_hz"]==rate
+    assert record["actual_settings"]["timing"]["probe_width_ns"]==100.
+    assert record["actual_settings"]["timing"]["mircat_pulse_width_ns"]==width
+
+
+def test_us_explicit_internal_rate_and_visible_optical_width_restore_originals(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,_,bus,_=setup(tmp_path,installed=True,runtime={"mircat_internal_rate_hz":1_500_000.,"mircat_internal_width_ns":120.})
+    bus.internal_rate_hz=1_100_000.;bus.internal_width_ns=100.
+    record=execute(context,_external_probe_settings(500_000.,150.),"preliminary",hardware=True)
+    assert record["disposition"]=="complete"
+    assert bus.laser.pulse_writes[0]["pulse_rate_hz"]==1_500_000.
+    assert bus.laser.pulse_writes[0]["pulse_width_ns"]==150.
+    assert bus.laser.pulse_writes[-1]["pulse_rate_hz"]==1_100_000.
+    assert bus.laser.pulse_writes[-1]["pulse_width_ns"]==100.
+
+
+@pytest.mark.parametrize("limits,current_limits",[
+    ({"max_pulse_rate_hz":1_050_000.,"max_pulse_width_ns":500.,"max_duty_cycle":30.},(0.,500.)),
+    ({"max_pulse_rate_hz":2_000_000.,"max_pulse_width_ns":50.,"max_duty_cycle":30.},(0.,500.)),
+    ({"max_pulse_rate_hz":2_000_000.,"max_pulse_width_ns":500.,"max_duty_cycle":10.},(0.,500.)),
+    ({"max_pulse_rate_hz":2_000_000.,"max_pulse_width_ns":500.,"max_duty_cycle":30.},(0.,99.)),
+])
+def test_us_stricter_vendor_rate_width_duty_and_current_limits_stop_before_emission(tmp_path,monkeypatch,limits,current_limits):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,_,bus,_=setup(tmp_path,installed=True)
+    bus.internal_rate_hz=1_100_000.;bus.pulse_limits=limits;bus.current_limits=current_limits
+    with pytest.raises(AcquisitionFailure,match="installed.*limits"):
+        execute(context,inputs(),"preliminary",hardware=True)
+    assert bus.laser.emission_starts==0
+
+
+@pytest.mark.parametrize("width",[300.000001,301.])
+def test_us_external_probe_above_thirty_percent_is_rejected_before_devices(tmp_path,width):
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    with pytest.raises(AcquisitionFailure,match="duty"):
+        execute(context,_external_probe_settings(1_000_000.,width),"preliminary",hardware=True)
+    assert not bus.created and coordinator.snapshot()["state"]=="free"
+
+
+@pytest.mark.parametrize("width,accepted",[(150.,True),(150.000000001,False)])
+def test_us_internal_thirty_percent_ceiling_overrides_looser_vendor_limit(tmp_path,monkeypatch,width,accepted):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,_,bus,_=setup(tmp_path,installed=True)
+    bus.internal_rate_hz=2_000_000.;bus.internal_width_ns=width
+    bus.pulse_limits={"max_pulse_rate_hz":3_000_000.,"max_pulse_width_ns":500.,"max_duty_cycle":80.}
+    if accepted:
+        record=execute(context,_external_probe_settings(1_000_000.,width),"preliminary",hardware=True)
+        assert record["disposition"]=="complete" and bus.laser.emission_starts==1
+    else:
+        with pytest.raises(AcquisitionFailure,match="duty fraction limit"):
+            execute(context,_external_probe_settings(1_000_000.,width),"preliminary",hardware=True)
+        assert bus.laser.emission_starts==0
+
+
+def test_us_actual_internal_readback_above_duty_ceiling_cannot_hide_in_match_tolerance(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    original=Laser.set_qcl_pulse_params
+    def rounded(self,**kwargs):
+        original(self,**kwargs)
+        if len(self.pulse_writes)==1:self.width=150.000000001
+    monkeypatch.setattr(Laser,"set_qcl_pulse_params",rounded)
+    context,_,bus,_=setup(tmp_path,installed=True)
+    bus.internal_rate_hz=2_000_000.;bus.internal_width_ns=150.
+    with pytest.raises(AcquisitionFailure,match="readback exceeds MIRcat duty fraction") as failed:
+        execute(context,_external_probe_settings(1_000_000.,150.),"preliminary",hardware=True)
+    assert bus.laser.emission_starts==0
+    assert failed.value.record["readbacks"]["mircat_pulse_parameters"]["pulse_width_ns"]==150.000000001
+
+
+@pytest.mark.parametrize("internal_rate",[999_999.,1_000_000.])
+def test_us_internal_rate_requires_headroom_above_external_trigger(tmp_path,monkeypatch,internal_rate):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,_,bus,_=setup(tmp_path,installed=True)
+    bus.internal_rate_hz=internal_rate
+    with pytest.raises(AcquisitionFailure,match="strictly greater than the external"):
+        execute(context,inputs(),"preliminary",hardware=True)
+    assert bus.laser.emission_starts==0
+
+
+def test_us_external_mode_cannot_silently_erase_internal_headroom(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    original=Laser.set_external_trigger_params
+    def reset_rate(self,**kwargs):
+        result=original(self,**kwargs)
+        self.rate=1_000_000.
+        return result
+    monkeypatch.setattr(Laser,"set_external_trigger_params",reset_rate)
+    context,_,bus,_=setup(tmp_path,installed=True)
+    bus.internal_rate_hz=1_000_000.5
+    with pytest.raises(AcquisitionFailure,match="readback must be strictly greater"):
+        execute(context,inputs(),"preliminary",hardware=True)
+    assert bus.laser.emission_starts==0
+
+
+def test_us_observed_t660_frequency_above_optical_duty_boundary_cannot_hide_in_tolerance(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    original=Timer.apply_recipe
+    def round_frequency(self,recipe):
+        result=original(self,recipe)
+        if self.name=="t660_1" and recipe["channels"]["A"]["enabled"]:
+            self.recipe["clock"]["frequency"]="1000000.000000001Hz"
+        return result
+    monkeypatch.setattr(Timer,"apply_recipe",round_frequency)
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    with pytest.raises(AcquisitionFailure,match="duty") as failed:
+        execute(context,_external_probe_settings(1_000_000.,300.),"preliminary",hardware=True)
+    actual=failed.value.record["readbacks"]["probe_reference_only"]["queries"]["synth_frequency"]["response"]
+    assert float(actual.removesuffix("Hz"))>1_000_000.
+    assert bus.laser.emission_starts==0 and coordinator.snapshot()["state"]=="free"
+
+
+def test_us_actual_optical_width_rounding_is_retained_after_tune(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    original=Laser.set_qcl_pulse_params
+    def round_width(self,**kwargs):
+        original(self,**kwargs)
+        if len(self.pulse_writes)==1:self.width=100.0000001
+    monkeypatch.setattr(Laser,"set_qcl_pulse_params",round_width)
+    context,_,_,_=setup(tmp_path,installed=True)
+    record=execute(context,_external_probe_settings(1_000_000.,100.),"preliminary",hardware=True)
+    assert record["requested_settings"]["timing"]["mircat_pulse_width_ns"]==100.
+    assert record["settings"]["timing"]["mircat_pulse_width_ns"]==100.0000001
+    assert record["actual_settings"]["timing"]["mircat_pulse_width_ns"]==100.0000001
+    assert record["native_blocks"][0]["readbacks"]["actual_settings"]["timing"]["mircat_pulse_width_ns"]==100.0000001
+
+
+@pytest.mark.parametrize("different_second_width",[False,True])
+def test_us_optional_optical_width_reuse_waits_for_each_wavelength_sdk_readback(tmp_path,monkeypatch,different_second_width):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    original_tune=Laser.tune_to_wavenumber
+    def tune_with_repeatable_rounding(self,wavenumber_cm1,**kwargs):
+        original_tune(self,wavenumber_cm1,**kwargs)
+        self.width=self.bus.optical_widths[wavenumber_cm1]
+    monkeypatch.setattr(Laser,"tune_to_wavenumber",tune_with_repeatable_rounding)
+    context,coordinator,bus,_=setup(tmp_path,"single",installed=True)
+    s=replace(inputs("single"),spectral_points=(SpectralPoint(1945.),SpectralPoint(1946.)))
+    bus.optical_widths={1945.:100.,1946.:100.0000001}
+    blank=execute(context,s,"blank",hardware=True)
+    assert blank["actual_settings"]["timing"]["mircat_pulse_width_ns"]==100.0000001
+    # The GUI must keep this optional candidate even though its final SDK width
+    # differs from the nominal new request. No source native settings are edited.
+    from control_app.measurement_modules.microsecond_stroboscopy.scientific_adapter import MicrosecondScientificAdapter
+    candidate=deepcopy(blank)
+    candidate["processing"]={"points":[{"wavenumber_cm1":point.wavenumber_cm1,"valid":True} for point in s.spectral_points]}
+    adapter=MicrosecondScientificAdapter(context,SimpleNamespace())
+    assert adapter.reusable(candidate,build_plan(s),kind="blank") is candidate
+    if different_second_width:
+        bus.optical_widths[1946.]=100.0000002
+    record=execute(context,s,"run",hardware=True,blank=candidate)
+    assert record["disposition"]=="complete" and coordinator.snapshot()["state"]=="free"
+    if different_second_width:
+        assert "blank_record" not in record
+        excluded=record["unused_optional_records"]
+        assert len(excluded)==1 and excluded[0]["wavenumber_cm1"]==1946.
+        assert excluded[0]["actual_optical_width_ns"]==100.0000002
+        assert set(excluded[0]["reference_optical_widths_ns"])=={100.0000001}
+        assert excluded[0]["run_id"]==candidate["run_id"] and "Actual MIRcat optical pulse width" in excluded[0]["reason"]
+    else:
+        assert record["blank_record"]["run_id"]==candidate["run_id"]
+        assert not record.get("unused_optional_records")
+    assert candidate["actual_settings"]["timing"]["mircat_pulse_width_ns"]==100.0000001
+    for block in candidate["native_blocks"]:
+        expected=100. if block["wavenumber_cm1"]==1945. else 100.0000001
+        assert block["readbacks"]["mircat_pulse_parameters"]["pulse_width_ns"]==expected
+
+
+def test_us_requested_optical_width_change_drops_optional_preliminary_only_after_actual_tune(tmp_path,monkeypatch):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    context,coordinator,_,_=setup(tmp_path,installed=True)
+    prior_settings=_external_probe_settings(1_000_000.,100.)
+    preliminary=execute(context,prior_settings,"preliminary",hardware=True)
+    changed=_external_probe_settings(1_000_000.,120.)
+    record=execute(context,changed,"run",hardware=True,preliminary=preliminary)
+    assert record["disposition"]=="complete" and coordinator.snapshot()["state"]=="free"
+    assert "preliminary" not in record
+    excluded=record["unused_optional_records"]
+    assert len(excluded)==1 and excluded[0]["kind"]=="preliminary"
+    assert excluded[0]["wavenumber_cm1"]==1945.
+    assert excluded[0]["actual_optical_width_ns"]==120.
+    assert excluded[0]["reference_optical_widths_ns"]==[100.]
+    assert preliminary["settings"]["timing"]["mircat_pulse_width_ns"]==100.
+
+
+@pytest.mark.parametrize("limit_kind",["duty","current"])
+def test_us_tune_induced_stricter_vendor_limits_are_refreshed_before_emission(tmp_path,monkeypatch,limit_kind):
+    monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
+    original=Laser.tune_to_wavenumber
+    def tighten_limits(self,*args,**kwargs):
+        original(self,*args,**kwargs)
+        if limit_kind=="duty":
+            self.bus.pulse_limits={"max_pulse_rate_hz":2_000_000.,"max_pulse_width_ns":500.,"max_duty_cycle":15.}
+        else:
+            self.bus.current_limits=(0.,99.)
+    monkeypatch.setattr(Laser,"tune_to_wavenumber",tighten_limits)
+    context,coordinator,bus,_=setup(tmp_path,installed=True)
+    with pytest.raises(AcquisitionFailure,match="installed.*limits") as failed:
+        execute(context,inputs(),"preliminary",hardware=True)
+    actual=failed.value.record["readbacks"]["mircat_pulse_parameters"]
+    if limit_kind=="duty":
+        assert actual["limits"]["max_duty_cycle"]==15.
+    else:
+        assert actual["current_limits_ma"]==[0.,99.]
+    assert bus.laser.tunes==[(1,1945.)] and bus.laser.emission_starts==0
+    assert all(qcl==1 for _,qcl in bus.laser.qcl_calls)
+    assert failed.value.record["restoration"]["safe_verified"] and coordinator.snapshot()["state"]=="free"

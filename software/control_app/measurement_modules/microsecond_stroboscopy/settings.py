@@ -12,6 +12,17 @@ from typing import Any, Mapping
 
 EXPERIMENT_ID = "microsecond_stroboscopy"
 SETTINGS_VERSION = 1
+MAXIMUM_PROBE_DUTY_FRACTION = 0.30  # Fixed QCL1 ceiling; saved settings cannot relax it.
+UI_MANUAL_OVERRIDE_PATHS = frozenset((
+    "response.hf2_order", "response.hf2_time_constant_s", "response.sample_rate_sps",
+    "response.reference_order", "response.reference_time_constant_s", "response.reference_rate_sps",
+    "response.integration_aperture_s", "timing.probe_rate_hz", "timing.mircat_pulse_width_ns",
+))
+REMOVED_UI_OVERRIDE_PATHS = frozenset((
+    "response.timing_rate_sps", "response.detector_latency_s", "response.jitter_s", "response.time_zero_s",
+    "response.reference_latency_s", "response.reference_alignment_uncertainty_s",
+    "timing.probe_width_ns", "timing.fire_to_q_us",
+))
 
 
 @dataclass(frozen=True)
@@ -92,7 +103,8 @@ class ResponseSettings:
 @dataclass(frozen=True)
 class TimingSettings:
     probe_rate_hz: float = 1_000_000.0
-    probe_width_ns: float = 100.0
+    mircat_pulse_width_ns: float = 100.0  # QCL1 optical pulse width selected through the MIRcat SDK.
+    probe_width_ns: float = 100.0  # T660 electrical trigger width; distinct from MIRcat optical width.
     reference_width_ns: float = 100.0
     frame_input_width_ns: float = 100.0
     probe_delay_ns: float = 0.0
@@ -105,7 +117,7 @@ class TimingSettings:
     command_guard_us: float = 100.0
     timing_quantum_ns: float = 0.01  # T660 Manual F5 pp. 5–6: 10 ps
     clock_frequency_quantum_hz: float = 0.02  # DDS command resolution, Manual p. 10
-    maximum_probe_duty_fraction: float = 0.30
+    maximum_probe_duty_fraction: float = MAXIMUM_PROBE_DUTY_FRACTION  # A stricter selected limit remains effective.
     maximum_pump_rate_hz: float = 10.0
     frame_capacity: int = 8192
     timing_marker_dio_bit: int = 17
@@ -171,6 +183,7 @@ class StroboscopySettings:
     averages: int = 2
     event_spacing_s: float = 1.0
     manual_overrides: tuple[str, ...] = ()
+    historical_overrides: Mapping[str, Any] = field(default_factory=dict)  # Inert provenance from GUI normalization.
     response: ResponseSettings = field(default_factory=ResponseSettings)
     timing: TimingSettings = field(default_factory=TimingSettings)
     identity: SampleIdentity = field(default_factory=SampleIdentity)
@@ -227,7 +240,52 @@ class StroboscopySettings:
         for name in ("delays_us", "promoted_bundle_ids", "calibration_ids", "manual_overrides"):
             if name in data:
                 data[name] = tuple(data[name])
+        if "historical_overrides" in data:
+            from copy import deepcopy
+            data["historical_overrides"] = deepcopy(dict(data["historical_overrides"]))
         return cls(**data)
+
+
+def normalize_ui_settings(settings: StroboscopySettings | Mapping[str, Any]) -> StroboscopySettings:
+    """Prepare GUI inputs without rewriting native records or loaded evidence.
+
+    Former hidden operator overrides cannot steer a new GUI run. Their original
+    values remain as inert provenance keyed by known setting path, rather than an
+    ever-growing history. The native ``from_dict`` path deliberately stays lossless.
+    """
+    if not isinstance(settings, StroboscopySettings):
+        settings = StroboscopySettings.from_dict(settings)
+    data, defaults = settings.to_dict(), StroboscopySettings().to_dict()
+    historical = data["historical_overrides"]
+    active = []
+    removed = []
+    response_changed = False
+    for path in settings.manual_overrides:
+        section, separator, name = path.partition(".")
+        if not separator or section not in ("response", "timing", "reset", "controls", "budget") or name not in defaults[section]:
+            raise ValueError(f"Unknown Advanced override {path!r}")
+        if path not in REMOVED_UI_OVERRIDE_PATHS:
+            # Backend-only limits had no former operator editor. In particular,
+            # do not relax a stricter duty or memory cap while loading a GUI plan.
+            active.append(path)
+            continue
+        historical[path] = data[section][name]
+        removed.append(path)
+        response_changed |= section == "response" and data[section][name] != defaults[section][name]
+        data[section][name] = defaults[section][name]
+    if removed:
+        previous = historical.get("removed_manual_overrides", ())
+        previous = [path for path in previous if isinstance(path, str) and path in REMOVED_UI_OVERRIDE_PATHS] if isinstance(previous, (list, tuple)) else []
+        historical["removed_manual_overrides"] = list(dict.fromkeys((*previous, *removed)))
+    if response_changed and (data["response"]["qualified"] or data["response"]["qualification_id"]):
+        for name in ("qualified", "qualification_id"):
+            historical["response." + name] = data["response"][name]
+            data["response"][name] = defaults["response"][name]
+    if data["delay_order"] != defaults["delay_order"]:
+        historical["delay_order"] = data["delay_order"]
+        data["delay_order"] = defaults["delay_order"]
+    data["manual_overrides"] = active
+    return StroboscopySettings.from_dict(data)
 
 
 def default_settings(mode: str = "single") -> StroboscopySettings:

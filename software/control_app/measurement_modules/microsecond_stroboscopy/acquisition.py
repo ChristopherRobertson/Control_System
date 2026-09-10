@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
+from decimal import Decimal
 from io import StringIO
 import math
 import time
@@ -210,18 +211,21 @@ class InstalledAcquirer:
         self.readbacks["probe_reference_only"] = self._verify_timer(probe, recipe)
         probe.start_continuous_clock()
         self.probe_recipe = deepcopy(program.t6601_recipe)
+        self.readbacks["requested_probe_recipe"]=deepcopy(program.t6601_recipe)
+        observed_probe=self.readbacks["probe_reference_only"]
+        self.probe_recipe["clock"]["frequency"]=_response(observed_probe["queries"],"synth_frequency")
+        self.probe_recipe["channels"]["B"]["width"]=_response(observed_probe["channels"]["B"],"width_edge")
 
         laser = self._create("mircat")
         laser.initialize()
         self.check()
-        self.original["mircat"] = {"state": data(laser.read_state()),
+        self.original["mircat"] = {"state": self._laser_state(),
             "trigger": laser.get_wavelength_trigger_params(), "qcls": []}
         laser.stop_scan_if_needed()
         laser.turn_emission_off()
-        for index in range(1, laser.get_num_installed_qcls()+1):
-            self.original["mircat"]["qcls"].append({"qcl": index,
-                "pulse_rate_hz": laser.get_qcl_pulse_rate(index),
-                "pulse_width_ns": laser.get_qcl_pulse_width(index), "current_ma": laser.get_qcl_current(index)})
+        self.original["mircat"]["qcls"].append({"qcl": 1,
+            "pulse_rate_hz": laser.get_qcl_pulse_rate(1),
+            "pulse_width_ns": laser.get_qcl_pulse_width(1), "current_ma": laser.get_qcl_current(1)})
         self._laser_integrity(require_tuned=False)
         laser.arm()
         self._wait_for(laser.are_tecs_ready, self.profile.get("tune_timeout_s", 45), "MIRcat TEC not ready")
@@ -301,7 +305,8 @@ class InstalledAcquirer:
                 continue
             for node,field in fields.items():
                 self.settings["response"][field]=actual["nodes"][f"/{hf.device_id}/demods/{index}/{node}"]["value"]
-        self.settings["timing"]["probe_rate_hz"]=program.input_frequency_hz
+        self.settings["timing"]["probe_rate_hz"]=float(self.probe_recipe["clock"]["frequency"].lower().removesuffix("hz"))
+        self.settings["timing"]["probe_width_ns"]=float(Decimal(str(_number(self.probe_recipe["channels"]["B"]["width"]))) * Decimal("1e9"))
         self.readbacks["actual_settings"]=deepcopy(self.settings)
         self._wait_for(lambda:math.isclose(hf.get_oscillator_frequency(0),program.input_frequency_hz,rel_tol=.001),
                        10.,"HF2LI did not follow the active DIO0 reference")
@@ -334,6 +339,40 @@ class InstalledAcquirer:
         pll["freqcenter_hz"]=program.input_frequency_hz
         config["pll"]=pll
         return config
+
+    def _laser_state(self):
+        """Physical state without the shared widget's active-QCL pulse reads."""
+        laser=self.devices["mircat"]
+        state={}
+        errors={}
+        for field,callback in (("armed",laser.is_laser_armed),("emission_on",laser.is_emission_on),
+                               ("scan_waiting_process_trigger",laser.get_scan_waiting_process_trigger)):
+            try:
+                state[field]=callback()
+            except Exception as exc:
+                state[field]=None
+                errors[field]=str(exc)
+        try:
+            scan=laser.get_scan_status()
+        except Exception as exc:
+            scan={}
+            errors["scan_status"]=str(exc)
+        for field in ("scan_in_progress","scan_active","scan_paused"):
+            state[field]=scan.get(field)
+        if errors:
+            state["read_errors"]=errors
+        return state
+
+    def _verify_probe_limits(self,rate,width,limits,role="External probe"):
+        numeric=(rate,width,limits["max_pulse_rate_hz"],limits["max_pulse_width_ns"],limits["max_duty_cycle"])
+        if not all(isinstance(value,(float,int)) and math.isfinite(value) and value>0 for value in numeric):
+            raise AcquisitionIntegrityError(f"Invalid {role} parameters or MIRcat QCL 1 limits")
+        duty=Decimal(str(rate))*Decimal(str(width))*Decimal("1e-9")
+        allowed=min(Decimal("0.30"),Decimal(str(self.settings["timing"]["maximum_probe_duty_fraction"])))
+        if duty>allowed:
+            raise AcquisitionIntegrityError(f"{role} exceeds MIRcat duty fraction limit (at most 0.30)")
+        if rate>limits["max_pulse_rate_hz"] or width>limits["max_pulse_width_ns"] or duty*100>Decimal(str(limits["max_duty_cycle"])):
+            raise AcquisitionIntegrityError(f"{role} exceeds installed MIRcat rate/width/duty limits")
 
     def _laser_integrity(self, require_tuned=True):
         laser = self.devices["mircat"]
@@ -369,26 +408,52 @@ class InstalledAcquirer:
         probe.disable_channel("B")
         probe.disable_channel("C")
         laser.turn_emission_off()
-        channels = [laser.get_qcl_tuning_range(i) for i in range(1, laser.get_num_installed_qcls()+1)]
-        matches = [entry for entry in channels if entry["min_cm1"] <= wavenumber <= entry["max_cm1"]]
-        if not matches:
-            raise AcquisitionIntegrityError("No installed QCL covers requested wavenumber")
-        selected = matches[0]["qcl"]
+        selected = 1  # Exactly one installed QCL; saved channel hints cannot reroute it.
+        tuning_range=laser.get_qcl_tuning_range(1)
+        if not tuning_range["min_cm1"]<=wavenumber<=tuning_range["max_cm1"]:
+            raise AcquisitionIntegrityError("Installed QCL 1 does not cover requested wavenumber")
         timing = self.settings["timing"]
         rate = float(str(self.probe_recipe["clock"]["frequency"]).lower().removesuffix("hz"))
-        width = timing.get("probe_pulse_width_ns", timing.get("probe_width_ns"))
+        width = timing["mircat_pulse_width_ns"]
+        trigger_width=timing["probe_width_ns"]
         limits = laser.get_qcl_pulse_limits(selected)
-        if rate > limits["max_pulse_rate_hz"] or width > limits["max_pulse_width_ns"] or rate*width*1e-9*100 > limits["max_duty_cycle"]:
-            raise AcquisitionIntegrityError("Requested probe exceeds installed MIRcat rate/width/duty limits")
+        self._verify_probe_limits(rate,width,limits)
+        # Internal pulse parameters are a separate device constraint. The T660
+        # carrier controls external timing and must retain internal rate headroom.
+        internal_rate=self.profile.get("mircat_internal_rate_hz",laser.get_qcl_pulse_rate(1))
+        internal_width=width
+        self._verify_probe_limits(internal_rate,internal_width,limits,"MIRcat internal pulse")
+        if internal_rate<=rate:
+            raise AcquisitionIntegrityError("MIRcat internal pulse rate must be strictly greater than the external trigger rate")
         current = self.profile.get("qcl_current_ma",laser.get_qcl_current(selected))
         low,high = laser.get_qcl_current_limits(selected)
         if not low<=current<=high:
             raise AcquisitionIntegrityError("Selected MIRcat current exceeds installed QCL limits")
-        laser.set_qcl_pulse_params(qcl=selected, pulse_rate_hz=rate, pulse_width_ns=width,
+        laser.set_qcl_pulse_params(qcl=1, pulse_rate_hz=internal_rate, pulse_width_ns=internal_width,
             current_ma=self.profile.get("qcl_current_ma"))
-        _equal(rate, laser.get_qcl_pulse_rate(selected), "MIRcat pulse rate", tolerance=1e-6)
-        _equal(width, laser.get_qcl_pulse_width(selected), "MIRcat width", tolerance=1e-6)
-        _equal(current,laser.get_qcl_current(selected),"MIRcat QCL current",tolerance=1e-6)
+        def verify_internal():
+            current_limits=laser.get_qcl_current_limits(1)
+            pulse_limits=laser.get_qcl_pulse_limits(1)
+            actual={"qcl":1,"pulse_rate_hz":laser.get_qcl_pulse_rate(1),
+                "pulse_width_ns":laser.get_qcl_pulse_width(1),"current_ma":laser.get_qcl_current(1),
+                "external_probe_rate_hz":rate,"probe_trigger_width_ns":trigger_width,
+                "limits":deepcopy(pulse_limits),"current_limits_ma":list(current_limits),"maximum_duty_fraction":.30}
+            self.readbacks["mircat_qcl"]=1
+            self.readbacks["mircat_pulse_parameters"]=actual
+            _equal(internal_rate,actual["pulse_rate_hz"],"MIRcat internal pulse rate",tolerance=1e-6)
+            _equal(internal_width,actual["pulse_width_ns"],"MIRcat internal width",tolerance=1e-6)
+            _equal(current,actual["current_ma"],"MIRcat QCL 1 current",tolerance=1e-6)
+            self._verify_probe_limits(actual["pulse_rate_hz"],actual["pulse_width_ns"],pulse_limits,"MIRcat internal pulse readback")
+            self._verify_probe_limits(rate,actual["pulse_width_ns"],pulse_limits,"Emitted optical pulse readback")
+            if actual["pulse_rate_hz"]<=rate:
+                raise AcquisitionIntegrityError("MIRcat internal pulse rate readback must be strictly greater than the external trigger rate")
+            if not current_limits[0]<=actual["current_ma"]<=current_limits[1]:
+                raise AcquisitionIntegrityError("MIRcat current readback exceeds installed QCL 1 limits")
+            self.settings["timing"]["probe_rate_hz"]=rate
+            self.settings["timing"]["probe_width_ns"]=trigger_width
+            self.settings["timing"]["mircat_pulse_width_ns"]=actual["pulse_width_ns"]
+            self.readbacks["actual_settings"]=deepcopy(self.settings)
+        verify_internal()
         trigger = laser.set_external_trigger_params(wavenumber_cm1=wavenumber)
         from control_app.devices.mircat_service import PULSE_MODE_EXTERNAL_TRIGGER, PROC_TRIG_MODE_INTERNAL
         _equal(PULSE_MODE_EXTERNAL_TRIGGER, trigger.get("pulse_mode"), "MIRcat external pulse mode")
@@ -396,6 +461,7 @@ class InstalledAcquirer:
         laser.tune_to_wavenumber(wavenumber, qcl=selected)
         self._wait_for(laser.is_tuned, self.profile.get("tune_timeout_s", 45), "MIRcat tune timeout")
         self._laser_integrity()
+        verify_internal()
         self.check()
         laser.start_emission()
         probe.enable_channel("B")
@@ -598,11 +664,13 @@ class InstalledAcquirer:
             if "mircat" in self.original:
                 original = self.original["mircat"]
                 for selected in original["qcls"]:
-                    attempt("MIRcat QCL restore "+str(selected["qcl"]), lambda s=selected: laser.set_qcl_pulse_params(**s))
+                    if selected.get("qcl")==1:
+                        attempt("MIRcat QCL restore 1", lambda s=selected: laser.set_qcl_pulse_params(qcl=1,
+                            **{key:s[key] for key in ("pulse_rate_hz","pulse_width_ns","current_ma")}))
                 fields = ("pulse_mode", "process_trigger_mode", "start", "stop", "interval", "units", "dwell_us", "after_off_us")
                 attempt("MIRcat trigger restore", lambda: laser.set_wavelength_trigger_params(**{k:original["trigger"][k] for k in fields}))
             def verify_laser_safe():
-                state=data(laser.read_state())
+                state=self._laser_state()
                 restored["MIRcat final state"]=state
                 for field in ("armed","emission_on","scan_in_progress","scan_active",
                               "scan_paused","scan_waiting_process_trigger"):

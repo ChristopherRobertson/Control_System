@@ -231,7 +231,7 @@ def resolve_settings(settings: StroboscopySettings | Mapping[str, Any],
         ("response", ResponseSettings(), ("hf2_order", "hf2_time_constant_s", "reference_order", "reference_time_constant_s",
           "sample_rate_sps", "reference_rate_sps", "timing_rate_sps",
           "detector_latency_s", "reference_latency_s", "jitter_s", "time_zero_s", "reference_alignment_uncertainty_s")),
-        ("timing", TimingSettings(), ("probe_rate_hz", "probe_width_ns", "reference_width_ns", "frame_input_width_ns",
+        ("timing", TimingSettings(), ("probe_rate_hz", "mircat_pulse_width_ns", "probe_width_ns", "reference_width_ns", "frame_input_width_ns",
           "probe_delay_ns", "fire_to_q_us", "fire_width_us", "q_switch_width_us", "command_guard_us")),
     ):
         for name in names:
@@ -312,7 +312,7 @@ def acquisition_signature(settings: StroboscopySettings | Mapping[str, Any], *, 
                 signature.pop(key, None)
             signature.get("response", {}).pop("integration_aperture_s", None)
             signature["timing"] = {key: value for key, value in signature.get("timing", {}).items()
-                if key in ("probe_rate_hz", "probe_width_ns", "reference_width_ns", "probe_delay_ns")}
+                if key in ("probe_rate_hz", "mircat_pulse_width_ns", "probe_width_ns", "reference_width_ns", "probe_delay_ns")}
         return signature
     if not isinstance(settings, StroboscopySettings):
         settings = StroboscopySettings.from_dict(settings)
@@ -332,7 +332,7 @@ def acquisition_signature(settings: StroboscopySettings | Mapping[str, Any], *, 
         # detector filtering and native support still must match/be adequate.
         signature["response"].pop("integration_aperture_s", None)
         signature["timing"] = {key: value for key, value in signature["timing"].items()
-            if key in ("probe_rate_hz", "probe_width_ns", "reference_width_ns", "probe_delay_ns")}
+            if key in ("probe_rate_hz", "mircat_pulse_width_ns", "probe_width_ns", "reference_width_ns", "probe_delay_ns")}
     return signature
 
 

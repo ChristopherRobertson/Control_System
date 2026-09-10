@@ -12,7 +12,7 @@ from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING
 import math
 from typing import Any, Callable, Iterable, Mapping
 
-from .settings import StroboscopySettings
+from .settings import MAXIMUM_PROBE_DUTY_FRACTION, StroboscopySettings
 
 UINT32_MAX = 2**32 - 1
 
@@ -128,9 +128,11 @@ def compile_timing(settings: StroboscopySettings, delays_us: Iterable[float] | N
     if not math.isfinite(delay_us):
         raise ValueError("Delay must be finite in microseconds")
     t = settings.timing
-    quantum_s = t.timing_quantum_ns * 1e-9
-    if not math.isclose(quantum_s, 1e-11, abs_tol=1e-20):
+    if not math.isclose(t.timing_quantum_ns * 1e-9, 1e-11, abs_tol=1e-20):
         raise ValueError("Installed T660 delay/width quantum is 10 ps (0.01 ns)")
+    # Use the physical decimal quantum after validation, not a binary unit
+    # conversion such as 0.01*1e-9 that can produce 1.0000000000000001e-11.
+    quantum_s = 1e-11
     if not math.isclose(t.clock_frequency_quantum_hz, .02, abs_tol=1e-12):
         raise ValueError("T660 DDS command frequency quantum is 0.02 Hz")
     frequency = _quantize(t.probe_rate_hz, .02)
@@ -146,15 +148,25 @@ def compile_timing(settings: StroboscopySettings, delays_us: Iterable[float] | N
         raise ValueError("Surelite pump maximum cannot exceed 10 Hz")
     # There is only ONE enabled pump frame. OFF frame spacing is not a pump
     # cadence; the planner checks actual inter-block command separation.
-    if not 0 < t.maximum_probe_duty_fraction <= .30:
-        raise ValueError("MIRcat maximum probe duty fraction must be positive and no greater than 0.30")
+    if not math.isfinite(t.maximum_probe_duty_fraction) or t.maximum_probe_duty_fraction <= 0:
+        raise ValueError("MIRcat selected maximum probe duty fraction must be positive and finite")
+    # Historical plans may declare a larger ceiling. Preserve that input, but
+    # it cannot relax QCL1's unconditional 30% cap. A stricter selection applies.
+    duty_limit = min(Decimal(str(MAXIMUM_PROBE_DUTY_FRACTION)), Decimal(str(t.maximum_probe_duty_fraction)))
     widths = tuple(_quantize(value * 1e-9, quantum_s) for value in
                    (t.reference_width_ns, t.probe_width_ns, t.frame_input_width_ns))
     probe_delay = _quantize(t.probe_delay_ns * 1e-9, quantum_s)
     if probe_delay < 0 or min(widths) <= 0:
         raise ValueError("Probe/reference widths must be positive and probe delay nonnegative after quantization")
-    if widths[1] * frequency > t.maximum_probe_duty_fraction + 1e-12:
-        raise ValueError("Probe width × rate exceeds selected MIRcat duty-cycle bound")
+    if not math.isfinite(t.mircat_pulse_width_ns) or t.mircat_pulse_width_ns <= 0:
+        raise ValueError("MIRcat optical pulse width must be positive and finite")
+    optical_width_s = Decimal(str(t.mircat_pulse_width_ns)) * Decimal("1e-9")
+    requested_duty = optical_width_s * Decimal(str(t.probe_rate_hz))
+    commanded_duty = optical_width_s * Decimal(str(frequency))
+    if requested_duty > duty_limit:
+        raise ValueError(f"Requested MIRcat optical pulse width × repetition rate exceeds QCL1 duty-cycle bound {duty_limit} (30% maximum)")
+    if commanded_duty > duty_limit:
+        raise ValueError(f"Quantized repetition rate × MIRcat optical pulse width exceeds QCL1 duty-cycle bound {duty_limit} (30% maximum)")
     if max(widths[0], widths[1] + probe_delay, widths[2]) + 62.5e-9 > 1 / frequency:
         raise ValueError("T660 probe edges plus 62.5 ns rearm interval exceed the trigger period")
     lead = _quantize(t.fire_to_q_us * 1e-6, quantum_s)

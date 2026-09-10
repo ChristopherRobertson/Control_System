@@ -61,9 +61,8 @@ def _compatible(record, settings, label):
         raise ValueError(f"A complete compatible {label} record is required")
     if record.get("experiment_id") != settings.experiment_id or record.get("mode") != settings.mode:
         raise ValueError(f"{label} experiment/detector mode differs")
-    from .planner import acquisition_signature
     kind="blank" if record.get("kind")=="blank" else "preliminary"
-    if acquisition_signature(record.get("requested_settings",record.get("settings",{})),kind=kind) != acquisition_signature(settings,kind=kind):
+    if _pre_tune_signature(record.get("requested_settings",record.get("settings",{})),kind) != _pre_tune_signature(settings,kind):
         raise ValueError(f"{label} acquisition settings differ")
     if record.get("disposition",record.get("status")) != "complete":
         raise ValueError(f"{label} is interrupted or rejected")
@@ -72,6 +71,28 @@ def _compatible(record, settings, label):
         raise ValueError(f"{label} does not cover every selected wavenumber")
     if record.get("restoration",{}).get("safe_verified") is not True:
         raise ValueError(f"{label} restoration has not been verified")
+
+
+def _pre_tune_signature(settings,kind):
+    from .planner import acquisition_signature
+    signature=acquisition_signature(settings,kind=kind)
+    # SDK optical width is only known after the current wavelength is tuned.
+    signature.get("timing",{}).pop("mircat_pulse_width_ns",None)
+    return signature
+
+
+def _reference_optical_widths(record,wavenumber):
+    """Prefer wavelength-local device observations over the last tune summary."""
+    blocks=[block for block in record.get("native_blocks",[]) if block.get("wavenumber_cm1")==wavenumber]
+    fallback=record.get("actual_settings",record.get("settings",{})).get("timing",{}).get("mircat_pulse_width_ns")
+    widths=[]
+    for block in blocks:
+        readbacks=block.get("readbacks",{})
+        width=readbacks.get("mircat_pulse_parameters",{}).get("pulse_width_ns")
+        if width is None:
+            width=readbacks.get("actual_settings",{}).get("timing",{}).get("mircat_pulse_width_ns",fallback)
+        widths.append(width)
+    return widths or [fallback]
 
 
 def _local_level(block, settings):
@@ -210,7 +231,6 @@ def run_acquisition(context, operation, plan, *, kind="run", cancel=lambda:False
             settings=StroboscopySettings.from_dict(data(acquirer.settings))
             record["actual_settings"]=settings.to_dict()
             record["settings"]=settings.to_dict()
-            from .planner import acquisition_signature
             actual_detector=_detector_readback_signature(record["readbacks"],settings.mode)
             for label,candidate in (("sequential blank",blank),("preliminary",preliminary)):
                 if not isinstance(candidate,dict):
@@ -222,7 +242,7 @@ def run_acquisition(context, operation, plan, *, kind="run", cancel=lambda:False
                 if actual_detector is not None:
                     prior_detector=prior_detector or {}
                     difference=[key for key,value in actual_detector.items() if value is None or prior_detector.get(key)!=value]
-                changed_settings=acquisition_signature(previous,kind=comparison_kind)!=acquisition_signature(settings,kind=comparison_kind)
+                changed_settings=_pre_tune_signature(previous,comparison_kind)!=_pre_tune_signature(settings,comparison_kind)
                 if changed_settings or difference:
                     reason="actual connected acquisition settings differ" if changed_settings else "actual detector receiver/projection settings differ: "+", ".join(difference)
                     record.setdefault("unused_optional_records",[]).append({"kind":label,"reason":reason,"run_id":candidate.get("run_id")})
@@ -263,6 +283,28 @@ def run_acquisition(context, operation, plan, *, kind="run", cancel=lambda:False
                 acquirer.check()
                 wave = point.wavenumber_cm1
                 record["readbacks"]["tune"] = acquirer.tune(wave)
+                # MIRcat optical width is read back during each tune, separately
+                # from the external trigger pulse. Preserve accepted values in
+                # the run as well as the per-block device readbacks.
+                record["actual_settings"] = data(acquirer.settings)
+                record["settings"] = deepcopy(record["actual_settings"])
+                optical_width=record["actual_settings"]["timing"]["mircat_pulse_width_ns"]
+                for label,candidate in (("sequential blank",blank),("preliminary",preliminary)):
+                    if not isinstance(candidate,dict):
+                        continue
+                    prior_widths=_reference_optical_widths(candidate,wave)
+                    if any(not isinstance(value,(float,int)) or isinstance(value,bool) or not math.isfinite(value)
+                           or value!=optical_width for value in prior_widths):
+                        record.setdefault("unused_optional_records",[]).append({"kind":label,"run_id":candidate.get("run_id"),
+                            "source_native_path":candidate.get("native_path"),"wavenumber_cm1":wave,
+                            "reason":"Actual MIRcat optical pulse width differs or is unavailable at this wavenumber",
+                            "actual_optical_width_ns":optical_width,"reference_optical_widths_ns":prior_widths})
+                        if label=="sequential blank":
+                            blank=None
+                            record.pop("blank_record",None)
+                        else:
+                            preliminary=None
+                            record.pop("preliminary",None)
                 baseline_kind = kind if kind in ("blank","preliminary") else "baseline"
                 duration = settings.controls.preliminary_duration_s if kind=="preliminary" else settings.controls.baseline_duration_s
                 baseline = observe(wave,baseline_kind,duration)

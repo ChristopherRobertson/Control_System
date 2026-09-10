@@ -13,7 +13,7 @@ import numpy as np
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QSpinBox, QTabWidget,
+    QLabel, QLineEdit, QPushButton, QSizePolicy, QSpinBox, QTabWidget,
     QVBoxLayout, QWidget,
 )
 
@@ -26,16 +26,13 @@ from .scientific_adapter import MicrosecondScientificAdapter, plain
 from .settings import default_settings
 
 
-def _label(key):
-    return (key.replace("_sps", " (samples/s)").replace("_cm1", " (cm⁻¹)")
-            .replace("_us", " (µs)").replace("_ns", " (ns)")
-            .replace("_hz", " (Hz)").replace("_k", " (K)")
-            .replace("_s", " (s)") if key.endswith(("_sps", "_cm1", "_us", "_ns", "_hz", "_k", "_s"))
-            else key).replace("_", " ").capitalize()
+class _CompactDoubleSpinBox(QDoubleSpinBox):
+    def textFromValue(self, value):
+        return self.locale().toString(value, "g", 7)
 
 
 class MicrosecondSettingsWidget(QWidget):
-    """Essential inputs plus independent, initially automatic advanced fields."""
+    """Essential inputs and continuously visible independent parameter overrides."""
     changed = Signal()
 
     def __init__(self, context, parent=None):
@@ -57,6 +54,7 @@ class MicrosecondSettingsWidget(QWidget):
         self.manual_override_fields = set(self._base.get("manual_overrides", ()))
         layout = QFormLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setVerticalSpacing(4)
         layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.spectral = QLineEdit()
         self.spectral.setObjectName("spectral_points")
@@ -73,41 +71,24 @@ class MicrosecondSettingsWidget(QWidget):
         self.advanced_widget = QWidget()
         advanced = QFormLayout(self.advanced_widget)
         advanced.setContentsMargins(0, 0, 0, 0)
+        advanced.setVerticalSpacing(3)
+        advanced.setHorizontalSpacing(5)
         advanced.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        advanced.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        advanced.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
         fields = [
             ("response.hf2_order", "Sample filter order", ""),
             ("response.hf2_time_constant_s", "Sample time constant", " µs"),
-            ("response.sample_rate_sps", "Sample rate", " Sa/s"),
+            ("response.sample_rate_sps", "Sample rate", " kSa/s"),
         ]
         if context.mode == "dual":
             fields += [("response.reference_order", "Reference filter order", ""),
                        ("response.reference_time_constant_s", "Reference time constant", " µs"),
-                       ("response.reference_rate_sps", "Reference rate", " Sa/s")]
+                       ("response.reference_rate_sps", "Reference rate", " kSa/s")]
         fields += [("response.integration_aperture_s", "Integration aperture", " µs"),
-                   ("response.timing_rate_sps", "Timing sample rate", " Sa/s"),
-                   ("response.detector_latency_s", "Sample latency", " µs"),
-                   ("response.jitter_s", "Timing jitter", " µs"),
-                   ("response.time_zero_s", "Time-zero offset", " µs"),
-                   ("timing.probe_rate_hz", "Probe rate", " Hz"),
-                   ("timing.probe_width_ns", "Probe pulse width", " ns"),
-                   ("timing.fire_to_q_us", "FIRE to Q-switch", " µs")]
-        if context.mode == "dual":
-            fields += [("response.reference_latency_s", "Reference latency", " µs"),
-                       ("response.reference_alignment_uncertainty_s", "Alignment uncertainty", " µs")]
+                   ("timing.probe_rate_hz", "Repetition rate", " kHz"),
+                   ("timing.mircat_pulse_width_ns", "Pulse width", " ns")]
         for path, label, suffix in fields:
             self._add_numeric(advanced, path, label, suffix=suffix)
-        self.off_band = QLineEdit()
-        self.off_band.setObjectName("off_band_wavenumbers")
-        self.off_band.textChanged.connect(self._emit_changed)
-        advanced.addRow("Off-band points (cm⁻¹)", self.off_band)
-        self.delay_order = QComboBox()
-        self.delay_order.addItems(("alternating", "ascending", "descending"))
-        self.delay_order.currentIndexChanged.connect(self._emit_changed)
-        advanced.addRow("Delay order", self.delay_order)
-        restore = QPushButton("Restore automatic settings")
-        restore.clicked.connect(self.restore_automatic)
-        advanced.addRow(restore)
         self.apply_settings(self._base)
 
     @staticmethod
@@ -128,14 +109,18 @@ class MicrosecondSettingsWidget(QWidget):
     def _add_numeric(self, layout, path, label, *, override=True, suffix=""):
         value = self._get(self._base, path)
         scale = 1e6 if path.startswith("response.") and path.endswith("_s") else 1.
+        if path.endswith("_sps") or path == "timing.probe_rate_hz":
+            scale = .001
         self._display_scales[path] = scale
-        editor = QSpinBox() if isinstance(value, int) else QDoubleSpinBox()
+        editor = QSpinBox() if isinstance(value, int) else _CompactDoubleSpinBox()
         if isinstance(editor, QDoubleSpinBox):
             editor.setDecimals(3 if path == "event_spacing_s" else 9 if scale == 1 else 6)
             editor.setRange(-1e12, 1e12)
         else:
             editor.setRange(-1000000, 1000000)
         editor.setKeyboardTracking(False)
+        editor.setMinimumWidth(80)
+        editor.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         editor.setSuffix(suffix)
         editor.setObjectName(path)
         editor.valueChanged.connect(lambda *_: self._field_changed(path))
@@ -146,7 +131,7 @@ class MicrosecondSettingsWidget(QWidget):
         mode = QComboBox()
         mode.addItems(("Auto", "Override"))
         mode.setObjectName("override:" + path)
-        mode.setMaximumWidth(86)
+        mode.setFixedWidth(75)
         mode.currentIndexChanged.connect(lambda *_: self._override_changed(path))
         self.override_modes[path] = mode
         row = QWidget()
@@ -179,7 +164,7 @@ class MicrosecondSettingsWidget(QWidget):
         for path, mode in self.override_modes.items():
             mode.setCurrentIndex(0)
             self._controls[path][0].setEnabled(False)
-        self.manual_override_fields.clear()
+        self.manual_override_fields.difference_update(self.override_modes)
         self._loading = False
         self.changed.emit()
 
@@ -191,19 +176,18 @@ class MicrosecondSettingsWidget(QWidget):
             value = editor.value() / self._display_scales[path]
             self._set(data, path, int(value) if isinstance(original, int) else value)
         waves = [float(text.strip()) for text in self.spectral.text().split(",") if text.strip()]
-        off_band = {float(text.strip()) for text in self.off_band.text().split(",") if text.strip()}
         previous = {point["wavenumber_cm1"]: point for point in self._base["spectral_points"]}
         data["spectral_points"] = [{"wavenumber_cm1": wave,
             "label": previous.get(wave, {}).get("label", "Local band"),
-            "role": "off_band" if wave in off_band else "band"} for wave in waves]
+            "role": previous.get(wave, {}).get("role", "band")} for wave in waves]
         data["delays_us"] = [float(text.strip()) for text in self.delays.text().split(",") if text.strip()]
-        data["delay_order"] = self.delay_order.currentText()
         data["manual_overrides"] = sorted(self.manual_override_fields)
         data["mode"] = self.context.mode
         return data
 
     def apply_settings(self, settings):
-        settings = plain(settings)
+        from .settings import normalize_ui_settings
+        settings = normalize_ui_settings(plain(settings)).to_dict()
         if settings.get("mode", self.context.mode) != self.context.mode:
             raise ValueError("Settings belong to another detector mode")
         self._loading = True
@@ -217,11 +201,9 @@ class MicrosecondSettingsWidget(QWidget):
                     self.override_modes[path].setCurrentIndex(1 if manual else 0)
                     editor.setEnabled(manual)
             self.spectral.setText(", ".join(f"{point['wavenumber_cm1']:g}" for point in settings["spectral_points"]))
-            self.off_band.setText(", ".join(f"{point['wavenumber_cm1']:g}" for point in settings["spectral_points"] if point.get("role") == "off_band"))
             self.delays.setText(", ".join(f"{delay:g}" for delay in settings["delays_us"]))
             self.delays.setCursorPosition(0)
             self.spectral.setCursorPosition(0)
-            self.delay_order.setCurrentText(settings.get("delay_order", "alternating"))
         finally:
             self._loading = False
         self.changed.emit()
@@ -501,6 +483,13 @@ class MicrosecondPanel(CompactMeasurementPanel):
         super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
         self.summary_form.setVerticalSpacing(4)
         self.right_layout.setSpacing(5)
+        self.settings_layout.setSpacing(3)
+        self.settings_layout.setContentsMargins(5, 5, 5, 5)
+        self.advanced_layout.setContentsMargins(8, 8, 8, 8)
+        self.file_layout.setSpacing(3)
+        self.action_layout.setSpacing(3)
+        self.blank_actions_layout.setSpacing(3)
+        self.left_layout.setSpacing(3)
         self.preliminary_button.setText("Preliminary sample/reference" if context.mode == "dual" else "Preliminary sample")
         self.start_button.setText("Start acquisition")
         self.abort_button.setText("Abort")
@@ -537,7 +526,7 @@ class MicrosecondPanel(CompactMeasurementPanel):
         self._timer.setInterval(250)
         self._timer.timeout.connect(self._update_clock)
         self.refresh_plan()
-        self.splitter.setSizes([340, 740])
+        self.splitter.setSizes([380, 700])
 
     def showEvent(self, event):
         super().showEvent(event)

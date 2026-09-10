@@ -81,7 +81,8 @@ def test_us_registration_creates_exact_two_compact_independent_hardware_free_tab
         assert "execution_mode" not in panel.settings_widget._controls
         assert not any("temperature" in field or "qualification" in field for field in panel.settings_widget._controls)
         assert panel.adapter.read_settings()["execution_mode"] == "hardware"
-        assert not panel.advanced_button.isChecked() and panel.advanced_content.isHidden()
+        assert not hasattr(panel, "advanced_button")
+        assert not panel.advanced_content.isCheckable() and not panel.advanced_content.isHidden()
         assert not panel.start_button.isEnabled()
         assert "Device service unavailable" in panel.validation.text()
         assert panel.settings_widget.delays.cursorPosition() == 0
@@ -90,6 +91,7 @@ def test_us_registration_creates_exact_two_compact_independent_hardware_free_tab
         qt_app.processEvents()
         assert panel.width() == 1100 and panel.height() == 780
         assert panel.splitter.sizes()[0] < 400
+        assert panel.advanced_content.isVisible()
         panel.close()
         panel.deleteLater()
 
@@ -125,6 +127,72 @@ def test_us_advanced_overrides_are_independent_and_roundtrip_microseconds(qt_app
     assert controls._controls["response.sample_rate_sps"][0].isEnabled()
     controls.restore_automatic()
     assert not controls.read_settings()["manual_overrides"]
+    panel.deleteLater()
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_us_only_pertinent_overrides_and_exact_mircat_labels(qt_app, context, mode):
+    from PySide6.QtWidgets import QLabel
+    panel = simulated_panel(context, mode)
+    expected = {"response.hf2_order", "response.hf2_time_constant_s", "response.sample_rate_sps",
+                "response.integration_aperture_s", "timing.probe_rate_hz", "timing.mircat_pulse_width_ns"}
+    if mode == "dual":
+        expected |= {"response.reference_order", "response.reference_time_constant_s", "response.reference_rate_sps"}
+    assert set(panel.settings_widget.override_modes) == expected
+    labels = {label.text() for label in panel.settings_widget.advanced_widget.findChildren(QLabel)}
+    assert {"Repetition rate", "Pulse width"} <= labels
+    assert not any("QCL" in label for label in labels)
+    assert not hasattr(panel.settings_widget, "off_band") and not hasattr(panel.settings_widget, "delay_order")
+    panel.deleteLater()
+
+
+def test_us_removed_editors_reset_current_values_and_preserve_historical_provenance(qt_app, context):
+    from control_app.measurement_modules.microsecond_stroboscopy.settings import default_settings
+    panel = simulated_panel(context, "single")
+    settings = panel.adapter.read_settings()
+    settings["response"]["detector_latency_s"] = 4e-6
+    settings["manual_overrides"] = ["response.detector_latency_s", "timing.probe_rate_hz", "timing.probe_width_ns"]
+    settings["timing"]["probe_rate_hz"] = 80000.
+    settings["timing"]["probe_width_ns"] = 150.
+    settings["timing"].pop("mircat_pulse_width_ns")
+    settings["delay_order"] = "descending"
+    settings["identity"]["sample_id"] = "retained-sample"
+    settings["spectral_points"][0]["role"] = "off_band"
+    panel.adapter.apply_settings(settings)
+    panel.settings_widget.restore_automatic()
+    saved = panel.adapter.read_settings()
+    assert saved["manual_overrides"] == []
+    assert saved["response"]["detector_latency_s"] == default_settings("single").response.detector_latency_s
+    assert saved["timing"]["probe_width_ns"] == default_settings("single").timing.probe_width_ns
+    assert saved["timing"]["mircat_pulse_width_ns"] == 100.
+    assert saved["delay_order"] == "alternating"
+    assert saved["historical_overrides"]["response.detector_latency_s"] == 4e-6
+    assert saved["historical_overrides"]["timing.probe_width_ns"] == 150.
+    assert saved["historical_overrides"]["delay_order"] == "descending"
+    assert saved["identity"]["sample_id"] == "retained-sample"
+    assert saved["spectral_points"][0]["role"] == "off_band"
+    panel.settings_widget.save_preferences()
+    reloaded = simulated_panel(context, "single")
+    assert reloaded.adapter.read_settings()["historical_overrides"] == saved["historical_overrides"]
+    assert reloaded.adapter.read_settings()["manual_overrides"] == []
+    panel.deleteLater(); reloaded.deleteLater()
+
+
+def test_us_repetition_rate_and_pulse_width_plumb_to_duty_validation(qt_app, context):
+    panel = simulated_panel(context, "single")
+    fields = panel.settings_widget
+    for path in ("timing.probe_rate_hz", "timing.mircat_pulse_width_ns"):
+        fields.override_modes[path].setCurrentText("Override")
+    fields._controls["timing.probe_rate_hz"][0].setValue(1000.)
+    fields._controls["timing.mircat_pulse_width_ns"][0].setValue(400.)
+    values = fields.read_settings()
+    assert values["timing"]["probe_rate_hz"] == 1e6
+    assert values["timing"]["mircat_pulse_width_ns"] == 400.
+    assert panel.plan is None and "30%" in panel.validation.text()
+    fields._controls["timing.mircat_pulse_width_ns"][0].setValue(100.)
+    assert panel.plan is not None, panel.validation.text()
+    assert panel.plan.settings.timing.probe_rate_hz == 1e6
+    assert panel.plan.settings.timing.mircat_pulse_width_ns == 100.
     panel.deleteLater()
 
 
@@ -177,11 +245,17 @@ def test_us_capability_resolution_keeps_independent_manual_override(qt_app, cont
 
 def test_us_plan_roundtrip_modes_and_scoped_new_run(qt_app, context, tmp_path):
     single, dual = [simulated_panel(context, mode) for mode in ("single", "dual")]
+    for field, value in (("timing.probe_rate_hz", 800.), ("timing.mircat_pulse_width_ns", 150.)):
+        single.settings_widget.override_modes[field].setCurrentText("Override")
+        single.settings_widget._controls[field][0].setValue(value)
     path = tmp_path / "single-plan.json"
     single.save_plan(path);wait_for(qt_app,single)
     single.settings_widget._controls["averages"][0].setValue(1)
     single.load_plan(path);wait_for(qt_app,single)
     assert single.plan.settings.averages == 2
+    assert single.plan.settings.timing.probe_rate_hz == 800000.
+    assert single.plan.settings.timing.mircat_pulse_width_ns == 150.
+    assert single.settings_widget.override_modes["timing.mircat_pulse_width_ns"].currentText() == "Override"
     dual.load_plan(path);wait_for(qt_app,dual)
     assert "mode" in dual.status.text().lower()
     dual.preliminary = record_for(dual)
@@ -202,6 +276,22 @@ def test_us_loaded_blank_is_reusable_without_manual_approval(qt_app, context, tm
     assert panel.adapter.reusable(panel.adapter.blank,panel.plan,kind="blank") is not None
     assert panel.start_button.isEnabled()
     assert panel.views.record is not None
+    panel.deleteLater()
+
+
+def test_us_native_run_loading_keeps_original_hidden_settings(qt_app, context, tmp_path):
+    from control_app.measurement_modules.microsecond_stroboscopy.persistence import save_run
+    panel = simulated_panel(context, "single")
+    current = panel.adapter.read_settings()
+    record = record_for(panel, "preliminary")
+    record["settings"]["timing"]["probe_width_ns"] = 175.
+    record["settings"]["response"]["detector_latency_s"] = 7e-6
+    record["settings"]["manual_overrides"] = ["timing.probe_width_ns", "response.detector_latency_s"]
+    record["settings"]["delay_order"] = "descending"
+    save_run(tmp_path / "historical-native", record)
+    panel.load_run(tmp_path / "historical-native"); wait_for(qt_app, panel)
+    assert panel.views.record["settings"] == record["settings"]
+    assert panel.adapter.read_settings() == current
     panel.deleteLater()
 
 

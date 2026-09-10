@@ -9,8 +9,11 @@ Each tab has its own settings, retained references, results and cancellation.
 
 Enter wavenumbers in cm⁻¹, delays in µs, averages and event spacing. The right
 pane shows the selected detector response, sample rate, delay range and estimated
-time/storage above the plots. **Advanced** contains independent overrides;
-changing one field leaves the other automatic choices active. Device capability
+time/storage above the plots. The framed **Advanced overrides** form is always
+visible. It contains detector filter order, time constant and sample rate,
+integration aperture, **Repetition rate** and **Pulse width**; dual mode also
+exposes the reference detector's filter settings. Changing one field leaves the
+other automatic choices active. Device capability
 checks run as owned operations. Constructing or editing a tab performs no device
 I/O.
 
@@ -36,6 +39,10 @@ developer injection and is used by tests.
 available. New Run clears the displayed result and retains reference candidates
 for compatibility checks on the next operation. Loading a native run does not
 require its historical condition metadata to match the current labels.
+Loading a plan or saved GUI preferences returns former overrides whose controls
+have been removed to automatic defaults and retains their original values as
+historical provenance. Visible overrides keep their independent Auto or explicit
+selection. Loading native measurement evidence preserves its original settings.
 
 ## Acquisition and scientific limits
 
@@ -45,6 +52,20 @@ define precise edges; host waits handle settling, event spacing and completion.
 Frame spacing within one block is distinct from spacing between pump events.
 The compiler checks pulse ordering, quantization, duty, finite-frame capacity,
 capture bounds and transfer/storage capacity.
+
+The installed optical source is QCL1. Acquisition, tuning, pulse settings and
+restoration address QCL1 explicitly; historical device-selection metadata cannot
+route a new operation to another QCL. Wavenumbers must lie within its reported
+tuning range. **Repetition rate** is the emitted optical cadence set by the
+external T660 trigger. **Pulse width** sets the MIRcat SDK optical pulse width;
+the T660 electrical trigger width is a separate automatic setting.
+
+The MIRcat internal pulse rate remains separate, using its connected readback or
+an explicit frozen instrument configuration. It must exceed the external trigger
+rate. Both the external rate and internal rate, each multiplied by the optical
+pulse width in seconds, must stay at or below 0.30 and any stricter selected or
+vendor duty limit. Requested values and actual device readbacks are checked;
+vendor rate/width limits and T660 trigger-timing constraints also apply.
 
 Time and memory estimates include the installed T660 command delays, table setup,
 subscribed acquisition overhead and cumulative native retention. The default
@@ -101,4 +122,8 @@ retained arrays at a writable location after a storage failure; it performs no
 device operation and does not clear an instrument recovery fault.
 
 Software verification uses injected device transports and explicit simulators.
-No physical laser or sample acquisition was performed for this UI overhaul.
+It covers QCL1 routing, separate optical and trigger pulse settings, exact duty
+boundaries and upward readback rounding, saved-plan migration, native settings
+preservation, cancellation and cleanup. Both complete app tabs were rendered at
+1100 × 780 with all override rows visible. No physical laser or sample acquisition
+was performed for this UI overhaul.
