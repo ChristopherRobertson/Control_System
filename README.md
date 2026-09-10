@@ -54,7 +54,7 @@ repository root:
 
 The GUI reads `instrument/hardware_configuration.yaml`,
 `instrument/wiring_map.yaml`, and `instrument/recipes/`; it writes ordinary runs and
-logs below `evidence/experiments/`. Runtime scientific values may come only from a
+logs below `evidence/experiments/`. Instrument calibration values may come only from a
 bundle explicitly marked `PROMOTED` in both the promoted-bundle registry and its
 manifest. A plan, recipe, directory, or registry row never authorizes hardware or
 changes scientific status.
@@ -74,6 +74,12 @@ This checkout includes all six measurement packages, each with single- and
 dual-detector tabs, for nineteen tabs in total. Restart an already-running UI
 after updating the checkout so it discovers the installed packages. Hidden
 measurement pages do not change the existing Phase Scan pages' layout size.
+The twelve new pages use compact scientific inputs and calculated settings with
+independent Advanced overrides. Their operator workflow uses installed devices,
+is temperature-naive, and has no procedural review or approval controls. Actual
+device faults, incompatible data, ownership, cancellation, restoration and native
+preservation remain enforced. Simulated transports remain available to tests;
+raw measurements do not require a promoted calibration merely to be acquired.
 
 The [version 1 module API](software/control_app/measurement_host/README.md)
 specifies the descriptor, two lifecycle handles, scoped context, frozen operation

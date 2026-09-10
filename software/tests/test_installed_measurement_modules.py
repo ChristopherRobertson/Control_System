@@ -26,6 +26,7 @@ def test_all_six_delivered_modules_install_together_without_hardware(monkeypatch
     from PySide6.QtWidgets import QApplication
 
     from control_app.measurement_host.ownership import HardwareCoordinator
+    from control_app.measurement_host.presentation import CompactMeasurementPanel
     from control_app.measurement_host.registry import discover_modules
     from control_app.ui import main_window
     from control_app.ui.contracts import blocked_handler
@@ -69,6 +70,7 @@ def test_all_six_delivered_modules_install_together_without_hardware(monkeypatch
         assert set(features) == set(expected)
         assert len(handles) == 14 and len(features) == 12
         assert window.tabs.count() == 19
+        assert not hasattr(window, "tab_selector")
         assert [window.tabs.tabText(index) for index in range(2)] == ["Phase Scan", "Dual-Detector Phase Scan"]
         assert [window.tabs.tabText(index) for index in range(14, 19)] == ["MIRcat", "T660-1", "Nd:YAG", "OPO Iris", "Plotter"]
         for identity, title in expected.items():
@@ -87,7 +89,17 @@ def test_all_six_delivered_modules_install_together_without_hardware(monkeypatch
         assert len({id(adapter) for adapter in adapters}) == 12
         assert len({id(context) for context in contexts}) == 12
         assert len({id(context.preferences) for context in contexts}) == 12
-        assert len({id(widget.review) for widget in widgets}) == 12
+        for widget, adapter in zip(widgets, adapters):
+            assert isinstance(widget, CompactMeasurementPanel)
+            assert not hasattr(widget, "review")
+            assert not hasattr(widget, "review_checkbox")
+            assert not widget.advanced_button.isChecked()
+            assert widget.advanced_content.isHidden()
+            # Operator pages default to installed instruments. Test simulators
+            # remain explicit backend fixtures, never an accidental UI default.
+            settings = adapter.read_settings()
+            assert adapter.hardware_required("measurement", settings), widget.context.instance_id
+            assert adapter.hardware_required("preliminary", settings), widget.context.instance_id
         for context in contexts:
             assert context.preferences.namespace == f"measurements/{context.experiment_id}/{context.mode}/v1/"
             context.preferences.setValue("installed_module_probe", {"instance_id": context.instance_id})
