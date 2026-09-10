@@ -1,0 +1,301 @@
+"""Production two-tab discovery, guided workflow and independent review sessions."""
+import json
+import os
+from dataclasses import replace
+from pathlib import Path
+import time
+
+import pytest
+import numpy as np
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+pytest.importorskip("PySide6")
+from PySide6.QtWidgets import QApplication
+
+from control_app.measurement_host.context import ContextFactory
+from control_app.measurement_host.ownership import HardwareCoordinator
+from control_app.measurement_host.registry import discover_modules, create_registered_tabs
+from control_app.measurement_host.interchange import InstrumentStateChange, DeviceConfigurationChange
+from control_app.measurement_modules.repeated_rapid_scan.registration import DESCRIPTOR
+from control_app.measurement_modules.repeated_rapid_scan.settings import example_settings
+
+
+@pytest.fixture
+def app():
+    app = QApplication.instance() or QApplication([])
+    yield app
+    app.processEvents()
+
+
+@pytest.fixture
+def tabs(app, tmp_path):
+    coordinator = HardwareCoordinator(tmp_path / "instrument.lock")
+    preferences = {}
+    factory = ContextFactory(save_root_provider=lambda: tmp_path,
+        preference_backend=preferences, ownership=coordinator)
+    result = create_registered_tabs((DESCRIPTOR,), factory)
+    assert not result.issues
+    yield result.handles
+    for handle in result.handles:
+        assert not handle.command_running()
+        handle.widget.deleteLater()
+    app.processEvents()
+
+
+def wait(app, panel, timeout=30):
+    deadline = time.monotonic()+timeout
+    while panel.command_running():
+        app.processEvents()
+        if time.monotonic() > deadline:
+            panel.request_abort("test timeout")
+            pytest.fail(panel.status.text())
+        time.sleep(.005)
+    app.processEvents()
+    return panel.status.text()
+
+
+def small_plan(panel):
+    settings = replace(example_settings(panel.context.mode), phase_offsets_s=(0.,), directions=("forward",),
+                       controls=("probe_only",), pre_scans=3, post_scans=24)
+    panel.adapter.apply_settings(settings.to_dict())
+    panel.refresh_plan()
+    assert panel.plan is not None, panel.validation.text()
+
+
+def test_rrs_actual_pair_discovery_and_construction_are_hardware_free(app, tmp_path):
+    def forbidden(**kwargs):
+        raise AssertionError("Factory invoked while constructing tabs")
+    factory = ContextFactory(real_device_factories={name: forbidden for name in ("hf2li", "mircat", "t660_1", "t660_2")},
+                             save_root_provider=lambda: tmp_path)
+    discovered = discover_modules()
+    assert DESCRIPTOR in discovered.descriptors
+    result = create_registered_tabs((DESCRIPTOR,), factory)
+    assert not result.issues
+    assert [h.title for h in result.handles] == ["Repeated Rapid-Scan Phase Delay", "Dual-Detector Repeated Rapid-Scan Phase Delay"]
+    assert [h.instance_id for h in result.handles] == ["repeated_rapid_scan:single", "repeated_rapid_scan:dual"]
+    single, dual = [h.widget for h in result.handles]
+    assert single.adapter.session is not dual.adapter.session
+    assert single.settings_widget is not dual.settings_widget
+    assert single.context.preferences.namespace == "measurements/repeated_rapid_scan/single/v1/"
+    assert dual.context.preferences.namespace == "measurements/repeated_rapid_scan/dual/v1/"
+    for handle in result.handles:
+        handle.widget.deleteLater()
+
+
+def test_rrs_single_guided_blank_preliminary_measurement_and_saved_loading(app, tabs, tmp_path):
+    panel, sibling = [h.widget for h in tabs]
+    small_plan(panel)
+    with pytest.raises(ValueError, match="blank"):
+        panel.begin("preliminary")
+    panel.begin_auxiliary("blank")
+    wait(app, panel)
+    assert panel.adapter.session.blank, panel.status.text()
+    panel.begin("preliminary")
+    wait(app, panel)
+    assert panel.preliminary is not None, panel.status.text()
+    assert not panel.review.isChecked()
+    panel.review.setChecked(True)
+    panel.begin("measurement")
+    wait(app, panel)
+    assert panel.result is not None, panel.status.text()
+    assert panel.result["status"] == "complete"
+    assert panel.result["processed"]
+    assert sibling.preliminary is None and sibling.result is None
+    path = Path(panel.result["output_path"])
+    assert path.is_relative_to(tmp_path / "measurements" / "repeated_rapid_scan" / "single")
+    assert (path / "run.json").exists()
+    loaded = panel.adapter.load_run(path)
+    assert loaded["run_id"] == panel.result["run_id"]
+    panel.plots.set_result(loaded)
+    panel.plots.scan.set_index(0)
+    panel.plots.scan.input.stepBy(1)
+    assert panel.plots.scan.index == 1
+    export = tmp_path / "native_coordinates.csv"
+    panel.adapter.export_run(export, loaded)
+    assert "time_s,wavenumber_cm1" in export.read_text()
+    settings = panel.adapter.read_settings()
+    panel.new_run()
+    assert panel.adapter.read_settings() == settings
+    assert panel.preliminary is None and panel.result is None and panel.adapter.session.blank is None
+    assert (path / "run.json").exists()
+
+
+def test_rrs_dual_simultaneous_workflow_no_routine_blank(app, tabs):
+    single, panel = [h.widget for h in tabs]
+    small_plan(panel)
+    panel.begin("preliminary")
+    wait(app, panel)
+    assert panel.preliminary is not None, panel.status.text()
+    assert all(scan.reference is not None for m in panel.preliminary["native_movies"] for scan in m.scans)
+    panel.review.setChecked(True)
+    panel.begin("measurement")
+    wait(app, panel)
+    assert panel.result is not None, panel.status.text()
+    assert panel.result["status"] == "complete"
+    assert panel.adapter.session.blank is None
+    assert single.adapter.session.preliminary is None
+
+
+def test_rrs_review_invalidates_precise_changes_restores_without_granting(app, tabs):
+    panel = tabs[1].widget
+    small_plan(panel)
+    panel.begin("preliminary")
+    wait(app, panel)
+    assert panel.preliminary, panel.status.text()
+    panel.review.setChecked(True)
+    original = panel.adapter.read_settings()
+    changed = json.loads(json.dumps(original))
+    changed["condition"]["sample_id"] = "other sample"
+    panel.adapter.apply_settings(changed)
+    panel.refresh_plan()
+    assert panel.preliminary is None and not panel.review.isChecked()
+    assert "sample_id" in panel.validation.text()
+    panel.adapter.apply_settings(original)
+    panel.refresh_plan()
+    assert panel.preliminary is not None
+    assert panel.validation.text() == "" and not panel.review.isChecked()
+    event = InstrumentStateChange("manual:mircat", (panel.context.instance_id,),
+        (DeviceConfigurationChange("mircat", "scan_speed", 10., 11.),), "manual adjustment")
+    panel.instrument_state_changed(event)
+    assert panel.preliminary is None
+    panel.instrument_state_changed(InstrumentStateChange("manual:mircat", (panel.context.instance_id,),
+        (DeviceConfigurationChange("mircat", "scan_speed", 11., 10.),), "restored"))
+    assert panel.preliminary is not None and not panel.review.isChecked()
+
+
+def test_rrs_plan_mode_rejection_and_preserving_preferences(app, tabs, tmp_path):
+    single, dual = [h.widget for h in tabs]
+    small_plan(single)
+    path = tmp_path / "plan.json"
+    single.adapter.save_plan(path, single.adapter.read_settings(), single.plan)
+    assert single.adapter.load_plan(path) == single.adapter.read_settings()
+    with pytest.raises(ValueError, match="detector mode"):
+        dual.adapter.load_plan(path)
+    with pytest.raises(FileExistsError):
+        single.adapter.save_plan(path, single.adapter.read_settings(), single.plan)
+
+
+def test_rrs_native_fit_action_persists_separate_analysis_and_residuals(app, tabs):
+    panel = tabs[1].widget
+    small_plan(panel)
+    panel.begin("preliminary")
+    wait(app, panel)
+    panel.review.setChecked(True)
+    panel.begin("measurement")
+    wait(app, panel)
+    assert panel.result is not None, panel.status.text()
+    original_path = panel.result["output_path"]
+    axis = np.linspace(1897., 1952., 1001)
+    windows = panel.plan.settings.band_windows_cm1
+    shape = sum(np.exp(-.5*((axis-(a+b)/2)/((b-a)/3))**2) for a,b in windows)
+    panel.adapter.fit_model = {
+        "kernel": {"measured": True, "calibration_id": "synthetic-identity-kernel-v1",
+                   "response_basis": "electrical_sync", "delays_s": [0.], "weights": [1.],
+                   "description": "Explicit known-truth simulated response, not installed instrument evidence"},
+        "spectral_template": {"record_id": "synthetic-two-band-template", "description": "Known simulated spectrum",
+                              "wavenumbers_cm1": axis.tolist(), "values": shape.tolist()},
+        "tau_bounds_s": [.08, .3],
+    }
+    panel._fit_movie()
+    wait(app, panel)
+    assert "fit_analysis" in panel.result, panel.status.text()
+    fit = panel.result["fit_analysis"]["fits_by_direction"]["forward"]
+    assert fit.apparent_tau_s == pytest.approx(.15, rel=.02)
+    assert panel.result["output_path"] != original_path
+    assert (Path(original_path)/"run.json").exists()
+    assert "apparent" in panel.fit_summary.text()
+    assert panel.plots.view.currentText() == "Fit residuals"
+
+
+def test_rrs_visible_layout_keeps_summary_alive_and_settings_scrollable(app, tabs):
+    from PySide6.QtWidgets import QScrollArea, QSplitter
+    panel = tabs[1].widget
+    panel.resize(1400, 1050)
+    panel.show()
+    app.processEvents()
+    assert panel.findChild(QSplitter).count() == 2
+    assert panel.summary.isVisible()
+    assert panel._summary_scroll.verticalScrollBar().maximum() > 0
+    assert panel.size().height() <= 1100
+    panel.refresh_plan()
+    assert panel.plan is not None
+    panel.hide()
+
+
+def test_rrs_production_pair_installs_in_main_window_without_sibling_packages(app):
+    from control_app.ui.main_window import ControlSystemMainWindow
+    window = ControlSystemMainWindow(module_discovery=(DESCRIPTOR,))
+    try:
+        titles = [window.tabs.tabText(i) for i in range(window.tabs.count())]
+        assert titles.count("Repeated Rapid-Scan Phase Delay") == 1
+        assert titles.count("Dual-Detector Repeated Rapid-Scan Phase Delay") == 1
+        assert "Phase Scan" in titles and "Dual-Detector Phase Scan" in titles
+    finally:
+        window.deleteLater()
+
+
+def test_rrs_presentation_failure_does_not_strand_completed_worker(app, tabs, monkeypatch):
+    panel = tabs[1].widget
+    small_plan(panel)
+    def fail(_result):
+        raise ValueError("injected plot failure")
+    monkeypatch.setattr(panel.plots, "set_result", fail)
+    panel.begin("preliminary")
+    wait(app, panel)
+    assert "Presentation failed" in panel.status.text()
+    assert panel.worker is None and not panel.close_blockers()
+    assert panel.adapter.session.preliminary is not None
+
+
+def test_rrs_promoted_dual_background_selected_separately_from_q0(app, tmp_path):
+    from types import SimpleNamespace
+    from control_app.measurement_modules.repeated_rapid_scan.data import SpectralBaseline, SpectrumSupport
+    from control_app.measurement_modules.repeated_rapid_scan.persistence import save_baseline
+    root = tmp_path / "promoted-example"
+    background = SpectralBaseline("measured-B", "dual", "example-hrp-room-temperature",
+        (SpectrumSupport("forward", np.array([1898., 1951.]), np.array([1.1, 1.2])),),
+        kind="background", complete=True, accepted=True)
+    save_baseline(root / "balance", background)
+    manifest = {"status": "PROMOTED", "bundle_id": "test-installed-response",
+                "repeated_rapid_scan": {"calibration": {"condition_id": background.condition_id},
+                                        "device_configuration": {}, "background_file": "balance"}}
+    factory = ContextFactory(save_root_provider=lambda: tmp_path,
+        promoted_bundle_loader=lambda _id: SimpleNamespace(bundle_id=manifest["bundle_id"], manifest=manifest, path=root))
+    handles = create_registered_tabs((DESCRIPTOR,), factory).handles
+    try:
+        adapter = handles[1].widget.adapter
+        record = adapter.read_bundle(manifest["bundle_id"])
+        adapter.apply_bundle(record)
+        assert adapter.session.background.record_id == "measured-B"
+        assert adapter.session.blank is None and adapter.session.preliminary is None
+        selected = adapter.selected_records().calibration_records[0]
+        assert "background" not in selected and selected["background_record_id"] == "measured-B"
+    finally:
+        for handle in handles:
+            handle.widget.deleteLater()
+
+
+def test_rrs_storage_failure_keeps_native_until_explicit_preservation(app, tabs, monkeypatch):
+    import control_app.measurement_modules.repeated_rapid_scan.runner as runner_module
+    panel = tabs[1].widget
+    small_plan(panel)
+    original = runner_module.RepeatedRapidScanRunner
+    def fail_save(*args, **kwargs):
+        raise OSError("injected disk full")
+    monkeypatch.setattr(runner_module, "RepeatedRapidScanRunner", lambda context: original(context, saver=fail_save))
+    panel.begin("preliminary")
+    wait(app, panel)
+    retained = panel.adapter.runner.last_result
+    assert retained["native_movies"] and retained["status"] == "preservation_failed"
+    assert panel.close_blockers()
+    panel.new_run()
+    assert panel.adapter.runner.last_result is retained
+    with pytest.raises(ValueError, match="Save retained records"):
+        panel.begin("preliminary")
+    panel._preserve_retained()
+    wait(app, panel)
+    assert retained["recovered_to"]
+    assert (Path(retained["recovered_to"])/"run.json").exists()
+    assert not panel.close_blockers()
+    panel.new_run()
+    assert panel.adapter.runner is None

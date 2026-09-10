@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "experiment_id": "repeated_rapid_scan",
+  "recipe_id": "rrs-finite-movie-t660-v1",
+  "status": "COMPILER_CONTRACT_NOT_AN_OPERATING_RECIPE",
+  "sources": [
+    "references/manuals/T660/Highland Technologies T660 Manual.pdf sections 2, 3.5, 5.3, 5.4",
+    "references/manuals/T660/Highland Technologies T660 Programming Guide.pdf page 92",
+    "references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md",
+    "instrument/wiring_map.yaml"
+  ],
+  "t660_1": {
+    "role": "continuous reference/probe/frame-input clock from explicitly calibrated settings",
+    "A": "HF2LI DIO0 reference",
+    "B": "MIRcat external laser trigger",
+    "C": "T660-2 external trigger input",
+    "D": "disabled and unwired"
+  },
+  "t660_2": {
+    "A": "one positive Fire command per authorized electrical event",
+    "B": "one positive Q-switch command per authorized electrical event",
+    "C": "negative process trigger at every scan opportunity; inactive high",
+    "D": "disabled and unwired",
+    "clock_reference": "10 MHz master",
+    "frame_capacity": 8192,
+    "edge_quantum_s": 1e-11,
+    "loop_count": 0,
+    "train_additional_pulses": 0,
+    "terminal_frame": "One additional finite frame with A/B/C/D all disabled; no scan index or spectral trigger. Count against upload capacity and elapsed duration.",
+    "predivider": "selected measured_scan_period_s * calibrated probe_frequency_hz, validated integer"
+  },
+  "upload": "Use existing T660Service.preload_frame_table; pending-field changes only, STORE acknowledgment progress and cancellation; hold ownership through restoration and preservation.",
+  "timing_basis": "Programmed edges describe the commanded schedule. Aligned native sample timestamps minus independently observed pump timestamps define reconstruction; T660 nominal insertion delay is not an optical calibration.",
+  "stationarity": "Accept an immediate unpumped qualification scan train before arming a whole finite one-pump movie. Qualification has its own all-disabled terminal frame. Also retain every declared pre-pump and pump-crossing scan.",
+  "control_event_counts": {
+    "sample": {"electrical_pump": 1, "sample_optical_pump": "one if independently observed"},
+    "pump_blocked": {"electrical_pump": 1, "sample_optical_pump": 0, "physical_action": "manual pump blocking required"},
+    "probe_only": {"electrical_pump": 0, "sample_optical_pump": 0},
+    "dark": {"electrical_pump": 0, "sample_optical_pump": 0, "physical_action": "manual dark condition required"}
+  },
+  "forbidden": ["repeat Fire/Q-switch in each scan", "software sleep defining pulse edges", "automatic biological pump retry", "circular buffer reuse", "silently splitting a movie", "slowing the scan to fit memory"]
+}
