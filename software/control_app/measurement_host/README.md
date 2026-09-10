@@ -256,6 +256,37 @@ callback errors. Recipients may invalidate their own readiness/review visibly;
 events must never silently replace another tab's settings. No digest matching is
 an operational gate in these APIs.
 
+## Read-only HF2 acquisition health
+
+`HF2LIService.read_acquisition_health(*, reference_pll=0, input_indices=(0, 1))`
+is an additive public device query using the connected service's existing
+ownership checks. Indices are zero-based; no connection, configuration, stream,
+subscription or synchronization changes occur. The JSON-compatible result uses
+`schema_version: "hf2li-acquisition-health/1"` and a host `timestamp_utc`.
+
+`reference_locked` is the selected PLL's lock when its enable state is true;
+disabled, missing or unreadable enable state yields `None`. `clock_locked`
+combines internal clock-generation PLL and digital clock-manager indicators,
+whose documented polarity is inverted: zero means locked. Either known unlock
+gives false, both known locks give true, otherwise the result is `None`.
+`clock_lock_basis` names that scope. `external_clock_selected` reports the
+configured source; `external_reference_locked` remains `None` because these
+nodes do not independently establish physical external-reference lock.
+
+`overload` covers only ADC clipping on the selected signal inputs: true if any
+clips, false if all are known clear, otherwise `None`. `inputs` is keyed by
+zero-based index strings and retains each `input_index`, `adc_clipped` and
+`overload`. `reference` and `clock` retain component states. Successful binary
+integer reads are retained in `nodes` by full path as `{type: "int", value: ...}`;
+individual missing, malformed or failed reads are retained in `read_errors` by
+path. Connection preconditions and ownership failures raise; SDK node read
+failures become unknowns. Require explicit `is True` for a required lock and
+`is False` for clear overload; do not treat unknown as permission to acquire.
+
+These sequential reads cannot establish uninterrupted health over an
+acquisition or detector/upstream electronics linearity. Meanings follow the
+[HF2 node reference](https://docs.zhinst.com/hf2_user_manual/nodedoc.html).
+
 ## Compatibility checks
 
 With the repository's UI test environment, run:
