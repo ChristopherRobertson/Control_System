@@ -1,7 +1,7 @@
 """Pure finite process-frame compiler with permanently inhibited pump outputs.
 
-T660-1 supplies the qualified probe/reference clock and T660-2's external input.
-T660-2 C generates only qualified active-low MIRcat process pulses. Hardware
+T660-1 supplies the selected probe/reference clock and T660-2's external input.
+T660-2 C generates active-low MIRcat process pulses. Hardware
 dividers and frame fields define edges; host scheduling only separates explicitly
 declared QCL/direction blocks. The existing service owns acknowledged pending-
 field upload, cancellation and readback; this module does not duplicate it.
@@ -98,8 +98,8 @@ def compile_timing(plan: SlowScanPlan) -> CompiledTiming:
         raise ValueError("Resolve T660 time quantization before timing compilation")
     probe_rate = values.get("probe_rate_hz")
     if not isinstance(probe_rate, (int, float)) or not math.isfinite(probe_rate) or probe_rate <= 0:
-        raise ValueError("Qualified probe frequency is unresolved")
-    for name in ("probe_width_s", "process_pulse_width_s", "measured_response_s"):
+        raise ValueError("Probe frequency is unresolved")
+    for name in ("probe_width_s", "process_pulse_width_s", "planning_response_s"):
         if not isinstance(values.get(name), (int, float)) or not math.isfinite(values[name]) or values[name] <= 0:
             raise ValueError(f"Resolve {name} before timing compilation")
     probe_width = quantize_seconds(values["probe_width_s"], tick, maximum)
@@ -132,12 +132,12 @@ def compile_timing(plan: SlowScanPlan) -> CompiledTiming:
         delays[block.block_id] = delay
         if delay + process_width >= block.frame_period_s - 1e-6:
             raise ValueError("Process pulse must finish before the following hardware frame trigger")
-        if delay + process_width + block.scan_duration_s + values["measured_response_s"] > block.frame_period_s + tick:
+        if delay + process_width + block.scan_duration_s + values["planning_response_s"] > block.frame_period_s + tick:
             raise ValueError("Quantized process event leaves insufficient complete-sweep/response support")
         frames = []
         for replicate in range(block.replicates):
             channels = deepcopy(disabled)
-            # Negative polarity idles C high and generates the qualified low
+            # Negative polarity idles C high and generates the selected low
             # pulse on DB9 pin 4. A/B/D stay OFF, including during settling.
             channels["C"] = _channel(enabled=True, delay_s=delay, width_s=process_width, polarity="negative")
             frames.append({"frame_id": f"{block.block_id}:replicate-{replicate + 1}", "replicate": replicate + 1,

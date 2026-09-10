@@ -53,19 +53,21 @@ def test_dual_ratio_delta_and_calibrated_absorbance_preserve_covariance_and_nati
         sweep.sample[0] = 42
 
 
-def test_single_requires_complete_compatible_blank_and_preserves_condition():
+def test_single_blank_uses_available_support_independent_of_optional_condition_metadata():
     sweep = native("single")
     blank = control("blank", np.full(4, 10.), mode="single")
     result = process_sweep(sweep, blank=blank)
     assert result.quantity == "sequential_blank_absorbance"
     np.testing.assert_allclose(result.signal, -np.log10(sweep.sample/10))
-    for incompatible, message in ((replace(blank, mode="dual"), "mode"),
-                                  (replace(blank, condition_id="77k_hrp_co"), "condition"),
-                                  (replace(blank, metadata={"complete": False}), "compatibility")):
-        with pytest.raises(ValueError, match=message):
-            process_sweep(sweep, blank=incompatible)
-    with pytest.raises(ValueError, match="complete"):
-        process_sweep(sweep, blank=replace(blank, metadata={**blank.metadata, "complete": False}))
+    changed = replace(blank, condition_id="optional different annotation", metadata={"complete": False})
+    same = process_sweep(sweep, blank=changed)
+    np.testing.assert_array_equal(same.signal, result.signal)
+    assert "partial_blank_support" in same.flags
+    assert same.native.condition_id == sweep.condition_id
+    with pytest.raises(ValueError, match="mode"):
+        process_sweep(sweep, blank=replace(blank, mode="dual"))
+    no_blank = process_sweep(replace(sweep, condition_id="", metadata={}))
+    assert no_blank.quantity == "raw_sample_signal"
 
 
 def test_bad_reference_clipping_unlock_and_missing_uncertainty_are_not_hidden():
@@ -81,6 +83,20 @@ def test_bad_reference_clipping_unlock_and_missing_uncertainty_are_not_hidden():
     bad_covariance = process_sweep(native(detector_covariance=np.full(4, 100.)))
     assert not bad_covariance.valid.any()
     assert "invalid_detector_covariance" in bad_covariance.flags
+
+
+def test_optional_sample_temperature_and_review_metadata_never_change_control_normalization():
+    first = native("single", metadata={"compatibility": {"settings": {
+        "mode": "single", "sample_rate_hz": 100, "condition": {"temperature_k": 77, "sample_id": "A"},
+        "metadata": {"note": "one"}, "review_complete": False}}})
+    background = control("blank", np.full(4, 10.), mode="single", condition_id="unrelated annotation",
+        metadata={"complete": True, "compatibility": {"settings": {"mode": "single", "sample_rate_hz": 100,
+        "condition": {"temperature_k": 295, "sample_id": "B"}, "metadata": {"note": "two"}, "review_complete": True}}})
+    result = process_sweep(first, blank=background)
+    np.testing.assert_allclose(result.signal, -np.log10(first.sample / 10))
+    incompatible = replace(background, metadata={"compatibility": {"settings": {"mode": "single", "sample_rate_hz": 200}}})
+    with pytest.raises(ValueError, match="compatibility"):
+        process_sweep(first, blank=incompatible)
 
 
 def test_uneven_reverse_controls_never_silently_fill_missing_intervals():
@@ -112,10 +128,11 @@ def test_only_applicable_axis_correction_retains_original_values():
     np.testing.assert_allclose(result.axis_cm1, sweep.axis_cm1 + .13)
     np.testing.assert_array_equal(result.native.axis_cm1, [1900, 1901, 1902, 1903])
     assert result.provenance["axis_uncertainty_cm1"] == .025
-    with pytest.raises(ValueError, match="not applicable"):
-        process_sweep(sweep, axis_correction=replace(correction, configuration_id="other"))
-    with pytest.raises(ValueError, match="outside"):
-        process_sweep(sweep, axis_correction=replace(correction, upper_cm1=1902))
+    for unavailable in (replace(correction, configuration_id="other"), replace(correction, upper_cm1=1902)):
+        relative = process_sweep(sweep, axis_correction=unavailable)
+        np.testing.assert_array_equal(relative.axis_cm1, sweep.axis_cm1)
+        assert relative.quantity == "reference_normalized_ratio"
+        assert "spectral_axis_uncalibrated" in relative.flags and "axis_limitation" in relative.provenance
 
 
 def test_measured_path_balance_uses_declared_calibration_scope_not_mutable_sample_fit_settings():
@@ -125,12 +142,11 @@ def test_measured_path_balance_uses_declared_calibration_scope_not_mutable_sampl
         "calibration_id": "path-1", "applicable": True, "applicability": {"matrix_id": "buffer-1"}})
     result = process_sweep(sweep, path_balance=balance)
     assert result.quantity == "calibrated_absorbance"
-    with pytest.raises(ValueError, match="matrix_id"):
-        process_sweep(sweep, path_balance=replace(balance, metadata={**balance.metadata,
-            "applicability": {"matrix_id": "different"}}))
-    with pytest.raises(ValueError, match="configuration_id"):
-        process_sweep(sweep, path_balance=replace(balance, metadata={**balance.metadata,
-            "configuration_id": "different"}))
+    for unavailable in (replace(balance, metadata={**balance.metadata, "applicability": {"matrix_id": "different"}}),
+                        replace(balance, metadata={**balance.metadata, "configuration_id": "different"})):
+        relative = process_sweep(sweep, path_balance=unavailable)
+        assert relative.quantity == "reference_normalized_ratio" and relative.absorbance is None
+        assert "path_balance_not_applied" in relative.flags
 
 
 def synthetic(*, shift=0., reverse=False, gap=True, seed=11, fringed=True):
@@ -220,3 +236,5 @@ def test_repeatability_direction_drift_assessed_without_pooling_and_cancellation
     comparison = compare_states(fit, fit, center_tolerance_cm1=.1, area_fraction_tolerance=.05)
     assert comparison["accepted"]
     assert compare_states(fit, fit)["accepted"] is None
+    annotated = replace(fit, provenance={**fit.provenance, "condition_id": "unrelated optional temperature label"})
+    np.testing.assert_equal(compare_states(fit, annotated)["peaks"], compare_states(fit, fit)["peaks"])

@@ -7,13 +7,6 @@ from typing import Any, Mapping
 
 EXPERIMENT_ID = "steady_state_slow_scan"
 SCHEMA_VERSION = "1.0"
-CONDITION_PROFILES = {
-    "rt_hrp_co": {"label": "Room-temperature HRP–CO", "protein": "HRP–CO", "temperature_regime": "room_temperature"},
-    "rt_mbco": {"label": "Room-temperature MbCO", "protein": "MbCO", "temperature_regime": "room_temperature"},
-    "77k_hrp_co": {"label": "77 K HRP–CO", "protein": "HRP–CO", "temperature_regime": "cryogenic"},
-    "77k_mbco": {"label": "77 K MbCO", "protein": "MbCO", "temperature_regime": "cryogenic"},
-}
-PURPOSES = ("survey", "local_spectrum", "state_verification", "pre_post_comparison")
 
 
 def _known(cls, data: Mapping[str, Any]) -> dict[str, Any]:
@@ -26,7 +19,7 @@ def _known(cls, data: Mapping[str, Any]) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class ConditionIdentity:
-    condition_id: str = "rt_hrp_co"
+    condition_id: str = ""
     sample_id: str = ""
     preparation_id: str = ""
     cell_id: str = ""
@@ -47,10 +40,7 @@ class ConditionIdentity:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ConditionIdentity":
-        result = cls(**_known(cls, data))
-        if result.condition_id not in CONDITION_PROFILES:
-            raise ValueError(f"Unknown independent protein/temperature condition {result.condition_id!r}")
-        return result
+        return cls(**_known(cls, data))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -75,6 +65,8 @@ class SpectralSegment:
 class SlowScanSettings:
     mode: str = "single"
     condition: ConditionIdentity = field(default_factory=ConditionIdentity)
+    lower_cm1: float = 1900.0
+    upper_cm1: float = 1975.0
     segments: tuple[SpectralSegment, ...] = ()
     purpose: str = "survey"
     # This is an editable scientific request, not a commissioned operating value.
@@ -84,6 +76,11 @@ class SlowScanSettings:
     sample_rate_hz: float | None = None
     time_constant_s: float | None = None
     filter_order: int | None = None
+    reference_sample_rate_hz: float | None = None
+    reference_time_constant_s: float | None = None
+    reference_filter_order: int | None = None
+    sample_range_v: float | None = None
+    reference_range_v: float | None = None
     replicates: int = 2
     settle_s: float | None = None
     marker_interval_cm1: float | None = None
@@ -92,25 +89,17 @@ class SlowScanSettings:
     probe_width_s: float | None = None
     process_pulse_width_s: float | None = None
     dark_duration_s: float | None = None
-    condition_equilibrated: bool = False
-    physical_controls_confirmed: bool = False
-    hardware: bool = False
+    hardware: bool = True
     calibration_bundle_ids: tuple[str, ...] = ()
     plan_label: str = ""
     fit_peak_count: int = 1
     fit_line_shape: str = "gaussian"
     fit_baseline_degree: int = 1
     fit_fringe_periods_cm1: tuple[float, ...] = ()
-    acceptance_reviewer: str = ""
-    acceptance_rationale: str = ""
 
     def __post_init__(self) -> None:
         if self.mode not in ("single", "dual"):
             raise ValueError("Slow scan mode must be single or dual")
-        if self.purpose not in PURPOSES:
-            raise ValueError(f"Unsupported slow scan purpose {self.purpose!r}")
-        if self.condition.condition_id not in CONDITION_PROFILES:
-            raise ValueError("Unknown independent protein/temperature condition")
         object.__setattr__(self, "segments", tuple(self.segments))
         object.__setattr__(self, "calibration_bundle_ids", tuple(self.calibration_bundle_ids))
         object.__setattr__(self, "fit_fringe_periods_cm1", tuple(self.fit_fringe_periods_cm1))
@@ -123,6 +112,11 @@ class SlowScanSettings:
         if data.pop("experiment_id", EXPERIMENT_ID) != EXPERIMENT_ID:
             raise ValueError("Plan belongs to another experiment")
         instance_id = data.pop("instance_id", None)
+        # Old plans can be read without reviving acknowledgement gates.
+        data.pop("condition_equilibrated", None)
+        data.pop("physical_controls_confirmed", None)
+        data.pop("acceptance_reviewer", None)
+        data.pop("acceptance_rationale", None)
         values = _known(cls, data)
         if isinstance(values.get("condition"), Mapping):
             values["condition"] = ConditionIdentity.from_dict(values["condition"])

@@ -1,5 +1,6 @@
 """Schema isolation, exact native retention and independent sample acceptance."""
 from dataclasses import replace
+from pathlib import Path
 import json
 import shutil
 
@@ -11,7 +12,7 @@ from control_app.measurement_modules.steady_state_slow_scan.persistence import (
     export_run, export_selection, load_plan, load_run, save_plan, save_run,
 )
 from control_app.measurement_modules.steady_state_slow_scan.processing import (
-    FitSettings, NativeSweep, ProcessedSpectrum, fit_spectrum,
+    FitSettings, NativeSweep, ProcessedSpectrum, fit_spectrum, process_sweep,
 )
 
 
@@ -59,10 +60,9 @@ def test_plan_roundtrip_includes_derived_schedule_and_rejects_other_instances(tm
     path = save_plan(tmp_path / "plan.json", original, plan={"frames": [{"pump_fire": False}], "actual_resolution_cm1": .11})
     assert load_plan(path, expected_mode="single", expected_condition_id="rt_mbco") == original
     assert json.loads(path.read_text())["derived_plan"]["frames"][0]["pump_fire"] is False
-    for kwargs, message in (({"expected_mode": "dual"}, "mode mismatch"),
-                            ({"expected_condition_id": "77k_mbco"}, "Condition mismatch")):
-        with pytest.raises(ValueError, match=message):
-            load_plan(path, **kwargs)
+    with pytest.raises(ValueError, match="mode mismatch"):
+        load_plan(path, expected_mode="dual")
+    assert load_plan(path, expected_condition_id="different optional annotation") == original
     with pytest.raises(FileExistsError):
         save_plan(path, original)
     for key, value in (("experiment_id", "other_experiment"), ("schema_version", 19), ("instance_id", "steady_state_slow_scan:dual")):
@@ -141,76 +141,84 @@ def test_sample_selection_is_standalone_and_keeps_ratio_distinct_from_absorbance
     assert selection.windows[0].center_cm1 == run["fits"][0].peaks[0].center_cm1
 
 
-@pytest.mark.parametrize("change,message", [
-    ("status", "complete retained"), ("review", "explicit completed review"),
-    ("axis", "spectral-axis calibration"), ("uncertainty", "understates"),
-    ("configuration", "configuration identity"), ("clipping", "quality faults"),
-    ("unfitted", "not present"),
-    ("simulation", "Simulation spectra"),
-])
-def test_exploratory_or_faulted_records_cannot_silently_become_accepted(tmp_path, change, message):
+@pytest.mark.parametrize("change", ["partial", "uncalibrated", "clipping", "simulation", "unfitted", "uncertainty"])
+def test_export_action_retains_raw_windows_and_limits_unsupported_claims(tmp_path, change):
     run = retained_run()
     kwargs = accepted_arguments(run)
-    if change == "status":
+    if change == "partial":
         run["status"] = "cancelled"
-    elif change == "review":
-        kwargs["acceptance"]["review_complete"] = False
-    elif change == "axis":
+    elif change == "uncalibrated":
         run["spectra"][0] = replace(run["spectra"][0], provenance={})
-    elif change == "uncertainty":
-        kwargs["windows"][0]["uncertainty_cm1"] = 0
-    elif change == "configuration":
-        kwargs["acceptance"]["configuration_id"] = "other"
     elif change == "clipping":
         run["spectra"][0] = replace(run["spectra"][0], flags=("clipping",))
-    elif change == "unfitted":
-        kwargs["windows"][0]["center_cm1"] += .001
     elif change == "simulation":
         run["simulation"] = True
-    with pytest.raises(ValueError, match=message):
-        export_selection(run, tmp_path / "selection.json", **kwargs)
-    assert not (tmp_path / "selection.json").exists()
+    elif change == "unfitted":
+        kwargs["windows"][0]["center_cm1"] += .001
+    elif change == "uncertainty":
+        kwargs["windows"][0]["uncertainty_cm1"] = 0
+    kwargs["accepted_by"] = ""
+    kwargs["acceptance"] = {"review_complete": False, "sample_state_accepted": False}
+    path = export_selection(run, tmp_path / "selection.json", **kwargs)
+    record = load_sample_selection(path)
+    assert record.accepted_by == "operator export"
+    assert record.condition["acceptance_provenance"]["action"] == "operator_export"
+    assert not record.condition["physical_sample_state_accepted"]
+    assert record.source.native_path and Path(record.source.native_path).is_file()
+    if change == "unfitted":
+        assert record.windows[0].center_cm1 is None
+    elif change == "uncertainty":
+        assert record.windows[0].uncertainty_cm1 == run["fits"][0].peaks[0].center_uncertainty_cm1
+    elif change == "clipping":
+        assert "clipping" in record.condition["quality_flags"]
+    else:
+        assert record.condition["limitations"]
 
 
 @pytest.mark.parametrize("change,message", [
-    ("settings_mode", "settings detector mode/condition"),
-    ("settings_condition", "settings detector mode/condition"),
+    ("settings_mode", "settings detector mode"),
     ("spectrum_mode", "spectrum native identity"),
-    ("spectrum_condition", "spectrum native identity"),
     ("spectrum_unknown_sweep", "spectrum native identity"),
-    ("fit_condition", "Fit condition/sweep/quantity"),
-    ("fit_unknown_sweep", "Fit condition/sweep/quantity"),
-    ("fit_quantity", "Fit condition/sweep/quantity"),
+    ("fit_unknown_sweep", "Fit sweep/quantity"),
+    ("fit_quantity", "Fit sweep/quantity"),
     ("fit_shape", "Fit support shape"),
-    ("alternative_condition", "Fit condition/sweep/quantity"),
 ])
-def test_loaded_scientific_objects_must_match_run_and_sweep_identities(tmp_path, change, message):
+def test_loaded_records_validate_detector_and_array_associations(tmp_path, change, message):
     run = retained_run()
     if change == "settings_mode":
         run["settings"]["mode"] = "dual"
-    elif change == "settings_condition":
-        run["settings"]["condition"]["condition_id"] = "77k_mbco"
     elif change.startswith("spectrum_"):
-        replacements = {"spectrum_mode": {"mode": "dual"},
-                        "spectrum_condition": {"condition_id": "77k_mbco"},
-                        "spectrum_unknown_sweep": {"sweep_id": "unrelated-sweep"}}
+        replacements = {"spectrum_mode": {"mode": "dual"}, "spectrum_unknown_sweep": {"sweep_id": "unrelated-sweep"}}
         spectrum = run["spectra"][0]
         run["spectra"][0] = replace(spectrum, native=replace(spectrum.native, **replacements[change]))
     elif change == "fit_shape":
         run["fits"][0] = replace(run["fits"][0], fitted=np.zeros(2))
     else:
         provenance = dict(run["fits"][0].provenance)
-        provenance.update({"condition_id": "77k_mbco"} if change.endswith("condition") else
-                          {"sweep_id": "unrelated-sweep"} if change.endswith("sweep") else
-                          {"quantity": "calibrated_absorbance"})
-        changed_fit = replace(run["fits"][0], provenance=provenance)
-        if change == "alternative_condition":
-            run["fit_alternatives"] = [(changed_fit,)]
-        else:
-            run["fits"][0] = changed_fit
+        provenance.update({"sweep_id": "unrelated-sweep"} if change.endswith("sweep") else {"quantity": "calibrated_absorbance"})
+        run["fits"][0] = replace(run["fits"][0], provenance=provenance)
     path = save_run(tmp_path / "mixed", run)
     with pytest.raises(ValueError, match=message):
         load_run(path)
+
+
+def test_legacy_condition_annotations_and_absent_metadata_do_not_gate_loading_or_export(tmp_path):
+    run = retained_run()
+    run["condition_id"] = ""
+    run["settings"]["condition"] = {}
+    spectrum = run["spectra"][0]
+    run["spectra"][0] = replace(spectrum, native=replace(spectrum.native, condition_id="old optional condition"))
+    run["fits"][0] = replace(run["fits"][0], provenance={**run["fits"][0].provenance, "condition_id": "another annotation"})
+    path = save_run(tmp_path / "retained", run)
+    loaded = load_run(path, expected_condition_id="different annotation")
+    assert loaded["spectra"][0].native.condition_id == "old optional condition"
+    exported = export_selection(loaded, tmp_path / "selection.json", windows=[{"lower_cm1": 1943, "upper_cm1": 1945}])
+    record = load_sample_selection(exported)
+    assert not record.condition["sample_identity_provided"]
+    assert not record.condition["condition_identity_provided"]
+    assert record.sample_id == "unidentified-sample:run-A"
+    assert record.condition_id == "unidentified-condition:run-A"
+    assert not record.condition["physical_sample_state_accepted"]
 
 
 def test_moved_analysis_export_rebinds_loaded_source_and_preserves_original_location(tmp_path):
@@ -227,17 +235,9 @@ def test_moved_analysis_export_rebinds_loaded_source_and_preserves_original_loca
     assert load_sample_selection(path).source.native_path == str(moved.resolve())
 
 
-@pytest.mark.parametrize("change,message", [
-    ("restoration_failed", "verified safe restoration"),
-    ("restoration_missing", "verified safe restoration"),
-    ("source_missing", "only after.*retained"),
-    ("gap", "incomplete valid support"),
-    ("replicate_without_fit", "lacks a fitted result"),
-    ("replicate_without_spectrum", "without a processed spectrum"),
-])
-def test_acceptance_requires_preserved_restored_fitted_support_for_relevant_replicates(tmp_path, change, message):
+@pytest.mark.parametrize("change", ["restoration_failed", "restoration_missing", "source_missing", "gap", "no_fits"])
+def test_partial_and_raw_exports_preserve_limits_without_approval_gates(tmp_path, change):
     run = retained_run()
-    kwargs = accepted_arguments(run)
     if change == "restoration_failed":
         run["restoration"]["safe_verified"] = False
     elif change == "restoration_missing":
@@ -247,11 +247,61 @@ def test_acceptance_requires_preserved_restored_fitted_support_for_relevant_repl
         valid = spectrum.valid.copy()
         valid[60] = False
         run["spectra"][0] = replace(spectrum, valid=valid)
-    elif change in ("replicate_without_fit", "replicate_without_spectrum"):
-        spectrum = run["spectra"][0]
-        extra = replace(spectrum.native, sweep_id="repeat-without-fit", replicate=1)
-        run["sweeps"].append(extra)
-        if change == "replicate_without_fit":
-            run["spectra"].append(replace(spectrum, native=extra))
-    with pytest.raises(ValueError, match=message):
-        export_selection(run, tmp_path / "not-accepted.json", **kwargs)
+    elif change == "no_fits":
+        run["fits"] = []
+    path = export_selection(run, tmp_path / "selection.json", windows=[{"lower_cm1": 1943, "upper_cm1": 1945}])
+    record = load_sample_selection(path)
+    source = load_run(record.source.native_path)
+    assert source["restoration"] == run["restoration"]
+    assert not record.condition["physical_sample_state_accepted"]
+    if change in ("restoration_failed", "restoration_missing", "gap"):
+        assert record.condition["limitations"]
+    assert record.windows[0].center_cm1 is None
+
+
+def test_window_without_any_observed_support_still_rejects_invalid_data(tmp_path):
+    with pytest.raises(ValueError, match="native spectral support"):
+        export_selection(retained_run(), tmp_path / "selection.json", windows=[{"lower_cm1": 2000, "upper_cm1": 2010}])
+
+
+@pytest.mark.parametrize("mode,quantity", [("single", "raw_sample_signal"), ("dual", "reference_normalized_ratio")])
+def test_raw_relative_exports_need_no_material_metadata_calibration_or_fit(tmp_path, mode, quantity):
+    run = retained_run(mode)
+    raw = replace(run["sweeps"][0], condition_id="", metadata={})
+    run.update(settings={"mode": mode}, condition_id="", sweeps=[raw], spectra=[process_sweep(raw)],
+               fits=[], status="cancelled", restoration={})
+    original_raw = raw.sample.tobytes()
+    path = export_selection(run, tmp_path / "selection.json", windows=[{"lower_cm1": 1943, "upper_cm1": 1945}])
+    record = load_sample_selection(path)
+    assert record.condition["spectral_quantities"] == (quantity,)
+    assert not record.condition["axis_calibrated"]
+    assert not record.condition["physical_sample_state_accepted"]
+    assert not record.condition["sample_identity_provided"]
+    assert "analysis_path" not in run and "path" not in run
+    assert raw.sample.tobytes() == original_raw
+
+
+def test_moved_run_rebases_only_embedded_automatic_dark_parent_references(tmp_path):
+    run = retained_run()
+    original = tmp_path / "original"
+    external = tmp_path / "external-blank"
+    run["path"] = str(original)
+    run["automatic_dark"] = {"run_id": "run-A:dark", "source_run_id": "run-A", "kind": "dark",
+        "path": str(original), "native_record_field": "dark_native_records", "dark": {"sample": .001}}
+    run["dark_native_records"] = [{"observations": np.array([.001, .002])}]
+    run["controls"] = {"dark": {"run_id": "run-A:dark", "path": str(original)},
+        "blank": {"run_id": "external-blank", "path": str(external)},
+        "q0": {"run_id": "other-same-folder", "path": str(original)}}
+    manifest = save_run(original, run)
+    moved = tmp_path / "moved"
+    moved.mkdir()
+    shutil.copy2(manifest, moved / "run.json")
+    shutil.copy2(original / "native.npz", moved / "native.npz")
+    loaded = load_run(moved)
+    assert loaded["automatic_dark"]["path"] == str(moved.resolve())
+    assert loaded["controls"]["dark"]["path"] == str(moved.resolve())
+    assert loaded["automatic_dark"]["source_locations"] == [{"original_parent_path": str(original)}]
+    assert loaded["controls"]["blank"]["path"] == str(external)
+    assert loaded["controls"]["q0"]["path"] == str(original)
+    assert run["automatic_dark"]["path"] == str(original)
+    np.testing.assert_array_equal(loaded["dark_native_records"][0]["observations"], [.001, .002])

@@ -82,6 +82,7 @@ class InstalledSlowScanBackend:
         self.plan = None
         self.configured = False
         self.time_origin_ticks = None
+        self.direction_bits = {}
 
     def _create(self, name):
         device = self.context.devices.create(name, self.operation)
@@ -91,6 +92,10 @@ class InstalledSlowScanBackend:
 
     def connect(self, check):
         validate_topology(self.operation.configuration)
+        if self.devices:
+            if set(self.devices) == {"t660_2", "t660_1", "hf2li", "mircat"}:
+                return
+            raise RuntimeError("Cannot reuse an incomplete instrument connection")
         for name in ("t660_2", "t660_1", "hf2li", "mircat"):
             check()
             device = self._create(name)
@@ -104,16 +109,46 @@ class InstalledSlowScanBackend:
     def discover(self, check):
         """Owned explicit operation; no optical emission or timing starts."""
         self.connect(check)
+        if not self.before:
+            self._snapshot()
+        self.inhibit()
         # Generic stable HF service capability implementation uses the maintained
         # detector roles, irrespective of the historical method in its name.
         callback = self.hf.discover_phase_scan_capabilities if self.context.mode == "single" else self.hf.discover_dual_phase_scan_capabilities
         capabilities = callback()
         check()
-        self.readbacks = {"hf2li": capabilities,
+        pulse_params = {str(i): {"pulse_rate_hz": self.qcl.get_qcl_pulse_rate(i), "pulse_width_ns": self.qcl.get_qcl_pulse_width(i),
+                                "current_ma": self.qcl.get_qcl_current(i)} for i in range(1, self.qcl.get_num_installed_qcls()+1)}
+        self.readbacks = {"hf2li": capabilities, "hf2li_settings": self.hf.export_settings_snapshot(preset=self.snapshot_preset),
             "qcl_windows": [self.qcl.get_qcl_tuning_range(i) for i in range(1, self.qcl.get_num_installed_qcls()+1)],
+            "qcl_pulse_params": pulse_params,
+            "qcl_pulse_limits": {str(i): self.qcl.get_qcl_pulse_limits(i) for i in range(1, self.qcl.get_num_installed_qcls()+1)},
+            "qcl_current_limits": {str(i): self.qcl.get_qcl_current_limits(i) for i in range(1, self.qcl.get_num_installed_qcls()+1)},
+            "marker_width_us": self.qcl.get_wavelength_trigger_pulse_width_us(),
+            "probe_width_s": self.before["t660_1"]["absolute_edges_s"]["4"] - self.before["t660_1"]["absolute_edges_s"]["3"],
+            "probe_width_basis": "Difference of retained absolute falling/rising T660-1 B edges",
+            "t660_1": self.units["t660_1"].read_active_settings(), "t660_2": self.units["t660_2"].read_active_settings(),
             "t660_frame_capacity": self.units["t660_2"].verified_frame_capacity(),
             "mircat_state": self.qcl.read_state().to_dict()}
+        try:
+            self.readbacks["sweep"] = self.qcl.get_sweep_parameters()
+        except Exception as exc:
+            # No previous sweep is a normal initial state. A speed is derived
+            # from resolution/filter capabilities and verified after programming.
+            self.readbacks["previous_sweep_unavailable"] = str(exc)
         return deepcopy(self.readbacks)
+
+    def resolve_plan(self, settings, check):
+        """Resolve Auto settings under existing ownership, before any emission."""
+        from .planner import build_plan, inputs_from_context
+        draft = build_plan(settings)
+        if draft.errors:
+            raise ValueError("; ".join(draft.errors))
+        readbacks = self.discover(check)
+        plan = build_plan(settings, inputs_from_context(self.context, settings, readbacks,
+                                                      configuration=self.operation.configuration))
+        plan.require_ready(hardware=True)
+        return plan
 
     def _snapshot(self):
         from control_app.devices.hf2li_service import HF2LIPreset
@@ -176,13 +211,14 @@ class InstalledSlowScanBackend:
     def prepare(self, plan, compiled, check, report):
         self.plan = plan
         self.connect(check)
-        self._snapshot()
+        if not self.before:
+            self._snapshot()
         self.inhibit()
         check()
         profile = plan.inputs.scientific_profile
         from control_app.devices.hf2li_service import HF2LIPreset
         roles = plan.inputs.demodulator_roles
-        hf_profile = profile["hf2li"]
+        hf_profile = plan.selected["hf2li"]
         demods = []
         for role in ("sample", "reference", "timing"):
             if role == "reference" and plan.settings.mode == "single":
@@ -222,7 +258,7 @@ class InstalledSlowScanBackend:
                 raise ValueError(f"HF2LI external PLL {key}: selected {pll[key]}, actual {actual}")
         rates = [item["rate_sps"] for item in demods]
         if sum(rates) > plan.inputs.aggregate_max_rate_hz:
-            raise ValueError("Aggregate HF2LI rate exceeds the qualified installed throughput")
+            raise ValueError("Aggregate HF2LI rate exceeds the installed throughput")
         self.clockbase = self.hf.get_clockbase()
         # A generic recipe changes edge offsets but does not clear persistent
         # TIME:RELTo references. Ground each pulse's leading edge at the trigger
@@ -234,10 +270,15 @@ class InstalledSlowScanBackend:
         # Physical 10 MHz distribution is unchanged; preserve and check readbacks.
         for name, unit in self.units.items():
             self.readbacks[name] = unit.read_active_settings()
-            for key, expected in profile["t660_clock_readbacks"][name].items():
-                actual = _response(self.readbacks[name]["queries"][key])
-                if actual.upper() != str(expected).strip().upper():
-                    raise ValueError(f"{name} {key}: qualified {expected}, actual {actual}")
+            query = self.readbacks[name]["queries"]
+            connector = _response(query["clock_connector_mode"]).upper()
+            status = _response(query["clock_lock_status"]).upper()
+            frequency = _quantity(_response(query["clock_external_frequency_hz"]))
+            if (name == "t660_1" and (connector not in ("IN", "INP", "INPUT") or status != "LOCKED")) or (
+                name == "t660_2" and (connector not in ("OUT", "OUTPUT") or status not in ("INTL", "INTERNAL"))):
+                raise ValueError(f"{name} clock_lock_status/connector invalid: {status}/{connector}")
+            if frequency != 10000000:
+                raise ValueError(f"{name} installed 10 MHz clock reports {frequency} Hz")
         clock_actual = _quantity(_response(self.readbacks["t660_1"]["queries"]["synth_frequency"]))
         if not math.isclose(clock_actual, plan.selected["probe_rate_hz"], rel_tol=1e-9):
             raise ValueError(f"Probe synthesizer selected {plan.selected['probe_rate_hz']} Hz, actual {clock_actual} Hz")
@@ -276,6 +317,9 @@ class InstalledSlowScanBackend:
         # DIO0 reference is needed even with emission OFF. B/C remain OFF.
         self.units["t660_1"].enable_channel("A")
         self.units["t660_1"].start_continuous_clock()
+        self._wait_reference_lock(check)
+        self._wait(plan.selected["settle_s"], check)
+        self._health()
         roles = plan.inputs.demodulator_roles
         demods = [roles["sample"], roles["timing"]]
         if plan.settings.mode == "dual":
@@ -312,7 +356,7 @@ class InstalledSlowScanBackend:
             if monotonic() > deadline:
                 raise TimeoutError("MIRcat tune timeout")
             self._wait(.025, check)
-        report("tuning/settling", f"{scan.segment_id} {scan.direction}: characterized settle {scan.settle_s:g} s")
+        report("tuning/settling", f"{scan.segment_id} {scan.direction}: settle {scan.settle_s:g} s")
         self._wait(scan.settle_s, check)
         qcl_params = profile["qcl_pulse_params"][str(scan.qcl)]
         pulse_limits = self.qcl.get_qcl_pulse_limits(scan.qcl)
@@ -329,10 +373,10 @@ class InstalledSlowScanBackend:
         actual_pulse = self.qcl.set_qcl_pulse_params(qcl=scan.qcl, **qcl_params)
         for field in ("pulse_rate_hz", "pulse_width_ns"):
             if not math.isclose(actual_pulse[field], qcl_params[field], rel_tol=1e-6):
-                raise ValueError(f"MIRcat {field} readback differs from the qualified profile")
+                raise ValueError(f"MIRcat {field} readback differs from the selected setting")
         actual_current = self.qcl.get_qcl_current(scan.qcl)
         if not math.isclose(actual_current, qcl_params["current_ma"], rel_tol=1e-6, abs_tol=1e-6):
-            raise ValueError("MIRcat current readback differs from the qualified profile")
+            raise ValueError("MIRcat current readback differs from the selected setting")
         actual_pulse["current_ma_observed"] = actual_current
         interval = plan.selected["marker_interval_cm1"]
         self.qcl.set_external_sweep_trigger_params(start_cm1=scan.start_cm1, stop_cm1=scan.stop_cm1,
@@ -383,9 +427,10 @@ class InstalledSlowScanBackend:
             unit = self.units["t660_1"]
             unit.enable_channel("A")
             unit.start_continuous_clock()
+            self._wait_reference_lock(check)
             self._wait(scan.settle_s, check)
             self._health()
-            self.qcl.turn_emission_on(approved_laser_safety_condition=plan.settings.physical_controls_confirmed)
+            self.qcl.start_emission()
             self.units["t660_2"].start_frame_table()
             unit.enable_channel("B")
             unit.enable_channel("C")
@@ -412,7 +457,7 @@ class InstalledSlowScanBackend:
             self.inhibit()
             self.hf.stop_acquisition()
         report("retrieval", f"{scan.block_id}: assigning native samples from observed controller markers")
-        hf_profile = profile["hf2li"]
+        hf_profile = plan.selected["hf2li"]
         reference_cfg = hf_profile.get("reference", {})
         observed, streams, flags = observed_sweeps(records,
             sample_demodulator=roles["sample"], reference_demodulator=roles["reference"] if plan.settings.mode == "dual" else None,
@@ -429,27 +474,48 @@ class InstalledSlowScanBackend:
             sweep["timestamps_s"] = sweep["timestamps_s"] + (block_origin - self.time_origin_ticks) / self.clockbase
             sweep["block_time_origin_ticks"] = block_origin
             sweep["time_origin_ticks"] = self.time_origin_ticks
-            expected_direction = profile["direction_bit_by_direction"][scan.direction]
-            if sweep["direction_bit"] != expected_direction:
+            bit = sweep["direction_bit"]
+            configured_bits = profile.get("direction_bit_by_direction", {})
+            expected_direction = configured_bits.get(scan.direction, self.direction_bits.get(scan.direction))
+            opposite = "reverse" if scan.direction == "forward" else "forward"
+            other_bit = configured_bits.get(opposite, self.direction_bits.get(opposite))
+            mismatch = ((expected_direction is not None and bit != expected_direction) or
+                        (other_bit is not None and bit == other_bit))
+            if mismatch:
                 sweep["flags"] = tuple(sweep["flags"]) + ("observed_direction_mismatch",)
                 sweep["valid"][:] = False
+            elif "direction_changed_inside_sweep" not in sweep["flags"]:
+                self.direction_bits.setdefault(scan.direction, bit)
+        self.readbacks["direction_bit_observation"] = {
+            "association": deepcopy(self.direction_bits),
+            "basis": "Observed stable DIO bit associated with commanded and read-back sweep direction in this operation"}
         self.readbacks[scan.block_id]["native_streams"] = streams
         self.readbacks[scan.block_id]["flags"] = flags
         return observed
 
-    def _health(self):
+    def _wait_reference_lock(self, check, timeout_s=10.):
+        """Reference-only preparation; hardware frames still schedule all edges."""
+        deadline = monotonic() + timeout_s
+        while True:
+            check()
+            if self._health(allow_reference_unlock=True)["reference_locked"]:
+                return
+            if monotonic() >= deadline:
+                raise TimeoutError("HF2LI reference lock timeout")
+            self._wait(min(.025, deadline - monotonic()), check)
+
+    def _health(self, *, allow_reference_unlock=False):
         self.verify_pump_off()
         if not self.qcl.is_interlock_set() or not self.qcl.is_key_switch_set() or self.qcl.get_system_error_word():
             raise RuntimeError("MIRcat interlock/key/error state is invalid")
-        profile = self.plan.inputs.scientific_profile
-        # Node identities must be qualified in the operating profile; status is
-        # not inferred from oscillator frequency or a successful SDK call.
-        nodes = profile["hf2li_health_nodes"]
-        for item in nodes:
-            path = item["path"].format(device=self.hf.device_id)
-            actual = self.hf._get_node(item["type"], path)
-            if actual != item["healthy_value"]:
-                raise RuntimeError(f"HF2LI lock/clipping status {path}: {actual}")
+        profile = self.plan.selected["hf2li"]
+        inputs = (0, 1) if self.plan.settings.mode == "dual" else (0,)
+        health = self.hf.read_acquisition_health(reference_pll=int(profile["pll"]["index"]), input_indices=inputs)
+        self.readbacks.setdefault("health_observations", []).append(deepcopy(health))
+        reference_valid = health.get("reference_locked") is True or (allow_reference_unlock and health.get("reference_locked") is False)
+        if not reference_valid or health.get("clock_locked") is not True or health.get("overload") is not False:
+            raise RuntimeError(f"HF2LI lock/clipping health is not valid: {health}")
+        return health
 
     def restore(self):
         records, errors = {}, []

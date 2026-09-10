@@ -1,7 +1,8 @@
 """Versioned experiment data and standalone host spectral-state interchange.
 
 Native arrays live in a lossless, pickle-free NPZ alongside readable metadata.
-Schema, mode, condition and configuration are compatibility requirements; no
+Schema, detector mode and scientific array associations are validated; optional
+sample and temperature annotations never control loading or operation. No
 checksum or previously recorded hash is ever a loading or acceptance gate.
 """
 from __future__ import annotations
@@ -70,8 +71,8 @@ def _validate_envelope(data, kind, expected_mode=None, expected_condition_id=Non
         raise ValueError("Record instance_id does not match experiment/mode")
     if expected_mode is not None and expected_mode != mode:
         raise ValueError(f"Detector mode mismatch: expected {expected_mode}, received {mode}")
-    if expected_condition_id is not None and data.get("condition_id") != expected_condition_id:
-        raise ValueError("Condition mismatch; this record belongs to a different sample/temperature profile")
+    # expected_condition_id remains an accepted legacy argument. Condition is
+    # optional descriptive metadata, not an operating or data-loading gate.
 
 
 def _write_json_exclusive(path, payload):
@@ -100,8 +101,6 @@ def load_plan(path, *, expected_mode=None, expected_condition_id=None):
     settings = data["settings"]
     if _mode(settings, data["mode"]) != data["mode"] or (settings.get("mode") and settings["mode"] != data["mode"]):
         raise ValueError("Plan settings detector mode disagrees with envelope")
-    if _condition_id(settings) != data.get("condition_id"):
-        raise ValueError("Plan settings condition disagrees with envelope")
     return settings
 
 
@@ -192,21 +191,21 @@ def save_run(output_dir, run_mapping, sweeps=None):
 
 def _validate_run_identities(run, mode, condition_id):
     """Associate scientific objects by readable identity, never list position."""
-    if run.get("mode") != mode or run.get("condition_id") != condition_id:
-        raise ValueError("Run detector mode/condition disagrees with envelope")
+    if run.get("mode") != mode:
+        raise ValueError("Run detector mode disagrees with envelope")
     if run.get("experiment_id", EXPERIMENT_ID) != EXPERIMENT_ID or run.get(
             "instance_id", f"{EXPERIMENT_ID}:{mode}") != f"{EXPERIMENT_ID}:{mode}":
         raise ValueError("Run experiment/instance identity disagrees with envelope")
     settings = _plain(run.get("settings", {}))
-    if settings.get("mode") != mode or _condition_id(settings) != condition_id:
-        raise ValueError("Run settings detector mode/condition disagrees with envelope")
+    if settings.get("mode") != mode:
+        raise ValueError("Run settings detector mode disagrees with envelope")
     if settings.get("experiment_id", EXPERIMENT_ID) != EXPERIMENT_ID or settings.get(
             "instance_id", f"{EXPERIMENT_ID}:{mode}") != f"{EXPERIMENT_ID}:{mode}":
         raise ValueError("Run settings experiment/instance identity disagrees with envelope")
     sweeps = {}
     for sweep in run.get("sweeps", ()):
-        if not isinstance(sweep, NativeSweep) or sweep.mode != mode or sweep.condition_id != condition_id:
-            raise ValueError("Native sweep experiment/mode/condition is incompatible with run")
+        if not isinstance(sweep, NativeSweep) or sweep.mode != mode:
+            raise ValueError("Native sweep detector mode is incompatible with run")
         if sweep.sweep_id in sweeps:
             raise ValueError("Duplicate native sweep identity")
         sweeps[sweep.sweep_id] = sweep
@@ -216,7 +215,7 @@ def _validate_run_identities(run, mode, condition_id):
             raise ValueError("Processed spectrum must retain its typed native sweep")
         native = spectrum.native
         original = sweeps.get(native.sweep_id)
-        identity = ("mode", "condition_id", "segment_id", "direction", "replicate")
+        identity = ("mode", "segment_id", "direction", "replicate")
         if original is None or any(getattr(native, key) != getattr(original, key) for key in identity):
             raise ValueError("Processed spectrum native identity is incompatible with its retained sweep")
         if len(native.axis_cm1) != len(original.axis_cm1):
@@ -229,9 +228,8 @@ def _validate_run_identities(run, mode, condition_id):
             raise ValueError("Fit results must retain typed scientific provenance")
         sweep_id = fit.provenance.get("sweep_id")
         spectrum = spectra.get(sweep_id)
-        if (spectrum is None or fit.provenance.get("condition_id") != condition_id or
-                fit.provenance.get("quantity") != spectrum.quantity):
-            raise ValueError("Fit condition/sweep/quantity identity is incompatible with its processed spectrum")
+        if spectrum is None or fit.provenance.get("quantity") != spectrum.quantity:
+            raise ValueError("Fit sweep/quantity identity is incompatible with its processed spectrum")
         for name in ("fitted", "baseline", "residuals", "valid"):
             if np.asarray(getattr(fit, name)).shape != spectrum.signal.shape:
                 raise ValueError("Fit support shape disagrees with its associated spectrum")
@@ -260,6 +258,25 @@ def load_run(path, *, expected_mode=None, expected_condition_id=None):
     with np.load(path.parent / native_file, allow_pickle=False) as arrays:
         run = _decode(data["run"], arrays)
     _validate_run_identities(run, data["mode"], data.get("condition_id"))
+    original_parent = run.get("path")
+    automatic_dark = run.get("automatic_dark")
+    if original_parent and isinstance(automatic_dark, dict):
+        parent_id = str(run.get("run_id", ""))
+        same_parent_record = (automatic_dark.get("source_run_id") == parent_id or
+                              automatic_dark.get("run_id") == parent_id + ":dark")
+        def points_to_original_parent(value):
+            return bool(value) and Path(value).resolve() == Path(original_parent).resolve()
+        if (same_parent_record and points_to_original_parent(automatic_dark.get("path")) and
+                Path(original_parent).resolve() != path.parent.resolve()):
+            automatic_dark["source_locations"] = list(automatic_dark.get("source_locations", ())) + [
+                {"original_parent_path": str(automatic_dark["path"])}]
+            automatic_dark["path"] = str(path.parent.resolve())
+            # This control is embedded in this package. External dark, blank
+            # and Q0 references are provenance and must not be retargeted.
+            reference = run.get("controls", {}).get("dark")
+            if (isinstance(reference, dict) and reference.get("run_id") == automatic_dark.get("run_id") and
+                    points_to_original_parent(reference.get("path"))):
+                reference["path"] = str(path.parent.resolve())
     run["path"] = path.parent
     if run.get("analysis_path") or native_file != "native.npz":
         previous = run.get("analysis_path")
@@ -296,110 +313,109 @@ def export_run(path, run):
     return _write_json_exclusive(path, payload)
 
 
-def export_selection(run, path, *, windows, accepted_by, acceptance):
-    """Export an explicitly accepted state via the standalone host data contract.
+def export_selection(run, path, *, windows, accepted_by="", acceptance=None):
+    """Export operator-selected windows through the existing standalone contract.
 
-    Sample-state acceptance is a named scientific review. It neither changes a
-    campaign phase nor promotes an instrument bundle. Ratio spectra remain
-    reference-normalized ratios even when a bounded sample-state selection is
-    accepted. A calibrated center claim requires applicable axis provenance.
+    Calling this function is the export intent. The host's legacy ``accepted``
+    disposition means the operator selected these windows; it does not certify
+    physical sample state, temperature, calibration or instrument readiness.
+    Optional legacy review fields are retained as metadata and never authorize
+    or block export. Invalid fitted claims are omitted while raw windows remain.
     """
     from control_app.measurement_host.interchange import (
         SampleSpectralSelection, SourceRecord, SpectralWindow, save_sample_selection,
     )
-    if run.get("status") not in ("complete", "completed"):
-        raise ValueError("Only a complete retained run can support sample-state acceptance")
-    if run.get("simulation") or run.get("readbacks", {}).get("simulation"):
-        raise ValueError("Simulation spectra cannot authorize acceptance of a physical sample-state record")
-    if run.get("restoration", {}).get("safe_verified") is not True:
-        raise ValueError("Sample-state acceptance requires verified safe restoration")
-    if not accepted_by.strip() or not acceptance.get("sample_state_accepted") or not acceptance.get("review_complete"):
-        raise ValueError("Sample-state acceptance requires a named reviewer and an explicit completed review")
-    if not acceptance.get("configuration_id") or not str(acceptance.get("rationale", "")).strip():
-        raise ValueError("Acceptance requires configuration identity and a bounded scientific rationale")
+    destination = Path(path)
+    if destination.exists():
+        raise FileExistsError("Selection already exists; use a new export record")
+    metadata = _plain(acceptance or {})
     settings = _plain(run.get("settings", {}))
+    mode = _mode(run)
+    _validate_run_identities(run, mode, run.get("condition_id"))
     condition = settings.get("condition", {})
-    if not isinstance(condition, dict):
-        condition = {"profile": condition}
-    sample_id = condition.get("sample_id") or settings.get("sample_id")
-    if not sample_id:
-        raise ValueError("An accepted sample record requires the actual sample_id")
-    configuration_id = condition.get("configuration_id") or settings.get("configuration_id")
-    if configuration_id != acceptance["configuration_id"]:
-        raise ValueError("Acceptance configuration identity does not match the retained sample condition")
-    for identity in ("preparation_id", "cell_id", "position_id", "temperature_id"):
-        if not condition.get(identity):
-            raise ValueError(f"Accepted sample-state record requires {identity}")
-    selected_windows = tuple(window if isinstance(window, SpectralWindow) else SpectralWindow(**window) for window in windows)
-    if not selected_windows:
-        raise ValueError("Select at least one bounded spectral window")
+    condition = dict(condition) if isinstance(condition, dict) else {"annotation": condition}
     spectra = tuple(run.get("spectra", ()))
     fits = tuple(run.get("fits", ()))
-    if not spectra or not fits:
-        raise ValueError("Selection acceptance requires retained spectra and independently fitted results")
-    _validate_run_identities(run, _mode(run), run.get("condition_id") or _condition_id(settings))
-    critical_flags = {"saturation", "clipping", "unlock", "reference_unlocked", "detector_clipping",
-        "unexpected_electrical_pump_sync", "sweep_trigger_count_mismatch", "wavelength_marker_count_mismatch",
-        "direction_changed_inside_sweep", "observed_direction_mismatch", "missing_reference_support", "invalid_reference_signal",
-        "invalid_detector_covariance", "dark_not_applied"}
-    present_flags = {flag for spectrum in spectra for flag in spectrum.flags}
-    if critical_flags & present_flags:
-        raise ValueError("Sample-state acceptance blocked by retained native quality faults: " + ", ".join(sorted(critical_flags & present_flags)))
-    if any("fit_not_converged" in fit.flags or "fit_parameters_not_identifiable" in fit.flags for fit in fits):
-        raise ValueError("Fit convergence/identifiability is unresolved; retain an exploratory analysis")
-    quantities = sorted({spectrum.quantity for spectrum in spectra})
-    if any(window.center_cm1 is not None for window in selected_windows):
-        if any(not spectrum.provenance.get("axis_calibration_id") for spectrum in spectra):
-            raise ValueError("Fitted-center acceptance requires applicable spectral-axis calibration")
-        if any(window.center_cm1 is not None and window.uncertainty_cm1 is None for window in selected_windows):
-            raise ValueError("Accepted fitted centers require explicit uncertainty")
-    for window in selected_windows:
-        # Identify the selected segment from its observed extent, then require
-        # every retained direction/replicate there to support the selection.
-        segments = {spectrum.native.segment_id for spectrum in spectra
-                    if np.any(np.isfinite(spectrum.axis_cm1)) and
-                    np.nanmin(spectrum.axis_cm1) <= window.lower_cm1 and
-                    np.nanmax(spectrum.axis_cm1) >= window.upper_cm1}
-        if not segments:
-            raise ValueError("Selected window has no retained valid spectral support")
-        relevant = {spectrum.native.sweep_id: spectrum for spectrum in spectra if spectrum.native.segment_id in segments}
-        relevant_fits = {fit.provenance["sweep_id"]: fit for fit in fits if fit.provenance["sweep_id"] in relevant}
-        for sweep in run.get("sweeps", ()):
-            if sweep.segment_id in segments and sweep.sweep_id not in relevant:
-                raise ValueError("Selected segment has a retained sweep without a processed spectrum")
-        for sweep_id, spectrum in relevant.items():
-            selected = np.isfinite(spectrum.axis_cm1) & (spectrum.axis_cm1 >= window.lower_cm1) & (spectrum.axis_cm1 <= window.upper_cm1)
-            support = (np.any(spectrum.valid) and np.any(selected) and np.all(spectrum.valid[selected]) and
-                       np.nanmin(spectrum.axis_cm1[spectrum.valid]) <= window.lower_cm1 and
-                       np.nanmax(spectrum.axis_cm1[spectrum.valid]) >= window.upper_cm1)
-            if not support:
-                raise ValueError(f"Selected window has incomplete valid support in sweep {sweep_id}")
-            fit = relevant_fits.get(sweep_id)
-            if fit is None or not np.all(fit.valid[selected]):
-                raise ValueError(f"Selected window lacks a fitted result on its native support in sweep {sweep_id}")
+    requested = tuple(window if isinstance(window, SpectralWindow) else SpectralWindow(**window) for window in windows)
+    if not requested:
+        raise ValueError("Select at least one spectral window")
+    if not spectra:
+        raise ValueError("Window export requires retained spectral observations; export native data for an unfinished scan")
+    selected_windows, limitations, support = [], [], []
+    quality_flags = sorted({flag for spectrum in spectra for flag in spectrum.flags})
+    for index, window in enumerate(requested):
+        observed = []
+        for spectrum in spectra:
+            axis = np.asarray(spectrum.axis_cm1, float)
+            native_signal = np.asarray(spectrum.native.sample, float)
+            finite = np.isfinite(axis) & np.isfinite(native_signal)
+            chosen = finite & (axis >= window.lower_cm1) & (axis <= window.upper_cm1)
+            if (np.any(chosen) and np.nanmin(axis[finite]) <= window.lower_cm1 and
+                    np.nanmax(axis[finite]) >= window.upper_cm1):
+                observed.append(spectrum)
+                support.append({"window": index, "sweep_id": spectrum.native.sweep_id,
+                    "raw_observation_count": int(np.count_nonzero(chosen)),
+                    "valid_processed_count": int(np.count_nonzero(chosen & spectrum.valid)),
+                    "quality_flags": list(spectrum.flags)})
+        if not observed:
+            raise ValueError("Selected window has no retained native spectral support")
+        if any(item["raw_observation_count"] != item["valid_processed_count"] for item in support if item["window"] == index):
+            limitations.append(f"Window {index + 1}: raw observations include invalid or missing normalized support; gaps remain in the source")
         if window.center_cm1 is not None:
-            matching_peaks = [peak for fit in relevant_fits.values() for peak in fit.peaks
-                              if abs(peak.center_cm1 - window.center_cm1) <= 1e-6]
-            if not matching_peaks:
-                raise ValueError("Selected fitted center is not present in the retained fit results")
-            if window.uncertainty_cm1 + 1e-12 < min(peak.center_uncertainty_cm1 for peak in matching_peaks):
-                raise ValueError("Selected uncertainty understates the retained fit/axis uncertainty")
-    mode = _mode(run)
-    source_path = str(run.get("analysis_path") or (Path(run.get("path", ".")) / "run.json"))
-    if not Path(source_path).is_file():
-        raise ValueError("Accept a sample selection only after its native run or analysis revision has been retained")
-    source = SourceRecord(str(run["run_id"]), source_path,
+            sweep_ids = {spectrum.native.sweep_id for spectrum in observed}
+            matches = [(fit, peak) for fit in fits if fit.provenance.get("sweep_id") in sweep_ids
+                       and not {"fit_not_converged", "fit_parameters_not_identifiable"}.intersection(fit.flags)
+                       for peak in fit.peaks if abs(peak.center_cm1 - window.center_cm1) <= 1e-6
+                       and np.isfinite(peak.center_uncertainty_cm1) and peak.center_uncertainty_cm1 >= 0]
+            if not matches:
+                limitations.append(f"Window {index + 1}: fitted-center claim omitted because no valid associated fit supports it")
+                window = SpectralWindow(window.lower_cm1, window.upper_cm1, label=window.label)
+            else:
+                required = min(peak.center_uncertainty_cm1 for _, peak in matches)
+                supplied = window.uncertainty_cm1
+                uncertainty = max(required, supplied) if supplied is not None else required
+                if supplied is not None and supplied < required:
+                    limitations.append(f"Window {index + 1}: uncertainty increased to the retained fit uncertainty")
+                window = SpectralWindow(window.lower_cm1, window.upper_cm1, window.center_cm1,
+                                        uncertainty, window.label)
+        selected_windows.append(window)
+    axis_calibrated = bool(spectra) and all(spectrum.provenance.get("axis_calibration_id") for spectrum in spectra)
+    if not axis_calibrated:
+        limitations.append("Native spectral axis is not established as calibrated; fitted uncertainties exclude unavailable axis uncertainty")
+    if run.get("simulation") or run.get("readbacks", {}).get("simulation"):
+        limitations.append("Simulated data: no physical sample observation")
+    if run.get("status") not in ("complete", "completed"):
+        limitations.append("Partial or failed run: only retained observations are exported")
+    if run.get("restoration", {}).get("safe_verified") is not True:
+        limitations.append("Safe restoration was not verified in this source record")
+    run_id = str(run["run_id"])
+    sample_id = condition.get("sample_id") or settings.get("sample_id")
+    condition_id = run.get("condition_id") or _condition_id(settings)
+    actual_sample_id, actual_condition_id = bool(sample_id), bool(condition_id)
+    sample_id = sample_id or f"unidentified-sample:{run_id}"
+    condition_id = condition_id or f"unidentified-condition:{run_id}"
+    source_path = Path(run.get("analysis_path") or (Path(run.get("path", ".")) / "run.json"))
+    if not source_path.is_file():
+        # Export is also a preservation action when no native package was saved.
+        source_path = export_run(destination.with_name(destination.stem + "-source-" + str(uuid4()) + ".json"), run)
+    source = SourceRecord(run_id, str(source_path),
         run.get("started_utc") or run.get("operation", {}).get("started_utc") or run.get("created_utc")
         or datetime.now(timezone.utc).isoformat(), ANALYSIS_VERSION)
-    condition = {**condition, "configuration_id": acceptance["configuration_id"],
-        "spectral_quantities": quantities, "analysis_version": ANALYSIS_VERSION,
-        "acceptance_rationale": acceptance["rationale"], "acceptance_provenance": _plain(acceptance),
-        "instrument_bundle_promoted": False, "campaign_phase_accepted": False,
+    condition.update({"spectral_quantities": sorted({spectrum.quantity for spectrum in spectra}),
+        "analysis_version": ANALYSIS_VERSION, "sample_identity_provided": actual_sample_id,
+        "condition_identity_provided": actual_condition_id,
+        "missing_identity_policy": "Run-local record identifiers do not identify an actual sample or temperature",
+        "acceptance_scope": "Operator selected spectral windows; no physical sample-state qualification",
+        "acceptance_provenance": {"action": "operator_export", "operator_metadata": metadata},
+        "physical_sample_state_accepted": False, "instrument_bundle_promoted": False,
+        "campaign_phase_accepted": False, "axis_calibrated": axis_calibrated,
+        "source_status": run.get("status", "unspecified"), "quality_flags": quality_flags,
+        "limitations": limitations, "support_summary": support,
         "fit_models": [_plain(fit.settings) for fit in fits],
-        "fit_uncertainty": [fit.provenance.get("uncertainty_method") for fit in fits]}
+        "fit_uncertainty": [fit.provenance.get("uncertainty_method") for fit in fits]})
     record = SampleSpectralSelection(selection_id=str(uuid4()), sample_id=sample_id,
         producer_instance_id=f"{EXPERIMENT_ID}:{mode}", source=source,
-        condition_id=run.get("condition_id") or _condition_id(settings), condition=condition,
-        windows=selected_windows, accepted_by=accepted_by, accepted_utc=datetime.now(timezone.utc).isoformat(),
-        uncertainty_description="Center uncertainty in cm^-1 combines local full-Jacobian fit covariance and applicable axis uncertainty; model alternatives retained in source run")
-    return save_sample_selection(record, path)
+        condition_id=condition_id, condition=condition, windows=tuple(selected_windows),
+        accepted_by=str(accepted_by or "").strip() or "operator export", accepted_utc=datetime.now(timezone.utc).isoformat(),
+        uncertainty_description="Fitted-center uncertainties are conditional on the retained model and noise inputs; calibrated-axis uncertainty is included only where available. Source limitations and native support remain explicit.")
+    return save_sample_selection(record, destination)

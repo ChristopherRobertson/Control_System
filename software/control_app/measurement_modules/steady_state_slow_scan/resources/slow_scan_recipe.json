@@ -3,21 +3,20 @@
   "experiment_id": "steady_state_slow_scan",
   "status": "declarative architecture, no operating-value authority",
   "detector_modes": ["single", "dual"],
-  "condition_profiles": ["rt_hrp_co", "rt_mbco", "77k_hrp_co", "77k_mbco"],
-  "purposes": ["survey", "local_spectrum", "state_verification", "pre_post_comparison"],
+  "procedure": "Blank/Sample; optional sample and temperature annotations do not change operation",
   "recorder": "hf2li",
   "pump_outputs": {"t660_2.A": "OFF", "t660_2.B": "OFF"},
   "standing_exclusions": ["t660_1.D", "t660_2.D", "hf2li.DIO1", "mircat.DB9.5", "mircat.DB9.6", "mircat.DB9.8"],
   "timing": {
-    "probe_clock": "t660_1.A/B; qualified rate and pulse width required",
+    "probe_clock": "t660_1.A/B; selected from installed readbacks and supported overrides",
     "frame_clock": "t660_1.C to t660_2.TRIG_IN",
-    "process": "t660_2.C active-low to mircat.DB9.4; qualified sequence required",
+    "process": "t660_2.C active-low to mircat.DB9.4; finite frame schedule",
     "upload": "T660Service.preload_frame_table with acknowledged pending fields and cancellation",
     "blocks": "explicit QCL segment and direction; no implicit splitting of continuous records"
   },
   "controls": {
-    "single": ["detector dark", "compatible complete sequential matched background", "reviewed sample preliminary"],
-    "dual": ["detector dark", "simultaneous sample and matched-buffer reference", "compatible unpumped Q0", "reviewed sample preliminary"]
+    "single": ["automatic emission-OFF detector dark", "optional compatible sequential blank for relative spectra"],
+    "dual": ["automatic emission-OFF detector dark", "simultaneous sample and reference", "optional compatible Q0 for comparison"]
   },
   "claims": {
     "Q": "S/R; reference-normalized signal",

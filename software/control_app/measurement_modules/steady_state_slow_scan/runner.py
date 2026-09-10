@@ -13,20 +13,39 @@ from .settings import SlowScanSettings
 from .native import combine_poll_streams
 
 
+_CONTROL_SETTINGS = ("mode", "segments", "replicates")
+_CONTROL_SELECTED = ("sample_rate_hz", "reference_sample_rate_hz", "time_constant_s", "filter_order",
+    "probe_rate_hz", "probe_width_s", "marker_interval_cm1", "marker_width_s",
+    "process_pulse_width_s", "demodulator_roles", "hf2li")
+
+
+def _acquisition_compatibility(settings, selected, blocks=(), profile=None):
+    """Compare acquired settings, not labels, optional metadata or Auto spelling."""
+    def plain(value):
+        if hasattr(value, "to_dict"):
+            value = value.to_dict()
+        if isinstance(value, dict):
+            return {key: plain(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [plain(item) for item in value]
+        return value
+    return {"version": 2,
+        "settings": {key: plain(settings.get(key)) for key in _CONTROL_SETTINGS},
+        "selected": {key: plain(selected.get(key)) for key in _CONTROL_SELECTED},
+        "qcl_pulse_params": plain((profile or {}).get("qcl_pulse_params", {})),
+        "trajectories": [{key: plain(block).get(key) for key in
+            ("segment_id", "qcl", "direction", "start_cm1", "stop_cm1", "scan_speed_cm1_s")}
+            for block in blocks]}
+
+
 def compatibility(plan):
-    """Explicit fields, never a digest; only scientifically relevant settings."""
-    values = plan.settings.to_dict()
-    for key in ("acceptance_reviewer", "acceptance_rationale", "plan_label", "hardware",
-                "physical_controls_confirmed", "condition_equilibrated"):
-        values.pop(key, None)
-    return {"settings": values, "selected": deepcopy(plan.selected),
-            "configuration_id": plan.settings.condition.configuration_id,
-            "calibration_bundle_ids": list(plan.inputs.promoted_bundle_ids)}
+    return _acquisition_compatibility(plan.settings.to_dict(), plan.selected,
+        [block.to_dict() for block in plan.blocks], plan.inputs.scientific_profile)
 
 
 def compatibility_errors(result, plan, *, kind=None):
     if not isinstance(result, dict):
-        return ("A complete compatible control/preliminary record is required",)
+        return ("No compatible record selected",)
     errors = []
     if result.get("experiment_id") != "steady_state_slow_scan":
         errors.append("Experiment identity mismatch")
@@ -36,21 +55,24 @@ def compatibility_errors(result, plan, *, kind=None):
         errors.append("Connected acquisition requires an observed control, not a simulated record")
     if result.get("mode") != plan.settings.mode:
         errors.append("Detector mode mismatch")
-    if result.get("condition_id") != plan.settings.condition.condition_id:
-        errors.append("Independent sample/temperature condition mismatch")
     if result.get("status") != "completed":
-        errors.append("Interrupted, rejected or failed records cannot supply a control or review")
+        errors.append("Control did not complete")
     if kind is not None and result.get("kind") != kind:
         errors.append(f"Expected {kind} record, received {result.get('kind')}")
     expected = compatibility(plan)
     actual = result.get("compatibility", {})
+    if actual.get("version") != 2:
+        stored_plan = result.get("plan", {})
+        actual = _acquisition_compatibility(result.get("settings", actual.get("settings", {})),
+            stored_plan.get("selected", actual.get("selected", {})), stored_plan.get("blocks", ()),
+            stored_plan.get("inputs", {}).get("scientific_profile", {}))
     for key, value in expected.items():
         if actual.get(key) != value:
             if key == "settings":
                 names = [name for name, field in value.items() if actual.get(key, {}).get(name) != field]
-                errors.append("Control/review settings mismatch: " + ", ".join(names))
+                errors.append("Control settings mismatch: " + ", ".join(names))
             else:
-                errors.append(f"Control/review mismatch: {key}")
+                errors.append(f"Control mismatch: {key}")
     return tuple(errors)
 
 
@@ -195,36 +217,36 @@ class SlowScanRunner:
                 self.context.ownership.assert_owner(operation.ownership)
             check()
             operation.output_path.mkdir(parents=True, exist_ok=False)
+            if kind != "capability" and plan.errors:
+                raise ValueError("; ".join(plan.errors))
+            # Construction never opens a device. Discovery, configuration and
+            # retention all remain inside this operation's ownership scope.
+            factory = self.backend_factory or (InstalledSlowScanBackend if operation.hardware else SyntheticSlowScanBackend)
+            active_backend = backend or factory(self.context, operation)
+            active_backend.kind = kind
             if kind != "capability":
+                if operation.hardware and hasattr(active_backend, "resolve_plan"):
+                    report("configuration", "Reading device settings")
+                    plan = active_backend.resolve_plan(plan.settings, check)
+                    result["plan"] = plan.to_dict()
+                    result["compatibility"] = compatibility(plan)
                 plan.require_ready(hardware=operation.hardware)
-                if operation.hardware:
-                    from .planner import inputs_from_context
-                    resolved = inputs_from_context(self.context, plan.settings)
-                    for field in ("scientific_profile", "configuration_id", "condition_ids", "modes",
-                                  "promoted_bundle_ids", "tee_receiver_topology_verified", "process_trigger_qualified",
-                                  "wavelength_markers_qualified", "t660_tick_s", "t660_maximum_delay_s"):
-                        if getattr(resolved, field) != getattr(plan.inputs, field):
-                            raise ValueError(f"Promoted operating profile changed or is incompatible: {field}; replan and review")
-                    qualified = {window.qcl: window for window in resolved.qcl_windows}
-                    for window in plan.inputs.qcl_windows:
-                        original = qualified.get(window.qcl)
-                        if original is None or window.lower_cm1 < original.lower_cm1 or window.upper_cm1 > original.upper_cm1:
-                            raise ValueError("Selected QCL coverage exceeds applicable promoted usable range")
-                        for field in ("qualified", "source_id", "minimum_speed_cm1_s", "maximum_speed_cm1_s", "speed_increment_cm1_s", "tuning_settle_s"):
-                            if getattr(window, field) != getattr(original, field):
-                                raise ValueError(f"QCL characterization changed: {field}; replan and review")
                 needed = int(plan.estimates.get("native_storage_bytes") or 0)
                 if shutil.disk_usage(operation.output_path).free < needed:
                     raise OSError(f"Insufficient storage for {needed} estimated native bytes")
                 if available_memory_bytes() < int(plan.estimates.get("peak_memory_bytes") or 0):
                     raise MemoryError("Declared complete acquisition exceeds available memory; revise the explicit plan")
-                controls = snapshot.preliminary or {}
+                controls = dict(snapshot.preliminary or {})
                 self._validate_controls(controls, plan, kind)
-                result["controls"] = {key: {"run_id": value["run_id"], "path": value["path"]}
-                                      for key, value in controls.items() if key in ("dark", "blank", "q0") and isinstance(value, dict)}
-            factory = self.backend_factory or (InstalledSlowScanBackend if operation.hardware else SyntheticSlowScanBackend)
-            active_backend = backend or factory(self.context, operation)
-            active_backend.kind = kind
+                for name in ("dark", "blank", "q0"):
+                    if controls.get(name) is None:
+                        continue
+                    reasons = compatibility_errors(controls[name], plan,
+                        kind=name if name != "q0" else None)
+                    if reasons:
+                        result.setdefault("unused_controls", {})[name] = list(reasons)
+                        controls.pop(name)
+                        report("configuration", f"{name.capitalize()} differs; acquiring without this record")
             if kind == "capability":
                 report("configuration", "Checking connected capabilities under exclusive ownership")
                 result["readbacks"] = active_backend.discover(check)
@@ -234,12 +256,34 @@ class SlowScanRunner:
                 result["compiled_timing"] = compiled.to_dict()
                 active_backend.prepare(plan, compiled, check, report)
                 result["readbacks"] = active_backend.readbacks
-                self._validate_instrument_controls(controls, active_backend.readbacks)
+                for name in ("dark", "blank", "q0"):
+                    try:
+                        self._validate_instrument_controls({name: controls.get(name)}, active_backend.readbacks)
+                    except ValueError as exc:
+                        controls.pop(name, None)
+                        result.setdefault("unused_controls", {})[name] = [str(exc)]
+                        report("configuration", f"{name.capitalize()} device settings differ; record omitted")
                 if kind == "dark":
                     records = active_backend.acquire_dark(plan, check, report)
                     result["dark_native_records"] = records
                     result["dark"] = self._dark_statistics(records, plan)
                 else:
+                    if not controls.get("dark"):
+                        report("dark", "Reading emission-OFF baseline")
+                        records = active_backend.acquire_dark(plan, check, report)
+                        result["dark_native_records"] = records
+                        result["dark"] = self._dark_statistics(records, plan)
+                        controls["dark"] = {"run_id": operation.run_id + ":dark", "kind": "dark",
+                            "source_run_id": operation.run_id, "native_record_field": "dark_native_records",
+                            "experiment_id": "steady_state_slow_scan", "instance_id": self.context.instance_id,
+                            "mode": self.context.mode, "condition_id": plan.settings.condition.condition_id,
+                            "status": "completed", "path": str(operation.output_path),
+                            "settings": plan.settings.to_dict(), "compatibility": compatibility(plan),
+                            "simulation": not operation.hardware, "dark": deepcopy(result["dark"]),
+                            "readbacks": deepcopy(active_backend.readbacks)}
+                        result["automatic_dark"] = controls["dark"]
+                    result["controls"] = {key: {"run_id": value["run_id"], "path": value["path"]}
+                        for key, value in controls.items() if key in ("dark", "blank", "q0") and isinstance(value, dict)}
                     for block_index, block in enumerate(compiled.blocks):
                         check()
                         observed = active_backend.acquire_block(block, plan, check, report)
@@ -248,12 +292,10 @@ class SlowScanRunner:
                             sweep = NativeSweep(f"{operation.run_id}:{block.block.block_id}:{repeat}", self.context.mode,
                                 plan.settings.condition.condition_id, block.block.segment_id, block.block.direction, repeat,
                                 **names, metadata={"compatibility": compatibility(plan),
-                                    "configuration_id": plan.settings.condition.configuration_id,
+                                    "configuration_id": plan.inputs.configuration_id,
                                     "condition": plan.settings.condition.to_dict(), "qcl": block.block.qcl,
                                     "native_assignment": {key: deepcopy(value) for key, value in values.items() if key not in names},
-                                    "effective_resolution_cm1": (plan.selected["intrinsic_resolution_cm1"]**2
-                                        + (block.block.scan_speed_cm1_s/plan.selected["sample_rate_hz"])**2
-                                        + (block.block.scan_speed_cm1_s*plan.selected["measured_response_s"])**2)**.5,
+                                    "effective_resolution_cm1": self._resolution_estimate(plan, block.block),
                                     "native_axis_basis": "simulated" if not operation.hardware else "observed controller marker intervals",
                                     "native_chunk_path": str(operation.output_path / "native_chunks"),
                                     "simulation": not operation.hardware})
@@ -264,7 +306,7 @@ class SlowScanRunner:
                             worker.progress.emit(block_index+1, len(compiled.blocks))
                         except Exception:
                             pass
-                    report("analysis", "Assessing each direction/replicate before any pooling")
+                    report("analysis", "Fitting spectra")
                     for sweep in result["sweeps"]:
                         check()
                         processed = self._process(sweep, controls, plan, kind, check)
@@ -309,7 +351,7 @@ class SlowScanRunner:
             if not restored.get("safe_verified", False):
                 result["status"] = "failed"
                 result["cleanup_error"] = "; ".join(restored.get("errors", ["Restoration unverified"]))
-            report("saving", "Preserving native, rejected, interrupted and restoration records")
+            report("saving", "Saving data")
             result["elapsed_s"] = monotonic()-started
             try:
                 save_run(operation.output_path, result, result["sweeps"])
@@ -327,26 +369,25 @@ class SlowScanRunner:
                 f"Original outcome: {primary_error}" if primary_error else None) if x)) from primary_error
         if primary_error:
             raise primary_error
-        report("complete", "Slow scan saved; pump outputs OFF")
+        report("complete", "Saved")
         return result
 
     @staticmethod
     def _validate_controls(controls, plan, kind):
         if kind == "blank" and plan.settings.mode == "dual":
             raise ValueError("Dual slow scan uses simultaneous matched reference; no routine sequential blank")
-        required = []
-        if kind in ("blank", "preliminary", "measurement"):
-            required.append(("dark", "dark"))
-        if kind in ("preliminary", "measurement") and plan.settings.mode == "single":
-            required.append(("blank", "blank"))
-        if kind == "measurement":
-            required.append(("q0", "preliminary"))
-            if not controls.get("reviewed"):
-                raise ValueError("Explicit preliminary review and Start are required")
-        for name, expected_kind in required:
-            errors = compatibility_errors(controls.get(name), plan, kind=expected_kind)
-            if errors:
-                raise ValueError(f"{name}: " + "; ".join(errors))
+        # Controls are reusable observed data, never procedural approvals.
+        # Missing blank/Q0 leaves raw/relative output; dark is acquired here.
+
+    @staticmethod
+    def _resolution_estimate(plan, block):
+        intrinsic = plan.selected.get("intrinsic_resolution_cm1")
+        response = plan.selected.get("measured_response_s")
+        rate = plan.selected.get("sample_rate_hz")
+        if any(value is None for value in (intrinsic, response, rate)):
+            return None
+        return (intrinsic**2 + (block.scan_speed_cm1_s/rate)**2 +
+                (block.scan_speed_cm1_s*response)**2)**.5
 
     @staticmethod
     def _validate_instrument_controls(controls, current):
@@ -364,7 +405,7 @@ class SlowScanRunner:
             if previous is not None:
                 previous = {path: value for path, value in previous.items() if "/oscs/" not in path}
             if previous != actual:
-                raise ValueError(f"{role} HF2LI actual instrument-state mismatch; reacquire/review compatible data")
+                raise ValueError(f"{role} HF2LI settings changed")
 
     @staticmethod
     def _dark_statistics(records, plan):
@@ -391,6 +432,8 @@ class SlowScanRunner:
             match = next((s for s in choices if s.native.replicate == sweep.replicate), None)
             if match is None:
                 raise ValueError(f"No matched {name} segment/direction/replicate")
+            if requested_kind == "unpumped_q0" and match.ratio is None:
+                return None  # A prior raw spectrum is not a normalized baseline.
             values = match.ratio if requested_kind == "unpumped_q0" and match.ratio is not None else match.signal
             variance = match.provenance.get("ratio_variance", match.variance) if requested_kind == "unpumped_q0" else match.variance
             return SpectralControl(result["run_id"]+":"+match.native.sweep_id, requested_kind, sweep.mode,
@@ -398,12 +441,25 @@ class SlowScanRunner:
                 match.provenance.get("ratio_valid", match.valid) if requested_kind == "unpumped_q0" else match.valid,
                 {"complete": True, "compatibility": compatibility(plan)})
         profile = plan.inputs.scientific_profile
-        axis = AxisCorrection(**profile["axis_correction"]) if profile.get("axis_correction") else None
-        balance = SpectralControl(**profile["path_balance"]) if profile.get("path_balance") else None
-        return process_sweep(sweep, dark=controls.get("dark", {}).get("dark") if controls.get("dark") else None,
+        omitted = {}
+        def optional_calibration(name, constructor):
+            if not profile.get(name):
+                return None
+            try:
+                return constructor(**profile[name])
+            except (TypeError, ValueError) as exc:
+                omitted[name] = str(exc)
+                return None
+        axis = optional_calibration("axis_correction", AxisCorrection)
+        balance = optional_calibration("path_balance", SpectralControl)
+        processed = process_sweep(sweep, dark=controls.get("dark", {}).get("dark") if controls.get("dark") else None,
             blank=control("blank", "blank") if sweep.mode == "single" and kind != "blank" else None,
-            q0=control("q0", "unpumped_q0") if kind == "measurement" else None,
+            q0=control("q0", "unpumped_q0") if kind == "measurement" and (sweep.mode == "dual" or controls.get("blank")) else None,
             path_balance=balance, axis_correction=axis, max_gap_cm1=profile.get("control_match_max_gap_cm1"), cancel_check=check)
+        if omitted:
+            processed = replace(processed, provenance={**processed.provenance, "calibration_omitted": omitted},
+                flags=tuple(dict.fromkeys((*processed.flags, *(name+"_not_applied" for name in omitted)))))
+        return processed
 
 
 def run(context, snapshot, worker, *, role=None, backend=None):

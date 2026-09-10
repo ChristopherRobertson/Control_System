@@ -45,7 +45,7 @@ class NativeSweep:
     def __post_init__(self):
         if self.mode not in ("single", "dual") or self.direction not in ("forward", "reverse"):
             raise ValueError("Sweep mode/direction must be explicit single/dual and forward/reverse")
-        for name in ("sweep_id", "condition_id", "segment_id"):
+        for name in ("sweep_id", "segment_id"):
             if not getattr(self, name):
                 raise ValueError(f"{name} is required")
         size = len(self.axis_cm1)
@@ -127,18 +127,28 @@ def _variance(value, size):
 def _control_compatible(sweep, control, kind):
     if control.mode != sweep.mode:
         raise ValueError(f"{kind} detector mode mismatch: {control.mode} != {sweep.mode}")
-    if control.condition_id != sweep.condition_id:
-        raise ValueError(f"{kind} condition mismatch: {control.condition_id} != {sweep.condition_id}")
     if control.kind != kind:
         raise ValueError(f"Expected {kind}, received {control.kind}")
-    expected = sweep.metadata.get("compatibility", {})
-    actual = control.metadata.get("compatibility", {})
+    def operational(value):
+        if not isinstance(value, Mapping):
+            return value
+        annotations = {"condition", "condition_id", "sample_id", "preparation_id", "cell_id", "position_id",
+            "temperature_id", "temperature_k", "temperature_uncertainty_k", "temperature_record_id", "matrix_id",
+            "configuration_id", "state_id", "exposure_history_id", "pH", "cell_reload_id", "lot_id",
+            "state_verification_id", "thermal_history_id", "calibration_bundle_ids", "promoted_bundle_ids",
+            "acceptance_reviewer", "acceptance_rationale", "review_complete", "condition_equilibrated",
+            "physical_controls_confirmed", "plan_label", "purpose", "hardware", "metadata", "annotations",
+            "notes", "operator", "description"}
+        return {key: operational(item) for key, item in value.items()
+                if key not in annotations and not key.startswith("fit_")}
+    expected = operational(sweep.metadata.get("compatibility", {}))
+    actual = operational(control.metadata.get("compatibility", {}))
     if kind == "path_balance":
         # Instrument/path calibration is reusable data, not a frozen sample run.
         # Its applicability is explicit and cannot depend on mutable fit choices.
         applicability = dict(control.metadata.get("applicability", {}))
-        configuration = control.metadata.get("configuration_id") or applicability.get("configuration_id") or actual.get("configuration_id")
-        sweep_configuration = sweep.metadata.get("configuration_id") or expected.get("configuration_id")
+        configuration = control.metadata.get("configuration_id") or applicability.get("configuration_id") or control.metadata.get("compatibility", {}).get("configuration_id")
+        sweep_configuration = sweep.metadata.get("configuration_id") or sweep.metadata.get("compatibility", {}).get("configuration_id")
         if not configuration or configuration != sweep_configuration:
             raise ValueError("path_balance compatibility mismatch for configuration_id")
         candidates = {**expected, **dict(sweep.metadata.get("condition", {})), **dict(sweep.metadata)}
@@ -298,7 +308,7 @@ def process_sweep(sweep: NativeSweep, *, dark=None, blank=None, q0=None, path_ba
     elif blank is not None:
         _control_compatible(sweep, blank, "blank")
         if not blank.metadata.get("complete", False):
-            raise ValueError("Single-detector mode requires a complete compatible sequential blank")
+            flags.append("partial_blank_support")
         background, background_var, support = match_support(axis, blank.axis_cm1, blank.values,
             blank.variance, blank.valid, max_gap_cm1=max_gap_cm1)
         valid &= support & (background > 0) & (sample > 0)
@@ -327,10 +337,19 @@ def process_sweep(sweep: NativeSweep, *, dark=None, blank=None, q0=None, path_ba
         provenance["delta_absorbance_valid"] = delta_valid.copy()
     if path_balance is not None:
         if sweep.mode != "dual":
-            raise ValueError("Path balance B is a dual-detector calibration")
-        _control_compatible(sweep, path_balance, "path_balance")
-        if not path_balance.metadata.get("calibration_id") or not path_balance.metadata.get("applicable"):
-            raise ValueError("Absolute absorbance requires an applicable measured path-balance calibration B")
+            flags.append("path_balance_not_applied")
+            provenance["path_balance_limitation"] = "B is a dual-detector calibration"
+            path_balance = None
+        else:
+            try:
+                _control_compatible(sweep, path_balance, "path_balance")
+                if not path_balance.metadata.get("calibration_id") or not path_balance.metadata.get("applicable"):
+                    raise ValueError("Applicable measured path-balance calibration B was not supplied")
+            except ValueError as exc:
+                flags.append("path_balance_not_applied")
+                provenance["path_balance_limitation"] = str(exc)
+                path_balance = None
+    if path_balance is not None:
         balance, balance_var, support = match_support(axis, path_balance.axis_cm1, path_balance.values,
             path_balance.variance, path_balance.valid, max_gap_cm1=max_gap_cm1)
         valid &= support & (balance > 0) & (ratio > 0)
@@ -343,15 +362,16 @@ def process_sweep(sweep: NativeSweep, *, dark=None, blank=None, q0=None, path_ba
         provenance["normalization_assumption"] = "B independent of sample acquisition; detector covariance retained"
     if axis_correction is not None:
         configuration = sweep.metadata.get("configuration_id", sweep.metadata.get("compatibility", {}).get("configuration_id"))
-        if not axis_correction.applicable or configuration != axis_correction.configuration_id:
-            raise ValueError("Spectral-axis correction is not applicable to this configuration")
         in_support = (axis >= axis_correction.lower_cm1) & (axis <= axis_correction.upper_cm1)
-        if np.any(np.isfinite(axis) & ~in_support):
-            raise ValueError("Native axis lies outside calibrated correction support")
-        axis = axis_correction.offset_cm1 + axis_correction.scale * axis
-        provenance["axis_calibration_id"] = axis_correction.calibration_id
-        provenance["axis_uncertainty_cm1"] = axis_correction.uncertainty_cm1
-    else:
+        if not axis_correction.applicable or configuration != axis_correction.configuration_id:
+            provenance["axis_limitation"] = "Spectral-axis correction is not applicable to this configuration"
+        elif np.any(np.isfinite(axis) & ~in_support):
+            provenance["axis_limitation"] = "Native axis lies outside calibrated correction support"
+        else:
+            axis = axis_correction.offset_cm1 + axis_correction.scale * axis
+            provenance["axis_calibration_id"] = axis_correction.calibration_id
+            provenance["axis_uncertainty_cm1"] = axis_correction.uncertainty_cm1
+    if not provenance.get("axis_calibration_id"):
         flags.append("spectral_axis_uncalibrated")
     valid &= np.isfinite(signal)
     negative_variance = np.isfinite(variance) & (variance < -1e-15)
@@ -394,8 +414,8 @@ class FitSettings:
     def __post_init__(self):
         if not 0 <= self.peak_count <= 8 or self.line_shape not in ("gaussian", "lorentzian"):
             raise ValueError("Supported fits have 0..8 components with Gaussian or Lorentzian line shape")
-        if self.baseline_degree not in (0, 1, 2) or not self.selection_reason.strip():
-            raise ValueError("A justified constant, linear or quadratic baseline is required")
+        if self.baseline_degree not in (0, 1, 2):
+            raise ValueError("Supported baselines are constant, linear or quadratic")
         if self.peak_polarity not in ("auto", "positive", "negative"):
             raise ValueError("Peak polarity must be auto, positive or negative")
         if any(not np.isfinite(p) or p <= 0 for p in self.fringe_periods_cm1):
@@ -678,8 +698,8 @@ def assess_sweeps(spectra: Sequence[ProcessedSpectrum], *, maximum_rms_differenc
     comparisons = []
     for first_index, first in enumerate(spectra):
         for second in spectra[first_index + 1:]:
-            if (first.native.mode, first.native.condition_id, first.native.segment_id, first.quantity) != (
-                    second.native.mode, second.native.condition_id, second.native.segment_id, second.quantity):
+            if (first.native.mode, first.native.segment_id, first.quantity) != (
+                    second.native.mode, second.native.segment_id, second.quantity):
                 continue
             aligned, _, supported = match_support(first.axis_cm1, second.axis_cm1, second.signal,
                 second.variance, second.valid, max_gap_cm1=max_gap_cm1)
@@ -701,12 +721,10 @@ def assess_sweeps(spectra: Sequence[ProcessedSpectrum], *, maximum_rms_differenc
 def compare_states(before: FitResult, after: FitResult, *, center_tolerance_cm1=None,
                    area_fraction_tolerance=None):
     """Compare independently fitted pre/post peaks in center order with explicit limits."""
-    if before.provenance.get("condition_id") != after.provenance.get("condition_id"):
-        raise ValueError("Pre/post-state condition mismatch")
     if before.provenance.get("quantity") != after.provenance.get("quantity"):
         raise ValueError("Pre/post-state spectral quantity mismatch")
     if len(before.peaks) != len(after.peaks):
-        return {"accepted": False, "reason": "Component counts differ; assignment requires review", "peaks": []}
+        return {"accepted": False, "reason": "Component counts differ; component correspondence is unresolved", "peaks": []}
     rows = []
     for first, second in zip(before.peaks, after.peaks):
         shift = second.center_cm1 - first.center_cm1
@@ -718,5 +736,7 @@ def compare_states(before: FitResult, after: FitResult, *, center_tolerance_cm1=
             "area_within_tolerance": None if area_fraction_tolerance is None or fraction is None else abs(fraction) <= area_fraction_tolerance})
     accepted = None if center_tolerance_cm1 is None or area_fraction_tolerance is None else all(
         row["center_within_tolerance"] and row["area_within_tolerance"] for row in rows)
-    return {"accepted": accepted, "reason": "Independent fits; ordered component correspondence requires review", "peaks": rows,
+    return {"accepted": accepted, "reason": "Independent fits paired by center order; component assignments remain conditional", "peaks": rows,
+            "before_metadata_condition_id": before.provenance.get("condition_id"),
+            "after_metadata_condition_id": after.provenance.get("condition_id"),
             "baseline_rms_change": float(np.nanmean(after.baseline) - np.nanmean(before.baseline))}

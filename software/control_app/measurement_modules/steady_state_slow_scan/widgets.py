@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-import json
 import math
 from pathlib import Path
 import time
@@ -10,14 +9,14 @@ import time
 import numpy as np
 from PySide6.QtCore import QTimer, Signal, Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
+    QComboBox, QFormLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
-    QWidget, QFileDialog, QPlainTextEdit, QDialog, QSplitter, QScrollArea,
+    QWidget, QFileDialog, QDoubleSpinBox, QSpinBox, QHeaderView, QToolButton,
 )
 
 from control_app.measurement_host import TabHandle
 from control_app.measurement_host.presentation import (
-    GuidedMeasurementPanel, LinkedSliceControl, PlotPanel, StartSnapshot,
+    CompactMeasurementPanel, LinkedSliceControl, PlotPanel,
 )
 
 
@@ -40,178 +39,143 @@ def _quantity_label(quantity):
 
 
 class SlowScanSettingsWidget(QWidget):
-    """Editable scientific values; blank overrides resolve from qualified profiles."""
+    """Short acquisition form with optional independent automatic overrides."""
 
     changed = Signal()
-    PROFILES = (("Room temperature HRP–CO", "rt_hrp_co"),
-                ("Room temperature MbCO", "rt_mbco"),
-                ("77 K HRP–CO", "77k_hrp_co"), ("77 K MbCO", "77k_mbco"))
-    IDENTITY_FIELDS = (
-        ("sample_id", "Sample ID"), ("preparation_id", "Preparation ID"),
-        ("cell_id", "Cell / reload ID"), ("position_id", "Illuminated position ID"),
-        ("temperature_id", "Temperature condition ID"), ("matrix_id", "Matrix / buffer ID"),
-        ("configuration_id", "Configuration ID"), ("temperature_k", "Observed temperature (K)"),
-        ("temperature_uncertainty_k", "Temperature uncertainty (K)"),
-        ("temperature_record_id", "Temperature observation record"),
-        ("pH", "Measured pH"), ("state_id", "Sample state ID"),
-        ("exposure_history_id", "Exposure history record"),
-        ("cell_reload_id", "Cell reload ID"), ("lot_id", "Material lot ID"),
-        ("state_verification_id", "Independent state verification record"),
-        ("thermal_history_id", "Thermal history / cooling record"),
-    )
-    NUMERIC_FIELDS = (
-        ("requested_resolution_cm1", "Requested resolution (cm⁻¹)"),
+    OVERRIDE_FIELDS = (
+        ("requested_scan_speed_cm1_s", "Scan speed (cm⁻¹/s)"),
         ("measured_linewidth_cm1", "Measured line width (cm⁻¹)"),
-        ("requested_scan_speed_cm1_s", "Scan speed override (cm⁻¹/s)"),
-        ("sample_rate_hz", "HF2LI native rate override (Hz/channel)"),
-        ("time_constant_s", "HF2LI time constant override (s)"),
-        ("filter_order", "HF2LI filter order override"),
-        ("replicates", "Technical replicates, each direction"),
-        ("settle_s", "Tune / filter settling override (s)"),
-        ("marker_interval_cm1", "Native marker interval override (cm⁻¹)"),
-        ("marker_width_s", "Marker width override (s)"),
-        ("probe_rate_hz", "Probe rate override (Hz)"),
-        ("probe_width_s", "Probe width override (s)"),
-        ("process_pulse_width_s", "Process trigger width override (s)"),
-        ("dark_duration_s", "Dark observation duration override (s)"),
-        ("fit_peak_count", "Prospective component count"),
-        ("fit_baseline_degree", "Baseline polynomial degree"),
+        ("sample_rate_hz", "Sample rate (Hz)"),
+        ("time_constant_s", "Sample time constant (s)"),
+        ("filter_order", "Sample filter order"),
+        ("sample_range_v", "Sample input range (V)"),
+        ("reference_sample_rate_hz", "Reference rate (Hz)"),
+        ("reference_time_constant_s", "Reference time constant (s)"),
+        ("reference_filter_order", "Reference filter order"),
+        ("reference_range_v", "Reference input range (V)"),
+        ("settle_s", "Settling (s)"),
+        ("marker_interval_cm1", "Marker interval (cm⁻¹)"),
+        ("marker_width_s", "Marker width (s)"),
+        ("probe_rate_hz", "Probe rate (Hz)"),
+        ("probe_width_s", "Probe width (s)"),
+        ("process_pulse_width_s", "Process pulse width (s)"),
+        ("dark_duration_s", "Dark duration (s)"),
     )
-    INTEGERS = {"filter_order", "replicates", "fit_peak_count", "fit_baseline_degree"}
+    INTEGERS = {"filter_order", "reference_filter_order", "replicates", "fit_peak_count", "fit_baseline_degree"}
 
     def __init__(self, mode, parent=None):
         super().__init__(parent)
         from .settings import SlowScanSettings
-        self.mode = mode
-        self._applying = False
-        self._profiles = {}
-        self._previous_profile = "rt_hrp_co"
+        self.mode, self._applying = mode, False
         self._base = SlowScanSettings(mode=mode).to_dict()
         self.fields = {}
         layout = QVBoxLayout(self)
-        notice = QLabel("Unpumped steady-state spectra. FIRE and Q-switch remain OFF. "
-                        "Blank numeric overrides use the applicable characterized operating profile.")
-        notice.setWordWrap(True)
-        layout.addWidget(notice)
-
-        identity = QGroupBox("Sample and condition")
-        form = QFormLayout(identity)
+        layout.setContentsMargins(0, 0, 0, 0)
+        form = QFormLayout()
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.condition = QComboBox()
-        for title, key in self.PROFILES:
-            self.condition.addItem(title, key)
-        form.addRow("Condition profile", self.condition)
-        for key, title in self.IDENTITY_FIELDS:
-            editor = QLineEdit()
-            editor.setObjectName(key)
-            editor.textChanged.connect(self._changed)
-            self.fields[key] = editor
-            form.addRow(title, editor)
-        self.equilibrated = QCheckBox("Condition equilibrated; temperature evidence entered above")
-        self.equilibrated.toggled.connect(self._changed)
-        form.addRow(self.equilibrated)
-        layout.addWidget(identity)
-
-        geometry = QGroupBox("Measurement and declared QCL segments")
-        form = QFormLayout(geometry)
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.purpose = QComboBox()
-        for label, key in (("Survey", "survey"), ("Local high-quality spectrum", "local_spectrum"),
-                           ("Short state verification", "state_verification"),
-                           ("Pre/post-exposure comparison", "pre_post_comparison")):
-            self.purpose.addItem(label, key)
-        self.purpose.currentIndexChanged.connect(self._changed)
-        form.addRow("Purpose", self.purpose)
         self.plan_label = QLineEdit()
+        self.plan_label.setPlaceholderText("Optional")
         self.plan_label.textChanged.connect(self._changed)
-        form.addRow("Plan label", self.plan_label)
-        self.segments = QTableWidget(0, 4)
-        self.segments.setHorizontalHeaderLabels(["Segment ID", "QCL", "Lower cm⁻¹", "Upper cm⁻¹"])
-        self.segments.setMinimumHeight(125)
+        form.addRow("Run label", self.plan_label)
+        self.lower, self.upper = QDoubleSpinBox(), QDoubleSpinBox()
+        for editor, name in ((self.lower, "lower_cm1"), (self.upper, "upper_cm1")):
+            editor.setObjectName(name)
+            editor.setDecimals(3)
+            editor.setRange(0., 100000.)
+            editor.setSuffix(" cm⁻¹")
+            editor.setKeyboardTracking(False)
+            editor.valueChanged.connect(self._changed)
+        form.addRow("From", self.lower)
+        form.addRow("To", self.upper)
+        self.resolution = QDoubleSpinBox()
+        self.resolution.setObjectName("requested_resolution_cm1")
+        self.resolution.setDecimals(4)
+        self.resolution.setRange(.0001, 1000.)
+        self.resolution.setSuffix(" cm⁻¹")
+        self.resolution.setKeyboardTracking(False)
+        self.resolution.valueChanged.connect(self._changed)
+        self.repeats = QSpinBox()
+        self.repeats.setObjectName("replicates")
+        self.repeats.setRange(1, 8192)
+        self.repeats.valueChanged.connect(self._changed)
+        form.addRow("Resolution", self.resolution)
+        form.addRow("Repeats per direction", self.repeats)
+        layout.addLayout(form)
+        self.advanced_widget = QWidget()
+        advanced = QVBoxLayout(self.advanced_widget)
+        advanced.setContentsMargins(0, 0, 0, 0)
+        advanced.addWidget(QLabel("Optional segment overrides (cm⁻¹)"))
+        self.segments = QTableWidget(0, 3)
+        self.segments.setHorizontalHeaderLabels(["From", "To", "QCL"])
+        self.segments.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.segments.verticalHeader().hide()
+        self.segments.setMinimumHeight(84)
+        self.segments.setMaximumHeight(135)
         self.segments.cellChanged.connect(self._changed)
-        form.addRow(self.segments)
+        advanced.addWidget(self.segments)
         row = QHBoxLayout()
-        add = QPushButton("Add segment")
-        remove = QPushButton("Remove selected segment")
+        add, remove = QPushButton("Add window"), QPushButton("Remove")
         add.clicked.connect(lambda: self.add_segment())
         remove.clicked.connect(self.remove_segment)
         row.addWidget(add)
         row.addWidget(remove)
-        form.addRow(row)
-        layout.addWidget(geometry)
-
-        acquisition = QGroupBox("Resolution, acquisition and fit settings")
-        form = QFormLayout(acquisition)
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        for key, title in self.NUMERIC_FIELDS:
+        advanced.addLayout(row)
+        self.capability_button = QPushButton("Check connected device")
+        self.capability_button.setToolTip("Read connected settings under instrument ownership. Start also reads the device automatically.")
+        advanced.addWidget(self.capability_button)
+        override_form = QFormLayout()
+        override_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        self.override_inputs = {}
+        for key, label in self.OVERRIDE_FIELDS:
+            if mode == "single" and key.startswith("reference_"):
+                continue
             editor = QLineEdit()
             editor.setObjectName(key)
-            editor.setPlaceholderText("Automatic from applicable evidence")
+            editor.setPlaceholderText("Auto")
             editor.textChanged.connect(self._changed)
-            self.fields[key] = editor
-            form.addRow(title, editor)
+            self.fields[key] = self.override_inputs[key] = editor
+            override_form.addRow(label, editor)
+        advanced.addLayout(override_form)
+        automatic = QPushButton("Restore automatic settings")
+        automatic.clicked.connect(self.restore_automatic)
+        advanced.addWidget(automatic)
+        fit_form = QFormLayout()
+        fit_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        self.peak_count = QSpinBox()
+        self.peak_count.setRange(0, 8)
+        self.peak_count.valueChanged.connect(self._changed)
+        self.baseline_degree = QSpinBox()
+        self.baseline_degree.setRange(0, 2)
+        self.baseline_degree.valueChanged.connect(self._changed)
         self.line_shape = QComboBox()
         self.line_shape.addItems(["gaussian", "lorentzian"])
         self.line_shape.currentTextChanged.connect(self._changed)
-        form.addRow("Prospective line shape", self.line_shape)
         self.fringes = QLineEdit()
-        self.fringes.setPlaceholderText("Optional measured periods, comma separated (cm⁻¹)")
+        self.fringes.setPlaceholderText("Optional periods, comma separated")
         self.fringes.textChanged.connect(self._changed)
-        form.addRow("Fringe periods (cm⁻¹)", self.fringes)
-        self.hardware = QCheckBox("Use connected instruments (exclusive instrument ownership)")
-        self.hardware.toggled.connect(self._changed)
-        form.addRow(self.hardware)
-        layout.addWidget(acquisition)
-
-        profile = QGroupBox("Qualified operating profile")
-        form = QFormLayout(profile)
-        self.bundle_ids = QLineEdit()
-        self.bundle_ids.setPlaceholderText("Promoted bundle IDs, comma separated")
-        self.bundle_ids.textChanged.connect(self._changed)
-        form.addRow("Promoted bundle IDs", self.bundle_ids)
-        self.load_profile_button = QPushButton("Load promoted operating profile")
-        self.capability_button = QPushButton("Read connected capabilities")
-        form.addRow(self.load_profile_button)
-        form.addRow(self.capability_button)
-        layout.addWidget(profile)
-        layout.addStretch()
+        fit_form.addRow("Peak components", self.peak_count)
+        fit_form.addRow("Line shape", self.line_shape)
+        fit_form.addRow("Baseline degree", self.baseline_degree)
+        fit_form.addRow("Fringe periods (cm⁻¹)", self.fringes)
+        advanced.addLayout(fit_form)
         self.apply_settings(self._base)
-        self.condition.currentIndexChanged.connect(self._switch_profile)
 
     def _changed(self, *_):
         if not self._applying:
             self.changed.emit()
 
-    def _identity(self):
-        values = {key: editor.text().strip() for key, editor in self.fields.items()
-                  if key in dict(self.IDENTITY_FIELDS)}
-        for key in ("temperature_k", "temperature_uncertainty_k", "pH"):
-            values[key] = float(values[key]) if values[key] else None
-        values["condition_id"] = self.condition.currentData()
-        return values
-
-    def _switch_profile(self, *_):
-        if self._applying:
-            return
-        # Retain independent identities when switching protein/temperature profiles.
-        self._profiles[self._previous_profile] = {
-            key: self.fields[key].text() for key, _ in self.IDENTITY_FIELDS}
-        selected = self.condition.currentData()
-        values = self._profiles.get(selected, {"state_id": "initial"})
-        self._applying = True
-        for key, _ in self.IDENTITY_FIELDS:
-            self.fields[key].setText(str(values.get(key, "")))
-        self.equilibrated.setChecked(False)
-        self._previous_profile = selected
-        self._applying = False
-        self.changed.emit()
-
     def add_segment(self, values=None):
+        was_applying = self._applying
+        self._applying = True
         row = self.segments.rowCount()
         self.segments.insertRow(row)
-        values = values or {"segment_id": f"segment-{row + 1}", "qcl": "", "lower_cm1": "", "upper_cm1": ""}
-        for column, key in enumerate(("segment_id", "qcl", "lower_cm1", "upper_cm1")):
-            self.segments.setItem(row, column, QTableWidgetItem(str(values.get(key, ""))))
+        values = values or {"segment_id": f"window-{row + 1}", "qcl": 0, "lower_cm1": "", "upper_cm1": ""}
+        for column, key in enumerate(("lower_cm1", "upper_cm1", "qcl")):
+            value = values.get(key, "")
+            item = QTableWidgetItem("Auto" if key == "qcl" and value == 0 else str(value))
+            item.setData(Qt.ItemDataRole.UserRole, values.get("segment_id", f"window-{row + 1}"))
+            self.segments.setItem(row, column, item)
+        self._applying = was_applying
         self._changed()
 
     def remove_segment(self):
@@ -220,24 +184,34 @@ class SlowScanSettingsWidget(QWidget):
             self.segments.removeRow(row)
             self._changed()
 
+    def restore_automatic(self):
+        self._applying = True
+        for editor in self.override_inputs.values():
+            editor.clear()
+        self._applying = False
+        self.changed.emit()
+
     def read_settings(self):
         from .settings import SlowScanSettings
         values = deepcopy(self._base)
-        values.update(mode=self.mode, condition=self._identity(), purpose=self.purpose.currentData(),
-                      hardware=self.hardware.isChecked(), condition_equilibrated=self.equilibrated.isChecked(),
-                      plan_label=self.plan_label.text().strip(),
-                      calibration_bundle_ids=[v.strip() for v in self.bundle_ids.text().split(",") if v.strip()],
-                      fit_line_shape=self.line_shape.currentText(),
+        values.update(mode=self.mode, hardware=True,
+                      lower_cm1=self.lower.value(), upper_cm1=self.upper.value(),
+                      plan_label=self.plan_label.text().strip(), requested_resolution_cm1=self.resolution.value(),
+                      replicates=self.repeats.value(), fit_peak_count=self.peak_count.value(),
+                      fit_baseline_degree=self.baseline_degree.value(), fit_line_shape=self.line_shape.currentText(),
                       fit_fringe_periods_cm1=[float(v.strip()) for v in self.fringes.text().split(",") if v.strip()])
         values["segments"] = []
         for row in range(self.segments.rowCount()):
-            cells = [self.segments.item(row, column).text().strip() if self.segments.item(row, column) else ""
-                     for column in range(4)]
-            values["segments"].append({"segment_id": cells[0], "qcl": int(cells[1]),
-                                       "lower_cm1": float(cells[2]), "upper_cm1": float(cells[3])})
-        for key, _ in self.NUMERIC_FIELDS:
-            text = self.fields[key].text().strip()
-            values[key] = (int(text) if key in self.INTEGERS else float(text)) if text else None
+            items = [self.segments.item(row, column) for column in range(3)]
+            text = [item.text().strip() if item else "" for item in items]
+            qcl = 0 if not text[2] or text[2].casefold() == "auto" else int(text[2])
+            values["segments"].append({"segment_id": items[0].data(Qt.ItemDataRole.UserRole) or f"window-{row+1}",
+                                       "qcl": qcl, "lower_cm1": float(text[0]), "upper_cm1": float(text[1])})
+        for key, editor in self.override_inputs.items():
+            value = editor.text().strip()
+            values[key] = None if not value or value.casefold() == "auto" else int(value) if key in self.INTEGERS else float(value)
+        for key in ("condition_equilibrated", "physical_controls_confirmed"):
+            values.pop(key, None)
         return SlowScanSettings.from_dict(values).to_dict()
 
     def apply_settings(self, settings):
@@ -249,22 +223,18 @@ class SlowScanSettingsWidget(QWidget):
         self._applying = True
         try:
             self._base = data
-            condition = data["condition"]
-            self.condition.setCurrentIndex(self.condition.findData(condition["condition_id"]))
-            self._previous_profile = condition["condition_id"]
-            for key, _ in self.IDENTITY_FIELDS:
-                value = condition.get(key)
-                self.fields[key].setText("" if value is None else str(value))
-            for key, _ in self.NUMERIC_FIELDS:
-                value = data.get(key)
-                self.fields[key].setText("" if value is None else str(value))
-            self.purpose.setCurrentIndex(max(0, self.purpose.findData(data["purpose"])))
             self.plan_label.setText(data.get("plan_label", ""))
-            self.hardware.setChecked(data.get("hardware", False))
-            self.equilibrated.setChecked(data.get("condition_equilibrated", False))
-            self.bundle_ids.setText(", ".join(data.get("calibration_bundle_ids", ())))
+            self.lower.setValue(data["lower_cm1"])
+            self.upper.setValue(data["upper_cm1"])
+            self.resolution.setValue(data["requested_resolution_cm1"])
+            self.repeats.setValue(data["replicates"])
+            self.peak_count.setValue(data.get("fit_peak_count", 1))
+            self.baseline_degree.setValue(data.get("fit_baseline_degree", 1))
             self.line_shape.setCurrentText(data.get("fit_line_shape", "gaussian"))
             self.fringes.setText(", ".join(str(v) for v in data.get("fit_fringe_periods_cm1", ())))
+            for key, editor in self.override_inputs.items():
+                value = data.get(key)
+                editor.setText("" if value is None else str(value))
             self.segments.setRowCount(0)
             for segment in data["segments"]:
                 self.add_segment(segment)
@@ -326,6 +296,8 @@ class SpectrumPlotAdapter:
                                np.insert(np.where(valid, residuals, np.nan)[indices], gaps, np.nan), linewidth=1)
             residual_axes.axhline(0, color="grey", linewidth=.5)
             residual_axes.set(xlabel="Wavenumber (cm⁻¹)", ylabel="Residual")
+            axes.set_xlabel("")
+            axes.tick_params(labelbottom=False)
         comparison = selection.get("comparison")
         if comparison is not None and view == "normalized":
             cx = np.asarray(_value(comparison, "axis_cm1"))
@@ -347,116 +319,103 @@ class SpectrumPlotAdapter:
         figure.tight_layout()
 
 
-class SlowScanPanel(GuidedMeasurementPanel):
-    """Guided physical staging and independent scientific session for one mode."""
+class SlowScanPanel(CompactMeasurementPanel):
+    """Compact range-to-spectrum presentation on the shared host lifecycle."""
 
     def __init__(self, context, parent=None):
         from .adapter import SlowScanScientificAdapter
         settings = SlowScanSettingsWidget(context.mode)
         adapter = SlowScanScientificAdapter(context, settings)
-        self._displayed = None
-        self._comparison = None
-        self._instrument_mismatch = ""
+        self._displayed = self._comparison = None
         self._clock_start = None
-        super().__init__(settings, adapter, context, parent)
+        super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
         self.settings_editor = settings
-        self.preliminary_button.setText("Acquire sample preliminary")
-        self.start_button.setText("Start unpumped slow scan")
-        self.abort_button.setText("Abort")
-
-        controls = QGroupBox("Physical staging and controls")
-        row = QVBoxLayout(controls)
-        self.physical_stage = QComboBox()
-        stages = [("Select the physically installed optical state", ""),
-                  ("Both optical paths blocked for detector dark", "dark")]
-        if context.mode == "single":
-            stages += [("Matched blank / matrix / cryostat cell in place", "blank")]
-        stages += [("Sample in place" + ("; matched-buffer reference in reference arm" if context.mode == "dual" else ""), "sample")]
-        for label, key in stages:
-            self.physical_stage.addItem(label, key)
-        self.physical_confirm = QCheckBox("I confirm this physical state; pump remains inhibited")
-        self.control_status = QLabel("Acquire or load a compatible dark" +
-                                     (" and sequential blank." if context.mode == "single" else ". Sample/reference will be simultaneous."))
+        self.preliminary_button.hide()
+        self.start_button.setText("Sample")
+        self.abort_button.setText("Stop")
+        self.load_run_button.setText("Load run…")
+        self.blank_button = self.add_blank_action("Blank", lambda: self._user_action(lambda: self.begin_control("blank")))
+        self.load_blank_button = self.add_blank_action("Load blank…", lambda: self._choose_control("blank"), requires_plan=False)
+        if context.mode == "dual":
+            self.blank_button.hide()
+            self.load_blank_button.hide()
+        self.control_status = QLabel("Dark is acquired automatically. A blank is optional." if context.mode == "single"
+                                    else "Sample and reference are recorded together. Dark is automatic.")
         self.control_status.setWordWrap(True)
-        row.addWidget(self.physical_stage)
-        row.addWidget(self.physical_confirm)
-        buttons = QHBoxLayout()
-        self.dark_button = QPushButton("Acquire dark")
+        self.settings_extras_layout.addWidget(self.control_status)
         self.load_dark_button = QPushButton("Load dark…")
-        self.blank_button = QPushButton("Acquire matched blank")
-        self.load_blank_button = QPushButton("Load matched blank…")
-        for button in (self.dark_button, self.load_dark_button):
-            buttons.addWidget(button)
-        if context.mode == "single":
-            buttons.addWidget(self.blank_button)
-            buttons.addWidget(self.load_blank_button)
-        row.addLayout(buttons)
-        row.addWidget(self.control_status)
-        self.layout().insertWidget(1, controls)
-        self.control_widget = controls
-        self.dark_button.clicked.connect(lambda: self._user_action(lambda: self.begin_control("dark")))
-        self.blank_button.clicked.connect(lambda: self._user_action(lambda: self.begin_control("blank")))
+        settings.advanced_widget.layout().addWidget(self.load_dark_button)
         self.load_dark_button.clicked.connect(lambda: self._choose_control("dark"))
-        self.load_blank_button.clicked.connect(lambda: self._choose_control("blank"))
-        self.physical_stage.currentIndexChanged.connect(lambda *_: self.physical_confirm.setChecked(False))
-        self.physical_confirm.toggled.connect(self._physical_changed)
-        settings.load_profile_button.clicked.connect(lambda: self._user_action(self.load_operating_profile))
         settings.capability_button.clicked.connect(lambda: self._user_action(lambda: self.begin_control("capability")))
 
         selectors = QHBoxLayout()
         self.sweep_choice = QComboBox()
+        self.sweep_choice.setMinimumContentsLength(12)
         self.sweep_choice.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        self.sweep_choice.setMinimumContentsLength(16)
         self.view_choice = QComboBox()
-        for label, key in (("Normalized spectrum", "normalized"), ("Native sample detector", "sample"),
-                           ("Native reference detector", "reference"), ("Ratio Q = S/R", "ratio"),
-                           ("Calibrated absorbance", "absorbance"), ("ΔA from compatible Q₀", "delta")):
+        self.view_choice.setMinimumContentsLength(12)
+        self.view_choice.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        for label, key in (("Spectrum", "normalized"), ("Native sample", "sample"),
+                           ("Native reference", "reference"), ("Ratio S/R", "ratio"),
+                           ("Absorbance", "absorbance"), ("ΔA from prior sample", "delta")):
             self.view_choice.addItem(label, key)
         if context.mode == "single":
-            self.view_choice.setItemText(self.view_choice.findData("ratio"), "Sequential blank-normalized S/blank")
-            self.view_choice.setItemText(self.view_choice.findData("absorbance"), "Matched-blank absorbance")
-        self.comparison_button = QPushButton("Load pre-exposure state…")
-        self.refit_button = QPushButton("Refit with entered models")
-        for control in (self.sweep_choice, self.view_choice, self.comparison_button, self.refit_button):
-            selectors.addWidget(control)
+            self.view_choice.setItemText(self.view_choice.findData("ratio"), "Ratio S/blank")
+            self.view_choice.setItemText(self.view_choice.findData("absorbance"), "Blank absorbance")
+            self.view_choice.removeItem(self.view_choice.findData("reference"))
+        selectors.addWidget(self.sweep_choice, 1)
+        selectors.addWidget(self.view_choice, 1)
         self.result_layout.addLayout(selectors)
-        self.plan_details_button = QPushButton("Inspect plan and frame/channel schedule")
-        self.layout().insertWidget(2, self.plan_details_button)
-        self.plan_details_button.clicked.connect(lambda: self._user_action(self.show_plan_details))
-        self.spectral_slice = LinkedSliceControl([0.], label="Observed coordinate", unit="cm⁻¹", decimals=5)
+        self.spectral_slice = LinkedSliceControl([0.], label="Coordinate", unit="cm⁻¹", decimals=5)
         self.result_layout.addWidget(self.spectral_slice)
+        self.plot = PlotPanel(SpectrumPlotAdapter())
+        self.plot.canvas.setMinimumHeight(160)
+        self.plot.setMinimumHeight(220)
+        self.result_layout.addWidget(self.plot, 1)
+        self.quality = QLabel("Acquire a sample or load a run to display its spectrum.")
+        self.quality.setWordWrap(True)
+        self.quality.setMaximumHeight(48)
+        self.result_layout.addWidget(self.quality)
+        self.analysis_button = QToolButton()
+        self.analysis_button.setText("Peaks and selected windows")
+        self.analysis_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.analysis_button.setArrowType(Qt.ArrowType.RightArrow)
+        self.analysis_button.setCheckable(True)
+        self.result_layout.addWidget(self.analysis_button)
+        self.analysis_content = QWidget()
+        analysis = QVBoxLayout(self.analysis_content)
+        analysis.setContentsMargins(0, 0, 0, 0)
+        self.peak_table = QTableWidget(0, 6)
+        self.peak_table.setHorizontalHeaderLabels(["Center cm⁻¹", "σ center", "FWHM", "Height", "Area", "Model"])
+        self.peak_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.peak_table.setMinimumHeight(75)
+        self.peak_table.setMaximumHeight(100)
+        analysis.addWidget(self.peak_table)
         selections = QHBoxLayout()
         self.band_lower, self.band_upper, self.offband_lower, self.offband_upper = (QLineEdit() for _ in range(4))
-        for label, widget in (("Band lower", self.band_lower), ("Band upper", self.band_upper),
-                              ("Off-band lower", self.offband_lower), ("Off-band upper", self.offband_upper)):
-            selections.addWidget(QLabel(label + " (cm⁻¹)"))
-            widget.setMaximumWidth(100)
-            widget.editingFinished.connect(self.redraw)
-            selections.addWidget(widget)
-        self.result_layout.addLayout(selections)
-        self.plot = PlotPanel(SpectrumPlotAdapter())
-        self.result_layout.addWidget(self.plot, 1)
-        self.peak_table = QTableWidget(0, 6)
-        self.peak_table.setHorizontalHeaderLabels(["Center cm⁻¹", "σ center cm⁻¹", "FWHM cm⁻¹", "Height", "Area", "Model"])
-        self.peak_table.setMaximumHeight(160)
-        self.result_layout.addWidget(self.peak_table)
-        self.quality = QLabel()
-        self.quality.setWordWrap(True)
-        self.result_layout.addWidget(self.quality)
-
-        acceptance = QHBoxLayout()
-        self.reviewer = QLineEdit()
-        self.reviewer.setPlaceholderText("Named sample-state reviewer")
-        self.rationale = QLineEdit()
-        self.rationale.setPlaceholderText("Acceptance rationale and bounded claim")
-        self.state_acceptance = QCheckBox("Accept sample state and selected windows")
-        self.selection_export = QPushButton("Export accepted state record…")
-        for control in (self.reviewer, self.rationale, self.state_acceptance, self.selection_export):
-            acceptance.addWidget(control)
-        self.result_layout.addLayout(acceptance)
-        self.elapsed = QLabel("Elapsed 0.0 s; remaining estimate includes preparation, controls, restoration and processing.")
+        for label, lower, upper in (("Band", self.band_lower, self.band_upper),
+                                    ("Off-band", self.offband_lower, self.offband_upper)):
+            selections.addWidget(QLabel(label))
+            for editor, placeholder in ((lower, "From"), (upper, "To")):
+                editor.setPlaceholderText(placeholder + " cm⁻¹")
+                editor.setMinimumWidth(40)
+                editor.setMaximumWidth(95)
+                editor.editingFinished.connect(self.redraw)
+                selections.addWidget(editor)
+        analysis.addLayout(selections)
+        tools = QHBoxLayout()
+        self.comparison_button = QPushButton("Compare run…")
+        self.refit_button = QPushButton("Refit")
+        self.selection_export = QPushButton("Export selection…")
+        for button in (self.comparison_button, self.refit_button, self.selection_export):
+            tools.addWidget(button)
+        analysis.addLayout(tools)
+        self.analysis_content.hide()
+        self.result_layout.addWidget(self.analysis_content)
+        self.analysis_button.toggled.connect(self._toggle_analysis)
+        self.elapsed = QLabel()
         self.elapsed.setWordWrap(True)
-        self.layout().insertWidget(self.layout().count() - 1, self.elapsed)
+        self.left_layout.addWidget(self.elapsed)
         self.timer = QTimer(self)
         self.timer.setInterval(250)
         self.timer.timeout.connect(self._tick)
@@ -464,6 +423,7 @@ class SlowScanPanel(GuidedMeasurementPanel):
         self.busy_changed.connect(self._busy_update)
         self.result_ready.connect(self.display_result)
         self.run_loaded.connect(lambda result, _: self.display_result(result))
+        self.operation_finished.connect(self._operation_finished)
         self.outcome_ready.connect(self._outcome)
         self.new_run_requested.connect(self._clear_display)
         self.sweep_choice.currentIndexChanged.connect(self._sweep_changed)
@@ -471,260 +431,110 @@ class SlowScanPanel(GuidedMeasurementPanel):
         self.spectral_slice.index_changed.connect(self.redraw)
         self.comparison_button.clicked.connect(self._choose_comparison)
         self.refit_button.clicked.connect(lambda: self._user_action(self.refit))
-        self.selection_export.clicked.connect(self._choose_selection_export)
+        self.selection_export.clicked.connect(lambda: self._user_action(self._export_selection_dialog))
         settings.changed.connect(self._settings_changed)
-        self._arrange_spectrum_first()
-        self._update_controls()
+        self._update_local_controls()
 
-    def _arrange_spectrum_first(self):
-        """Keep the host actions, with a scrolling sidebar beside the spectrum."""
-        old_splitter = self.findChild(QSplitter)
-        # QScrollArea retains its managed-widget pointer across setParent().
-        # Explicitly detach it so two scroll areas cannot resize the same form.
-        if old_splitter is not None and isinstance(old_splitter.widget(0), QScrollArea):
-            old_splitter.widget(0).takeWidget()
-        self.settings_editor.setParent(None)
-        for label in (self.summary, self.validation):
-            label.setParent(None)
-        outer = self.layout()
-        while outer.count():
-            outer.takeAt(0)
-        if old_splitter is not None:
-            old_splitter.setParent(None)
-            old_splitter.deleteLater()
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        sidebar = QWidget()
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(0, 0, 4, 0)
-        sidebar_layout.addWidget(self.summary)
-        sidebar_layout.addWidget(self.validation)
-        sidebar_layout.addWidget(self.plan_details_button)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(self.settings_editor)
-        sidebar_layout.addWidget(scroll, 1)
-        plan_files = QHBoxLayout()
-        plan_files.addWidget(self.save_plan_button)
-        plan_files.addWidget(self.load_plan_button)
-        sidebar_layout.addLayout(plan_files)
-        splitter.addWidget(sidebar)
-        main = QWidget()
-        main_layout = QVBoxLayout(main)
-        main_layout.setContentsMargins(4, 0, 0, 0)
-        main_layout.addWidget(self.control_widget)
-        main_layout.addWidget(self.review_summary)
-        main_layout.addWidget(self.review)
-        actions = QHBoxLayout()
-        for widget in (self.preliminary_button, self.start_button, self.abort_button, self.new_run_button):
-            actions.addWidget(widget)
-        main_layout.addLayout(actions)
-        main_layout.addWidget(self.status)
-        main_layout.addWidget(self.progress)
-        main_layout.addWidget(self.elapsed)
-        native_files = QHBoxLayout()
-        native_files.addWidget(self.load_run_button)
-        native_files.addWidget(self.export_button)
-        main_layout.addLayout(native_files)
-        main_layout.addLayout(self.result_layout, 1)
-        splitter.addWidget(main)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([440, 1060])
-        outer.addWidget(splitter)
+    def _toggle_analysis(self, shown):
+        self.analysis_content.setVisible(shown)
+        self.analysis_button.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
+        QTimer.singleShot(0, self.redraw)
 
     def _settings_changed(self):
-        self._instrument_mismatch = ""
         self.adapter.persist_preferences()
         self.refresh_plan()
-        self._refresh_controls_summary()
-        if hasattr(self, "state_acceptance"):
-            self.state_acceptance.setChecked(False)
+        self._update_local_controls()
 
-    def _physical_changed(self):
-        self.adapter.physical_controls_confirmed = self.physical_confirm.isChecked()
-        self.refresh_plan()
-
-    def refresh_plan(self, *_):
-        previous_review = getattr(self, "review", None)
-        had_review = previous_review is not None and previous_review.isChecked()
-        super().refresh_plan()
-        if had_review:
-            self.review_summary.setText("Preliminary review invalidated: scientific settings, selected evidence or physical staging changed.")
-
-    def _update_controls(self, *_):
-        super()._update_controls()
-        if hasattr(self, "control_widget"):
-            self.control_widget.setEnabled(not self._busy)
-            valid = self.plan is not None and not self._busy
-            self.dark_button.setEnabled(valid)
-            self.blank_button.setEnabled(valid and self.adapter.controls.get("dark") is not None)
-        if hasattr(self, "selection_export"):
-            for control in (self.comparison_button, self.refit_button, self.selection_export):
-                control.setEnabled(not self._busy and self._displayed is not None)
-
-    def load_operating_profile(self):
-        self.adapter.load_operating_profile()
-        self.refresh_plan()
-
-    def _check_physical_stage(self, stage):
-        if not self.physical_confirm.isChecked() or self.physical_stage.currentData() != stage:
-            raise ValueError(f"Place the optics in the {stage} state and confirm the physical staging first")
-
-    def begin(self, kind):
-        self._check_physical_stage("sample")
-        if self.plan is None:
-            raise ValueError("Resolve the scientific plan before acquiring the sample")
-        self.plan.require_ready(hardware=self.plan.settings.hardware)
-        errors = self.adapter.control_errors(self.plan)
-        if errors:
-            raise ValueError("; ".join(errors))
-        self._instrument_mismatch = ""
-        super().begin(kind)
+    def _update_local_controls(self):
+        idle = not self.command_running()
+        self.blank_button.setEnabled(idle and self.plan is not None)
+        for button in (self.load_blank_button, self.load_dark_button):
+            button.setEnabled(idle)
+        for button in (self.comparison_button, self.refit_button, self.selection_export):
+            button.setEnabled(idle and self._displayed is not None)
+        if hasattr(self, "control_status"):
+            controls = self.adapter.controls
+            description = "Dark: retained" if controls["dark"] else "Dark: automatic"
+            if self.context.mode == "single":
+                description += " · Blank: retained" if controls["blank"] else " · Blank: optional"
+            else:
+                description += " · Simultaneous reference"
+            self.control_status.setText(description)
 
     def begin_control(self, kind):
-        if self._busy:
-            raise RuntimeError("Wait for this tab's active operation and cleanup")
-        if kind != "capability":
-            self._check_physical_stage(kind)
-            if self.plan is None:
-                raise ValueError("Resolve the scientific plan before acquiring controls")
-            self.plan.require_ready(hardware=self.plan.settings.hardware)
         if kind == "blank" and self.context.mode != "single":
-            raise ValueError("Dual mode records a simultaneous matched-buffer reference")
-        settings = self.adapter.read_settings()
-        plan = deepcopy(self.plan or self.adapter.make_plan(settings))
-        selected = self.adapter.selected_records()
-        host_plan = self.context.new_plan(settings)
-        operation = self.context.begin_operation(
-            plan=host_plan, calibration_records=selected.calibration_records,
-            sample_records=selected.sample_records,
-            hardware=self.adapter.hardware_required(kind, settings),
-            purpose=kind, cancel=self.request_abort,
-        )
-        snapshot = StartSnapshot(operation, kind, plan, None)
-        self.snapshot = snapshot
-        def run(worker):
-            if operation.hardware:
-                with self.context.hardware_scope(operation):
-                    return self.adapter.run_control(snapshot, worker)
-            return self.adapter.run_control(snapshot, worker)
-        try:
-            self._launch(run, kind)
-        except Exception:
-            if operation.hardware and not (self.worker and self.worker.isRunning()):
-                self.context.ownership.release(operation.ownership, safe_verified=True,
-                                               preservation_verified=True, detail="Dispatch failed before device access")
-            raise
+            raise ValueError("Dual mode records the reference simultaneously")
+        self.begin_operation(kind, self.adapter.run_control, requires_valid_plan=kind != "capability")
 
-    def _finished(self, worker, kind, path):
-        if self.worker is worker and worker.outcome.state == "completed":
-            if kind in ("dark", "blank", "capability"):
-                try:
-                    self.adapter.accept_control(kind, worker.outcome.result)
-                    self.preliminary = None
-                    self.review.setChecked(False)
-                    self._refresh_controls_summary()
-                except Exception as exc:
-                    from control_app.measurement_host.presentation import WorkerOutcome
-                    worker.outcome = WorkerOutcome("failed", error=str(exc))
-            elif kind in ("refit", "load_comparison"):
-                if kind == "refit":
-                    self.result = worker.outcome.result
-                    self.display_result(self.result)
-                else:
-                    self._comparison = worker.outcome.result
+    def _operation_finished(self, kind, outcome):
+        if outcome.state == "completed":
+            try:
+                if kind in ("dark", "blank", "capability", "load_dark", "load_blank"):
+                    self.adapter.accept_control(kind.removeprefix("load_"), outcome.result)
+                elif kind == "refit":
+                    self.result = outcome.result
+                    self.display_result(outcome.result)
+                elif kind == "load_comparison":
+                    self._comparison = outcome.result
                     self.redraw()
-        super()._finished(worker, kind, path)
-        if kind == "preliminary" and worker.outcome.state == "completed" and self.preliminary is not None:
-            self.display_result(self.preliminary)
-        if kind == "capability":
-            self.refresh_plan()
+                elif kind in ("measurement", "preliminary", "load_run"):
+                    self.adapter.accept_result(outcome.result)
+                self.refresh_plan()
+            except Exception as exc:
+                self.status.setText(str(exc))
+        self._update_local_controls()
 
     def _outcome(self, outcome):
         if outcome.state == "cancelled":
-            self.status.setText("Acquisition stopped. Partial data and restoration outcome retained.")
-
-    def _refresh_controls_summary(self):
-        if not hasattr(self, "control_status"):
-            return
-        descriptions = []
-        for role in ("dark", "blank") if self.context.mode == "single" else ("dark",):
-            result = self.adapter.controls.get(role)
-            errors = self.adapter.compatibility_errors(result, self.plan) if result else []
-            descriptions.append(f"{role}: " + ("missing" if result is None else "; ".join(errors) if errors else "compatible"))
-        self.control_status.setText(" | ".join(descriptions))
+            self.status.setText("Stopped. Partial data and cleanup results were retained.")
 
     def _choose_control(self, role):
-        path = QFileDialog.getExistingDirectory(self, f"Load compatible {role}", str(self.save_root_provider()))
+        path = QFileDialog.getExistingDirectory(self, f"Load {role}", str(self.save_root_provider()))
         if path:
-            self._launch(lambda worker: self.adapter.load_control(Path(path), role, worker), role)
+            self.load_control(path, role)
 
-    def request_abort(self, reason):
-        if self._busy and self._active_kind in ("dark", "blank", "capability"):
-            self.adapter.request_abort(reason)
-        super().request_abort(reason)
+    def load_control(self, path, role):
+        self.begin_operation("load_" + role,
+            lambda _snapshot, worker: self.adapter.load_control(Path(path), role, worker), requires_valid_plan=False)
 
     def output_location_changed(self, path):
-        # Start uses context.save_root(); existing snapshots retain their root.
-        self.adapter.next_output_root = Path(path)
-        if not self._busy:
+        if not self.command_running():
             self.status.setText(f"Next run save root: {path}")
 
     def instrument_state_changed(self, change):
-        names = ", ".join(f"{item.device_id}.{item.configuration_key}" for item in change.changes)
-        self._instrument_mismatch = f"Instrument state changed: {names}. {change.reason}"
-        self.adapter.invalidate_instrument_state(self._instrument_mismatch)
-        self.review.setChecked(False)
-        self.preliminary = None
-        self.review_summary.setText(self._instrument_mismatch)
-        self.validation.setText(self._instrument_mismatch)
-        self._refresh_controls_summary()
+        self.adapter.invalidate_instrument_state(change.reason)
+        self.refresh_plan()
 
     def _busy_update(self, busy):
         if busy:
             self._clock_start = time.monotonic()
         self._tick()
+        self._update_local_controls()
 
     def _tick(self):
         if self._clock_start is None:
             return
         elapsed = time.monotonic() - self._clock_start
         estimate = self.adapter.estimated_seconds(self.plan)
-        if not self._busy:
-            planned = f" Planned wall-time estimate: {estimate:.1f} s." if estimate is not None else ""
-            self.elapsed.setText(f"Operation finished in {elapsed:.1f} s, including cleanup and preservation.{planned}")
+        if not self.command_running():
+            self.elapsed.setText(f"Finished in {elapsed:.1f} s, including cleanup and saving.")
             self._clock_start = None
             return
-        remaining = f"{max(0., estimate - elapsed):.1f} s estimated remaining" if estimate else "remaining estimate unavailable"
-        self.elapsed.setText(f"Elapsed {elapsed:.1f} s; {remaining}. Basis: planned preparation, tuning/settling, controls, acquisition, retrieval, restoration and analysis.")
+        remaining = f" · about {max(0., estimate - elapsed):.0f} s remaining" if estimate else ""
+        self.elapsed.setText(f"Elapsed {elapsed:.1f} s{remaining}")
 
     def display_result(self, result):
         self._displayed = result
-        self.state_acceptance.setChecked(False)
+        self.adapter.accept_result(result)
         self.sweep_choice.blockSignals(True)
         self.sweep_choice.clear()
         for index, spectrum in enumerate(result.get("spectra", ())):
             native = _value(spectrum, "native")
-            label = f"{_value(native, 'segment_id', '')} / {_value(native, 'direction', '')} / replicate {_value(native, 'replicate', '')} / {_value(native, 'sweep_id', index)}"
+            label = f"{_value(native, 'segment_id', '')} · {_value(native, 'direction', '')} · repeat {_value(native, 'replicate', '')}"
             self.sweep_choice.addItem(label, index)
         self.sweep_choice.blockSignals(False)
         self._sweep_changed()
-        self._update_controls()
-
-    def show_plan_details(self):
-        if self.plan is None:
-            raise ValueError("Resolve the scientific settings to inspect the plan")
-        details = self.adapter.plan_details(self.plan)
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Requested, selected and actual values; declared frame/channel schedule")
-        dialog.resize(850, 700)
-        layout = QVBoxLayout(dialog)
-        text = QPlainTextEdit()
-        text.setReadOnly(True)
-        text.setPlainText(json.dumps(details, indent=2))
-        layout.addWidget(text)
-        self._plan_dialog = dialog
-        dialog.show()
+        self._update_local_controls()
 
     def _sweep_changed(self, *_):
         if not self._displayed or self.sweep_choice.currentIndex() < 0:
@@ -788,67 +598,84 @@ class SlowScanPanel(GuidedMeasurementPanel):
                                     f"{row['center_shift_uncertainty_cm1']:.3g} cm⁻¹, width change {row['width_change_cm1']:.5g} cm⁻¹, "
                                     f"fractional area change {row['area_fraction_change']}" for row in rows)
                 self.quality.setText(self.quality.text() + " Pre/post comparison: " + summary +
-                                     ". Component correspondence and acceptance tolerances require review.")
+                                     ". Component correspondence remains an analysis assumption.")
             except ValueError as exc:
                 self.quality.setText(self.quality.text() + f" Pre/post comparison unavailable: {exc}")
+        detail = self.quality.text()
+        labels = []
+        for fragment, label in (("axis_uncalibrated", "Axis uncalibrated"),
+                                ("uncertainty", "Uncertainty limited"),
+                                ("correlated_residuals", "Structured residuals")):
+            if any(fragment in str(flag) for flag in flags):
+                labels.append(label)
+        quantity = _quantity_label(_value(spectrum, "quantity", "unknown")).replace("\n", " ")
+        self.quality.setText(" · ".join([quantity, *labels]) + (" · Comparison loaded" if comparison is not None else ""))
+        self.quality.setToolTip(detail)
 
     def _choose_comparison(self):
-        path = QFileDialog.getExistingDirectory(self, "Load compatible pre-exposure state", str(self.save_root_provider()))
+        path = QFileDialog.getExistingDirectory(self, "Compare saved run", str(self.save_root_provider()))
         if path:
-            self._launch(lambda worker: self.adapter.load_comparison(Path(path), self._displayed, worker), "load_comparison")
+            displayed = deepcopy(self._displayed)
+            self.begin_operation("load_comparison",
+                lambda _snapshot, worker: self.adapter.load_comparison(Path(path), displayed, worker), requires_valid_plan=False)
 
     def refit(self):
         if self._displayed is None:
-            raise ValueError("Load or acquire a spectrum before refitting")
+            raise ValueError("Acquire or load a spectrum before refitting")
         settings, result = deepcopy(self.adapter.read_settings()), deepcopy(self._displayed)
-        self._launch(lambda worker: self.adapter.refit(result, settings, worker), "refit")
+        self.begin_operation("refit", lambda _snapshot, worker: self.adapter.refit(result, settings, worker), requires_valid_plan=False)
 
-    def _choose_selection_export(self):
-        self._user_action(self._export_selection_dialog)
-
-    def _export_selection_dialog(self):
-        if not self.state_acceptance.isChecked():
-            raise ValueError("Explicitly accept the sample state and selected windows first")
-        if not self.reviewer.text().strip() or not self.rationale.text().strip():
-            raise ValueError("Provide a named reviewer and the acceptance rationale")
+    def selected_windows(self):
         windows = []
-        for label, lower, upper in (("band", self.band_lower, self.band_upper), ("off-band", self.offband_lower, self.offband_upper)):
+        for label, lower, upper in (("band", self.band_lower, self.band_upper),
+                                    ("off-band", self.offband_lower, self.offband_upper)):
+            if not lower.text().strip() and not upper.text().strip():
+                continue
             bounds = self._bounds(lower, upper)
             if bounds is None or bounds[0] >= bounds[1]:
-                raise ValueError(f"Enter a valid numeric {label} window")
-            fitted_peaks = ()
+                raise ValueError(f"Enter a numeric {label} range with From below To")
+            peaks = ()
             if label == "band":
                 index = self.sweep_choice.currentIndex()
-                spectra = self._displayed.get("spectra", ())
+                spectra = self._displayed.get("spectra", ()) if self._displayed else ()
                 fit = _fit_for_spectrum(self._displayed, spectra[index]) if 0 <= index < len(spectra) else None
                 if fit is not None:
-                    fitted_peaks = tuple(peak for peak in _value(fit, "peaks", ())
-                                         if bounds[0] <= _value(peak, "center_cm1") <= bounds[1])
-            if fitted_peaks:
-                for peak in fitted_peaks:
-                    windows.append({"lower_cm1": bounds[0], "upper_cm1": bounds[1],
-                                    "center_cm1": _value(peak, "center_cm1"),
-                                    "uncertainty_cm1": _value(peak, "center_uncertainty_cm1"),
-                                    "label": f"Fitted band component {_value(peak, 'component')}"})
+                    peaks = tuple(peak for peak in _value(fit, "peaks", ())
+                                  if bounds[0] <= _value(peak, "center_cm1") <= bounds[1])
+            if peaks:
+                windows.extend({"lower_cm1": bounds[0], "upper_cm1": bounds[1],
+                                "center_cm1": _value(peak, "center_cm1"),
+                                "uncertainty_cm1": _value(peak, "center_uncertainty_cm1"),
+                                "label": f"Fitted band component {_value(peak, 'component')}"} for peak in peaks)
             else:
                 windows.append({"lower_cm1": bounds[0], "upper_cm1": bounds[1], "label": label})
-        path, _ = QFileDialog.getSaveFileName(self, "Export accepted state record", str(self.save_root_provider()), "JSON (*.json)")
+        if not windows:
+            raise ValueError("Enter a band or off-band range to export")
+        return windows
+
+    def _export_selection_dialog(self):
+        windows = self.selected_windows()
+        path, _ = QFileDialog.getSaveFileName(self, "Export selection", str(self.save_root_provider()), "JSON (*.json)")
         if path:
-            result = deepcopy(self._displayed)
-            reviewer, rationale = self.reviewer.text().strip(), self.rationale.text().strip()
-            self._launch(lambda worker: self.adapter.export_selection(Path(path), result, windows, reviewer, rationale, worker), "export_selection")
+            self.export_selection(path, windows)
+
+    def export_selection(self, path, windows=None):
+        if self._displayed is None:
+            raise ValueError("Acquire or load a spectrum before exporting a selection")
+        result = deepcopy(self._displayed)
+        windows = deepcopy(self.selected_windows() if windows is None else windows)
+        self.begin_operation("export_selection",
+            lambda _snapshot, worker: self.adapter.export_selection(Path(path), result, windows, worker), requires_valid_plan=False)
 
     def _clear_display(self):
         self._displayed = self._comparison = None
         self.sweep_choice.clear()
         self.plot.clear_result()
         self.peak_table.setRowCount(0)
-        self.quality.clear()
-        self.state_acceptance.setChecked(False)
+        self.quality.setText("Acquire a sample or load a run to display its spectrum.")
         for field in (self.band_lower, self.band_upper, self.offband_lower, self.offband_upper):
             field.clear()
-        self.physical_confirm.setChecked(False)
-        self._refresh_controls_summary()
+        self._update_local_controls()
 
 
 def make_handle(context, *, title):

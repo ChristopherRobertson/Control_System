@@ -30,10 +30,10 @@ def setup(tmp_path, mode="single"):
     coordinator = HardwareCoordinator(tmp_path / "instrument.lock")
     factory = ContextFactory(ownership=coordinator, save_root_provider=lambda: tmp_path)
     context = factory.for_experiment("steady_state_slow_scan").for_mode(mode)
-    settings = SlowScanSettings(mode=mode, condition=ConditionIdentity(sample_id="sample-1", preparation_id="prep-1",
+    settings = SlowScanSettings(mode=mode, hardware=False, condition=ConditionIdentity(sample_id="sample-1", preparation_id="prep-1",
         cell_id="cell-1", position_id="position-1", temperature_id="room-1", matrix_id="buffer-1",
         configuration_id="config-1", temperature_k=295., temperature_uncertainty_k=.2, temperature_record_id="T-1"),
-        segments=(SpectralSegment("band", 1, 1900., 1910.),), physical_controls_confirmed=True, condition_equilibrated=True)
+        segments=(SpectralSegment("band", 1, 1900., 1910.),))
     plan = build_plan(settings, simulation_inputs(settings))
     return coordinator, context, plan
 
@@ -51,7 +51,6 @@ def test_complete_guided_slow_scan_retains_native_and_separate_controls(tmp_path
     if mode == "single":
         controls["blank"] = runner.run(operation(context, plan, "blank", controls), worker)
     controls["q0"] = runner.run(operation(context, plan, "preliminary", controls), worker)
-    controls["reviewed"] = True
     result = runner.run(operation(context, plan, "measurement", controls), worker)
     assert result["status"] == "completed"
     assert result["restoration"]["safe_verified"]
@@ -67,16 +66,18 @@ def test_complete_guided_slow_scan_retains_native_and_separate_controls(tmp_path
     assert "restoration" in " ".join(worker.messages)
 
 
-def test_review_compatibility_rejects_condition_setting_and_mode_changes(tmp_path):
+def test_control_compatibility_ignores_metadata_but_detects_acquisition_changes(tmp_path):
     _, context, plan = setup(tmp_path)
     runner = SlowScanRunner(context)
     dark = runner.run(operation(context, plan, "dark"), Worker())
     assert not compatibility_errors(dark, plan, kind="dark")
     settings = replace(plan.settings, condition=replace(plan.settings.condition, sample_id="another"))
     changed = build_plan(settings, plan.inputs)
+    assert not compatibility_errors(dark, changed)
+    changed = build_plan(replace(settings, replicates=3), plan.inputs)
     assert "settings mismatch" in " ".join(compatibility_errors(dark, changed))
     assert "Detector mode" in " ".join(compatibility_errors({**dark, "mode": "dual"}, plan))
-    assert not compatibility_errors(dark, plan)  # Restored settings clear errors, never approve review.
+    assert not compatibility_errors(dark, plan)
 
 
 def test_controls_reject_foreign_identities_and_simulation_for_connected_use(tmp_path):
@@ -93,14 +94,17 @@ def test_controls_reject_foreign_identities_and_simulation_for_connected_use(tmp
     assert not compatibility_errors({**dark, "simulation": False, "readbacks": {}}, connected)
 
 
+@pytest.mark.parametrize("mode", ["single", "dual"])
 @pytest.mark.parametrize("kind", ["preliminary", "measurement"])
-def test_required_controls_and_review_are_not_fabricated(tmp_path, kind):
-    _, context, plan = setup(tmp_path)
+def test_direct_sample_acquires_dark_without_approval_or_blank(tmp_path, kind, mode):
+    _, context, plan = setup(tmp_path, mode)
     runner = SlowScanRunner(context)
-    with pytest.raises(ValueError, match="dark|review"):
-        runner.run(operation(context, plan, kind), Worker())
-    assert runner.last_result["status"] == "failed"
-    assert load_run(runner.last_result["path"])["status"] == "failed"
+    result = runner.run(operation(context, plan, kind), Worker())
+    assert result["status"] == "completed"
+    assert result["dark_native_records"]
+    assert result["automatic_dark"]["dark"]["sample"] == pytest.approx(.001)
+    assert result["spectra"][0].quantity == ("raw_sample_signal" if mode == "single" else "reference_normalized_ratio")
+    assert load_run(result["path"])["status"] == "completed"
 
 
 @pytest.mark.parametrize("cancel_stage", ["prepare", "acquire", "processing"])
@@ -191,3 +195,72 @@ def test_frozen_save_root_stays_with_operation(tmp_path):
     snapshot = operation(context, plan, "dark")
     result = SlowScanRunner(context).run(snapshot, Worker())
     assert str(tmp_path / "measurements" / "steady_state_slow_scan" / "single") in result["path"]
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_normal_factory_resolves_live_plan_under_ownership(tmp_path, monkeypatch, mode):
+    coordinator, context, plan = setup(tmp_path, mode)
+    from control_app.measurement_modules.steady_state_slow_scan import acquisition
+    connected = replace(plan, settings=replace(plan.settings, hardware=True),
+                        inputs=replace(plan.inputs, simulation=False), readiness=())
+    calls = []
+    class InjectedInstalled(SyntheticSlowScanBackend):
+        def resolve_plan(self, settings, check):
+            context.ownership.assert_owner(self.operation.ownership)
+            calls.append("resolve")
+            check()
+            return connected
+        def prepare(self, *args):
+            calls.append("prepare")
+            super().prepare(*args)
+    monkeypatch.setattr(acquisition, "InstalledSlowScanBackend", InjectedInstalled)
+    result = SlowScanRunner(context).run(operation(context, connected, "measurement", hardware=True), Worker())
+    assert calls == ["resolve", "prepare"]
+    assert result["status"] == "completed"
+    assert result["plan"]["inputs"]["simulation"] is False
+    assert coordinator.snapshot()["state"] == "free"
+
+
+def test_automatic_dark_reuse_and_incompatible_blank_do_not_block_raw_sample(tmp_path):
+    _, context, plan = setup(tmp_path)
+    runner = SlowScanRunner(context)
+    blank = runner.run(operation(context, plan, "blank"), Worker())
+    controls = {"dark": blank["automatic_dark"], "blank": {**blank, "mode": "dual"}}
+    result = runner.run(operation(context, plan, "measurement", controls), Worker())
+    assert "dark_native_records" not in result  # Reuses the observed dark.
+    assert result["controls"]["dark"]["run_id"] == blank["automatic_dark"]["run_id"]
+    assert result["unused_controls"]["blank"]
+    assert result["spectra"][0].quantity == "raw_sample_signal"
+
+
+def test_legacy_record_compatibility_ignores_retired_procedure_metadata(tmp_path):
+    _, context, plan = setup(tmp_path)
+    dark = SlowScanRunner(context).run(operation(context, plan, "dark"), Worker())
+    legacy = {**dark, "compatibility": {"settings": {**plan.settings.to_dict(),
+        "physical_controls_confirmed": True, "condition_equilibrated": True},
+        "selected": plan.selected, "calibration_bundle_ids": ["old-profile"],
+        "configuration_id": "old-user-label"}}
+    changed = replace(plan, settings=replace(plan.settings, plan_label="new label", fit_peak_count=2,
+        condition=replace(plan.settings.condition, temperature_k=77., sample_id="new sample")))
+    assert not compatibility_errors(legacy, changed)
+
+
+def test_malformed_optional_calibration_does_not_lose_raw_acquisition(tmp_path):
+    _, context, plan = setup(tmp_path)
+    profile = {**plan.inputs.scientific_profile, "axis_correction": {"unknown": "legacy"},
+               "path_balance": {"source": "incomplete"}}
+    plan = replace(plan, inputs=replace(plan.inputs, scientific_profile=profile))
+    result = SlowScanRunner(context).run(operation(context, plan, "measurement"), Worker())
+    assert result["status"] == "completed"
+    assert result["spectra"][0].quantity == "raw_sample_signal"
+    assert set(result["spectra"][0].provenance["calibration_omitted"]) == {"axis_correction", "path_balance"}
+    assert load_run(result["path"])["sweeps"]
+
+
+def test_changed_qcl_current_invalidates_relative_control(tmp_path):
+    _, context, plan = setup(tmp_path)
+    blank = SlowScanRunner(context).run(operation(context, plan, "blank"), Worker())
+    profile = {**plan.inputs.scientific_profile, "qcl_pulse_params": {"1": {
+        **plan.inputs.scientific_profile["qcl_pulse_params"]["1"], "current_ma": 2.}}}
+    changed = replace(plan, inputs=replace(plan.inputs, scientific_profile=profile))
+    assert "qcl_pulse_params" in " ".join(compatibility_errors(blank, changed))

@@ -1,6 +1,9 @@
-"""Actual registered slow-scan tabs exercised with retained synthetic records."""
+"""Compact registered tabs exercised through shared workers; no real devices."""
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
+from threading import Event
+import json
 import time
 
 import numpy as np
@@ -28,30 +31,32 @@ def wait_for(app, panel, timeout=30):
 
 
 def settings(mode="single"):
-    from control_app.measurement_modules.steady_state_slow_scan.settings import (
-        ConditionIdentity, SlowScanSettings, SpectralSegment,
-    )
-    return SlowScanSettings(mode=mode,
-        condition=ConditionIdentity(sample_id="sample-1", preparation_id="prep-1", cell_id="cell-1",
-            position_id="position-1", temperature_id="room-temperature-observation-1", matrix_id="buffer-1",
-            configuration_id="configuration-1", temperature_k=295., temperature_uncertainty_k=.3,
-            temperature_record_id="temperature-readback-1"),
-        segments=(SpectralSegment("window-1", 1, 1900., 1904.),),
-        condition_equilibrated=True, physical_controls_confirmed=True).to_dict()
+    from control_app.measurement_modules.steady_state_slow_scan.settings import SlowScanSettings, SpectralSegment
+    return SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1904.,
+        segments=(SpectralSegment("window-1", 1, 1900., 1904.),)).to_dict()
+
+
+def inject_backend(panel, backend_type=None):
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner, SyntheticSlowScanBackend
+    from control_app.measurement_modules.steady_state_slow_scan.planner import build_plan, simulation_inputs
+    class InjectedBackend(backend_type or SyntheticSlowScanBackend):
+        def resolve_plan(self, settings, check):
+            check()
+            return build_plan(settings, replace(simulation_inputs(settings), simulation=False))
+    panel.adapter.runner = SlowScanRunner(panel.context, backend_factory=InjectedBackend)
 
 
 @pytest.fixture
 def tabs(app, tmp_path):
     from control_app.measurement_host.context import ContextFactory
+    from control_app.measurement_host.ownership import HardwareCoordinator
     from control_app.measurement_host.registry import create_registered_tabs
     from control_app.measurement_modules.steady_state_slow_scan.registration import DESCRIPTOR
-
     def forbidden(**kwargs):
         raise AssertionError("UI construction must not create connected devices")
-
-    preferences = {}
-    destination = [tmp_path]
-    factory = ContextFactory(configuration_provider=lambda: {}, ownership=object(),
+    preferences, destination = {}, [tmp_path]
+    factory = ContextFactory(configuration_provider=lambda: {},
+        ownership=HardwareCoordinator(tmp_path / "instrument.lock"),
         real_device_factories={"hf2li": forbidden, "mircat": forbidden},
         preference_backend=preferences, save_root_provider=lambda: destination[0])
     created = create_registered_tabs((DESCRIPTOR,), factory)
@@ -66,137 +71,228 @@ def tabs(app, tmp_path):
     app.processEvents()
 
 
-def stage(panel, role):
-    panel.physical_stage.setCurrentIndex(panel.physical_stage.findData(role))
-    panel.physical_confirm.setChecked(True)
-
-
-def prepare(app, panel):
-    panel.settings_editor.apply_settings(settings(panel.context.mode))
-    stage(panel, "dark")
-    assert panel.plan is not None, panel.validation.text()
-    panel.begin_control("dark")
-    wait_for(app, panel)
-    assert panel.adapter.controls["dark"] is not None, panel.status.text()
-    if panel.context.mode == "single":
-        stage(panel, "blank")
-        panel.begin_control("blank")
-        wait_for(app, panel)
-        assert panel.adapter.controls["blank"] is not None, panel.status.text()
-    stage(panel, "sample")
-    panel.begin("preliminary")
-    wait_for(app, panel)
-    assert panel.preliminary is not None, panel.status.text()
-
-
-def test_slow_scan_exact_discovery_hardware_free_construction_and_independent_settings(app, tabs):
-    from control_app.measurement_host.registry import discover_modules
+def test_compact_tabs_construct_without_devices_or_approval_state(app, tabs):
+    from PySide6.QtWidgets import QCheckBox
+    from control_app.measurement_host.presentation import CompactMeasurementPanel
     handles, preferences, _ = tabs
-    assert "steady_state_slow_scan" in [d.experiment_id for d in discover_modules().descriptors]
     assert [h.title for h in handles] == ["Slow Scan", "Dual-Detector Slow Scan"]
-    assert [h.instance_id for h in handles] == ["steady_state_slow_scan:single", "steady_state_slow_scan:dual"]
     first, second = (h.widget for h in handles)
-    assert first is not second and first.adapter is not second.adapter
+    assert isinstance(first, CompactMeasurementPanel)
     assert first.adapter.runner is second.adapter.runner is None
-    first.settings_editor.fields["sample_id"].setText("single-only")
-    assert second.settings_editor.fields["sample_id"].text() == ""
+    assert not first.findChildren(QCheckBox) and not second.findChildren(QCheckBox)
+    assert not hasattr(first, "review") and not hasattr(first, "state_acceptance")
+    assert not hasattr(first.settings_editor, "hardware")
+    assert first.settings_editor.read_settings()["hardware"] is True
+    assert first.start_button.isEnabled(), first.validation.text()
+    assert second.start_button.isEnabled(), second.validation.text()
+    assert first.adapter.validate_preliminary(None, first.plan) == ()
+    assert first.settings_editor.segments.rowCount() == 0
+    requested = first.settings_editor.read_settings()
+    requested["condition"]["sample_id"] = "one tab only"
+    first.settings_editor.apply_settings(requested)
+    assert second.settings_editor.read_settings()["condition"]["sample_id"] == ""
+    from PySide6.QtWidgets import QLabel, QLineEdit
+    for panel in (first, second):
+        labels = " ".join(label.text() for label in panel.settings_editor.advanced_widget.findChildren(QLabel))
+        assert not any(word in labels.casefold() for word in ("temperature", "thermal", "preparation", "metadata", "exposure"))
+        assert not any(editor.objectName() in requested["condition"] for editor in panel.findChildren(QLineEdit))
     assert all(key.startswith("measurements/steady_state_slow_scan/single/v1/") for key in preferences)
-    assert not first.start_button.isEnabled() and not second.start_button.isEnabled()
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
-def test_slow_scan_guided_physical_controls_preliminary_review_measure_save_load_new_run(app, tabs, mode, tmp_path):
-    handles, preferences, destination = tabs
-    panel = handles[0 if mode == "single" else 1].widget
-    other = handles[1 if mode == "single" else 0].widget
-    # Exercise real layout/resize delivery too: hidden widgets cannot detect
-    # a form accidentally retained by both old and new QScrollArea instances.
-    panel.resize(1600, 1120)
+def test_shown_compact_sample_without_preliminary_saves_loads_and_exports(app, tabs, mode, tmp_path):
+    panel = tabs[0][0 if mode == "single" else 1].widget
+    panel.resize(1100, 780)
     panel.show()
     app.processEvents()
+    assert panel.width() == 1100 and panel.height() == 780
+    assert not panel.advanced_content.isVisible()
+    assert not panel.preliminary_button.isVisible()
+    assert panel.settings_editor.isVisible()
+    assert panel.plot.isVisible()
     panel.settings_editor.apply_settings(settings(mode))
-    with pytest.raises(ValueError, match="physical staging"):
-        panel.begin_control("dark")
-    prepare(app, panel)
-    assert not panel.start_button.isEnabled()
-    assert len(panel.preliminary["spectra"]) == 4
-    assert panel.plot.figure.axes[0].name == "rectilinear"
-    assert len(panel.plot.figure.axes) == 2
-    assert panel.peak_table.rowCount() == 1
-    assert other.preliminary is None and other.adapter.controls["dark"] is None
-    if mode == "dual":
-        assert panel.adapter.controls["blank"] is None
-        with pytest.raises(ValueError, match="simultaneous"):
-            panel.adapter.accept_control("blank", {})
-    panel.review.setChecked(True)
-    assert panel.start_button.isEnabled()
+    inject_backend(panel)
     panel.begin("measurement")
     snapshot = panel.snapshot
-    frozen_root = snapshot.operation.save_root
-    destination[0] = tmp_path / "new_root"
-    panel.output_location_changed(destination[0])
+    assert snapshot.operation.hardware is True
     wait_for(app, panel)
     assert panel.result is not None, panel.status.text()
-    assert panel._displayed is panel.result
     assert panel.result["status"] == "completed"
-    assert "estimated remaining" not in panel.elapsed.text()
-    assert Path(panel.result["path"]).is_relative_to(frozen_root)
-    assert snapshot.operation.save_root == frozen_root
-    assert Path(panel.result["path"], "run.json").is_file()
-    assert panel.result["restoration"]["pump_outputs"] == {"FIRE": False, "Q-switch": False}
-    saved_run = Path(panel.result["path"])
-    selected_settings = panel.adapter.read_settings()
-    panel.save_plan(tmp_path / f"{mode}.plan.json")
+    assert panel.adapter.controls["dark"] is not None
+    assert panel.adapter.controls["q0"]["run_id"] == panel.result["run_id"]
+    assert panel.result["spectra"][0].quantity == ("raw_sample_signal" if mode == "single" else "reference_normalized_ratio")
+    assert len(panel.result["spectra"]) == 4
+    assert len(panel.plot.figure.axes) == 2
+    panel.analysis_button.setChecked(True)
+    app.processEvents()
+    assert panel.height() == 780
+    assert panel.plot.canvas.geometry().bottom() < panel.plot.height()
+    assert panel.settings_editor.read_settings()["sample_rate_hz"] is None
+    source = Path(panel.result["path"])
+    assert (source / "run.json").is_file()
+    panel.save_plan(tmp_path / f"{mode}.json")
     wait_for(app, panel)
-    import json
-    saved_plan = json.loads((tmp_path / f"{mode}.plan.json").read_text())
-    assert saved_plan["derived_plan"]["compiled_timing"]["event_counts"]["pump_fire"] == 0
+    assert json.loads((tmp_path / f"{mode}.json").read_text())["settings"]["sample_rate_hz"] is None
     panel.new_run()
     assert panel.result is panel.preliminary is None
-    assert panel.adapter.controls == {"dark": None, "blank": None}
-    assert panel.settings_editor.fields["sample_id"].text() == "sample-1"
-    assert (saved_run / "run.json").exists()
-    panel.load_plan(tmp_path / f"{mode}.plan.json")
+    assert panel.adapter.controls == {"dark": None, "blank": None, "q0": None}
+    panel.load_plan(tmp_path / f"{mode}.json")
     wait_for(app, panel)
-    assert panel.adapter.read_settings()["condition"] == selected_settings["condition"]
-    panel.load_run(saved_run)
+    panel.load_run(source)
     wait_for(app, panel)
     assert panel.result["run_id"] == snapshot.operation.run_id
-    assert panel.review.isChecked() is False
-    assert other.result is None
-    panel.export_run(tmp_path / f"{mode}_export.json")
+    panel.export_run(tmp_path / f"{mode}-export.json")
     wait_for(app, panel)
-    assert (tmp_path / f"{mode}_export.json").is_file()
+    assert (tmp_path / f"{mode}-export.npz").is_file()
+    panel.band_lower.setText("1901")
+    panel.band_upper.setText("1903")
+    panel.export_selection(tmp_path / f"{mode}-selection.json")
+    wait_for(app, panel)
+    assert (tmp_path / f"{mode}-selection.json").is_file(), panel.status.text()
 
 
-def test_slow_scan_condition_profiles_retain_independent_identities(app, tabs):
-    panel = tabs[0][0].widget
+def test_independent_auto_overrides_roundtrip_and_optional_metadata(app, tabs, tmp_path):
+    panel = tabs[0][1].widget
     editor = panel.settings_editor
-    editor.fields["sample_id"].setText("room-sample")
-    editor.fields["temperature_id"].setText("room-observation")
-    editor.condition.setCurrentIndex(editor.condition.findData("77k_hrp_co"))
-    assert editor.fields["sample_id"].text() == ""
-    assert editor.fields["temperature_id"].text() == ""
-    editor.fields["sample_id"].setText("cryo-sample")
-    editor.fields["temperature_id"].setText("cryo-observation")
-    editor.condition.setCurrentIndex(editor.condition.findData("rt_hrp_co"))
-    assert editor.fields["sample_id"].text() == "room-sample"
-    assert editor.fields["temperature_id"].text() == "room-observation"
-    editor.condition.setCurrentIndex(editor.condition.findData("77k_hrp_co"))
-    assert editor.fields["sample_id"].text() == "cryo-sample"
+    editor.override_inputs["time_constant_s"].setText("0.017")
+    editor.override_inputs["reference_sample_rate_hz"].setText("112.0")
+    loaded = editor.read_settings()
+    loaded["condition"].update(condition_id="Arbitrary buffer condition", temperature_k=77.)
+    editor.apply_settings(loaded)
+    requested = editor.read_settings()
+    assert requested["time_constant_s"] == .017
+    assert requested["sample_rate_hz"] is None
+    assert requested["reference_sample_rate_hz"] == 112.
+    assert requested["reference_time_constant_s"] is None
+    editor.apply_settings({**requested, "hardware": False})
+    assert editor.read_settings()["hardware"] is True
+    editor.restore_automatic()
+    assert all(editor.read_settings()[key] is None for key in editor.override_inputs)
+    assert editor.read_settings()["condition"] == loaded["condition"]
+    assert panel.start_button.isEnabled(), panel.validation.text()
+    assert editor.lower.value() == 1900.
+    assert editor.upper.value() == 1975.
 
 
-def test_slow_scan_review_invalidates_with_specific_mismatch_then_clears_without_approval(app, tabs):
+def test_blank_and_dark_records_reject_wrong_kind_or_status_without_metadata_gates(app, tabs):
     panel = tabs[0][0].widget
-    prepare(app, panel)
-    panel.review.setChecked(True)
-    panel.settings_editor.fields["sample_id"].setText("other-sample")
-    assert not panel.review.isChecked()
-    assert "condition.sample_id differs" in panel.control_status.text()
-    assert panel.preliminary is None
-    panel.settings_editor.fields["sample_id"].setText("sample-1")
-    assert "differs" not in panel.control_status.text()
-    assert not panel.review.isChecked() and not panel.start_button.isEnabled()
+    record = {"kind": "blank", "mode": "single", "status": "completed",
+              "experiment_id": "steady_state_slow_scan", "instance_id": panel.context.instance_id,
+              "settings": {"condition": {"condition_id": "another optional label"}}}
+    panel.adapter.accept_control("blank", record)
+    assert panel.adapter.controls["blank"]["settings"] == record["settings"]
+    with pytest.raises(ValueError, match="completed"):
+        panel.adapter.accept_control("blank", {**record, "status": "cancelled"})
+    with pytest.raises(ValueError, match="another measurement"):
+        panel.adapter.accept_control("blank", {**record, "experiment_id": "another"})
+
+
+def test_refit_preserves_original_native_and_linked_slice_navigation(app, tabs):
+    panel = tabs[0][1].widget
+    panel.settings_editor.apply_settings(settings("dual"))
+    inject_backend(panel)
+    panel.begin("measurement")
+    wait_for(app, panel)
+    assert panel.result is not None, panel.status.text()
+    native_path = Path(panel.result["path"]) / "run.json"
+    original = native_path.read_bytes()
+    panel.sweep_choice.setCurrentIndex(1)
+    panel.spectral_slice.set_index(1)
+    panel.spectral_slice.input.stepBy(1)
+    assert panel.spectral_slice.index != 1
+    panel.refit()
+    wait_for(app, panel)
+    assert Path(panel.result["analysis_path"]).is_file(), panel.status.text()
+    assert native_path.read_bytes() == original
+    assert panel._displayed is panel.result
+
+
+def test_blank_is_reused_after_metadata_edit_and_saved_run_load(app, tabs):
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SyntheticSlowScanBackend
+    panel = tabs[0][0].widget
+    class InjectedConnectedReadbacks(SyntheticSlowScanBackend):
+        def prepare(self, *args):
+            super().prepare(*args)
+            # Emulate connected readbacks for this reuse test. Native records
+            # remain explicitly synthetic, and no real device factory is used.
+            self.readbacks = {"injected_fixture": True}
+    panel.settings_editor.apply_settings(settings())
+    inject_backend(panel, InjectedConnectedReadbacks)
+    panel.begin_control("blank")
+    wait_for(app, panel)
+    blank = panel.adapter.controls["blank"]
+    assert blank is not None, panel.status.text()
+    loaded = panel.settings_editor.read_settings()
+    loaded["condition"].update(condition_id="Arbitrary later label", temperature_k="Not measured")
+    panel.settings_editor.apply_settings(loaded)
+    assert panel.start_button.isEnabled(), panel.validation.text()
+    panel.begin("measurement")
+    wait_for(app, panel)
+    assert panel.result is not None, panel.status.text()
+    assert "automatic_dark" not in panel.result
+    assert panel.result["spectra"][0].quantity == "sequential_blank_absorbance"
+    panel.adapter.controls["blank"] = None
+    panel.load_run(blank["path"])
+    wait_for(app, panel)
+    assert panel.adapter.controls["blank"]["run_id"] == blank["run_id"]
+
+
+def test_stop_uses_shared_worker_and_preserves_partial_run(app, tabs):
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SyntheticSlowScanBackend
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+    panel = tabs[0][0].widget
+    entered = Event()
+    class SlowPreparation(SyntheticSlowScanBackend):
+        def prepare(self, plan, compiled, check, report):
+            super().prepare(plan, compiled, check, report)
+            entered.set()
+            while True:
+                time.sleep(.005)
+                check()
+    panel.settings_editor.apply_settings(settings())
+    inject_backend(panel, SlowPreparation)
+    panel.begin("measurement")
+    assert entered.wait(5)
+    assert panel.close_blockers()
+    panel.request_abort("Stop from UI test")
+    wait_for(app, panel)
+    record = panel.adapter.runner.last_result
+    assert load_run(record["path"])["status"] == "cancelled"
+    assert record["restoration"]["safe_verified"]
+    assert not panel.close_blockers()
+    assert panel.context.ownership.snapshot()["state"] == "free"
+    panel.new_run()
+    assert panel.start_button.isEnabled()
+
+
+def test_capability_operation_contends_and_releases_without_complete_plan(app, tabs):
+    from control_app.measurement_host.ownership import OwnershipError
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SyntheticSlowScanBackend
+    first, second = (handle.widget for handle in tabs[0])
+    entered, finish = Event(), Event()
+    class Backend(SyntheticSlowScanBackend):
+        def discover(self, check):
+            entered.set()
+            while not finish.wait(.005):
+                check()
+            self.readbacks = {"t660_frame_capacity": 8192}
+            return self.readbacks
+    inject_backend(first, Backend)
+    inject_backend(second, Backend)
+    first.settings_editor.lower.setValue(2000.)
+    first.settings_editor.override_inputs["filter_order"].setText("unfinished number")
+    assert first.plan is None
+    try:
+        first.begin_control("capability")
+        assert entered.wait(5)
+        with pytest.raises(OwnershipError):
+            second.begin_control("capability")
+        assert first.snapshot.operation.hardware
+    finally:
+        finish.set()
+        wait_for(app, first)
+    assert first.adapter.readbacks["t660_frame_capacity"] == 8192
+    assert first.context.ownership.snapshot()["state"] == "free"
 
 
 def test_slow_scan_plot_preserves_reversed_native_axes_missing_intervals_and_ratio_label(app):
@@ -217,85 +313,6 @@ def test_slow_scan_plot_preserves_reversed_native_axes_missing_intervals_and_rat
     assert "no applicable calibration" in plot.figure.axes[0].texts[0].get_text()
     plot.close()
     plot.deleteLater()
-
-
-def test_slow_scan_mode_and_condition_native_loading_rejected(app, tabs, tmp_path):
-    from control_app.measurement_modules.steady_state_slow_scan.persistence import save_plan
-    single, dual = (h.widget for h in tabs[0])
-    path = tmp_path / "single_plan.json"
-    save_plan(path, settings("single"))
-    with pytest.raises(ValueError, match="mode mismatch"):
-        dual.adapter.load_plan(path)
-    prepare(app, single)
-    original = single.preliminary
-    wrong = deepcopy(original)
-    wrong["settings"]["condition"]["configuration_id"] = "different-config"
-    assert any("configuration_id" in error for error in single.adapter.compatibility_errors(wrong, single.plan))
-
-
-def test_slow_scan_instrument_changes_invalidate_only_recipient(app, tabs):
-    from control_app.measurement_host.interchange import DeviceConfigurationChange, InstrumentStateChange
-    first, second = (h.widget for h in tabs[0])
-    prepare(app, first)
-    first.review.setChecked(True)
-    first.instrument_state_changed(InstrumentStateChange(
-        producer_instance_id="phase_scan:single", recipients=(first.context.instance_id,),
-        changes=(DeviceConfigurationChange("hf2li", "range_v", 1., 2.),), reason="Detector range adjusted"))
-    assert not first.review.isChecked()
-    assert "hf2li.range_v" in first.review_summary.text()
-    assert "Instrument state changed" in ";".join(first.adapter.control_errors(first.plan))
-    assert second.adapter._instrument_generation == 0
-
-
-def test_slow_scan_abort_during_preparation_retains_partial_and_allows_new_run(app, tabs):
-    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner, SyntheticSlowScanBackend
-    from threading import Event
-    panel, sibling = (h.widget for h in tabs[0])
-    entered = Event()
-
-    class WaitingBackend(SyntheticSlowScanBackend):
-        def prepare(self, plan, compiled, check, report):
-            super().prepare(plan, compiled, check, report)
-            entered.set()
-            while True:
-                check()
-                time.sleep(.002)
-
-    panel.settings_editor.apply_settings(settings())
-    panel.adapter.runner = SlowScanRunner(panel.context, backend_factory=WaitingBackend)
-    stage(panel, "dark")
-    panel.begin_control("dark")
-    assert entered.wait(5)
-    assert panel.close_blockers()
-    panel.request_abort("operator abort")
-    wait_for(app, panel)
-    assert panel.status.text().startswith("Acquisition stopped")
-    assert panel.adapter.runner.last_result["status"] == "cancelled"
-    assert Path(panel.adapter.runner.last_result["path"], "run.json").exists()
-    assert sibling.adapter.runner is None
-    assert not panel.close_blockers()
-    panel.new_run()
-    assert panel.adapter.runner is None
-
-
-def test_slow_scan_refit_preserves_original_native_and_sweep_navigation(app, tabs):
-    panel = tabs[0][1].widget
-    prepare(app, panel)
-    old_path = Path(panel.preliminary["path"])
-    original = (old_path / "run.json").read_bytes()
-    panel.sweep_choice.setCurrentIndex(1)
-    assert "reverse" in panel.sweep_choice.currentText() or "forward" in panel.sweep_choice.currentText()
-    panel.spectral_slice.set_index(1)
-    panel.spectral_slice.input.stepBy(1)
-    assert panel.spectral_slice.index != 1
-    panel.refit()
-    wait_for(app, panel)
-    assert panel.result is not None, panel.status.text()
-    assert panel._displayed is panel.result
-    assert Path(panel.result["analysis_path"]).is_file()
-    assert (old_path / "run.json").read_bytes() == original
-    assert len(panel.result["fit_alternatives"][0]) == 3
-    assert len(panel.plot.figure.axes) == 2
 
 
 def test_slow_scan_raw_view_keeps_native_when_normalization_lacks_support(app):
@@ -330,50 +347,3 @@ def test_slow_scan_fits_match_sweep_identity_when_an_earlier_spectrum_has_no_fit
     assert panel.peak_table.rowCount() == 1
     assert float(panel.peak_table.item(0, 0).text()) == pytest.approx(1902., abs=.01)
     assert len(panel.plot.figure.axes) == 2
-
-
-def test_slow_scan_capability_operation_with_incomplete_plan_contends_and_releases(app, tmp_path):
-    from threading import Event
-    from control_app.measurement_host import ContextFactory
-    from control_app.measurement_host.ownership import HardwareCoordinator, OwnershipError
-    from control_app.measurement_modules.steady_state_slow_scan.widgets import SlowScanPanel
-    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner, SyntheticSlowScanBackend
-    entered, finish = Event(), Event()
-    coordinator = HardwareCoordinator(tmp_path / "injected.lock")
-    factory = ContextFactory(ownership=coordinator, save_root_provider=lambda: tmp_path)
-    context = factory.for_experiment("steady_state_slow_scan")
-    first, second = (SlowScanPanel(context.for_mode(mode)) for mode in ("single", "dual"))
-
-    class InjectedCapabilityBackend(SyntheticSlowScanBackend):
-        def discover(self, check):
-            entered.set()
-            while not finish.wait(.005):
-                check()
-            self.readbacks = {"t660_frame_capacity": 8192}
-            return self.readbacks
-
-    try:
-        for panel in (first, second):
-            panel.settings_editor.hardware.setChecked(True)
-            panel.adapter.runner = SlowScanRunner(panel.context, backend_factory=InjectedCapabilityBackend)
-        assert first.plan is None  # No sample identity/segments or operating values supplied.
-        first.begin_control("capability")
-        assert entered.wait(5)
-        assert first.snapshot.operation.hardware
-        with pytest.raises(OwnershipError):
-            second.begin_control("capability")
-        manual = factory.for_experiment("manual_controls").for_mode("single")
-        with pytest.raises(OwnershipError):
-            manual.begin_operation({}, hardware=True, purpose="injected manual adjustment")
-        finish.set()
-        wait_for(app, first)
-        assert coordinator.snapshot()["state"] == "free"
-        assert first.adapter.readbacks["t660_frame_capacity"] == 8192
-        assert not first.review.isChecked()
-    finally:
-        finish.set()
-        if first.command_running():
-            first.request_abort("test cleanup")
-            wait_for(app, first)
-        for panel in (first, second):
-            panel.deleteLater()

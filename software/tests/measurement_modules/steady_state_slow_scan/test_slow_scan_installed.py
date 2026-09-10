@@ -3,6 +3,7 @@
 from copy import deepcopy
 from dataclasses import replace
 from types import SimpleNamespace
+import math
 
 import numpy as np
 import pytest
@@ -204,6 +205,7 @@ class QCLService(InjectedService):
     def is_interlock_set(self): return True
     def is_key_switch_set(self): return True
     def get_system_error_word(self): return 0
+    def read_state(self): return SimpleNamespace(to_dict=lambda: {"emission_on": self.emission, "interlock": True})
     def get_scan_waiting_process_trigger(self): return True
     def is_emission_on(self): return self.emission
 
@@ -232,19 +234,19 @@ class QCLService(InjectedService):
         self.sweep_generation += 1
 
     def get_sweep_parameters(self):
-        result = deepcopy(self.sweep)
+        result = deepcopy(self.sweep or {"start_cm1": 1900., "stop_cm1": 1900.4, "scan_rate_cm1_s": 2., "repetitions": 2})
         if self.bad_readback:
             result["scan_rate_cm1_s"] *= 2
         return result
 
     def get_wavelength_trigger_channel_params(self, channel):
         interval = self.trigger["interval"]
-        count = round(abs(self.trigger["stop"] - self.trigger["start"]) / interval) + 1
+        count = math.floor(abs(self.trigger["stop"] - self.trigger["start"]) / interval + 1e-8) + 1
         return {"start": self.trigger["start"], "interval": interval, "num_triggers": count, "units": 2}
 
     def turn_emission_off(self): self.touch("turn_emission_off"); self.emission = False
     def stop_scan_if_needed(self): self.touch("stop_scan_if_needed")
-    def turn_emission_on(self, **kwargs): self.touch("turn_emission_on"); self.emission = True
+    def start_emission(self): self.touch("start_emission"); self.emission = True
 
 
 class HFService(InjectedService):
@@ -311,6 +313,19 @@ class HFService(InjectedService):
         return {"match": all(after["nodes"].get(key) == value for key, value in before["nodes"].items())}
 
     def get_clockbase(self): return 1000000.
+    def discover_phase_scan_capabilities(self):
+        self.touch("discover_phase_scan_capabilities")
+        return {"device_id": self.device_id, "verified": True, "source": "injected connected transport", "rates_sps": (100., 1000., 10000.),
+                "orders": (1, 2, 3, 4), "timeconstants_by_order": {i: (.0001, .001, .002, .01) for i in range(1, 5)},
+                "timing_rate_sps": 10000., "enabled_streams": (0, 2)}
+    def discover_dual_phase_scan_capabilities(self):
+        self.touch("discover_dual_phase_scan_capabilities")
+        single = self.discover_phase_scan_capabilities()
+        return {**single, "sample": deepcopy(single), "reference": deepcopy(single), "enabled_streams": (0, 2, 3)}
+    def read_acquisition_health(self, **kwargs):
+        self.touch("read_acquisition_health")
+        return {"reference_locked": not self.bad_health, "clock_locked": True, "overload": False,
+                "external_clock_selected": True, "external_reference_locked": None, "nodes": {}, "read_errors": {}}
     def _get_node(self, *args): self.touch("health_readback"); return int(self.bad_health)
     def start_acquisition(self, *, demodulators): self.touch("start_acquisition"); self.subscriptions.append(tuple(demodulators))
     def stop_acquisition(self): self.touch("stop_acquisition")
@@ -323,30 +338,36 @@ class HFService(InjectedService):
         if generation in self.delivered:
             return {"data": {}}
         self.delivered.add(generation)
-        times = np.arange(0., 1.05, .0001)
+        duration = abs(qcl.sweep.get("stop_cm1", 1900.4)-qcl.sweep.get("start_cm1", 1900.))/qcl.sweep.get("scan_rate_cm1_s", 2.)
+        count = qcl.get_wavelength_trigger_channel_params(1)["num_triggers"]
+        block_duration = qcl.sweep.get("repetitions", 2)*(duration+.1)+.2
+        times = np.arange(0., block_duration, .0001)
         epoch = 0 if generation == "dark" else generation * 5_000_000
         ticks = np.uint64(2 ** 54 + epoch) + np.rint(times * 1e6).astype(np.uint64)
         dio = np.zeros(len(times), dtype=np.uint64)
         if generation != "dark":
             for rep in range(qcl.sweep["repetitions"]):
-                start = .1 + rep * .4
-                active = (times >= start) & (times <= start + .22)
+                start = .1 + rep * (duration+.1)
+                active = (times >= start) & (times <= start + duration+.02)
                 dio[active] |= np.uint64(1 << 21)
                 if qcl.sweep["start_cm1"] < qcl.sweep["stop_cm1"]:
                     dio[active] |= np.uint64(1 << 20)
-                for step in range(5):
-                    edge = start + .005 + step * .05
+                for step in range(count):
+                    edge = start + .005 + step * qcl.trigger["interval"]/qcl.sweep["scan_rate_cm1_s"]
                     dio[(times >= edge) & (times <= edge + .001)] |= np.uint64(1 << 22)
-        sample_ticks = ticks[::10]
-        data = {f"/{self.device_id}/demods/0/sample": {"timestamp": sample_ticks, "x": np.linspace(.8, .9, len(sample_ticks)), "y": np.zeros(len(sample_ticks))},
+        sample_rate = self.nodes[f"/{self.device_id}/demods/0/rate"]["value"]
+        sample_ticks = ticks[::max(1, round(10000/sample_rate))]
+        sample = np.linspace(.001, .0011, len(sample_ticks)) if generation == "dark" else np.linspace(.8, .9, len(sample_ticks))
+        reference = np.linspace(.0014, .0015, len(sample_ticks)) if generation == "dark" else np.ones(len(sample_ticks))
+        data = {f"/{self.device_id}/demods/0/sample": {"timestamp": sample_ticks, "x": sample, "y": np.zeros(len(sample_ticks))},
                 f"/{self.device_id}/demods/2/sample": {"timestamp": ticks, "dio": dio},
-                f"/{self.device_id}/demods/3/sample": {"timestamp": sample_ticks, "x": np.ones(len(sample_ticks)), "y": np.zeros(len(sample_ticks))}}
+                f"/{self.device_id}/demods/3/sample": {"timestamp": sample_ticks, "x": reference, "y": np.zeros(len(sample_ticks))}}
         record = {"data": data}
         self.native_delivered.append(record)
         return record
 
 
-def configured(tmp_path, monkeypatch, mode="dual"):
+def configured(tmp_path, monkeypatch, mode="dual", *, live=False):
     from pathlib import Path
     configuration_path = Path(__file__).resolve().parents[4] / "instrument" / "hardware_configuration.yaml"
     config = yaml.safe_load(configuration_path.read_text(encoding="utf-8"))
@@ -354,6 +375,7 @@ def configured(tmp_path, monkeypatch, mode="dual"):
     active, services = {}, {}
     clock = VirtualClock()
     monkeypatch.setattr(acquisition, "monotonic", clock.now)
+    monkeypatch.setattr(acquisition, "Event", lambda: SimpleNamespace(wait=clock.advance))
     def guard():
         coordinator.assert_owner(active["operation"].ownership)
     def make(name):
@@ -367,18 +389,193 @@ def configured(tmp_path, monkeypatch, mode="dual"):
                              real_device_factories={name: make(name) for name in ("hf2li", "mircat", "t660_1", "t660_2")},
                              ownership=coordinator).for_experiment("steady_state_slow_scan").for_mode(mode)
     settings = SlowScanSettings(mode=mode, segments=(SpectralSegment("band", 1, 1900., 1900.4),),
-                                condition=ConditionIdentity(configuration_id="fixture-config"), physical_controls_confirmed=True)
-    inputs = simulation_inputs(settings)
-    profile = deepcopy(inputs.scientific_profile)
-    profile["hf2li"]["reference"].update(order=3, timeconstant_s=.002, rate_sps=1000.)
-    profile["hf2li"]["sigins"]["ch2"]["range_v"] = .3
-    plan = build_plan(settings, replace(inputs, scientific_profile=profile))
-    compiled = compile_timing(plan)
+                                sample_rate_hz=1000., time_constant_s=.001, reference_time_constant_s=.002,
+                                condition=ConditionIdentity(configuration_id="fixture-config"))
+    if live:
+        settings = SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1900.4, requested_resolution_cm1=.05)
+        plan, compiled = build_plan(settings), None
+    else:
+        inputs = simulation_inputs(settings)
+        profile = deepcopy(inputs.scientific_profile)
+        profile["hf2li"]["reference"].update(order=3, timeconstant_s=.002, rate_sps=1000.)
+        profile["hf2li"]["sigins"]["ch2"]["range_v"] = .3
+        plan = build_plan(settings, replace(inputs, scientific_profile=profile))
+        compiled = compile_timing(plan)
     operation = context.begin_operation(settings.to_dict(), hardware=True)
     active["operation"] = operation
     backend = InstalledSlowScanBackend(context, operation)
     backend._stop_wait = SimpleNamespace(wait=clock.advance)
     return context, coordinator, operation, backend, plan, compiled, services
+
+
+def worker():
+    return SimpleNamespace(check_cancelled=lambda: None, message=SimpleNamespace(emit=lambda *args: None),
+                           progress=SimpleNamespace(emit=lambda *args: None))
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_default_runner_resolves_live_factories_acquires_automatic_dark_and_sample(tmp_path, monkeypatch, mode):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path, monkeypatch, mode, live=True)
+    assert not services and not draft.errors and draft.readiness
+    result = SlowScanRunner(context).run(StartSnapshot(operation, "measurement", draft, {}), worker())
+    assert result["status"] == "completed"
+    assert result["simulation"] is False and not result["plan"]["inputs"]["simulation"]
+    assert not result["plan"]["inputs"]["promoted_bundle_ids"]
+    assert result["plan"]["selected"]["measured_response_s"] is None
+    assert result["plan"]["selected"]["intrinsic_resolution_cm1"] is None
+    assert result["automatic_dark"]["dark"]["sample"] < .01
+    assert len(result["sweeps"]) == 4 and len(result["spectra"]) == 4
+    assert all(np.count_nonzero(item.valid) > 20 for item in result["spectra"])
+    assert all(item.metadata["effective_resolution_cm1"] is None for item in result["sweeps"])
+    assert result["readbacks"]["direction_bit_observation"]["association"] == {"forward": 1, "reverse": 0}
+    assert result["restoration"]["safe_verified"]
+    assert all(device.closed for device in services.values())
+    assert all(not enabled for name in ("t660_1", "t660_2") for enabled in services[name].channels.values())
+    assert not services["mircat"].emission
+    assert "start_emission" in services["mircat"].calls
+    assert services["hf2li"].calls.count("connect") == 1
+    loaded = load_run(result["path"], expected_mode=mode)
+    assert len(loaded["sweeps"]) == 4 and loaded["restoration"]["safe_verified"]
+    assert loaded["partial_native_records"]
+    assert coordinator.snapshot()["state"] == "free"
+
+
+@pytest.mark.parametrize("outcome", ["success", "timeout", "cancelled"])
+def test_reference_lock_wait_is_bounded_cancellable_and_retains_observations(tmp_path, monkeypatch, outcome):
+    context, _, operation, backend, plan, compiled, services = configured(tmp_path, monkeypatch)
+    checks = []
+    with context.hardware_scope(operation):
+        backend.prepare(plan, compiled, lambda: None, lambda *args: None)
+        original = services["hf2li"].read_acquisition_health
+        def health(**kwargs):
+            observed = original(**kwargs)
+            checks.append(observed)
+            observed["reference_locked"] = outcome == "success" and len(checks) >= 4
+            return observed
+        services["hf2li"].read_acquisition_health = health
+        def check():
+            if outcome == "cancelled" and len(checks) >= 3:
+                raise InterruptedError("operator Stop while waiting for reference")
+        if outcome == "success":
+            assert backend.acquire_dark(plan, check, lambda *args: None)
+        else:
+            with pytest.raises(TimeoutError if outcome == "timeout" else InterruptedError, match="reference"):
+                backend.acquire_dark(plan, check, lambda *args: None)
+        restored = backend.restore()
+    assert len(checks) >= 3
+    assert any(row["reference_locked"] is False for row in backend.readbacks["health_observations"])
+    assert restored["safe_verified"]
+    assert not services["mircat"].emission and "start_emission" not in services["mircat"].calls
+    context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True, detail="Reference wait retained")
+
+
+def test_runtime_auto_probe_width_uses_absolute_edges_in_rise_fall_mode(tmp_path, monkeypatch):
+    context, _, operation, backend, draft, _, services = configured(tmp_path, monkeypatch, live=True)
+    original = backend._create
+    def create(name):
+        device = original(name)
+        if name == "t660_1":
+            device.absolute.update({3: 3e-6, 4: 4e-6})
+            device.references.update({3: 0, 4: 0})
+            device.modes["B"] = "RF"
+        return device
+    monkeypatch.setattr(backend, "_create", create)
+    with context.hardware_scope(operation):
+        plan = backend.resolve_plan(draft.settings, lambda: None)
+        assert plan.selected["probe_width_s"] == pytest.approx(1e-6)
+        assert plan.actual["t660_1"]["channels"]["B"]["width_edge"]["response"] == "4e-06s"
+        restored = backend.restore()
+    assert restored["safe_verified"], restored["errors"]
+    context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True, detail="Absolute pulse width observed")
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+@pytest.mark.parametrize("outcome", ["fault", "cancelled"])
+def test_default_installed_runner_preserves_failure_and_stop_partials(tmp_path, monkeypatch, mode, outcome):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path, monkeypatch, mode, live=True)
+    if outcome == "fault":
+        monkeypatch.setattr(TimingService, "get_shot_count", lambda self: len(self.frames) + 1)
+    active_worker = worker()
+    def check():
+        hf = services.get("hf2li")
+        if outcome == "cancelled" and hf and any(isinstance(item, int) for item in hf.delivered):
+            raise InterruptedError("operator Stop after a native poll")
+    active_worker.check_cancelled = check
+    runner = SlowScanRunner(context)
+    with pytest.raises(RuntimeError if outcome == "fault" else InterruptedError, match="shot count|Stop"):
+        runner.run(StartSnapshot(operation, "measurement", draft, {}), active_worker)
+    result = runner.last_result
+    assert result["status"] == ("failed" if outcome == "fault" else "cancelled")
+    assert result["partial_native_records"] and result["automatic_dark"]
+    assert result["restoration"]["safe_verified"]
+    assert all(device.closed for device in services.values())
+    assert all(not enabled for name in ("t660_1", "t660_2") for enabled in services[name].channels.values())
+    assert not services["mircat"].emission
+    loaded = load_run(result["path"], expected_mode=mode)
+    assert loaded["status"] == result["status"] and loaded["partial_native_records"]
+    assert coordinator.snapshot()["state"] == "free"
+
+
+def test_live_direction_mapping_can_be_inverted_and_is_learned_from_observed_sweeps(tmp_path, monkeypatch):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    original = HFService.read_acquisition
+    def read(self, duration):
+        record = original(self, duration)
+        timing = record.get("data", {}).get(f"/{self.device_id}/demods/2/sample")
+        if timing is not None and self.services["mircat"].emission:
+            active = (timing["dio"] & np.uint64(1 << 21)) != 0
+            timing["dio"][active] ^= np.uint64(1 << 20)
+        return record
+    monkeypatch.setattr(HFService, "read_acquisition", read)
+    context, _, operation, _, draft, _, _ = configured(tmp_path, monkeypatch, live=True)
+    result = SlowScanRunner(context).run(StartSnapshot(operation, "measurement", draft, {}), worker())
+    assert result["status"] == "completed"
+    assert result["readbacks"]["direction_bit_observation"]["association"] == {"forward": 0, "reverse": 1}
+    assert all(np.any(item.valid) for item in result["spectra"])
+
+
+def test_default_installed_single_blank_then_sample_reuses_controls_on_distinct_native_coordinates(tmp_path, monkeypatch):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+    blank_context, _, blank_operation, _, blank_draft, _, _ = configured(tmp_path / "blank", monkeypatch, "single", live=True)
+    blank = SlowScanRunner(blank_context).run(StartSnapshot(blank_operation, "blank", blank_draft, {}), worker())
+    assert blank["status"] == "completed" and blank["automatic_dark"]
+    # Independent connected polls do not land on identical native coordinates.
+    # Offset the sample timestamps within the explicit bounded support policy.
+    original = HFService.read_acquisition
+    def read(self, duration):
+        record = original(self, duration)
+        sample = record.get("data", {}).get(f"/{self.device_id}/demods/0/sample")
+        if sample is not None:
+            sample["timestamp"] = sample["timestamp"] + np.uint64(100)
+        return record
+    monkeypatch.setattr(HFService, "read_acquisition", read)
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path / "sample", monkeypatch, "single", live=True)
+    controls = {"blank": blank, "dark": blank["automatic_dark"]}
+    result = SlowScanRunner(context).run(StartSnapshot(operation, "measurement", draft, controls), worker())
+    assert result["status"] == "completed" and result["simulation"] is False
+    assert "automatic_dark" not in result and "dark" not in services["hf2li"].delivered
+    assert not result.get("unused_controls")
+    assert result["controls"]["blank"]["run_id"] == blank["run_id"]
+    assert result["controls"]["dark"]["run_id"] == blank["automatic_dark"]["run_id"]
+    for sample, control in zip(result["spectra"], blank["spectra"]):
+        assert sample.quantity == "sequential_blank_absorbance"
+        assert not np.array_equal(sample.native.axis_cm1, control.native.axis_cm1)
+        assert np.count_nonzero(sample.valid) > 20
+        assert np.all(np.isfinite(sample.signal[sample.valid]))
+        assert sample.provenance["control_ids"]["blank"].startswith(blank["run_id"])
+    loaded = load_run(result["path"], expected_mode="single")
+    assert loaded["controls"] == result["controls"] and loaded["restoration"]["safe_verified"]
+    assert all(device.closed for device in services.values()) and not services["mircat"].emission
+    assert coordinator.snapshot()["state"] == "free"
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
@@ -438,7 +635,7 @@ def test_installed_readback_and_count_faults_restore_pump_off(tmp_path, monkeypa
             services["mircat"].bad_readback = fault == "qcl_readback"
             services["t660_2"].shot_error = 1 if fault == "shot_count" else 0
             services["hf2li"].bad_health = fault == "health"
-            with pytest.raises((ValueError, RuntimeError), match="MIRcat|shot count|clipping"):
+            with pytest.raises((ValueError, RuntimeError, TimeoutError), match="MIRcat|shot count|clipping|lock timeout"):
                 backend.acquire_block(compiled.blocks[0], plan, lambda: None, lambda *args: None)
         restored = backend.restore()
     assert restored["safe_verified"], restored["errors"]
@@ -513,7 +710,7 @@ def test_installed_clock_mismatch_blocks_before_emission(tmp_path, monkeypatch):
         with pytest.raises(ValueError, match="clock_lock_status"):
             backend.prepare(plan, compiled, lambda: None, lambda *args: None)
         restored = backend.restore()
-    assert "turn_emission_on" not in services["mircat"].calls
+    assert "start_emission" not in services["mircat"].calls
     assert restored["safe_verified"]
     context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True, detail="Clock failure retained")
 
