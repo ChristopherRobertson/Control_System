@@ -52,7 +52,7 @@ def test_independent_packages_install_together_without_shell_edits(app, tmp_path
     """Actual registration imports from separate directories plus broken SDK isolation."""
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QToolButton
+    from PySide6.QtWidgets import QSizePolicy, QToolButton
     from control_app.ui.main_window import ControlSystemMainWindow
     ids = ("steady_state_slow_scan", "fixed_wavenumber_kinetics", "nanosecond_stroboscopy",
            "microsecond_stroboscopy", "repeated_rapid_scan", "single_pump_scan_burst")
@@ -85,6 +85,17 @@ def test_independent_packages_install_together_without_shell_edits(app, tmp_path
         window.resize(1100, 780)
         window.show()
         app.processEvents()
+        original_legacy_policies = tuple((widget, QSizePolicy(policy))
+                                       for widget, policy in window._legacy_page_policies)
+        window.tabs.setCurrentIndex(2)
+        QTest.qWait(10)
+        assert window.tabs.height() <= window.workspace_scroll.viewport().height()
+        assert window.workspace_scroll.verticalScrollBar().maximum() == 0
+        assert all(widget.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Ignored
+                   for widget, _ in original_legacy_policies)
+        window.tabs.setCurrentIndex(0)
+        QTest.qWait(10)
+        assert all(widget.sizePolicy() == policy for widget, policy in original_legacy_policies)
         bar = window.tabs.tabBar()
         right_arrow = next(button for button in bar.findChildren(QToolButton)
                            if button.arrowType() == Qt.ArrowType.RightArrow)

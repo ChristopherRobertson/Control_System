@@ -147,6 +147,10 @@ class ControlSystemMainWindow(QMainWindow):
         tabs.addTab(self.iris_widget, "OPO Iris")
         self.scan_plotter_widget = ScanPlotterWidget()
         tabs.addTab(self.scan_plotter_widget, "Plotter")
+        measurement_pages = {widget for widget, _ in self._measurement_page_policies}
+        self._legacy_page_policies = tuple(
+            (tabs.widget(index), QSizePolicy(tabs.widget(index).sizePolicy()))
+            for index in range(tabs.count()) if tabs.widget(index) not in measurement_pages)
         tabs.currentChanged.connect(self._update_measurement_page_sizes)
         self._update_measurement_page_sizes()
         self.mircat_widget.scan_data_ready_callback = self.scan_plotter_widget.set_rows
@@ -198,11 +202,22 @@ class ControlSystemMainWindow(QMainWindow):
             self._apply_save_location()
 
     def _update_measurement_page_sizes(self, *_):
-        """Use a feature's native sizing only while that feature is selected."""
+        """Fit a selected feature without changing the established page layouts."""
         selected = self.tabs.currentWidget()
+        feature_selected = any(widget is selected for widget, _ in self._measurement_page_policies)
         for widget, original in self._measurement_page_policies:
             policy = QSizePolicy(original)
             if widget is not selected:
+                policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
+                policy.setVerticalPolicy(QSizePolicy.Policy.Ignored)
+            widget.setSizePolicy(policy)
+            widget.updateGeometry()
+        # Large hidden instrument forms also contribute to the tab stack's
+        # minimum. Ignore them only while showing a new compact experiment;
+        # restore every original policy when an established page is selected.
+        for widget, original in self._legacy_page_policies:
+            policy = QSizePolicy(original)
+            if feature_selected:
                 policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
                 policy.setVerticalPolicy(QSizePolicy.Policy.Ignored)
             widget.setSizePolicy(policy)
