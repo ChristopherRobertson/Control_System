@@ -221,3 +221,24 @@ def test_rrs_actual_qcl_changes_invalidate_baseline_reuse(field,value):
     old=operational_contract(settings)
     settings["condition"]["preparation_id"]="prep-b"
     assert "preparation_id" in "; ".join(compatibility_conflicts(old,operational_contract(settings)))
+
+
+def test_rrs_plan_budgets_existing_native_records_once_per_array_identity():
+    item=adapter()
+    settings=item.read_settings()
+    original=item.make_plan(settings)
+    shared=np.arange(4096,dtype=np.uint64)
+    separate=shared.copy()
+    native=SpectralBaseline("selected-blank","single","annotation",
+        (SpectrumSupport("forward",shared,shared),),kind="background",complete=True)
+    item.session.blank={"baseline":native,"raw":[shared,shared]}
+    item.session.preliminary={"same_blank":item.session.blank}
+    item.session.background=native
+    item.session.result={"original":item.session.preliminary,"independent_native_copy":separate}
+    measured=item.make_plan(settings)
+    expected=shared.nbytes+separate.nbytes
+    assert measured.capabilities.selected_baseline_bytes==expected
+    assert measured.estimates["retained_run_memory_bytes"]==original.estimates["retained_run_memory_bytes"]+expected
+    assert measured.estimates["storage_bytes"]==original.estimates["storage_bytes"]+expected
+    item.session.clear()
+    assert item.make_plan(settings).capabilities.selected_baseline_bytes==0

@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict, replace
+from collections.abc import Mapping
+from dataclasses import asdict, fields, is_dataclass, replace
 from decimal import Decimal
 import csv
 import json
@@ -14,7 +15,27 @@ from control_app.measurement_host.context import thaw_data
 from control_app.measurement_host.presentation import ScientificSelections
 from .session import MeasurementSession, operational_contract
 from .settings import AcquisitionIntent, ConditionProfile, RepeatedRapidScanSettings
-from .planner import build_plan
+from .planner import HardwareCapabilities, build_plan
+
+
+def retained_native_bytes(records):
+    """Count actual retained ndarray storage once per object, without digests."""
+    seen = set()
+    def visit(value):
+        identity = id(value)
+        if identity in seen:
+            return 0
+        seen.add(identity)
+        if isinstance(value,np.ndarray):
+            return int(value.nbytes) + (sum(visit(item) for item in value.flat) if value.dtype.hasobject else 0)
+        if is_dataclass(value) and not isinstance(value,type):
+            return sum(visit(getattr(value,field.name)) for field in fields(value))
+        if isinstance(value,Mapping):
+            return sum(visit(item) for item in value.values())
+        if isinstance(value,(list,tuple,set,frozenset)):
+            return sum(visit(item) for item in value)
+        return 0
+    return visit(records)
 
 
 class RepeatedRapidScanAdapter:
@@ -68,7 +89,13 @@ class RepeatedRapidScanAdapter:
         self.context.preferences.sync()
 
     def make_plan(self, settings):
-        return build_plan(settings, capabilities=self.capabilities, calibration=self.calibration)
+        retained = retained_native_bytes((self.session.blank,self.session.preliminary,
+                                          self.session.background,self.session.result))
+        caps = self.capabilities or HardwareCapabilities()
+        if isinstance(caps,Mapping):
+            caps = HardwareCapabilities(**caps)
+        caps = replace(caps,selected_baseline_bytes=retained)
+        return build_plan(settings, capabilities=caps, calibration=self.calibration)
 
     def validate_plan(self, plan):
         return ()  # build_plan validates structure; readiness is separate and visible.
