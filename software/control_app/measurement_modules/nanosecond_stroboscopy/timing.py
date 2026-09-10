@@ -83,7 +83,7 @@ def compile_timing(settings: Settings | dict[str, Any]) -> TimingCompilation:
         raise ValueError("Probe period must be finite and positive")
     frequency = float((Decimal(str(1 / s.probe_period_s)) / Decimal(str(DDS_GRID_HZ))).quantize(Decimal("1"), rounding=ROUND_FLOOR) * Decimal(str(DDS_GRID_HZ)))
     if frequency <= 0 or frequency > 16000000:
-        raise ValueError("Probe period is outside the documented 0.02 Hz..16 MHz T660 DDS range; use a supported probe cycle and the separate reset interval")
+        raise ValueError("Probe period is outside the documented 0.02 Hz..16 MHz T660 DDS range; select a supported cycle interval and HF2LI filter")
     period = 1 / frequency
     step = s.timing_step_ns
     anchor = quantize_ns(s.probe_anchor_ns, step)

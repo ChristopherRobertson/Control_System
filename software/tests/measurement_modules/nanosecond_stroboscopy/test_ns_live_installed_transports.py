@@ -23,6 +23,8 @@ class Bench:
     def __init__(self):
         self.units = {}; self.starts = 0; self.pending = False; self.clock = 1.; self.kind = "blank"
         self.optical_pulse_width_ns=100.;self.optical_current_ma=300.;self.optical_pulse_rate_hz=10000.
+        self.qcl_calls=[];self.tuned_pulse_width_ns=None
+        self.pulse_limits={"max_pulse_rate_hz":100000.,"max_pulse_width_ns":500.,"max_duty_cycle":5.}
         self.nodes = {}; self.calls = []; self.broken_clock = False; self.refuse_dc = False
         self.missing_first_probe=False;self.shot_delta = 0; self.broken_restore = False; self.alternate_refs = False; self.refuse_oscselect = False; self.refuse_refs = False
     def start(self):
@@ -190,16 +192,30 @@ class MemoryMircat(MircatService):
         self.trigger={"pulse_mode":0,"process_trigger_mode":0,"start":1942.,"stop":1942.,"interval":0.,"units":1,"dwell_us":0,"after_off_us":0}
     def initialize(self):require_hardware_owner(self)
     def deinitialize(self):self.bench.calls.append(("mircat","close"))
-    def get_num_installed_qcls(self):return 1
-    def get_qcl_pulse_rate(self,qcl):return self.bench.optical_pulse_rate_hz
-    def get_qcl_pulse_width(self,qcl):return self.bench.optical_pulse_width_ns
-    def get_qcl_current(self,qcl):return self.bench.optical_current_ma
-    def get_qcl_tuning_range(self,qcl):return {"qcl":qcl,"min_cm1":1900.,"max_cm1":2000.}
-    def get_qcl_pulse_limits(self,qcl):return {"max_pulse_rate_hz":100000.,"max_pulse_width_ns":500.,"max_duty_cycle":5.}
+    def _qcl(self,index,action):
+        self.bench.qcl_calls.append((action,index))
+        assert index==1, "Legacy selectors must never route device I/O to another QCL"
+    def get_num_installed_qcls(self):return 3 # historical controller metadata
+    def get_active_qcl(self):return 2 # never use this historical selector for pulse reads
+    def get_qcl_pulse_rate(self,qcl):
+        self._qcl(qcl,"pulse_rate");return self.bench.optical_pulse_rate_hz
+    def get_qcl_pulse_width(self,qcl):
+        self._qcl(qcl,"pulse_width");return self.bench.optical_pulse_width_ns
+    def get_qcl_current(self,qcl):
+        self._qcl(qcl,"current");return self.bench.optical_current_ma
+    def get_qcl_tuning_range(self,qcl):
+        self._qcl(qcl,"range");return {"qcl":1,"min_cm1":1900.,"max_cm1":2000.}
+    def get_qcl_pulse_limits(self,qcl):
+        self._qcl(qcl,"limits");return deepcopy(self.bench.pulse_limits)
     def get_wavelength_trigger_params(self):return deepcopy(self.trigger)
     def set_wavelength_trigger_params(self,**kwargs):self.trigger.update(kwargs);return deepcopy(self.trigger)
-    def set_qcl_pulse_params(self,**kwargs):return deepcopy(kwargs)
-    def read_state(self):return {"emission_on":self.emission,"armed":self.armed}
+    def set_qcl_pulse_params(self,**kwargs):
+        self._qcl(kwargs["qcl"],"set_params")
+        self.bench.optical_pulse_rate_hz=kwargs["pulse_rate_hz"]
+        self.bench.optical_pulse_width_ns=kwargs["pulse_width_ns"]
+        self.bench.optical_current_ma=kwargs["current_ma"]
+        return deepcopy(kwargs)
+    def read_state(self):raise AssertionError("Generic legacy state getter may choose active QCL 2")
     def turn_emission_off(self):self.emission=False
     def is_connected(self):return True
     def _call(self,name,*args):
@@ -215,7 +231,9 @@ class MemoryMircat(MircatService):
     def is_key_switch_set(self):return True
     def are_tecs_ready(self):return True
     def is_tuned(self):return True
-    def tune_to_wavenumber(self,wavenumber_cm1,*,qcl):self.wave=wavenumber_cm1
+    def tune_to_wavenumber(self,wavenumber_cm1,*,qcl):
+        self._qcl(qcl,"tune");self.wave=wavenumber_cm1
+        if self.bench.tuned_pulse_width_ns is not None:self.bench.optical_pulse_width_ns=self.bench.tuned_pulse_width_ns
     def get_actual_wavelength(self):return {"value":self.wave,"units":"cm^-1","light_valid":self.emission}
 
 
@@ -410,3 +428,74 @@ def test_ns_live_changed_actual_instrument_settings_keep_raw_but_exclude_normali
     assert not np.any(result["result"]["coverage"])
     assert np.all(np.isnan(result["result"]["delta_a"]))
     assert load_run(result["output_path"])["events"][0]["native_device_data"]
+
+
+@pytest.mark.parametrize("rate,width,vendor_duty,completed", [
+    (600000.,500.,50.,True),
+    (600000.01,500.,50.,False),
+    (100000.,500.,4.,False),
+    (1000001.,100.,50.,False),
+    (10000.,2000.1,50.,False),
+])
+def test_ns_live_actual_optical_duty_is_inclusive_and_keeps_vendor_limits(tmp_path, rate, width, vendor_duty, completed):
+    bench=Bench();bench.optical_pulse_rate_hz=rate;bench.optical_pulse_width_ns=width
+    bench.pulse_limits={"max_pulse_rate_hz":1000000.,"max_pulse_width_ns":2000.,"max_duty_cycle":vendor_duty}
+    ctx,owner=live_context(tmp_path,bench)
+    settings=replace(Settings(mode="dual"),wavenumbers_cm1=(1942.,),delays_ns=(0.,),repetitions=1,cycle_interval_s=.1)
+    result=Runner(ctx).run(ctx.begin_operation(settings.to_dict(),hardware=True),build_plan(settings),kind="preliminary")
+    assert result["status"]==("completed" if completed else "failed"),result["error"]
+    assert owner.snapshot()["state"]=="free",result["error"]
+    assert all(index==1 for _,index in bench.qcl_calls)
+    if completed:
+        pulse=result["readbacks"]["mircat_pulse"]
+        assert pulse["configured_duty_cycle_fraction"]==pytest.approx(.30)
+        assert pulse["external_probe_rate_hz"]!=pulse["internal_rate_hz"]
+        assert pulse["external_probe_duty_cycle_fraction"]<pulse["configured_duty_cycle_fraction"]
+    else:
+        assert not bench.starts
+        assert not any(action=="set_params" for action,_ in bench.qcl_calls)
+
+
+def test_ns_live_optical_duty_uses_fresh_post_tune_readback_then_restores_qcl1(tmp_path):
+    bench=Bench();bench.optical_pulse_rate_hz=600000.;bench.optical_pulse_width_ns=500.
+    bench.tuned_pulse_width_ns=501.
+    bench.pulse_limits={"max_pulse_rate_hz":1000000.,"max_pulse_width_ns":2000.,"max_duty_cycle":50.}
+    ctx,owner=live_context(tmp_path,bench)
+    settings=replace(Settings(mode="dual"),wavenumbers_cm1=(1942.,),delays_ns=(0.,),repetitions=1,cycle_interval_s=.1)
+    result=Runner(ctx).run(ctx.begin_operation(settings.to_dict(),hardware=True),build_plan(settings),kind="preliminary")
+    assert result["status"]=="failed" and "30%" in result["error"]
+    assert result["readbacks"]["mircat_pulse"]["optical_pulse_width_ns"]==501.
+    assert not bench.starts
+    assert ("set_params",1) in bench.qcl_calls
+    assert bench.optical_pulse_width_ns==500.
+    assert owner.snapshot()["state"]=="free",result["error"]
+
+
+@pytest.mark.parametrize("wave,completed", [(1942.,True),(2050.,False)])
+def test_ns_live_legacy_selectors_never_choose_a_second_qcl(tmp_path,wave,completed):
+    bench=Bench();ctx,owner=live_context(tmp_path,bench)
+    settings=replace(Settings(mode="dual"),wavenumbers_cm1=(wave,),delays_ns=(0.,),repetitions=1,cycle_interval_s=.1,
+                     metadata={"qcl":2,"preferred_qcl":2,"active_qcl":2,"historical_qcl2_range_cm1":[2000.,2100.]})
+    settings=Settings.from_dict({**settings.to_dict(),"qcl":2,"overrides":{"qcl_index":3}})
+    assert settings.qcl==1
+    result=Runner(ctx).run(ctx.begin_operation(settings.to_dict(),hardware=True),build_plan(settings),kind="preliminary")
+    assert result["status"]==("completed" if completed else "failed"),result["error"]
+    assert all(index==1 for _,index in bench.qcl_calls)
+    assert owner.snapshot()["state"]=="free"
+    if completed:
+        assert ("tune",1) in bench.qcl_calls
+        assert result["readbacks"]["wavelength"]["qcl"]==1
+        assert result["settings"]["metadata"]["preferred_qcl"]==2 # retained annotation
+    else:
+        assert "QCL 1 tuning range" in result["error"]
+        assert not bench.starts and not any(action=="tune" for action,_ in bench.qcl_calls)
+
+
+def test_ns_optical_duty_checks_external_cadence_independently_and_exactly():
+    from control_app.measurement_modules.nanosecond_stroboscopy.adapters import _validate_optical_pulses, ReadinessError
+    limits={"max_pulse_rate_hz":1000000.,"max_pulse_width_ns":2000.,"max_duty_cycle":50.}
+    assert _validate_optical_pulses(10000.,500.,600000.,limits)["external_probe_duty_cycle_fraction"]==pytest.approx(.30)
+    with pytest.raises(ReadinessError,match="External probe cadence.*30%"):
+        _validate_optical_pulses(10000.,500.,600000.0000000001,limits)
+    with pytest.raises(ReadinessError,match="configured optical pulse rate.*30%"):
+        _validate_optical_pulses(600000.0000000001,500.,10.,limits)

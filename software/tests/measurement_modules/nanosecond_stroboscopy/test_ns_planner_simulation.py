@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pytest
 
-from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings, PROFILES, resolve_settings
+from control_app.measurement_modules.nanosecond_stroboscopy.settings import ADVANCED_FIELDS, Settings, PROFILES, optical_pulse_errors, resolve_settings
 from control_app.measurement_modules.nanosecond_stroboscopy.planner import build_plan
 from control_app.measurement_modules.nanosecond_stroboscopy.timing import compile_timing, quantize_ns
 from control_app.measurement_modules.nanosecond_stroboscopy.simulation import (
@@ -49,12 +49,13 @@ def test_ns_delay_compilation_is_deterministic_signed_and_all_channels_explicit(
 
 
 def test_ns_dds_quantization_and_invalid_electrical_settings():
-    comp = compile_timing(sim(overrides={"probe_period_s": 3}))
+    comp = compile_timing(sim(cycle_interval_s=3))
     assert comp.input_frequency_hz == .32
     assert comp.frame_period_s == pytest.approx(1 / .32)
     with pytest.raises(ValueError, match="0.01 ns"):
         quantize_ns(5, .001)
-    assert build_plan(Settings(overrides={"probe_anchor_ns": 100}), CAPS).errors
+    with pytest.raises(ValueError, match="anchor"):
+        compile_timing(replace(sim(), probe_anchor_ns=100))
     assert build_plan(Settings(delays_ns=(0, .001)), CAPS).errors
 
 
@@ -105,6 +106,69 @@ def test_ns_auto_resolution_changes_only_explicit_override():
     reset = build_plan(replace(requested, overrides={"filter_time_constant_s": None}), CAPS)
     assert reset.resolved_settings.filter_time_constant_s == CAPS["filter_time_constant_s"]
     assert reset.resolved_settings.probe_period_s == pytest.approx(.8)
+
+
+def test_ns_legacy_engineering_overrides_and_qcl_selection_become_metadata():
+    obsolete = {"probe_period_s": 40, "fire_to_q_ns": "bad", "warmup_frames": 1000000,
+                "probe_command_width_ns": -9, "demodulator_sample": 5}
+    requested = Settings(qcl=2, overrides={**obsolete, "filter_order": 2}, metadata={"sample": "buffer"})
+    normalized = Settings.from_dict(requested)
+    assert normalized.qcl == 1
+    assert normalized.overrides == {"filter_order": 2}
+    assert normalized.metadata == {"sample": "buffer", "legacy_qcl_selection": 2, "legacy_timing_overrides": obsolete}
+    assert Settings.from_dict(normalized) == normalized
+    assert Settings.from_dict(requested.to_dict()) == normalized
+    assert requested.qcl == 2 and requested.overrides["fire_to_q_ns"] == "bad"  # Caller is unchanged.
+    p = build_plan(requested, {**CAPS, "qcl": 7})
+    assert not p.errors and p.settings == normalized
+    assert p.resolved_settings.qcl == 1
+    assert p.resolved_settings.probe_period_s == pytest.approx(1.6)
+    assert p.resolved_settings.fire_to_q_ns == CAPS["fire_to_q_ns"]
+    assert p.resolved_settings.warmup_frames == 1
+    assert set(ADVANCED_FIELDS) == {"filter_order", "filter_time_constant_s", "hf2li_rate_hz",
+                                   "reference_filter_order", "reference_filter_time_constant_s", "reference_hf2li_rate_hz"}
+
+
+@pytest.mark.parametrize("rate,width,accepted", [
+    (600000, 500, True), (600000.01, 500, False), (599999.99, 500, True),
+    (3000000, 100, True), (3000000.000001, 100, False),
+])
+def test_ns_optical_duty_boundary_is_inclusive_without_above_limit_tolerance(rate, width, accepted):
+    errors = optical_pulse_errors(rate, width)
+    assert not errors if accepted else any("30%" in e for e in errors)
+
+
+def test_ns_optical_live_values_preserve_vendor_limits_and_distinguish_external_cadence():
+    optical = {"mircat_pulse_rate_hz": 600000., "mircat_pulse_width_ns": 500.,
+               "mircat_max_pulse_rate_hz": 1000000., "mircat_max_pulse_width_ns": 2000.,
+               "mircat_max_duty_fraction": .5}
+    s = Settings(mircat_pulse_rate_hz=123, mircat_pulse_width_ns=999)
+    p = build_plan(s, {**CAPS, **optical})
+    assert not p.errors
+    assert p.resolved_settings.mircat_pulse_rate_hz == 600000
+    assert p.resolved_settings.mircat_pulse_width_ns == 500
+    assert p.resolved_settings.probe_command_width_ns == 100  # Independent electrical TTL width.
+    assert p.timing["input_frequency_hz"] == 1
+    changed = build_plan(s, {**CAPS, **optical, "mircat_pulse_rate_hz": 600001})
+    assert not changed.events and any("configured optical pulse rate" in e for e in changed.errors)
+    lower_vendor = build_plan(s, {**CAPS, **optical, "mircat_max_duty_fraction": .25})
+    assert any("vendor duty" in e for e in lower_vendor.errors)
+    assert not optical_pulse_errors(500000, 500, max_duty_fraction=.25)
+    assert any("vendor duty" in e for e in optical_pulse_errors(500000.001, 500, max_duty_fraction=.25))
+    assert any("vendor pulse-rate" in e for e in optical_pulse_errors(600000, 500, max_rate_hz=500000))
+    assert any("vendor limit" in e for e in optical_pulse_errors(600000, 500, max_width_ns=400))
+    external = optical_pulse_errors(1, 500, external_probe_rate_hz=600000.01)
+    assert any("External probe cadence" in e for e in external)
+    assert not optical_pulse_errors(None, None)
+    pending = build_plan(s)
+    assert not pending.errors
+    assert pending.resolved_settings.mircat_pulse_rate_hz is None
+    assert pending.resolved_settings.mircat_pulse_width_ns is None
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -1, 0, True, "500"])
+def test_ns_invalid_live_optical_values_are_rejected(value):
+    assert build_plan(Settings(), {**CAPS, "mircat_pulse_width_ns": value}).errors
 
 
 def test_ns_independent_reference_readbacks_drive_dual_cycle_and_aggregate_rate():
@@ -209,7 +273,7 @@ def test_ns_filter_order_tail_and_event_storage_limits():
                                    {"repetitions": True}, {"delays_ns": ("zero",)},
                                    {"max_frame_capacity": "bad"}, {"delays_ns": None}, {"overrides": None},
                                    {"overrides": {"filter_order": 0}}, {"overrides": {"filter_order": 1.5}},
-                                   {"overrides": {"fire_to_q_ns": "bad"}}, {"overrides": {"not_supported": 1}}])
+                                   {"overrides": {"hf2li_rate_hz": "bad"}}, {"overrides": {"not_supported": 1}}])
 def test_ns_malformed_operating_inputs_are_reviewable_errors(values):
     assert build_plan(Settings(**values), CAPS).errors
 
@@ -282,7 +346,7 @@ def test_ns_forward_evaluation_cancellation_and_no_approval_gate():
     ({"repetitions": 10000, "max_storage_bytes": 1}, "storage"),
     ({"repetitions": 1000, "max_storage_bytes": 10**15, "max_pump_events": 10**9}, "memory"),
     ({"max_storage_bytes": 1}, "storage"), ({"max_pump_events": 1}, "event budget"),
-    ({"overrides": {"warmup_frames": 1000000}}, "frame capacity"),
+    ({"max_frame_capacity": 3}, "frame capacity"),
 ])
 def test_ns_oversized_plans_fail_before_event_materialization(monkeypatch, values, reason):
     import control_app.measurement_modules.nanosecond_stroboscopy.planner as planner_module

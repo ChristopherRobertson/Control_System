@@ -10,8 +10,8 @@ import time
 import numpy as np
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
-    QHBoxLayout, QLabel, QLineEdit, QPushButton, QSpinBox, QWidget,
+    QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
+    QHBoxLayout, QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from control_app.measurement_host import TabHandle
@@ -27,23 +27,12 @@ class NanosecondSettingsWidget(QWidget):
 
     changed = Signal()
     OVERRIDES = (
-        ("probe_period_s", "Probe period", "s"),
-        ("fire_to_q_ns", "Fire to Q-switch", "ns"),
-        ("fire_command_width_ns", "Fire pulse width", "ns"),
-        ("q_command_width_ns", "Q-switch width", "ns"),
-        ("probe_command_width_ns", "Probe trigger width", "ns"),
-        ("reference_command_width_ns", "Reference width", "ns"),
-        ("event_trigger_width_ns", "Event trigger width", "ns"),
-        ("probe_anchor_ns", "Probe anchor", "ns"),
-        ("timing_step_ns", "Delay step", "ns"),
-        ("warmup_frames", "Warmup frames", ""),
-        ("filter_tail_frames", "Filter-tail frames", ""),
-        ("filter_time_constant_s", "HF2LI time constant", "s"),
-        ("filter_order", "HF2LI filter order", ""),
-        ("hf2li_rate_hz", "HF2LI sample rate", "Sa/s"),
-        ("reference_filter_time_constant_s", "Reference time constant", "s"),
-        ("reference_filter_order", "Reference filter order", ""),
-        ("reference_hf2li_rate_hz", "Reference sample rate", "Sa/s"),
+        ("filter_order", "Filter order", ""),
+        ("filter_time_constant_s", "Time constant", "s"),
+        ("hf2li_rate_hz", "Sample rate", "Sa/s"),
+        ("reference_filter_order", "Filter order", ""),
+        ("reference_filter_time_constant_s", "Time constant", "s"),
+        ("reference_hf2li_rate_hz", "Sample rate", "Sa/s"),
     )
     INTEGER_OVERRIDES = INTEGER_ADVANCED_FIELDS
 
@@ -61,8 +50,13 @@ class NanosecondSettingsWidget(QWidget):
             except (ValueError, TypeError, KeyError):
                 pass
         self._values["execution_mode"] = execution_mode
-        layout = QFormLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        self.measurement_group = QGroupBox("Measurement")
+        layout = QFormLayout(self.measurement_group)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setVerticalSpacing(3)
+        root.addWidget(self.measurement_group)
         for key, label in (("wavenumbers_cm1", "Wavenumbers (cm⁻¹)"), ("delays_ns", "Delays (ns)")):
             control = QLineEdit()
             control.setObjectName(key)
@@ -85,13 +79,28 @@ class NanosecondSettingsWidget(QWidget):
             self.controls[key] = control
             layout.addRow(label, control)
         self.advanced_widget = QWidget()
-        advanced = QFormLayout(self.advanced_widget)
+        advanced = QVBoxLayout(self.advanced_widget)
         advanced.setContentsMargins(0, 0, 0, 0)
+        advanced.setSpacing(3)
+        self.detector_groups = {}
+        forms = {}
+        for role in (("sample", "reference") if mode == "dual" else ("sample",)):
+            if mode == "dual":
+                group = QGroupBox(role.title())
+                self.detector_groups[role] = group
+                form = QFormLayout(group)
+                form.setContentsMargins(8, 4, 8, 4)
+                advanced.addWidget(group)
+            else:
+                form = QFormLayout()
+                form.setContentsMargins(0, 0, 0, 0)
+                advanced.addLayout(form)
+            form.setVerticalSpacing(3)
+            forms[role] = form
         for key, label, unit in self.OVERRIDES:
-            if key not in ADVANCED_FIELDS or mode == "single" and key in ("reference_filter_time_constant_s", "reference_filter_order", "reference_hf2li_rate_hz"):
+            role = "reference" if key.startswith("reference_") else "sample"
+            if key not in ADVANCED_FIELDS or role not in forms:
                 continue
-            if mode == "dual" and key in ("filter_time_constant_s", "filter_order", "hf2li_rate_hz"):
-                label = label.replace("HF2LI", "Sample")
             control = QComboBox()
             control.setObjectName("override_" + key)
             control.setEditable(True)
@@ -99,18 +108,10 @@ class NanosecondSettingsWidget(QWidget):
             control.setToolTip(f"Automatic selection; enter an explicit {unit or 'value'} override if needed.")
             control.currentTextChanged.connect(self._changed)
             self.override_inputs[key] = control
-            advanced.addRow(label + (f" ({unit})" if unit else ""), control)
+            forms[role].addRow(label + (f" ({unit})" if unit else ""), control)
         self.restore_auto_button = QPushButton("Restore Auto")
         self.restore_auto_button.clicked.connect(self.restore_auto)
-        advanced.addRow(self.restore_auto_button)
-        self.run_label = QLineEdit()
-        self.run_label.setPlaceholderText("Optional")
-        self.notes = QLineEdit()
-        self.notes.setPlaceholderText("Optional")
-        for control in (self.run_label, self.notes):
-            control.editingFinished.connect(self._changed)
-        advanced.addRow("Run label", self.run_label)
-        advanced.addRow("Notes", self.notes)
+        advanced.addWidget(self.restore_auto_button)
         self.apply_settings(self._values)
 
     def _changed(self, *_):
@@ -139,13 +140,6 @@ class NanosecondSettingsWidget(QWidget):
                 value = int(value)
             overrides[key] = value
         values.update(mode=self.mode, execution_mode=self.execution_mode, overrides=overrides)
-        metadata = deepcopy(values.get("metadata", {}))
-        for key, control in (("run_label", self.run_label), ("notes", self.notes)):
-            if control.text().strip():
-                metadata[key] = control.text().strip()
-            else:
-                metadata.pop(key, None)
-        values["metadata"] = metadata
         return Settings.from_dict(values).to_dict()
 
     def apply_settings(self, values):
@@ -170,8 +164,6 @@ class NanosecondSettingsWidget(QWidget):
             value = overrides.get(key)
             control.setCurrentText("Auto" if value is None else f"{value:g}")
             control.blockSignals(False)
-        self.run_label.setText(str(values.get("metadata", {}).get("run_label", "")))
-        self.notes.setText(str(values.get("metadata", {}).get("notes", "")))
         self.preferences.setValue("settings_json", json.dumps(values))
 
     def set_resolved(self, plan):
@@ -295,6 +287,9 @@ class NanosecondPanel(CompactMeasurementPanel):
         settings = NanosecondSettingsWidget(context.mode, context.preferences, execution_mode=execution_mode)
         adapter = NanosecondScientificAdapter(context, settings, runner_factory=runner_factory)
         super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
+        self.advanced_group.setTitle("HF2LI overrides")
+        self.advanced_layout.setContentsMargins(8, 4, 8, 4)
+        self.settings_layout.setSpacing(4)
         settings.changed.connect(self.refresh_plan)
         self.save_root_provider = lambda: self._next_root or self.context.save_root()
         self.preliminary_button.setText("Acquire unpumped sample")

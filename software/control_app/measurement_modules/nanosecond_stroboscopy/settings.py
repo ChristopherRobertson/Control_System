@@ -32,6 +32,7 @@ class Settings:
     delays_ns: tuple[float, ...] = (-300.0, -150.0, -60.0, -20.0, 0.0, 20.0, 50.0, 100.0, 200.0, 400.0, 800.0, 1600.0, 4000.0)
     repetitions: int = 3
     cycle_interval_s: float = 1.0
+    qcl: int = 1
     overrides: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     conditions: tuple[str, ...] = ("pump_on", "pump_blocked")
@@ -59,6 +60,12 @@ class Settings:
     fire_to_q_ns: float | None = None
     pump_command_width_ns: float | None = None
     probe_command_width_ns: float | None = None
+    # These are independent MIRcat optical readbacks, not electrical TTL widths.
+    mircat_pulse_rate_hz: float | None = None
+    mircat_pulse_width_ns: float | None = None
+    mircat_max_pulse_rate_hz: float | None = None
+    mircat_max_pulse_width_ns: float | None = None
+    mircat_max_duty_fraction: float | None = None
     timing_step_ns: float | None = None
     optical_delay_offset_ns: float | None = None
     fire_command_width_ns: float | None = None
@@ -111,23 +118,36 @@ class Settings:
         return PROFILES.get(self.profile_id, {}).get("architecture_id", "unknown")
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return asdict(self.from_dict(self))
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any] | "Settings") -> "Settings":
-        if isinstance(value, cls):
-            return value
-        values = dict(value)
+        values = {f.name: getattr(value, f.name) for f in fields(cls)} if isinstance(value, cls) else dict(value)
         known = {f.name for f in fields(cls)}
         unknown = set(values) - known
         if unknown:
             raise ValueError(f"Unknown nanosecond settings fields: {', '.join(sorted(unknown))}")
         for name in ("wavenumbers_cm1", "delays_ns", "conditions", "selected_populations", "quantified_populations", "position_ids", "off_band_wavenumbers_cm1", "calibration_ids"):
-            if name in values:
+            if name in values and isinstance(values[name], (tuple, list)):
                 values[name] = tuple(values[name])
         for name in ("qualification", "control_records", "control_applicability", "overrides", "metadata"):
-            if name in values:
+            if name in values and isinstance(values[name], Mapping):
                 values[name] = dict(values[name])
+        metadata = dict(values.get("metadata") or {})
+        if values.get("qcl", 1) != 1:
+            metadata["legacy_qcl_selection"] = values["qcl"]
+        values["qcl"] = 1
+        if isinstance(values.get("overrides"), dict):
+            overrides = dict(values["overrides"])
+            retired = {name: overrides.pop(name) for name in tuple(overrides) if name in RETIRED_ADVANCED_FIELDS}
+            if retired:
+                previous = metadata.get("legacy_timing_overrides", {})
+                metadata["legacy_timing_overrides"] = {**(previous if isinstance(previous, Mapping) else {}), **retired}
+            for name in ("qcl", "qcl_index", "qcl_number", "selected_qcl"):
+                if name in overrides:
+                    metadata["legacy_qcl_selection"] = overrides.pop(name)
+            values["overrides"] = overrides
+        values["metadata"] = metadata
         return cls(**values)
 
     def kernel(self) -> dict[str, Any]:
@@ -156,14 +176,54 @@ NanosecondSettings = Settings
 
 
 ADVANCED_FIELDS = (
-    "probe_period_s", "probe_anchor_ns", "fire_to_q_ns",
-    "fire_command_width_ns", "q_command_width_ns", "probe_command_width_ns",
-    "event_trigger_width_ns", "timing_step_ns",
-    "warmup_frames", "filter_tail_frames", "filter_time_constant_s", "filter_order",
-    "hf2li_rate_hz",
+    "filter_time_constant_s", "filter_order", "hf2li_rate_hz",
     "reference_filter_time_constant_s", "reference_filter_order", "reference_hf2li_rate_hz",
 )
+RETIRED_ADVANCED_FIELDS = frozenset((
+    "probe_period_s", "probe_anchor_ns", "fire_to_q_ns", "pump_command_width_ns",
+    "fire_command_width_ns", "q_command_width_ns", "probe_command_width_ns",
+    "reference_command_width_ns", "event_trigger_width_ns", "timing_step_ns",
+    "warmup_frames", "filter_tail_frames", "demodulator_sample", "demodulator_reference",
+    "integration_aperture_ns", "timing_rate_hz", "reset_interval_s",
+))
 INTEGER_ADVANCED_FIELDS = {"warmup_frames", "filter_tail_frames", "filter_order", "reference_filter_order", "demodulator_sample", "demodulator_reference"}
+
+
+def optical_pulse_errors(rate_hz, width_ns, *, max_rate_hz=None, max_width_ns=None,
+                         max_duty_fraction=None, external_probe_rate_hz=None) -> tuple[str, ...]:
+    """Check optical settings against the inclusive 30% and vendor limits.
+
+    MIRcat SDK duty limits are percentages; callers convert them once to a
+    fraction before calling. Decimal comparisons retain the exact 30% boundary
+    without a tolerance that would admit values above the limit. Missing live
+    values defer only their corresponding checks until the adapter reads them.
+    """
+    from decimal import Decimal
+    import math
+    supplied = {"MIRcat optical pulse rate": rate_hz, "MIRcat optical pulse width": width_ns,
+                "MIRcat vendor maximum pulse rate": max_rate_hz, "MIRcat vendor maximum pulse width": max_width_ns,
+                "MIRcat vendor duty fraction": max_duty_fraction, "External probe cadence": external_probe_rate_hz}
+    errors = [f"{name} must be finite and positive" for name, value in supplied.items()
+              if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0)]
+    if errors:
+        return tuple(errors)
+    decimal = lambda value: Decimal(str(value))
+    if max_duty_fraction is not None and max_duty_fraction > 1:
+        errors.append("MIRcat vendor duty fraction must be at most 1 (convert SDK percent to fraction)")
+    if width_ns is not None and max_width_ns is not None and decimal(width_ns) > decimal(max_width_ns):
+        errors.append("MIRcat optical pulse width exceeds its vendor limit")
+    for label, rate in (("MIRcat configured optical pulse rate", rate_hz), ("External probe cadence", external_probe_rate_hz)):
+        if rate is None:
+            continue
+        if max_rate_hz is not None and decimal(rate) > decimal(max_rate_hz):
+            errors.append(f"{label} exceeds the MIRcat vendor pulse-rate limit")
+        if width_ns is not None:
+            duty = decimal(rate) * decimal(width_ns) / Decimal("1e9")
+            if duty > Decimal("0.30"):
+                errors.append(f"{label} × MIRcat optical width exceeds the inclusive 30% duty limit")
+            if max_duty_fraction is not None and duty > decimal(max_duty_fraction):
+                errors.append(f"{label} × MIRcat optical width exceeds the vendor duty limit")
+    return tuple(errors)
 
 
 @dataclass(frozen=True)
@@ -185,7 +245,8 @@ def resolve_settings(settings: Settings | Mapping[str, Any], capabilities: Mappi
     s = Settings.from_dict(settings)
     caps = dict(capabilities or {})
     sources = {"reset_interval_s": "No additional software reset wait; selected hardware cycles provide event spacing"}
-    values, errors = {"reset_interval_s": 0.0}, []
+    values, errors = {"reset_interval_s": 0.0, "qcl": 1}, []
+    sources["qcl"] = "Installed MIRcat QCL 1"
     examples = {"fire_to_q_ns": 200000.0, "pump_command_width_ns": 1000.0,
                 "probe_command_width_ns": 100.0, "filter_time_constant_s": .05,
                 "filter_order": 1, "hf2li_rate_hz": 200.0}
@@ -196,7 +257,7 @@ def resolve_settings(settings: Settings | Mapping[str, Any], capabilities: Mappi
         if name not in ADVANCED_FIELDS:
             errors.append(f"Unsupported advanced override: {name}")
     def select(name, automatic=None, source="Derived automatically"):
-        override = s.overrides.get(name)
+        override = s.overrides.get(name) if name in ADVANCED_FIELDS else None
         if override is not None and override != "Auto":
             if isinstance(override, bool) or not isinstance(override, (int, float)) or not math.isfinite(override):
                 errors.append(f"{name} override must be a finite number or Auto")
@@ -223,6 +284,8 @@ def resolve_settings(settings: Settings | Mapping[str, Any], capabilities: Mappi
         return value
     for name in ("fire_to_q_ns", "pump_command_width_ns", "probe_command_width_ns", "filter_time_constant_s", "filter_order", "hf2li_rate_hz"):
         select(name, caps.get(name), "Live device readback" if capabilities and name in capabilities else "EXAMPLE ONLY simulator value")
+    for name in ("mircat_pulse_rate_hz", "mircat_pulse_width_ns", "mircat_max_pulse_rate_hz", "mircat_max_pulse_width_ns", "mircat_max_duty_fraction"):
+        select(name, caps.get(name), "Live MIRcat QCL 1 optical readback or vendor limit")
     for name, sample_name in (("reference_filter_time_constant_s", "filter_time_constant_s"), ("reference_filter_order", "filter_order"), ("reference_hf2li_rate_hz", "hf2li_rate_hz")):
         fallback = values[sample_name] if s.execution_mode == "simulation" else None
         select(name, caps.get(name, fallback), "Independent reference device readback" if capabilities else "EXAMPLE ONLY simulator value")

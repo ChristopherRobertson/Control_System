@@ -73,9 +73,12 @@ def test_ns_production_discovery_live_default_compact_no_review(ns_qt, ns_factor
         assert isinstance(panel, CompactMeasurementPanel)
         assert panel.plan.settings.execution_mode == "connected"
         assert not hasattr(panel, "review")
+        assert not hasattr(panel, "advanced_button")
+        assert not panel.advanced_group.isCheckable()
         assert not panel.findChildren(QPlainTextEdit)
         assert set(panel.settings_widget.controls) == {"wavenumbers_cm1", "delays_ns", "repetitions", "cycle_interval_s"}
         assert all(control.currentText() == "Auto" for control in panel.settings_widget.override_inputs.values())
+        assert len(panel.settings_widget.override_inputs) == (6 if panel.context.mode == "dual" else 3)
         assert panel.plan is not None
         assert not panel.start_button.isEnabled()
         panel.close()
@@ -157,11 +160,21 @@ def test_ns_individual_auto_overrides_remain_auto_after_other_edits(ns_pair):
     before = single.plan.resolved_settings.probe_period_s
     controls.controls["cycle_interval_s"].setValue(3.)
     assert controls.read_settings()["overrides"] == {"filter_order": 2}
-    assert controls.override_inputs["probe_period_s"].currentText() == "Auto"
+    assert "probe_period_s" not in controls.override_inputs
     assert single.plan.resolved_settings.probe_period_s != before
     assert dual.adapter.read_settings()["overrides"] == {}
     assert "reference_hf2li_rate_hz" in dual.settings_widget.override_inputs
     assert "reference_hf2li_rate_hz" not in controls.override_inputs
+    legacy = controls.read_settings()
+    legacy["overrides"]["probe_period_s"] = 999.
+    legacy["qcl"] = 2
+    controls.apply_settings(legacy)
+    single.refresh_plan()
+    normalized = controls.read_settings()
+    assert normalized["overrides"] == {"filter_order": 2}
+    assert normalized["metadata"]["legacy_timing_overrides"]["probe_period_s"] == 999.
+    assert normalized["qcl"] == 1
+    assert single.plan.resolved_settings.probe_period_s != 999.
     controls.restore_auto()
     assert controls.read_settings()["overrides"] == {}
 
@@ -221,11 +234,15 @@ def test_ns_instrument_change_invalidates_only_its_receiver(ns_qt, ns_pair):
 
 
 def test_ns_compact_pages_fit_actual_app_without_outer_scrolling(ns_qt, tmp_path):
+    from PySide6.QtGui import QFont, QFontDatabase
     from control_app.ui.contracts import blocked_handler
     from control_app.ui.main_window import ControlSystemMainWindow
     from control_app.measurement_host.ownership import HardwareCoordinator
     handler = blocked_handler("Compact UI verification; no hardware")
     handler.coordinator = HardwareCoordinator(tmp_path / "render.lock")
+    previous_font = ns_qt.font()
+    QFontDatabase.addApplicationFont("C:/Windows/Fonts/arial.ttf")
+    ns_qt.setFont(QFont("Arial", 9))
     window = ControlSystemMainWindow(handler, persist_settings=False)
     try:
         window.resize(1100, 780)
@@ -238,6 +255,12 @@ def test_ns_compact_pages_fit_actual_app_without_outer_scrolling(ns_qt, tmp_path
                 assert window.workspace_scroll.verticalScrollBar().maximum() == 0
                 assert window.workspace_scroll.horizontalScrollBar().maximum() == 0
                 assert handle.widget.plot.width() > handle.widget.left_panel.width()
+                assert handle.widget.advanced_group.isVisible()
+                assert handle.widget.settings_scroll.verticalScrollBar().maximum() == 0
+                assert handle.widget.settings_scroll.horizontalScrollBar().maximum() == 0
+                for control in handle.widget.settings_widget.override_inputs.values():
+                    assert control.isVisibleTo(handle.widget)
     finally:
         window.deleteLater()
         ns_qt.processEvents()
+        ns_qt.setFont(previous_font)

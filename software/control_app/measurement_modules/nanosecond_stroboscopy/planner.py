@@ -11,7 +11,7 @@ import math
 import random
 from typing import Any, Mapping
 
-from .settings import EXPERIMENT_ID, KERNEL_ID, Settings, resolve_settings
+from .settings import EXPERIMENT_ID, KERNEL_ID, Settings, optical_pulse_errors, resolve_settings
 from .timing import compile_timing, event_frames
 
 PLAN_MATERIALIZATION_LIMIT_BYTES = 256 * 1024 * 1024
@@ -161,6 +161,10 @@ def build_plan(settings: Settings | dict[str, Any], capabilities: Mapping[str, A
         except (ValueError, TypeError, OverflowError) as exc:
             errors.append(str(exc))
     period = timing.frame_period_s if timing else s.probe_period_s or s.cycle_interval_s
+    errors.extend(optical_pulse_errors(s.mircat_pulse_rate_hz, s.mircat_pulse_width_ns,
+                  max_rate_hz=s.mircat_max_pulse_rate_hz, max_width_ns=s.mircat_max_pulse_width_ns,
+                  max_duty_fraction=s.mircat_max_duty_fraction,
+                  external_probe_rate_hz=timing.input_frequency_hz if timing else None))
     if period * frames_per < .1:
         errors.append("Finite event bursts exceed the installed 10 Hz pump maximum")
     if timing and not math.isclose(period, s.probe_period_s, rel_tol=1e-9):

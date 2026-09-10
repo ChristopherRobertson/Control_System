@@ -240,6 +240,23 @@ def test_ns_optional_metadata_and_analysis_priors_do_not_gate_baseline_reuse():
     assert acquisition_conflicts(before, replace(after, overrides={"hf2li_rate_hz": None})) == []
 
 
+def test_ns_historical_plan_keeps_provenance_without_hidden_overrides_or_qcl_routing(tmp_path):
+    from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings
+    from control_app.measurement_modules.nanosecond_stroboscopy.persistence import acquisition_conflicts, read_json
+    historical = Settings().to_dict()
+    historical.update(qcl=2, overrides={"probe_period_s": 10., "hf2li_rate_hz": 200.})
+    path = tmp_path / "historical-plan.json"
+    save_plan(path, historical)
+    retained = load_plan(path, expected_mode="single")
+    selected = Settings.from_dict(retained)
+    assert selected.qcl == 1
+    assert selected.overrides == {"hf2li_rate_hz": 200.}
+    assert selected.metadata["legacy_timing_overrides"]["probe_period_s"] == 10.
+    assert acquisition_conflicts(retained, Settings(overrides={"hf2li_rate_hz": 200.})) == []
+    # Loading is read-only; the exact historical routing intent stays in its file.
+    assert read_json(path)["settings"]["qcl"] == 2
+
+
 def test_ns_blank_support_reused_when_averages_or_annotations_change():
     from dataclasses import replace
     from control_app.measurement_modules.nanosecond_stroboscopy.settings import Settings, KERNEL_ID

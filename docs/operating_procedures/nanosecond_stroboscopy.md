@@ -8,10 +8,19 @@ branch, or promoted-evidence gate for raw measurement.
 ## Inputs and operation
 
 The essential inputs are wavenumbers (cm⁻¹), programmed delays (ns), averages,
-and cycle interval (s). Advanced overrides are individually optional. Auto
-values are recalculated from the requested inputs and connected readbacks;
-setting one override does not freeze other automatic choices. Optional sample,
+and cycle interval (s). The framed HF2LI override form is always visible: filter
+order, time constant, and sample rate. Dual mode provides independent sample and
+reference choices. Each field starts at Auto and follows connected readbacks;
+setting one override does not freeze the others. Sequencing and electrical timing
+details are computed automatically. Historical overrides remain recorded as
+metadata when an older plan is loaded. Optional sample,
 protein, temperature, and preparation annotations do not change the procedure.
+
+Acquisition uses the single installed laser, QCL 1. Historical QCL selection in a
+saved plan cannot redirect it. MIRcat repetition rate and optical pulse width are
+preserved from the device; their product (with width in seconds) must be at most
+0.30 and satisfy the device's own limits. The sparse external probe cadence and
+electrical trigger width are separate settings, not substitutes for this check.
 
 In single mode, acquire or load a complete blank, then acquire the unpumped
 sample. In dual mode, acquire the unpumped sample and simultaneous reference Q₀.
@@ -81,13 +90,15 @@ and tests only. No physical measurement is performed by unattended tests.
 
 ## Verification
 
-Final scoped verification on 2026-09-10 passed 107 experiment tests and 33 shared
-compact-panel/HF2LI/MIRcat checks. Physical commissioning was not performed.
+Scoped verification of the visible-form/QCL 1 correction passed 142 experiment
+and shared-panel checks. Physical commissioning was not performed.
 
 The module tests cover both detector modes through the installed adapter with
 injected transports, default live-factory selection, automatic overrides,
 metadata-independent compatibility, uncalibrated raw reconstruction, device
-failures, abort, cleanup, and native preservation. UI renders at 1100×780 are
+failures, abort, cleanup, and native preservation. QCL 1 routing, saved-setting
+migration, actual pulse readbacks, and the exact inclusive 30% duty boundary are
+covered with injected transports. UI renders at 1100×780 are
 compared with the established Phase Scan layout. The screenshots under
 `software/tests/measurement_modules/nanosecond_stroboscopy/artifacts/` display
 synthetic example data in the actual app; they are not physical measurements.

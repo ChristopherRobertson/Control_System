@@ -15,7 +15,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from .settings import KERNEL_ID
+from .settings import KERNEL_ID, optical_pulse_errors
 
 
 class ReadinessError(RuntimeError):
@@ -69,6 +69,25 @@ def _seconds(value):
         if text.endswith(suffix):
             return float(text[:-len(suffix)]) * scale
     return float(text)
+
+
+def _validate_optical_pulses(internal_rate_hz, optical_width_ns, external_rate_hz, limits):
+    """Validate actual optical parameters; electrical TTL width is unrelated."""
+    values = (internal_rate_hz, optical_width_ns, external_rate_hz,
+              limits["max_pulse_rate_hz"], limits["max_pulse_width_ns"], limits["max_duty_cycle"])
+    if not all(math.isfinite(float(value)) and float(value) > 0 for value in values):
+        raise ReadinessError("MIRcat QCL 1 optical pulse parameters and vendor limits must be finite and positive")
+    width_s = float(optical_width_ns)*1e-9
+    configured_duty = float(internal_rate_hz)*width_s
+    external_duty = float(external_rate_hz)*width_s
+    vendor_duty = float(limits["max_duty_cycle"])/100.0
+    errors = optical_pulse_errors(internal_rate_hz, optical_width_ns,
+        max_rate_hz=float(limits["max_pulse_rate_hz"]), max_width_ns=float(limits["max_pulse_width_ns"]),
+        max_duty_fraction=vendor_duty, external_probe_rate_hz=external_rate_hz)
+    if errors:
+        raise ReadinessError("MIRcat QCL 1: " + "; ".join(errors))
+    return {"configured_duty_cycle_fraction": configured_duty, "external_probe_duty_cycle_fraction": external_duty,
+            "maximum_duty_cycle_fraction": .30, "vendor_maximum_duty_cycle_fraction": vendor_duty}
 
 
 def _flatten_native(records, demod):
@@ -194,13 +213,13 @@ class InstalledAdapter:
             if self.before["hf2li"].get("read_errors"):
                 raise ReadinessError("HF2LI settings could not be preserved before configuration: " + str(self.before["hf2li"]["read_errors"]))
             qcl = self.devices["mircat"]
-            qcls = []
-            for index in range(1, qcl.get_num_installed_qcls()+1):
-                qcls.append({"qcl": index, "pulse_rate_hz": qcl.get_qcl_pulse_rate(index),
-                    "pulse_width_ns": qcl.get_qcl_pulse_width(index), "current_ma": qcl.get_qcl_current(index),
-                    "range": qcl.get_qcl_tuning_range(index)})
+            # This installation contains exactly QCL 1. Historical selectors
+            # remain provenance and never choose a device or tuning range.
+            qcls = [{"qcl": 1, "pulse_rate_hz": qcl.get_qcl_pulse_rate(1),
+                "pulse_width_ns": qcl.get_qcl_pulse_width(1), "current_ma": qcl.get_qcl_current(1),
+                "range": qcl.get_qcl_tuning_range(1), "limits": qcl.get_qcl_pulse_limits(1)}]
             self.before["mircat"] = {"trigger": qcl.get_wavelength_trigger_params(),
-                "qcls": qcls, "state": data(qcl.read_state())}
+                "qcls": qcls, "state": {"emission_on": qcl.is_emission_on(), "armed": qcl.is_laser_armed(), "qcl": 1}}
             self._inhibit()
             qcl.turn_emission_off()
             self.capabilities = self._capabilities()
@@ -268,7 +287,7 @@ class InstalledAdapter:
                 "demodulation": "internal_zero_frequency", "observable": "magnitude_of_baseline_subtracted_complex_impulse_area",
                 "units": "V s (uncalibrated demodulator scale)", "detectors": deepcopy(self.detector_settings),
                 "signal_inputs": {path: value for path, value in after["nodes"].items() if "/sigins/" in path},
-                "mircat_qcls": deepcopy(qcls),
+                "mircat_qcls": [{key: deepcopy(value) for key, value in item.items() if key != "limits"} for item in qcls],
                 "probe_trigger_width_ns": _seconds(self.plan.timing["t660_1_recipe"]["channels"]["B"]["width"])*1e9,
                 "probe_period_s": self.plan.timing["frame_period_s"], "optical_timing_qualified": False}
             self._health("configured")
@@ -297,7 +316,12 @@ class InstalledAdapter:
             for edge in relative: resolve(edge)
             return values
         t1, t2 = absolute("t660_1"), absolute("t660_2")
-        return {"fire_to_q_ns": (t2[3]-t2[1])*1e9,
+        optical = self.before["mircat"]["qcls"][0]
+        limits = optical["limits"]
+        return {"mircat_pulse_rate_hz": optical["pulse_rate_hz"], "mircat_pulse_width_ns": optical["pulse_width_ns"],
+            "mircat_max_pulse_rate_hz": limits["max_pulse_rate_hz"], "mircat_max_pulse_width_ns": limits["max_pulse_width_ns"],
+            "mircat_max_duty_fraction": float(limits["max_duty_cycle"])/100.0, "qcl": 1,
+            "fire_to_q_ns": (t2[3]-t2[1])*1e9,
             "pump_command_width_ns": (t2[2]-t2[1])*1e9,
             "fire_command_width_ns": (t2[2]-t2[1])*1e9,
             "q_command_width_ns": (t2[4]-t2[3])*1e9,
@@ -335,10 +359,10 @@ class InstalledAdapter:
                 raise ReadinessError("MIRcat reports a system fault")
             if not qcl.is_interlock_set() or not qcl.is_key_switch_set():
                 raise ReadinessError("MIRcat interlock/key switch is not ready")
-            candidates = [x for x in self.before["mircat"]["qcls"] if x["range"]["min_cm1"] <= wavenumber <= x["range"]["max_cm1"]]
-            if not candidates:
-                raise ValueError(f"{wavenumber:g} cm^-1 is outside all installed MIRcat QCL tuning ranges")
-            index = candidates[0]["qcl"]
+            index = 1
+            installed = self.before["mircat"]["qcls"][0]
+            if not installed["range"]["min_cm1"] <= wavenumber <= installed["range"]["max_cm1"]:
+                raise ValueError(f"{wavenumber:g} cm^-1 is outside the installed MIRcat QCL 1 tuning range")
             if not qcl.is_laser_armed(): qcl.arm()
             deadline = time.monotonic() + 120.0
             while not qcl.are_tecs_ready():
@@ -360,11 +384,11 @@ class InstalledAdapter:
             limits = qcl.get_qcl_pulse_limits(index)
             width = float(qcl.get_qcl_pulse_width(index))
             rate = self.plan.timing["input_frequency_hz"]
-            if rate > limits["max_pulse_rate_hz"] or width <= 0 or width > limits["max_pulse_width_ns"] or rate * width * 1e-9 * 100 > limits["max_duty_cycle"]:
-                raise ReadinessError("MIRcat current optical pulse width and selected cadence exceed the installed limits")
-            self.readbacks["mircat_pulse"] = {"qcl": index, "optical_pulse_width_ns": width,
-                "current_ma": qcl.get_qcl_current(index), "external_probe_rate_hz": rate,
-                "internal_rate_hz": qcl.get_qcl_pulse_rate(index), "source": "installed readback; preserved optical pulse parameters"}
+            internal_rate = float(qcl.get_qcl_pulse_rate(1))
+            self.readbacks["mircat_pulse"] = {"qcl": 1, "optical_pulse_width_ns": width,
+                "current_ma": qcl.get_qcl_current(1), "external_probe_rate_hz": rate,
+                "internal_rate_hz": internal_rate, "source": "installed QCL 1 readback; preserved optical pulse parameters"}
+            self.readbacks["mircat_pulse"].update(_validate_optical_pulses(internal_rate, width, rate, limits))
             qcl.start_emission()
             settling = max(x["timeconstant_s"]*x["order"]*8 for x in self.detector_settings.values())
             self._wait(settling, "detector settling")
@@ -653,12 +677,16 @@ class InstalledAdapter:
                 if "mircat" in self.before:
                     def restore_qcl():
                         before = self.before["mircat"]
-                        retained_qcls = before.get("qcls") or [before]
-                        for original in retained_qcls:
-                            qcl.set_qcl_pulse_params(**{k: original[k] for k in ("qcl", "pulse_rate_hz", "pulse_width_ns", "current_ma")})
+                        retained_qcls = [item for item in (before.get("qcls") or [before]) if int(item.get("qcl", 1)) == 1]
+                        if len(retained_qcls) != 1:
+                            raise RuntimeError("Original QCL 1 settings are unavailable for restoration")
+                        original = retained_qcls[0]
+                        restored_fields = (("pulse_rate_hz", qcl.get_qcl_pulse_rate), ("pulse_width_ns", qcl.get_qcl_pulse_width), ("current_ma", qcl.get_qcl_current))
+                        if any(not math.isclose(method(1), original[key], rel_tol=1e-6) for key, method in restored_fields):
+                            qcl.set_qcl_pulse_params(qcl=1, **{k: original[k] for k in ("pulse_rate_hz", "pulse_width_ns", "current_ma")})
                         allowed = ("pulse_mode", "process_trigger_mode", "start", "stop", "interval", "units", "dwell_us", "after_off_us")
                         qcl.set_wavelength_trigger_params(**{k: v for k, v in before["trigger"].items() if k in allowed})
-                        after = {"trigger": qcl.get_wavelength_trigger_params(), "state": data(qcl.read_state())}
+                        after = {"trigger": qcl.get_wavelength_trigger_params(), "state": {"emission_on": qcl.is_emission_on(), "armed": qcl.is_laser_armed(), "qcl": 1}}
                         for key in allowed:
                             if key not in before["trigger"]:
                                 continue
@@ -670,7 +698,7 @@ class InstalledAdapter:
                             raise RuntimeError("MIRcat safe idle readback failed")
                         for original in retained_qcls:
                             for key, method in (("pulse_rate_hz", qcl.get_qcl_pulse_rate), ("pulse_width_ns", qcl.get_qcl_pulse_width), ("current_ma", qcl.get_qcl_current)):
-                                if not math.isclose(method(original["qcl"]), original[key], rel_tol=1e-6):
+                                if not math.isclose(method(1), original[key], rel_tol=1e-6):
                                     raise RuntimeError(f"MIRcat QCL {original['qcl']} {key} did not restore")
                         return {"before": before, "after": after}
                     attempt("mircat_settings", restore_qcl)

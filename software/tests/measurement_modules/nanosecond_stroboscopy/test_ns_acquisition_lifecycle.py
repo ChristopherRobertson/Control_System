@@ -221,17 +221,20 @@ def test_ns_installed_pending_table_uses_acknowledged_deltas_and_cancel():
             if command in ("TFRame:LOOP:FIRST?", "TFRame:LOOP:CouNT?"):
                 return "0"
             return ";".join("OK" for _ in command.split(";"))
-    p = plan(overrides={"warmup_frames": 2})
+    p = plan()
+    # Duplicate an inert frame to exercise retained pending fields directly;
+    # warmup count is an automatic operational choice, not a user override.
+    frames = [p.events[0].frames[0], *p.events[0].frames]
     timing = compile_timing(p.resolved_settings)
     unit = AckDevice()
     progress = []
-    result = unit.preload_frame_table(list(p.events[0].frames), predivider=1,
+    result = unit.preload_frame_table(frames, predivider=1,
         input_frequency_hz=timing.input_frequency_hz, progress=lambda a, b: progress.append((a, b)))
     stores = [line for line in unit.lines if ":TFRame:STORe" in line]
     assert len(stores[0].split(";")) == 21  # full A/B/C/D pending fields + STORE
     assert stores[1] == ":TFRame:STORe 1"  # unchanged warmup pending fields retained
-    assert progress[-1] == (len(p.events[0].frames), len(p.events[0].frames))
-    assert result["readback"]["last"] == len(p.events[0].frames) - 1
+    assert progress[-1] == (len(frames), len(frames))
+    assert result["readback"]["last"] == len(frames) - 1
     assert not any(line == "START" for line in unit.lines)
     cancelled = AckDevice()
     state = {"done": 0}
@@ -239,7 +242,7 @@ def test_ns_installed_pending_table_uses_acknowledged_deltas_and_cancel():
         if state["done"] == 2:
             raise InterruptedError("injected table upload cancellation")
     with pytest.raises(InterruptedError):
-        cancelled.preload_frame_table(list(p.events[0].frames), predivider=1,
+        cancelled.preload_frame_table(frames, predivider=1,
             input_frequency_hz=timing.input_frequency_hz, cancel_check=check,
             progress=lambda done, total: state.update(done=done))
     assert not any(line == "START" for line in cancelled.lines)
