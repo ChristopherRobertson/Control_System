@@ -1,5 +1,6 @@
 """Real shell navigation and destinations, using isolated ownership and settings."""
 import os
+import json
 from datetime import date
 from pathlib import Path
 
@@ -91,6 +92,49 @@ def test_exact_order_and_modes_retain_page_state_and_device_access(shell):
     assert len(window.measurement_lifecycle.handles) == 14
     assert window.tabs.count() == 19
     assert not coordinator.lock_path.exists()
+
+
+def test_restart_resets_experiment_inputs_and_ignores_old_disk_preferences(shell):
+    window, _, preferences, _ = shell
+    defaults = {}
+    for mode in ("single", "dual"):
+        instance = f"steady_state_slow_scan:{mode}"
+        editor = handle(window, instance).widget.settings_widget
+        defaults[mode] = editor.read_settings()
+        editor.plan_label.setText("Previous launch sample")
+        editor.scan_speed.setValue(123)
+        editor.fields["repetition_rate_hz"].setText("1000")
+        saved = editor.read_settings()
+        preferences.setValue(f"measurements/steady_state_slow_scan/{mode}/v1/settings", json.dumps(saved))
+    phase_defaults = []
+    for mode, widget in (("single", window.phase_scan_widget), ("dual", window.dual_detector_phase_scan_widget)):
+        phase_defaults.append({key: control.value() for key, control in widget.inputs.items()})
+        old = json.dumps({"inputs": {key: control.maximum() for key, control in widget.inputs.items()}})
+        preferences.setValue(widget.preference_key, old)
+        preferences.setValue(f"measurements/phase_scan/{mode}/v1/settings", old)
+    preferences.sync()
+    original_disk_values = {key: preferences.value(key) for key in preferences.allKeys()}
+    restarted = main_window.ControlSystemMainWindow(persist_settings=True)
+    try:
+        assert restarted.registration_issues == ()
+        for mode in ("single", "dual"):
+            editor = handle(restarted, f"steady_state_slow_scan:{mode}").widget.settings_widget
+            assert editor.read_settings() == defaults[mode]
+        for widget, expected in zip((restarted.phase_scan_widget, restarted.dual_detector_phase_scan_widget), phase_defaults):
+            assert {key: control.value() for key, control in widget.inputs.items()} == expected
+            assert widget._overrides == {}
+        # Every experiment gets a launch-local preference namespace, including
+        # modules that persist edits only when planning or starting a run.
+        for item in window.measurement_lifecycle.handles:
+            experiment, mode = item.instance_id.rsplit(":", 1)
+            old_context = window.measurement_context_factory.for_experiment(experiment).for_mode(mode)
+            new_context = restarted.measurement_context_factory.for_experiment(experiment).for_mode(mode)
+            old_context.preferences.setValue("restart_probe", "previous launch")
+            assert new_context.preferences.value("restart_probe") is None
+        assert {key: preferences.value(key) for key in preferences.allKeys()} == original_disk_values
+    finally:
+        restarted._save_timer.stop()
+        restarted.deleteLater()
 
 
 def test_each_tab_uses_its_exact_title_and_unique_frozen_run_folder(shell):

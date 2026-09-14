@@ -117,7 +117,9 @@ class ControlSystemMainWindow(QMainWindow):
             real_device_factories=(installed_device_factories()
                                    if getattr(handler, "hardware_access", False) else {}),
             simulated_device_factories=getattr(handler, "simulated_device_factories", {}),
-            preference_backend=self.preferences, ownership=self.ownership,
+            # Experiment inputs belong to this launch only. Keep disk-backed
+            # destination preferences separate from run names and overrides.
+            preference_backend={}, ownership=self.ownership,
             lifecycle=self.measurement_lifecycle, save_root_provider=get_save_location,
             instance_save_root_provider=self._save_root_for_instance,
         )
@@ -129,7 +131,7 @@ class ControlSystemMainWindow(QMainWindow):
             self.measurement_context_factory.for_experiment("phase_scan"),
             single_runner=getattr(handler, "phase_scan_runner", None),
             dual_runner=getattr(handler, "dual_detector_phase_scan_runner", None),
-            before_start=self._phase_start_blocker, legacy_preferences=self.preferences,
+            before_start=self._phase_start_blocker, legacy_preferences=None,
         )
         self.phase_scan_widget, self.dual_detector_phase_scan_widget = (h.widget for h in phase_handles)
         discovered = discover_modules() if module_discovery is None else module_discovery
