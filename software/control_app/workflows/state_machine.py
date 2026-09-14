@@ -478,6 +478,41 @@ class WorkflowStateMachine:
                 self._command_mutex.release()
                 self._apply_pending_output_location()
 
+    def ui_reset_instrument(self):
+        """Establish current safe idle; retain, but do not certify, prior runs."""
+        if not self.hardware_access:
+            return WorkflowResult(status="blocked", message="Hardware access is disabled.")
+        lifecycle = getattr(self, "measurement_lifecycle", None)
+        if lifecycle is not None and any(state.get("busy") for state in lifecycle.states.values()):
+            return WorkflowResult(status="blocked", message="Wait for measurement cleanup to finish.")
+        if any(runner.hardware_cleanup_pending or runner._lock.locked() for runner in
+               (self.phase_scan_runner, self.dual_detector_phase_scan_runner)):
+            return WorkflowResult(status="blocked", message="Wait for measurement cleanup to finish.")
+        if self.mircat_scan_active or self.iris_command_active:
+            return WorkflowResult(status="blocked", message="Wait for the current device operation to finish.")
+        if not self._command_mutex.acquire(blocking=False):
+            return WorkflowResult(status="blocked", message="Wait for the current device command to finish.")
+        token = None
+        try:
+            previous = self.coordinator.snapshot()
+            token = self.coordinator.acquire("manual:recovery", purpose="operator instrument reset", recovery=True)
+            self._manual_token = token
+            with self.coordinator.scope(token):
+                result = self._ui_shutdown_actions(reason="instrument_reset", emergency=True)
+            if result.status != "complete":
+                self.coordinator.release(token, safe_verified=False, preservation_verified=False, detail=result.message)
+                return result
+            self.coordinator.complete_reset(token, previous=previous, checks=result.to_dict())
+            self._manual_token = None
+            return WorkflowResult(status="complete", message="Instrument reset completed.")
+        except Exception as exc:
+            if token is not None:
+                self.coordinator.release(token, safe_verified=False, preservation_verified=False, detail=str(exc))
+            return WorkflowResult(status="failed", message=str(exc))
+        finally:
+            self._command_mutex.release()
+            self._apply_pending_output_location()
+
     def ui_recover_instrument(self, *, operator, evidence, restoration_verified,
                               preservation_verified):
         """Recover explicitly from named, evidenced operator verification.

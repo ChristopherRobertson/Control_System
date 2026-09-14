@@ -1,8 +1,9 @@
 """Exclusive coupled-instrument ownership, including process crash provenance.
 
-The byte lock is held until physical cleanup AND required preservation have been
-verified. Its disappearance is never evidence of safe idle: the durable record
-must also say ``free``. Recovery is an explicit operation, never a retry policy.
+Normal completion holds the byte lock through cleanup and required preservation.
+An explicit hardware reset can release it after current safe-state checks while
+retaining the prior run's unresolved disposition. Its disappearance alone is
+never evidence of safe idle: the durable record must also say ``free``.
 """
 from __future__ import annotations
 
@@ -129,7 +130,7 @@ class HardwareCoordinator:
             previous = self._read()
             if previous["state"] != "free" and not recovery:
                 self._unlock_os()
-                raise OwnershipError(f"Explicit Safe Shutdown recovery required; previous {previous['state']} owner: {previous.get('owner')}. {previous.get('detail', '')}")
+                raise OwnershipError("Instrument recovery required after an interrupted session. Select Reset instrument.")
             token = OwnershipToken(uuid4().hex, instance_id, operation_id or uuid4().hex, os.getpid(), _utc())
             self._token, self._cancel, self._fault = token, cancel, False
             try:
@@ -172,6 +173,25 @@ class HardwareCoordinator:
             except BaseException:
                 self._fault = True
                 raise
+            self._token, self._cancel, self._fault = None, None, False
+            self._unlock_os()
+
+    def complete_reset(self, token, *, previous, checks):
+        """Release current hardware after reset, without certifying an old run.
+
+        The prior disposition and current checks are retained in both the
+        durable record and append-only journal before releasing the OS lock.
+        """
+        with self._mutex:
+            self.assert_owner(token)
+            if token.instance_id != "manual:recovery" or not self._read().get("recovery"):
+                raise OwnershipError("Instrument reset requires recovery ownership")
+            if checks.get("status") != "complete":
+                raise OwnershipError("Instrument reset checks failed")
+            self._write("free", "Instrument reset completed; prior run disposition retained",
+                        safe_verified=True, previous=previous, reset_checks=checks,
+                        prior_run_restoration_verified=False,
+                        prior_run_preservation_verified=False)
             self._token, self._cancel, self._fault = None, None, False
             self._unlock_os()
 

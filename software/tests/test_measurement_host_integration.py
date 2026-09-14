@@ -295,16 +295,21 @@ def test_persistent_close_fault_does_not_hide_recovery_or_claim_a_running_worker
 
     descriptor = ModuleDescriptor(1, "single_pump_scan_burst", 10, factory)
     window = main_window.ControlSystemMainWindow(module_discovery=(descriptor,))
+    from control_app.ui.contracts import WorkflowResult
+    from PySide6.QtTest import QTest
     opened = []
-    def inspect_dialog(dialog):
-        opened.append(dialog.windowTitle())
-        return main_window.QDialog.DialogCode.Rejected
-    monkeypatch.setattr(main_window.QDialog, "exec", inspect_dialog)
+    def reset():
+        opened.append("reset")
+        return WorkflowResult(status="complete", message="Reset completed")
+    window.command_handler.ui_reset_instrument = reset
     try:
+        assert window.recovery_button.text() == "Reset instrument"
         assert any("Restoration remains unverified" in item for item in window._close_blockers())
         assert window.live_worker_blockers() == []
         window._review_recovery()
-        assert opened == ["Verify instrument recovery"]
+        while window._recovery_worker is not None:
+            QTest.qWait(10)
+        assert opened == ["reset"]
         active = window.measurement_lifecycle.handles[-1].widget
         active.busy = True
         assert window.live_worker_blockers()

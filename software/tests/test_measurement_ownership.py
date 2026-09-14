@@ -215,6 +215,63 @@ def test_emergency_targets_live_dual_owner_without_cancelling_simulations(coordi
         coordinator.release(token, safe_verified=True)
 
 
+@pytest.mark.parametrize("status", ["complete", "failed"])
+def test_reset_checks_current_hardware_without_certifying_prior_run(coordinator, tmp_path, monkeypatch, status):
+    machine = WorkflowStateMachine(operator="test", run_dir=tmp_path, coordinator=coordinator)
+    native = tmp_path / "partial.bin"
+    native.write_bytes(b"retained partial acquisition")
+    token = coordinator.acquire("phase_scan:single")
+    coordinator.release(token, safe_verified=False, preservation_verified=False, detail="Interrupted run")
+    prior = coordinator.snapshot()
+    calls = []
+    def check(**kwargs):
+        assert coordinator.snapshot()["owner"]["instance_id"] == "manual:recovery"
+        calls.append(kwargs)
+        return WorkflowResult(status=status, message="Synthetic device check")
+    monkeypatch.setattr(machine, "_ui_shutdown_actions", check)
+    result = machine.ui_reset_instrument()
+    assert result.status == status
+    assert len(calls) == 1
+    assert native.read_bytes() == b"retained partial acquisition"
+    record = coordinator.snapshot()
+    if status == "complete":
+        assert record["state"] == "free"
+        assert record["previous"] == prior
+        assert record["prior_run_preservation_verified"] is False
+        assert record["prior_run_restoration_verified"] is False
+        token = coordinator.acquire("steady_state_slow_scan:single")
+        coordinator.release(token, safe_verified=True)
+    else:
+        assert record["state"] == "fault"
+        with pytest.raises(OwnershipError):
+            coordinator.acquire("steady_state_slow_scan:single")
+
+
+def test_reset_retains_fault_when_record_cannot_be_saved(coordinator, tmp_path, monkeypatch):
+    machine = WorkflowStateMachine(operator="test", run_dir=tmp_path, coordinator=coordinator)
+    token = coordinator.acquire("phase_scan:single")
+    coordinator.release(token, safe_verified=False)
+    write = coordinator._write
+    def fail_free(state, detail, **fields):
+        if state == "free":
+            raise OSError("Cannot save reset record")
+        return write(state, detail, **fields)
+    monkeypatch.setattr(coordinator, "_write", fail_free)
+    monkeypatch.setattr(machine, "_ui_shutdown_actions", lambda **kwargs: WorkflowResult("complete", "Synthetic check"))
+    assert machine.ui_reset_instrument().status == "failed"
+    assert coordinator.snapshot()["state"] == "fault"
+
+
+def test_reset_refuses_live_worker(coordinator, tmp_path, monkeypatch):
+    machine = WorkflowStateMachine(operator="test", run_dir=tmp_path, coordinator=coordinator)
+    monkeypatch.setattr(machine, "_ui_shutdown_actions", lambda **kwargs: pytest.fail("Must not touch hardware"))
+    machine.phase_scan_runner._lock.acquire()
+    try:
+        assert machine.ui_reset_instrument().status == "blocked"
+    finally:
+        machine.phase_scan_runner._lock.release()
+
+
 def test_named_recovery_requires_evidence_and_fresh_safe_checks(coordinator, tmp_path, monkeypatch):
     machine = WorkflowStateMachine(operator="test", run_dir=tmp_path, coordinator=coordinator)
     token = coordinator.acquire("phase_scan:single")

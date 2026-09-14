@@ -26,7 +26,7 @@ try:
     from PySide6.QtCore import QObject, QSettings, QTimer, Signal, Slot, Qt
     from PySide6.QtWidgets import (QMessageBox, QMainWindow, QTabWidget, QWidget,
                                   QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QScrollArea,
-                                  QDialog, QDialogButtonBox, QFormLayout, QCheckBox, QSizePolicy, QComboBox)
+                                  QSizePolicy, QComboBox)
 
     PYSIDE6_AVAILABLE = True
 except ImportError:  # pragma: no cover - import-safe in non-UI environments
@@ -199,7 +199,7 @@ class ControlSystemMainWindow(QMainWindow):
         self.host_status = QLabel()
         self.host_status.setWordWrap(True)
         layout.addWidget(self.host_status)
-        self.recovery_button = QPushButton("Review instrument recovery…")
+        self.recovery_button = QPushButton("Reset instrument")
         self.recovery_button.clicked.connect(self._review_recovery)
         layout.addWidget(self.recovery_button)
         # Instrument forms can be taller than a monitor's usable desktop.
@@ -407,57 +407,20 @@ class ControlSystemMainWindow(QMainWindow):
         state = self.ownership.snapshot()
         if state["state"] != "free":
             owner = state.get("owner") or {}
-            messages.append(f"Instrument {state['state']}: {owner.get('instance_id', 'unknown owner')}. {state.get('detail', '')}")
+            messages.append("Instrument reset required after an interrupted session." if state["state"] == "fault" else f"Instrument in use: {owner.get('instance_id', 'another session')}")
         messages.extend(self.measurement_lifecycle.errors[-3:])
         self.host_status.setText("\n".join(messages))
         self.host_status.setVisible(bool(messages))
         self.recovery_button.setVisible(state["state"] != "free" and callable(
-            getattr(self.command_handler, "ui_recover_instrument", None)))
+            getattr(self.command_handler, "ui_reset_instrument", None)))
         self.recovery_button.setEnabled(self._recovery_worker is None)
 
     def _review_recovery(self):
-        """Explicit, recorded verification of a fault; never repeat acquisition."""
+        """Reset hardware asynchronously; never restart a measurement."""
         if self._recovery_worker is not None or self.live_worker_blockers():
             return
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Verify instrument recovery")
-        layout = QVBoxLayout(dialog)
-        explanation = QLabel("First stop emission and timing outputs using the owning controls. "
-                             "Inspect the retained native, partial, cleanup and restoration records. "
-                             "Identify the evidence for the two confirmations below. Recovery runs "
-                             "the safe-shutdown checks and records your verification; it never restarts a measurement.")
-        explanation.setWordWrap(True)
-        layout.addWidget(explanation)
-        form = QFormLayout()
-        operator, evidence = QLineEdit(), QLineEdit()
-        form.addRow("Verified by", operator)
-        form.addRow("Recovery evidence file", evidence)
-        layout.addLayout(form)
-        browse = QPushButton("Select evidence file…")
-        def select_evidence():
-            path, _ = QFileDialog.getOpenFileName(dialog, "Recovery evidence", str(get_save_location()))
-            if path:
-                evidence.setText(path)
-        browse.clicked.connect(select_evidence)
-        layout.addWidget(browse)
-        restoration = QCheckBox("I verified instrument restoration against the retained configuration records")
-        preservation = QCheckBox("I verified preservation of all required native and partial data")
-        layout.addWidget(restoration)
-        layout.addWidget(preservation)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        if not (operator.text().strip() and evidence.text().strip() and restoration.isChecked() and preservation.isChecked()):
-            self._show_close_error("Recovery verification incomplete", "A named verifier, evidence file and both verified outcomes are required.")
-            return
         from control_app.measurement_host.presentation import OperationWorker
-        operator_name, evidence_path = operator.text().strip(), evidence.text().strip()
-        worker = OperationWorker(lambda _: self.command_handler.ui_recover_instrument(
-            operator=operator_name, evidence=evidence_path,
-            restoration_verified=True, preservation_verified=True), self)
+        worker = OperationWorker(lambda _: self.command_handler.ui_reset_instrument(), self)
         self._recovery_worker = worker
         worker.finished.connect(self._recovery_finished)
         worker.start()
@@ -469,9 +432,9 @@ class ControlSystemMainWindow(QMainWindow):
         worker.deleteLater()
         if outcome is not None and outcome.state == "failed":
             self.measurement_lifecycle.report_error("recovery", outcome.error)
-            self._show_close_error("Recovery failed", outcome.error)
+            self._show_close_error("Instrument reset failed", outcome.error)
         elif outcome is not None and getattr(outcome.result, "status", None) != "complete":
-            self._show_close_error("Recovery incomplete", str(getattr(outcome.result, "message", outcome.result)))
+            self._show_close_error("Instrument reset incomplete", str(getattr(outcome.result, "message", outcome.result)))
         self._update_save_enabled()
 
     def request_emergency_stop(self, reason):
