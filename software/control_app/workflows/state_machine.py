@@ -322,8 +322,8 @@ class WorkflowStateMachine:
                 blockers.append(f"{runner.instance_id} is running; wait for cancellation, restoration and saving.")
         if self._manual_token is not None and self._manual_token.instance_id in {"manual:ndyag", "manual:t660_1"}:
             blockers.append(f"{self._manual_token.instance_id} timing session remains active; use Safe Idle first.")
-        if self.coordinator.snapshot()["state"] == "fault":
-            blockers.append("Instrument restoration or data preservation is unverified; use explicit Safe Shutdown recovery and inspect its retained records.")
+        # Historical recovery requirements block new hardware operations, not
+        # an attempt to put hardware into safe idle and close the application.
         if self.mircat_scan_active:
             blockers.append("MIRcat Sweep Scan is running. Press Stop Scan and wait for shutdown and saving to finish.")
         if self.iris_command_active:
@@ -414,11 +414,13 @@ class WorkflowStateMachine:
             # preservation outcome from successfully inhibiting outputs now.
             if previous["state"] != "free" and (previous["state"] == "fault" or
                     (previous.get("owner") or {}).get("token_id") != token.token_id):
-                result = WorkflowResult(status="failed", message=(
-                    result.message + " Previous owner restoration/data preservation remain unverified. "
-                    "Inspect the recorded owner and native/restoration records, then use Recover instrument "
-                    "with named, evidenced restoration and preservation verification."),
-                    data={**result.data, "previous_ownership": previous, "safe_idle_verified": verified})
+                result = WorkflowResult(status=result.status, message=(
+                    result.message + " Prior restoration/data-preservation requirements remain recorded; "
+                    "hardware recovery is still required before another measurement."),
+                    data={**result.data, "previous_ownership": previous,
+                          "safe_idle_verified": verified, "recovery_required": True})
+                # Successful safe-idle commands allow the UI to close, but do
+                # not certify the previous operation or clear its durable fault.
                 verified = False
             self.coordinator.release(token, safe_verified=verified, preservation_verified=verified, detail=result.message)
             if verified:

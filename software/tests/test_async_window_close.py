@@ -124,6 +124,33 @@ def test_active_measurement_blocks_close_without_starting_shutdown(close_window,
     assert errors[0][0] == "Close Blocked"
 
 
+@pytest.mark.parametrize("safe_status", ["complete", "failed"])
+def test_real_shutdown_result_with_prior_fault_closes_only_after_safe_idle(close_window, tmp_path, monkeypatch, safe_status):
+    from control_app.workflows.state_machine import WorkflowStateMachine
+    from control_app.measurement_host.ownership import require_hardware_owner
+    app, window, handler, errors = close_window
+    coordinator = handler.coordinator
+    previous = coordinator.acquire("phase_scan:single")
+    coordinator.release(previous, safe_verified=False, detail="Unresolved previous run")
+    machine = WorkflowStateMachine(operator="isolated shutdown", run_dir=tmp_path, coordinator=coordinator)
+    def safe_actions(**kwargs):
+        require_hardware_owner()
+        return WorkflowResult(safe_status, "Synthetic shutdown readbacks")
+    monkeypatch.setattr(machine, "_ui_shutdown_actions", safe_actions)
+    handler.ui_close_blockers = machine.ui_close_blockers
+    handler.ui_safe_shutdown = machine.ui_safe_shutdown
+    try:
+        window.close()
+        spin_until(app, lambda: window._shutdown_worker is None)
+        assert window.safe_shutdown_completed is (safe_status == "complete")
+        assert window.isVisible() is (safe_status != "complete")
+        assert bool(errors) is (safe_status != "complete")
+        assert coordinator.snapshot()["state"] == "fault"
+        assert coordinator.snapshot()["preservation_verified"] is False
+    finally:
+        coordinator._unlock_os()  # Test-only process-exit emulation; retain record.
+
+
 @pytest.mark.parametrize("retry,external", [(False, False), (True, False), (False, True)])
 def test_real_app_event_loop_exits_cleanly_in_subprocess(tmp_path, retry, external):
     import subprocess

@@ -235,6 +235,38 @@ def test_named_recovery_requires_evidence_and_fresh_safe_checks(coordinator, tmp
     assert coordinator.snapshot()["state"] == "free"
 
 
+@pytest.mark.parametrize("safe_status", ["complete", "failed"])
+def test_shutdown_reports_current_safety_separately_from_prior_fault(coordinator, tmp_path, monkeypatch, safe_status):
+    machine = WorkflowStateMachine(operator="test", run_dir=tmp_path, coordinator=coordinator)
+    token = coordinator.acquire("phase_scan:single")
+    coordinator.release(token, safe_verified=False, preservation_verified=False, detail="Prior run not verified")
+    native = tmp_path / "original-native.bin"
+    native.write_bytes(b"original partial measurement")
+    actions = []
+    def shutdown(**kwargs):
+        require_hardware_owner()
+        actions.append(kwargs)
+        return WorkflowResult(safe_status, "Synthetic safe-state readbacks")
+    monkeypatch.setattr(machine, "_ui_shutdown_actions", shutdown)
+    assert machine.ui_close_blockers() == []
+    result = machine.ui_safe_shutdown()
+    assert result.status == safe_status
+    assert result.data["safe_idle_verified"] is (safe_status == "complete")
+    assert result.data["recovery_required"] is True
+    assert result.data["previous_ownership"]["owner"]["token_id"] == token.token_id
+    assert len(actions) == 1
+    record = coordinator.snapshot()
+    assert record["state"] == "fault"
+    assert record["safe_verified"] is False and record["preservation_verified"] is False
+    assert native.read_bytes() == b"original partial measurement"
+    # Model process exit: release only the test OS handle, not the fault record.
+    coordinator._unlock_os()
+    reopened = HardwareCoordinator(coordinator.lock_path)
+    with pytest.raises(OwnershipError, match="recovery"):
+        reopened.acquire("steady_state_slow_scan:single")
+    assert reopened.snapshot()["state"] == "fault"
+
+
 def test_owner_manual_cleanup_allowed_after_failure_but_fault_is_preserved(coordinator, tmp_path, monkeypatch):
     machine = WorkflowStateMachine(operator="test", run_dir=tmp_path, coordinator=coordinator)
     sent = []
@@ -285,8 +317,10 @@ def test_generic_shutdown_does_not_clear_abandoned_provenance(coordinator, tmp_p
                         WorkflowResult(status="complete", message="Synthetic outputs inhibited"))
     try:
         result = machine._ui_shutdown(reason="explicit test shutdown", emergency=True)
-        assert result.status == "failed"
-        assert "preservation remain unverified" in result.message
+        assert result.status == "complete"
+        assert result.data["safe_idle_verified"] is True
+        assert result.data["recovery_required"] is True
+        assert "recovery is still required" in result.message
         assert other.snapshot()["state"] == "fault"
     finally:
         other._unlock_os()
