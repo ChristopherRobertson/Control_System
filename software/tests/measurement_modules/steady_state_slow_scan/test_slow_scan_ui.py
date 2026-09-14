@@ -32,7 +32,7 @@ def wait_for(app, panel, timeout=30):
 
 def settings(mode="single"):
     from control_app.measurement_modules.steady_state_slow_scan.settings import SlowScanSettings
-    return SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1904.).to_dict()
+    return SlowScanSettings(mode=mode, replicates=2, lower_cm1=1900., upper_cm1=1904.).to_dict()
 
 
 def inject_backend(panel, backend_type=None):
@@ -177,7 +177,7 @@ def test_independent_auto_overrides_roundtrip_and_optional_metadata(app, tabs, t
     assert editor.read_settings()["hardware"] is True
     for control in editor.fields.values():
         control.clear()
-    assert all(editor.read_settings()[key] is None for key in editor.override_inputs)
+    assert all(editor.read_settings()[key] is None for key in editor.override_inputs if key != "current_ma")
     assert editor.read_settings()["condition"] == loaded["condition"]
     assert panel.start_button.isEnabled(), panel.validation.text()
     assert editor.end.value() == 1650.
@@ -209,12 +209,41 @@ def test_visible_physical_controls_and_removed_preferences_do_not_return(app, ta
                  probe_width_s=.5, sample_rate_hz=17, fit_peak_count=4, dark_duration_s=50)
     editor.apply_settings(stale)
     current = editor.read_settings()
-    assert current["pulse_width_s"] is None
+    assert current["pulse_width_s"] == pytest.approx(150e-9)
     assert current["requested_sample_rate_hz"] is None
     assert current["requested_reference_sample_rate_hz"] is None
     assert all(key not in current for key in ("requested_resolution_cm1", "segments", "probe_width_s", "sample_rate_hz", "fit_peak_count", "dark_duration_s"))
     labels = " ".join(label.text().casefold() for label in editor.findChildren(QLabel))
     assert not any(word in labels for word in ("resolution", "marker", "settling", "fringe", "baseline", "line width", "peak components"))
+
+
+def test_laser_mode_defaults_pulse_editability_and_inclusive_duty_limit(app, tabs):
+    from PySide6.QtWidgets import QGroupBox
+    for handle in tabs[0]:
+        panel, editor = handle.widget, handle.widget.settings_editor
+        assert {box.title() for box in editor.findChildren(QGroupBox)} == {"MIRcat Settings"}
+        assert panel.advanced_group.title() == "HF2LI Settings"
+        assert editor.repeats.value() == 1
+        assert editor.laser_mode.currentData() == "pulsed"
+        assert editor.fields["current_ma"].text() == "1000"
+        assert editor.fields["repetition_rate_hz"].text() == "2e+06"
+        assert editor.fields["pulse_width_s"].text() == "150"
+        assert editor.read_settings()["pulse_width_s"] == pytest.approx(150e-9)
+        editor.fields["pulse_width_s"].setText("151")
+        with pytest.raises(ValueError, match="30%"):
+            editor.read_settings()
+        editor.laser_mode.setCurrentIndex(1)
+        assert editor.fields["current_ma"].text() == "750"
+        assert not editor.fields["repetition_rate_hz"].isEnabled()
+        assert not editor.fields["pulse_width_s"].isEnabled()
+        saved = editor.read_settings()
+        editor.apply_settings(saved)
+        assert editor.read_settings() == saved
+        editor.laser_mode.setCurrentIndex(0)
+        assert editor.fields["current_ma"].text() == "1000"
+        assert editor.fields["pulse_width_s"].isEnabled()
+        editor.fields["pulse_width_s"].setText("150")
+        assert editor.read_settings()["laser_mode"] == "pulsed"
 
 
 def test_scan_labels_and_independent_sampling_rate_plan_roundtrip(app, tabs, tmp_path):
@@ -233,7 +262,7 @@ def test_scan_labels_and_independent_sampling_rate_plan_roundtrip(app, tabs, tmp
         assert editor.scan_speed.value() == 40.
         rows = dict(panel.adapter.summarize_plan(panel.plan))
         assert rows["Range"] == "2050 → 1650 cm⁻¹"
-        assert rows["Speed / scans"] == "40 cm⁻¹/s / 2 scans"
+        assert rows["Speed / scans"] == "40 cm⁻¹/s / 1 scan"
         advanced_labels = {label.text() for label in editor.advanced_widget.findChildren(QLabel)}
         assert "Sampling rate (Sa/s)" in advanced_labels
         assert panel.band_lower.placeholderText() == "Lower cm⁻¹"
@@ -335,7 +364,7 @@ def test_actual_shell_keeps_entire_input_rectangles_visible_at_1100_by_780(app, 
             viewport = panel.settings_scroll.viewport()
             editor = panel.settings_editor
             controls = dict(editor.fields, plan_label=editor.plan_label, lower=editor.lower, upper=editor.upper,
-                            scan_speed=editor.scan_speed, repeats=editor.repeats,
+                            laser_mode=editor.laser_mode, scan_speed=editor.scan_speed, repeats=editor.repeats,
                             read_connected=editor.capability_button, load_dark=panel.load_dark_button)
             for name, editor in controls.items():
                 bounds = QRect(editor.mapTo(viewport, QPoint()), editor.size())

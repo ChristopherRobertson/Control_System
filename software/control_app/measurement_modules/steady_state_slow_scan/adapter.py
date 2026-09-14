@@ -69,6 +69,7 @@ class SlowScanScientificAdapter:
         rate = selected.get("repetition_rate_hz", settings.repetition_rate_hz)
         width = selected.get("pulse_width_s", settings.pulse_width_s)
         duty = f"{100*rate*width:.3g}%" if rate and width else "Auto"
+        if settings.laser_mode == "cw": duty = "Not applicable (CW)"
         filters = []
         for label, tau_key, order_key in (("Sample", "time_constant_s", "filter_order"),
                                            ("Reference", "reference_time_constant_s", "reference_filter_order")):
@@ -76,7 +77,7 @@ class SlowScanScientificAdapter:
             if tau and order and (label == "Sample" or self.context.mode == "dual"):
                 filters.append(f"{label} {tau*1000:g} ms, order {order}")
         return (("Range", f"{settings.upper_cm1:g} → {settings.lower_cm1:g} cm⁻¹"),
-                ("Speed / scans", f"{settings.requested_scan_speed_cm1_s:g} cm⁻¹/s / {settings.replicates} scans"),
+                ("Speed / scans", f"{settings.requested_scan_speed_cm1_s:g} cm⁻¹/s / {settings.replicates} {'scan' if settings.replicates == 1 else 'scans'}"),
                 ("Laser current", f"{current:g} mA" if current is not None else "Auto"),
                 ("Pulse duty", duty), ("HF2LI filters", "; ".join(filters) or "Auto"),
                 ("Estimated time", f"{duration:.3g} s" if duration and plan.blocks else "Available after device readback"))

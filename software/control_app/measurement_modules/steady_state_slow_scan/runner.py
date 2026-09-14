@@ -13,8 +13,8 @@ from .settings import SlowScanSettings
 from .native import combine_poll_streams
 
 
-_CONTROL_SETTINGS = ("mode", "segments", "replicates")
-_CONTROL_SELECTED = ("sample_rate_hz", "reference_sample_rate_hz", "time_constant_s", "filter_order",
+_CONTROL_SETTINGS = ("mode", "laser_mode", "segments", "replicates")
+_CONTROL_SELECTED = ("detector_recording", "mircat_pulse_trigger_mode", "sample_rate_hz", "reference_sample_rate_hz", "time_constant_s", "filter_order",
     "repetition_rate_hz", "pulse_width_s", "current_ma",
     "probe_rate_hz", "probe_width_s", "marker_interval_cm1", "marker_width_s",
     "process_pulse_width_s", "demodulator_roles", "hf2li")
@@ -302,6 +302,10 @@ class SlowScanRunner:
                                 **names, metadata={"compatibility": compatibility(plan),
                                     "configuration_id": plan.inputs.configuration_id,
                                     "condition": plan.settings.condition.to_dict(), "qcl": block.block.qcl,
+                                    "laser_mode": plan.settings.laser_mode,
+                                    "detector_recording": plan.selected["detector_recording"],
+                                    "detector_units": "HF2LI demodulator magnitude; raw signed X/Y retained in native chunks",
+                                    "detector_dc_response_qualified": False,
                                     "native_assignment": {key: deepcopy(value) for key, value in values.items() if key not in names},
                                     "effective_resolution_cm1": self._resolution_estimate(plan, block.block),
                                     "native_axis_basis": "simulated" if not operation.hardware else "observed controller marker intervals",

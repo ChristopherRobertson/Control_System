@@ -124,11 +124,13 @@ def build_plan(settings, inputs=None):
     names = ("time_constant_s", "filter_order", "reference_time_constant_s", "reference_filter_order", "repetition_rate_hz", "pulse_width_s",
              "requested_sample_rate_hz", "requested_reference_sample_rate_hz")
     for name in names:
+        if settings.laser_mode == "cw" and name in ("repetition_rate_hz", "pulse_width_s"):
+            continue
         if getattr(settings, name) is not None and not _positive(getattr(settings, name)): errors.append(f"{name} must be Auto or finite and positive")
     if settings.current_ma is not None and (not isinstance(settings.current_ma, (int, float)) or isinstance(settings.current_ma, bool)
                                           or not math.isfinite(settings.current_ma) or settings.current_ma < 0):
         errors.append("Current must be Auto or a finite nonnegative mA value")
-    if settings.repetition_rate_hz is not None and settings.pulse_width_s is not None and not errors:
+    if settings.laser_mode == "pulsed" and settings.repetition_rate_hz is not None and settings.pulse_width_s is not None and not errors:
         if settings.repetition_rate_hz * settings.pulse_width_s > .30 + 1e-12:
             errors.append("Repetition rate × pulse width must not exceed 0.30 (30% duty)")
     if errors:
@@ -186,7 +188,8 @@ def build_plan(settings, inputs=None):
                 errors.append(f"{role} sampling rate unsupported; choose Auto or an installed rate")
                 continue
         if rate * duration < 2: errors.append(f"{role} stream cannot sample the requested scan duration")
-        hf[role] = {**previous, "order": order, "timeconstant_s": tau, "rate_sps": rate}
+        hf[role] = {**previous, "order": order, "timeconstant_s": tau, "rate_sps": rate,
+                    "oscselect": 1, "harmonic": 1, "phaseshift": 0., "sinc": False}
         selected.update({fields[0]: rate, fields[1]: tau, fields[2]: order, f"{role}_filter_estimate": response})
         input_name = "ch1" if role == "sample" else "ch2"
         input_range = hf.get("sigins", {}).get(input_name, {}).get("range_v")
@@ -217,12 +220,24 @@ def build_plan(settings, inputs=None):
         return value
     pulse_params = deepcopy(profile.get("qcl_pulse_params", {}).get("1", {}))
     pulse_limits = inputs.actual_readbacks.get("qcl_pulse_limits", {}).get("1", {})
-    probe_rate = choose("repetition_rate_hz", profile.get("probe_rate_hz"))
-    optical_width = choose("pulse_width_s", pulse_params.get("pulse_width_ns", 0.) * 1e-9)
+    probe_rate = profile.get("probe_rate_hz")
+    if not _positive(probe_rate):
+        readiness.append("Connect T660-1 to resolve the independent scan timing clock")
+    selected["laser_mode"] = settings.laser_mode
+    selected["mircat_pulse_trigger_mode"] = 1
+    selected["detector_recording"] = "zero_frequency_demodulator_magnitude"
+    selected["detector_dc_response_qualified"] = False
+    warnings.append("Zero-frequency detector recording: detector/preamp DC response and optical intensity calibration remain unqualified")
+    hf["oscillators"] = [{"index": 1, "frequency_hz": 0.}]
+    optical_width = (choose("pulse_width_s", pulse_params.get("pulse_width_ns", 0.) * 1e-9)
+                     if settings.laser_mode == "pulsed" else pulse_params.get("pulse_width_ns", 150.) * 1e-9)
+    selected["pulse_width_s"] = optical_width
+    optical_rate = (choose("repetition_rate_hz", pulse_params.get("pulse_rate_hz"))
+                    if settings.laser_mode == "pulsed" else pulse_params.get("pulse_rate_hz", 2_000_000.))
+    selected["repetition_rate_hz"] = optical_rate
     if optical_width is not None:
         try:
-            # SetQCLParams encodes optical width as float32 nanoseconds. Use
-            # that same width before deriving an internal-frequency ceiling.
+            # The SDK encodes optical width as float32 nanoseconds.
             width_ns = struct.unpack("f", struct.pack("f", optical_width * 1e9))[0]
             if not _positive(width_ns):
                 raise ValueError("Unrepresentable optical width")
@@ -233,7 +248,6 @@ def build_plan(settings, inputs=None):
     probe_width = profile.get("probe_width_s")
     if probe_rate:
         probe_rate = selected["probe_rate_hz"] = round(probe_rate/.02)*.02
-        selected["repetition_rate_hz"] = probe_rate
         if probe_rate <= 0:
             errors.append("Repetition rate rounds to zero on the documented 0.02 Hz DDS grid")
         # TTL trigger duration is a separate electrical parameter, never the
@@ -241,35 +255,32 @@ def build_plan(settings, inputs=None):
         if _positive(probe_width) and probe_rate > 0:
             probe_width = min(probe_width, .5/probe_rate)
         if probe_rate > 16e6 or (probe_width and probe_rate*(probe_width+62.5e-9) >= 1): errors.append("Probe exceeds documented T660 repetition/width limit")
-        if optical_width and probe_rate * optical_width > .30 + 1e-12: errors.append("Repetition rate × pulse width must not exceed 0.30 (30% duty)")
     selected["probe_width_s"] = probe_width
     if not _positive(probe_width): readiness.append("Connect T660-1 to resolve electrical trigger width")
-    selected["pulse_duty_fraction"] = probe_rate * optical_width if probe_rate and optical_width else None
+    selected["pulse_duty_fraction"] = optical_rate * optical_width if settings.laser_mode == "pulsed" and optical_rate and optical_width else None
     selected["probe_width_basis"] = "Observed electrical trigger width, shortened if needed for selected cadence; separate from optical pulse width"
-    if probe_rate and optical_width:
-        internal_rate = pulse_params.get("pulse_rate_hz")
-        internal_limit = min(.30, pulse_limits.get("max_duty_cycle", 30.)/100)
-        if (not _positive(internal_rate) or internal_rate <= probe_rate or
-            internal_rate * optical_width > internal_limit or
-            (pulse_limits and internal_rate > pulse_limits["max_pulse_rate_hz"])):
-            if pulse_limits:
-                ceiling = min(pulse_limits["max_pulse_rate_hz"], min(.30, pulse_limits["max_duty_cycle"]/100)/optical_width)
-                packed = struct.unpack("I", struct.pack("f", ceiling))[0]
-                internal_rate = struct.unpack("f", struct.pack("I", packed))[0]
-                if internal_rate > ceiling:
-                    internal_rate = struct.unpack("f", struct.pack("I", packed - 1))[0]
-            else:
-                readiness.append("Connect MIRcat to resolve internal pulse rate headroom")
-        if pulse_limits and (not _positive(internal_rate) or internal_rate <= probe_rate):
-            errors.append("No MIRcat internal pulse rate above external repetition fits vendor limits")
+    if optical_rate and optical_width:
+        try:
+            internal_rate = struct.unpack("f", struct.pack("f", optical_rate))[0]
+        except (OverflowError, ValueError, struct.error):
+            errors.append("Pulse rate cannot be represented by the MIRcat SDK")
+            internal_rate = 0.
+        selected["repetition_rate_hz"] = internal_rate
+        if settings.laser_mode == "pulsed" and not _positive(internal_rate):
+            errors.append("Pulse rate is zero or nonfinite after SDK quantization")
         pulse_params.update(pulse_rate_hz=internal_rate, pulse_width_ns=width_ns)
-        if pulse_limits and (internal_rate > pulse_limits["max_pulse_rate_hz"] or
+        if settings.laser_mode == "pulsed" and internal_rate * optical_width > .30 + 1e-12:
+            errors.append("Repetition rate × pulse width must not exceed 0.30 (30% duty)")
+        if settings.laser_mode == "pulsed" and pulse_limits and (internal_rate > pulse_limits["max_pulse_rate_hz"] or
                              width_ns > pulse_limits["max_pulse_width_ns"] or
                              internal_rate*optical_width > min(.30, pulse_limits["max_duty_cycle"]/100) + 1e-12):
             errors.append("MIRcat internal pulse rate/optical width exceeds connected vendor limits")
         selected["mircat_internal_rate_hz"] = internal_rate
+        selected["pulse_duty_fraction"] = internal_rate * optical_width if settings.laser_mode == "pulsed" else None
     current = settings.current_ma if settings.current_ma is not None else profile.get("qcl_pulse_params", {}).get("1", {}).get("current_ma")
-    limits = inputs.actual_readbacks.get("qcl_current_limits", {}).get("1")
+    limits = inputs.actual_readbacks.get("qcl_cw_current_limits" if settings.laser_mode == "cw" else "qcl_current_limits", {}).get("1")
+    if settings.laser_mode == "cw" and not inputs.simulation and inputs.actual_readbacks.get("qcl_cw_allowed", {}).get("1") is not True:
+        readiness.append("Connected QCL 1 must report CW support")
     if not isinstance(current, (int, float)) or not math.isfinite(current) or current < 0:
         readiness.append("Connect MIRcat to resolve QCL 1 current")
     elif limits is not None and not min(limits) <= current <= max(limits): errors.append("Current exceeds connected QCL 1 limits")

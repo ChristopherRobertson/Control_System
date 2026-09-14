@@ -126,6 +126,8 @@ class InstalledSlowScanBackend:
             "qcl_windows": [self.qcl.get_qcl_tuning_range(1)],
             "qcl_pulse_params": pulse_params,
             "qcl_pulse_limits": {"1": self.qcl.get_qcl_pulse_limits(1)},
+            "qcl_cw_allowed": {"1": self.qcl.is_cw_allowed(1)},
+            "qcl_cw_current_limits": {"1": self.qcl.get_qcl_cw_current_limits(1)},
             "qcl_current_limits": {"1": self.qcl.get_qcl_current_limits(1)},
             "marker_width_us": self.qcl.get_wavelength_trigger_pulse_width_us(),
             "probe_width_s": self.before["t660_1"]["absolute_edges_s"]["4"] - self.before["t660_1"]["absolute_edges_s"]["3"],
@@ -156,7 +158,8 @@ class InstalledSlowScanBackend:
     def _snapshot(self):
         from control_app.devices.hf2li_service import HF2LIPreset
         self.snapshot_preset = HF2LIPreset("steady_state_slow_scan_restore_v1",
-            {"demodulators": [{"index": i} for i in range(6)]})
+            {"demodulators": [{"index": i, "sinc": False, "phaseshift": 0.} for i in range(6)],
+             "oscillators": [{"index": 1}], "pll": {"index": 1}})
         self.before["hf2li"] = self.hf.export_settings_snapshot(preset=self.snapshot_preset)
         if self.before["hf2li"].get("read_errors"):
             raise RuntimeError("HF2LI original settings could not all be retained")
@@ -173,7 +176,8 @@ class InstalledSlowScanBackend:
         self.before["mircat"] = {"trigger": self.qcl.get_wavelength_trigger_params(),
             "marker_width_us": self.qcl.get_wavelength_trigger_pulse_width_us(),
             "qcls": [{"qcl": i, "pulse_rate_hz": self.qcl.get_qcl_pulse_rate(i),
-                      "pulse_width_ns": self.qcl.get_qcl_pulse_width(i), "current_ma": self.qcl.get_qcl_current(i)}
+                      "pulse_width_ns": self.qcl.get_qcl_pulse_width(i), "current_ma": self.qcl.get_qcl_current(i),
+                      "laser_mode": self.qcl.get_qcl_operating_mode(i), "temperature_c": self.qcl.get_qcl_set_temperature(i)}
                      for i in (1,)]}
 
     def inhibit(self):
@@ -225,7 +229,9 @@ class InstalledSlowScanBackend:
         selected["current_ma"] = actual_pulse["current_ma"]
         selected["pulse_width_s"] = actual_pulse["pulse_width_ns"] * 1e-9
         selected["mircat_internal_rate_hz"] = actual_pulse["pulse_rate_hz"]
-        selected["pulse_duty_fraction"] = selected["repetition_rate_hz"] * selected["pulse_width_s"]
+        selected["repetition_rate_hz"] = actual_pulse["pulse_rate_hz"]
+        selected["pulse_duty_fraction"] = (selected["repetition_rate_hz"] * selected["pulse_width_s"]
+                                           if plan.settings.laser_mode == "pulsed" else None)
         selected["requested_input_range_v"] = requested_range
         for role, label in (("sample", "ch1"), ("reference", "ch2")):
             if role == "reference" and plan.settings.mode == "single": continue
@@ -252,18 +258,25 @@ class InstalledSlowScanBackend:
                 item["rate_sps"] = plan.inputs.timing_rate_hz
             demods.append(item)
         self.hf.configure_demodulators([{"index": i, "enable": False} for i in range(6)])
+        self.hf.configure_pll({"index": 1, "enable": False})
         preset = HF2LIPreset("steady_state_slow_scan_v1", {"signal_inputs": hf_profile["sigins"],
-            "pll": hf_profile["pll"], "demodulators": demods})
+            "pll": hf_profile["pll"], "demodulators": demods, "oscillators": hf_profile["oscillators"]})
         self.hf.apply_preset(preset)
         self.readbacks["hf2li"] = self.hf.export_settings_snapshot(preset=self.snapshot_preset)
         if self.readbacks["hf2li"].get("read_errors"):
             raise RuntimeError("HF2LI configured readbacks are incomplete")
+        for suffix, expected in (("plls/1/enable", 0), ("oscs/1/freq", 0.)):
+            if self.readbacks["hf2li"]["nodes"][f"/{self.hf.device_id}/{suffix}"]["value"] != expected:
+                raise ValueError(f"HF2LI {suffix} must be zero for detector recording")
         for item in demods:
             for key, node in (("rate_sps", "rate"), ("timeconstant_s", "timeconstant"), ("order", "order"), ("adcselect", "adcselect"),
                               ("oscselect", "oscselect"), ("harmonic", "harmonic"), ("trigger", "trigger"), ("enable", "enable")):
                 actual = self.readbacks["hf2li"]["nodes"][f"/{self.hf.device_id}/demods/{item['index']}/{node}"]["value"]
                 if not math.isclose(actual, item[key], rel_tol=1e-6, abs_tol=1e-12):
                     raise ValueError(f"HF2LI demodulator {item['index']} {key}: selected {item[key]}, actual {actual}")
+            for key in ("sinc", "phaseshift"):
+                if key in item and self.readbacks["hf2li"]["nodes"][f"/{self.hf.device_id}/demods/{item['index']}/{key}"]["value"] != item[key]:
+                    raise ValueError(f"HF2LI detector {key} readback differs")
         for label, item in hf_profile["sigins"].items():
             for key, node in (("ac", "ac"), ("impedance_50ohm", "imp50"), ("differential", "diff"), ("range_v", "range")):
                 actual = self.readbacks["hf2li"]["nodes"][f"/{self.hf.device_id}/sigins/{item['index']}/{node}"]["value"]
@@ -395,11 +408,11 @@ class InstalledSlowScanBackend:
         actual_pulse = pulse_observation["pulse"]
         pulse_limits, current_limits = pulse_observation["pulse_limits"], pulse_observation["current_limits"]
         interval = plan.selected["marker_interval_cm1"]
-        self.qcl.set_external_sweep_trigger_params(start_cm1=scan.start_cm1, stop_cm1=scan.stop_cm1,
-            wavelength_trigger_interval_cm1=interval, external_process_trigger=True)
+        self.qcl.set_wavelength_trigger_params(pulse_mode=1, process_trigger_mode=2,
+            start=scan.start_cm1, stop=scan.stop_cm1, interval=interval, units=2, dwell_us=0, after_off_us=0)
         trigger = self.qcl.get_wavelength_trigger_params()
-        if trigger["pulse_mode"] != 2 or trigger["process_trigger_mode"] != 2 or trigger["units"] != 2:
-            raise ValueError("MIRcat requires observed external pulse/process triggers and cm^-1 units")
+        if trigger["pulse_mode"] != 1 or trigger["process_trigger_mode"] != 2 or trigger["units"] != 2:
+            raise ValueError("MIRcat requires internal pulse timing, external process triggers and cm^-1 units")
         width = round(plan.selected["marker_width_s"]*1e6)
         if self.qcl.set_wavelength_trigger_pulse_width_us(width) != width:
             raise ValueError("MIRcat marker width readback differs")
@@ -450,7 +463,6 @@ class InstalledSlowScanBackend:
             self._validate_live_pulses(plan, "before_emission", block_id=scan.block_id)
             self.qcl.start_emission()
             self.units["t660_2"].start_frame_table()
-            unit.enable_channel("B")
             unit.enable_channel("C")
             report("acquisition", f"{scan.block_id}: {scan.replicates} sweeps; FIRE/Q-switch OFF")
             deadline = monotonic()+block.record_duration_s+max(2., scan.settle_s)
@@ -514,20 +526,20 @@ class InstalledSlowScanBackend:
     def _configure_qcl_pulses(self, plan):
         qcl_params = plan.inputs.scientific_profile["qcl_pulse_params"]["1"]
         pulse_limits = self.qcl.get_qcl_pulse_limits(1)
-        current_limits = self.qcl.get_qcl_current_limits(1)
+        cw = plan.settings.laser_mode == "cw"
+        current_limits = self.qcl.get_qcl_cw_current_limits(1) if cw else self.qcl.get_qcl_current_limits(1)
+        if cw and not self.qcl.is_cw_allowed(1):
+            raise ValueError("Connected QCL 1 does not support CW")
         optical_width = qcl_params["pulse_width_ns"] * 1e-9
-        external_rate = plan.selected["repetition_rate_hz"]
         duty_limit = min(.30, pulse_limits["max_duty_cycle"] / 100.)
-        if external_rate * optical_width > duty_limit + 1e-12:
-            raise ValueError("Repetition rate × optical pulse width exceeds 30% duty")
-        if not qcl_params["pulse_rate_hz"] > external_rate:
-            raise ValueError("MIRcat internal pulse rate must exceed the external repetition rate")
-        if (qcl_params["pulse_rate_hz"] > pulse_limits["max_pulse_rate_hz"] or
+        if not cw and (qcl_params["pulse_rate_hz"] > pulse_limits["max_pulse_rate_hz"] or
             qcl_params["pulse_width_ns"] > pulse_limits["max_pulse_width_ns"] or
-            qcl_params["pulse_rate_hz"] * optical_width > duty_limit + 1e-12 or
-            not min(current_limits) <= qcl_params["current_ma"] <= max(current_limits)):
+            qcl_params["pulse_rate_hz"] * optical_width > duty_limit + 1e-12):
             raise ValueError("Selected QCL pulse/current parameters exceed connected controller limits")
-        actual = self.qcl.set_qcl_pulse_params(qcl=1, **qcl_params)
+        if not min(current_limits) <= qcl_params["current_ma"] <= max(current_limits):
+            raise ValueError("Selected QCL current exceeds connected mode-specific limits")
+        actual = self.qcl.set_qcl_operating_params(qcl=1, **qcl_params,
+            temperature_c=self.before["mircat"]["qcls"][0]["temperature_c"], laser_mode=2 if cw else 1)
         self.readbacks["configured_pulse_limits"] = {"pulse_limits": deepcopy(pulse_limits), "current_limits": deepcopy(current_limits)}
         record = self._validate_live_pulses(plan, "pulse_parameters_programmed", read_dds=False)
         observed = record["pulse"]
@@ -545,14 +557,26 @@ class InstalledSlowScanBackend:
                                 ("pulse_width_ns", self.qcl.get_qcl_pulse_width), ("current_ma", self.qcl.get_qcl_current)):
                 record["pulse"][key] = getter(1)
             record["pulse_limits"] = self.qcl.get_qcl_pulse_limits(1)
-            record["current_limits"] = self.qcl.get_qcl_current_limits(1)
+            cw = plan.settings.laser_mode == "cw"
+            record["laser_mode"] = self.qcl.get_qcl_operating_mode(1)
+            record["temperature_c"] = self.qcl.get_qcl_set_temperature(1)
+            record["current_limits"] = self.qcl.get_qcl_cw_current_limits(1) if cw else self.qcl.get_qcl_current_limits(1)
+            if record["laser_mode"] != (2 if cw else 1) or (cw and not self.qcl.is_cw_allowed(1)):
+                raise ValueError("MIRcat laser mode readback differs or CW is unavailable")
+            if not math.isclose(record["temperature_c"], self.before["mircat"]["qcls"][0]["temperature_c"], abs_tol=1e-5):
+                raise ValueError("MIRcat temperature setpoint changed")
+            if stage == "before_emission":
+                record["trigger"] = self.qcl.get_wavelength_trigger_params()
+                if any(record["trigger"].get(key) != value for key, value in
+                       (("pulse_mode", 1), ("process_trigger_mode", 2), ("units", 2))):
+                    raise ValueError("MIRcat pulse/process trigger mode changed before emission")
             if read_dds:
                 record["t660_1"] = self.units["t660_1"].read_active_settings()
                 queries = record["t660_1"]["queries"]
                 record["external_rate_hz"] = _quantity(_response(queries["synth_frequency"]))
                 record["predivider"] = int(_response(queries["predivider"]))
             else:
-                record["external_rate_hz"] = plan.selected["repetition_rate_hz"]
+                record["external_rate_hz"] = plan.selected["probe_rate_hz"]
                 record["cadence_basis"] = "Selected cadence; DDS not programmed yet"
         except Exception as exc:
             record["read_error"] = str(exc)
@@ -560,19 +584,20 @@ class InstalledSlowScanBackend:
         observed, limits = record["pulse"], record["pulse_limits"]
         external = record["external_rate_hz"]
         expected = plan.inputs.scientific_profile["qcl_pulse_params"]["1"]
-        record["selected"] = {**deepcopy(expected), "external_rate_hz": plan.selected["repetition_rate_hz"]}
+        record["selected"] = {**deepcopy(expected), "external_rate_hz": plan.selected["probe_rate_hz"]}
         if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in (*observed.values(), external, *limits.values(), *record["current_limits"])):
             raise ValueError("MIRcat/DDS returned nonfinite pulse or limit readbacks")
         width = observed["pulse_width_ns"] * 1e-9
         duty_limit = min(.30, limits["max_duty_cycle"] / 100.)
-        record.update(external_duty_fraction=external*width,
-                      internal_duty_fraction=observed["pulse_rate_hz"]*width, duty_limit_fraction=duty_limit)
-        if (external <= 0 or width <= 0 or observed["pulse_rate_hz"] <= external or
-            record["external_duty_fraction"] > duty_limit + 1e-12 or record["internal_duty_fraction"] > duty_limit + 1e-12 or
-            observed["pulse_rate_hz"] > limits["max_pulse_rate_hz"] or observed["pulse_width_ns"] > limits["max_pulse_width_ns"] or
-            not min(record["current_limits"]) <= observed["current_ma"] <= max(record["current_limits"])):
+        record.update(external_duty_fraction=None, external_clock_role="Process Trigger timing only",
+                      internal_duty_fraction=None if cw else observed["pulse_rate_hz"]*width, duty_limit_fraction=duty_limit)
+        if not cw and (width <= 0 or observed["pulse_rate_hz"] <= 0 or
+            record["internal_duty_fraction"] > duty_limit + 1e-12 or
+            observed["pulse_rate_hz"] > limits["max_pulse_rate_hz"] or observed["pulse_width_ns"] > limits["max_pulse_width_ns"]):
             raise ValueError("MIRcat observed pulse duty/internal rate/current exceeds connected limits")
-        if read_dds and (record["predivider"] != 1 or not math.isclose(external, plan.selected["repetition_rate_hz"], rel_tol=1e-9)):
+        if not min(record["current_limits"]) <= observed["current_ma"] <= max(record["current_limits"]):
+            raise ValueError("MIRcat observed current exceeds connected mode-specific limits")
+        if read_dds and (record["predivider"] != 1 or not math.isclose(external, plan.selected["probe_rate_hz"], rel_tol=1e-9)):
             raise ValueError("T660 actual DDS cadence/predivider changed from the selected setting")
         for field, value in observed.items():
             if not math.isclose(value, expected[field], rel_tol=1e-6, abs_tol=1e-6):
@@ -600,6 +625,9 @@ class InstalledSlowScanBackend:
         if not self.qcl.is_interlock_set() or not self.qcl.is_key_switch_set() or self.qcl.get_system_error_word():
             raise RuntimeError("MIRcat interlock/key/error state is invalid")
         profile = self.plan.selected["hf2li"]
+        frequency = self.hf.get_oscillator_frequency(1)
+        if not math.isfinite(frequency) or abs(frequency) > 1e-9:
+            raise RuntimeError("HF2LI detector oscillator must remain at zero frequency")
         inputs = (0, 1) if self.plan.settings.mode == "dual" else (0,)
         health = self.hf.read_acquisition_health(reference_pll=int(profile["pll"]["index"]), input_indices=inputs)
         self.readbacks.setdefault("health_observations", []).append(deepcopy(health))
@@ -622,7 +650,7 @@ class InstalledSlowScanBackend:
         if "mircat" in self.before:
             qcl = self.devices["mircat"]
             for params in self.before["mircat"]["qcls"]:
-                attempt(f"restore QCL {params['qcl']}", lambda p=params: qcl.set_qcl_pulse_params(**p))
+                attempt(f"restore QCL {params['qcl']}", lambda p=params: qcl.set_qcl_operating_params(**p))
             trigger = self.before["mircat"]["trigger"]
             args = {key: trigger[key] for key in ("pulse_mode", "process_trigger_mode", "start", "stop", "interval", "units", "dwell_us", "after_off_us")}
             attempt("restore marker parameters", lambda: qcl.set_wavelength_trigger_params(**args))
@@ -633,7 +661,8 @@ class InstalledSlowScanBackend:
                 for expected in self.before["mircat"]["qcls"]:
                     index = expected["qcl"]
                     actual = {"qcl": index, "pulse_rate_hz": qcl.get_qcl_pulse_rate(index),
-                              "pulse_width_ns": qcl.get_qcl_pulse_width(index), "current_ma": qcl.get_qcl_current(index)}
+                              "pulse_width_ns": qcl.get_qcl_pulse_width(index), "current_ma": qcl.get_qcl_current(index),
+                              "laser_mode": qcl.get_qcl_operating_mode(index), "temperature_c": qcl.get_qcl_set_temperature(index)}
                     current["qcls"].append(actual)
                     for key, value in expected.items():
                         if not math.isclose(actual[key], value, rel_tol=1e-6, abs_tol=1e-8):
@@ -650,23 +679,29 @@ class InstalledSlowScanBackend:
             def restore_hf():
                 snapshot = deepcopy(self.before["hf2li"])
                 enabled = {path: item for path, item in snapshot["nodes"].items() if "/demods/" in path and path.endswith("/enable")}
+                pll_enabled = {path: item for path, item in snapshot["nodes"].items() if "/plls/" in path and path.endswith("/enable")}
                 hf.configure_demodulators([{"index": index, "enable": False} for index in range(6)])
-                snapshot["nodes"] = {path: item for path, item in snapshot["nodes"].items() if path not in enabled and "/oscs/" not in path}
+                hf.configure_pll({"index": 1, "enable": False})
+                snapshot["nodes"] = {path: item for path, item in snapshot["nodes"].items()
+                                     if path not in enabled and path not in pll_enabled and "/oscs/0/" not in path}
                 # Restore filters/rates with every spectral stream disabled; the
                 # original aggregate becomes active only after all rates return.
                 detail = hf.reload_settings_snapshot(snapshot)
+                hf.reload_settings_snapshot({"nodes": pll_enabled})
                 hf.reload_settings_snapshot({"nodes": enabled})
                 return detail
             attempt("restore HF2LI", restore_hf)
             def check_hf():
                 actual = hf.export_settings_snapshot(preset=self.snapshot_preset)
                 expected = deepcopy(self.before["hf2li"])
-                expected["nodes"] = {path: item for path, item in expected["nodes"].items() if "/oscs/" not in path}
+                expected["nodes"] = {path: item for path, item in expected["nodes"].items() if "/oscs/0/" not in path}
+                if expected["nodes"].get(f"/{hf.device_id}/plls/1/enable", {}).get("value"):
+                    expected["nodes"].pop(f"/{hf.device_id}/oscs/1/freq", None)
                 comparison = hf.compare_settings_snapshots(expected, actual)
                 if not comparison["match"] or actual.get("read_errors"):
                     raise RuntimeError(str(comparison))
                 comparison["observed_oscillator_nodes"] = {path: item for path, item in actual["nodes"].items() if "/oscs/" in path}
-                comparison["oscillator_note"] = "Stopped external-reference frequency is retained as observation, not restored or compared as a setting"
+                comparison["oscillator_note"] = "Manual detector oscillator restored and compared; externally controlled oscillator frequencies retained as observations"
                 return comparison
             attempt("verify HF2LI restoration", check_hf)
         for name in ("t660_1", "t660_2"):

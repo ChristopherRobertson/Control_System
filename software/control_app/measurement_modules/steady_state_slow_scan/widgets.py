@@ -58,15 +58,21 @@ class SlowScanSettingsWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
-        group = QGroupBox("Scan settings")
+        group = QGroupBox("MIRcat Settings")
         form = QFormLayout(group)
         form.setContentsMargins(4, 4, 4, 4)
-        form.setVerticalSpacing(2)
+        form.setVerticalSpacing(0)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.plan_label = QLineEdit()
         self.plan_label.setPlaceholderText("Optional")
         self.plan_label.textChanged.connect(self._changed)
         form.addRow("Run label", self.plan_label)
+        self.laser_mode = QComboBox()
+        self.laser_mode.setObjectName("laser_mode")
+        self.laser_mode.addItem("Pulsed", "pulsed")
+        self.laser_mode.addItem("Continuous Wave", "cw")
+        self.laser_mode.currentIndexChanged.connect(self._laser_mode_changed)
+        form.addRow("Mode", self.laser_mode)
         self.lower, self.upper = QDoubleSpinBox(), QDoubleSpinBox()
         self.start, self.end = self.upper, self.lower
         for editor, name in ((self.lower, "lower_cm1"), (self.upper, "upper_cm1")):
@@ -131,18 +137,33 @@ class SlowScanSettingsWidget(QWidget):
         if not self._applying:
             self.changed.emit()
 
+    def _laser_mode_changed(self, *_):
+        pulsed = self.laser_mode.currentData() == "pulsed"
+        self.fields["current_ma"].setPlaceholderText("1000" if pulsed else "750")
+        for name in ("repetition_rate_hz", "pulse_width_s"):
+            self.fields[name].setEnabled(pulsed)
+        if not self._applying:
+            self.fields["current_ma"].setText("1000" if pulsed else "750")
+            self.changed.emit()
+
     def read_settings(self):
         from .settings import SlowScanSettings
         values = deepcopy(self._base)
         values.update(mode=self.mode, hardware=True, lower_cm1=self.lower.value(), upper_cm1=self.upper.value(),
                       plan_label=self.plan_label.text().strip(), requested_scan_speed_cm1_s=self.scan_speed.value(),
-                      replicates=self.repeats.value())
+                      replicates=self.repeats.value(), laser_mode=self.laser_mode.currentData())
         scales = {key: scale for key, _label, scale in self.AUTO_FIELDS}
         for key, editor in self.fields.items():
             text = editor.text().strip()
+            if values["laser_mode"] == "cw" and key in ("repetition_rate_hz", "pulse_width_s"):
+                try:
+                    values[key] = None if not text or text.casefold() == "auto" else float(text) * scales[key]
+                except ValueError:
+                    values[key] = self._base[key]
+                continue
             values[key] = (None if not text or text.casefold() == "auto" else int(text) if key.endswith("filter_order")
                            else float(text) * scales.get(key, 1.))
-        if values["repetition_rate_hz"] is not None and values["pulse_width_s"] is not None:
+        if values["laser_mode"] == "pulsed" and values["repetition_rate_hz"] is not None and values["pulse_width_s"] is not None:
             if values["repetition_rate_hz"] * values["pulse_width_s"] > .30 + 1e-12:
                 raise ValueError("Pulse duty must be 30% or less")
         return SlowScanSettings.from_dict(values).to_dict()
@@ -156,6 +177,8 @@ class SlowScanSettingsWidget(QWidget):
         self._applying = True
         try:
             self._base = data
+            self.laser_mode.setCurrentIndex(self.laser_mode.findData(data["laser_mode"]))
+            self._laser_mode_changed()
             self.plan_label.setText(data.get("plan_label", ""))
             self.lower.setValue(data["lower_cm1"])
             self.upper.setValue(data["upper_cm1"])
@@ -260,9 +283,11 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.settings_editor = settings
         self.settings_layout.setContentsMargins(6, 6, 6, 6)
         self.settings_layout.setSpacing(2)
+        self.settings_layout.setContentsMargins(2, 2, 2, 2)
         self.left_layout.setSpacing(4)
         self.settings_extras_layout.setSpacing(2)
         self.advanced_layout.setContentsMargins(4, 4, 4, 4)
+        self.advanced_group.setTitle("HF2LI Settings")
         self.file_layout.setDirection(QBoxLayout.Direction.LeftToRight)
         self.preliminary_button.hide()
         self.start_button.setText("Sample")
@@ -273,8 +298,8 @@ class SlowScanPanel(CompactMeasurementPanel):
         if context.mode == "dual":
             self.blank_button.hide()
             self.load_blank_button.hide()
-        self.control_status = QLabel("Dark is acquired automatically. A blank is optional." if context.mode == "single"
-                                    else "Sample and reference are recorded together. Dark is automatic.")
+        self.control_status = QLabel("Automatic dark; blank optional." if context.mode == "single"
+                                    else "Automatic dark; simultaneous reference.")
         self.control_status.setWordWrap(True)
         self.settings_extras_layout.addWidget(self.control_status)
         self.load_dark_button = QPushButton("Load dark…")

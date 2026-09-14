@@ -25,7 +25,7 @@ def live_readbacks(mode="single"):
     return {"hf2li":caps,"hf2li_settings":{"nodes":nodes,"read_errors":[]},
             "qcl_windows":[{"qcl":1,"min_cm1":1600.,"max_cm1":2100.}],"qcl_pulse_params":{"1":{"pulse_rate_hz":120000.,"pulse_width_ns":1000.,"current_ma":1.}},
             "t660_1":{"queries":{"synth_frequency":{"ok":True,"response":"100000Hz"}},"channels":{"B":{"width_edge":{"ok":True,"response":"1000ns"}}}},
-            "qcl_current_limits":{"1":(0.,1000.)},"qcl_pulse_limits":{"1":{"max_pulse_rate_hz":300000.,"max_pulse_width_ns":5000.,"max_duty_cycle":30.}},"probe_width_s":1e-6,"t660_frame_capacity":8192,"marker_width_us":1000,"sweep":{"scan_rate_cm1_s":2.}}
+            "qcl_current_limits":{"1":(0.,1000.)},"qcl_pulse_limits":{"1":{"max_pulse_rate_hz":3000000.,"max_pulse_width_ns":5000.,"max_duty_cycle":30.}},"probe_width_s":1e-6,"t660_frame_capacity":8192,"marker_width_us":1000,"sweep":{"scan_rate_cm1_s":2.}}
 
 
 def plan_for(settings=None, readbacks=None):
@@ -100,7 +100,7 @@ def test_aggregate_throughput_and_frame_memory_are_actual_blockers():
     plan=plan_for(SlowScanSettings(mode="dual",lower_cm1=1900.,upper_cm1=1901.))
     limited=build_plan(plan.settings,replace(plan.inputs,aggregate_max_rate_hz=1.))
     assert any("throughput" in error for error in limited.errors)
-    limited=build_plan(plan.settings,replace(plan.inputs,t660_frame_capacity=2))
+    limited=build_plan(plan.settings,replace(plan.inputs,t660_frame_capacity=1))
     assert any("physical frame memory" in error for error in limited.errors)
 
 
@@ -215,15 +215,15 @@ def test_saved_removed_controls_cannot_change_selected_settings_or_select_qcl2()
     restored = SlowScanSettings.from_dict(data)
     changed = plan_for(restored)
     assert changed.selected == plain.selected and changed.blocks == plain.blocks
-    assert restored.imported_requested_metadata == retired and restored.pulse_width_s is None
+    assert restored.imported_requested_metadata == retired and restored.pulse_width_s == 150e-9
     assert SlowScanSettings.from_dict(restored.to_dict()).imported_requested_metadata == retired
 
 
 def test_legacy_cadence_migrates_but_electrical_width_is_not_optical_width():
     settings = SlowScanSettings.from_dict({"probe_rate_hz":80000.,"probe_width_s":5e-6})
-    assert settings.repetition_rate_hz == 80000. and settings.pulse_width_s is None
+    assert settings.repetition_rate_hz == 80000. and settings.pulse_width_s == 150e-9
     plan = plan_for(replace(settings,lower_cm1=1900.,upper_cm1=1901.))
-    assert plan.selected["pulse_width_s"] == pytest.approx(1e-6)
+    assert plan.selected["pulse_width_s"] == pytest.approx(150e-9)
     assert plan.selected["probe_width_s"] == pytest.approx(1e-6)
 
 
@@ -255,7 +255,7 @@ def test_visible_optical_duty_limit_is_inclusive_and_independent_of_ttl_width():
     assert not any("30% duty" in error for error in at_limit.errors)
     above = build_plan(SlowScanSettings(repetition_rate_hz=100000.,pulse_width_s=3.0001e-6))
     assert "30% duty" in " ".join(above.errors)
-    plan = plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,pulse_width_s=2e-6))
+    plan = plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,repetition_rate_hz=100000.,pulse_width_s=2e-6))
     assert plan.ready and plan.selected["pulse_duty_fraction"] == pytest.approx(.2)
     assert plan.selected["probe_width_s"] == 1e-6
     assert plan.inputs.scientific_profile["qcl_pulse_params"]["1"]["pulse_width_ns"] == pytest.approx(2000.)
@@ -265,13 +265,13 @@ def test_internal_vendor_duty_is_separate_and_cannot_exceed_thirty_percent():
     raw = live_readbacks()
     raw["qcl_pulse_params"]["1"]["pulse_rate_hz"] = 190000.
     raw["qcl_pulse_limits"]["1"]["max_duty_cycle"] = 40.
-    plan = plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,pulse_width_s=2e-6),raw)
+    plan = plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,repetition_rate_hz=100000.,pulse_width_s=2e-6),raw)
     assert plan.ready
     params = plan.inputs.scientific_profile["qcl_pulse_params"]["1"]
     assert params["pulse_rate_hz"] * params["pulse_width_ns"] * 1e-9 <= .30 + 1e-12
-    assert params["pulse_rate_hz"] > plan.selected["repetition_rate_hz"]
+    assert params["pulse_rate_hz"] == plan.selected["repetition_rate_hz"]
     raw["qcl_pulse_limits"]["1"]["max_duty_cycle"] = 10.
-    assert plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,pulse_width_s=2e-6),raw).errors
+    assert plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,repetition_rate_hz=100000.,pulse_width_s=2e-6),raw).errors
 
 
 def test_internal_rate_ceiling_uses_sdk_float32_optical_width_not_unrounded_request():
@@ -290,7 +290,7 @@ def test_internal_rate_ceiling_uses_sdk_float32_optical_width_not_unrounded_requ
     assert params["pulse_width_ns"] == encoded_width
     assert plan.selected["pulse_width_s"] == encoded_width*1e-9
     assert encoded_rate == params["pulse_rate_hz"]
-    assert 150000. < encoded_rate < 199999.078125
+    assert encoded_rate == 150000.
     assert encoded_rate * encoded_width * 1e-9 <= .30
 
 

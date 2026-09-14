@@ -121,7 +121,7 @@ def compile_timing(plan: SlowScanPlan) -> CompiledTiming:
     probe_recipe = {"stop_first": True, "trigger_source": "OFF", "force_eod": True,
                     "predivider": 1, "gate_mode": 0, "burst_enabled": False,
                     "clock": {"frequency": f"{probe_rate:.12g}Hz", "shots": 0},
-                    "channels": {channel: _channel(enabled=channel in "ABC", delay_s=0., width_s=probe_width)
+                    "channels": {channel: _channel(enabled=channel in "AC", delay_s=0., width_s=probe_width)
                                  for channel in "ABCD"}}
     compiled: list[TimingBlock] = []
     delays: dict[str, float] = {}

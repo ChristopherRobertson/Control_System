@@ -189,6 +189,7 @@ class QCLService(InjectedService):
         self.tune_history = []
         self.pulse = {"pulse_rate_hz": 120000., "pulse_width_ns": 1000., "current_ma": 500.}
         self.pulse_history = []
+        self.laser_mode, self.temperature_c = 1, 20.
         self.trigger = {"pulse_mode": 2, "process_trigger_mode": 1, "start": 1900., "stop": 1900.4,
                         "interval": .1, "units": 2, "dwell_us": 0, "after_off_us": 0}
         self.width_us = 1000
@@ -207,7 +208,14 @@ class QCLService(InjectedService):
     def tune_to_wavenumber(self, *args, **kwargs): self.touch("tune_to_wavenumber"); self.tune_history.append((args,kwargs))
     def get_num_installed_qcls(self): self.touch("get_num_installed_qcls"); return 1
     def get_qcl_tuning_range(self, qcl): self.touch("get_qcl_tuning_range"); return {"qcl": qcl, "min_cm1": 1800., "max_cm1": 2000.}
-    def get_qcl_pulse_limits(self, qcl): return {"max_pulse_rate_hz": 200000., "max_pulse_width_ns": 2000., "max_duty_cycle": 30.}
+    def get_qcl_pulse_limits(self, qcl): return {"max_pulse_rate_hz": 3_000_000., "max_pulse_width_ns": 2000., "max_duty_cycle": 30.}
+    def is_cw_allowed(self, qcl): return True
+    def get_qcl_cw_current_limits(self, qcl): return (0., 800.)
+    def get_qcl_operating_mode(self, qcl): return self.laser_mode
+    def get_qcl_set_temperature(self, qcl): return self.temperature_c
+    def set_qcl_operating_params(self, qcl, *, laser_mode, temperature_c, **params):
+        self.laser_mode, self.temperature_c = laser_mode, temperature_c
+        return self.set_qcl_pulse_params(qcl=qcl, **params)
     def get_qcl_current_limits(self, qcl): assert qcl == 1; return (0., 1000.)
     def get_qcl_pulse_rate(self, qcl): return self.pulse["pulse_rate_hz"]
     def get_qcl_pulse_width(self, qcl): return self.pulse["pulse_width_ns"]
@@ -241,6 +249,7 @@ class QCLService(InjectedService):
 
     def set_wavelength_trigger_params(self, **params):
         self.touch("set_wavelength_trigger_params")
+        self.trigger_history.append(deepcopy(params))
         self.trigger = deepcopy(params)
 
     def start_sweep_scan(self, **params):
@@ -273,6 +282,14 @@ class QCLService(InjectedService):
 class HFService(InjectedService):
     device_id = "devTEST"
 
+    def configure_pll(self, settings):
+        for key, value in settings.items():
+            if key != "index":
+                self.nodes[f"/{self.device_id}/plls/{settings['index']}/{key}"] = {"value": value, "type": "int"}
+
+    def get_oscillator_frequency(self, index):
+        return self.nodes[f"/{self.device_id}/oscs/{index}/freq"]["value"]
+
     def __init__(self, guard, clock, services):
         super().__init__(guard)
         self.clock, self.services = clock, services
@@ -293,6 +310,11 @@ class HFService(InjectedService):
         self.reload_calls = []
         self.native_delivered = []
         self.coerce_range_to = None
+        self.nodes[f"/{self.device_id}/oscs/1/freq"] = {"value": 12345., "type": "double"}
+        self.nodes[f"/{self.device_id}/plls/1/enable"] = {"value": 0, "type": "int"}
+        for i in range(6):
+            for field in ("phaseshift", "sinc"):
+                self.nodes[f"/{self.device_id}/demods/{i}/{field}"] = {"value": 0, "type": "double" if field == "phaseshift" else "int"}
 
     def export_settings_snapshot(self, **kwargs):
         self.touch("export_settings_snapshot")
@@ -304,7 +326,7 @@ class HFService(InjectedService):
     def configure_demodulators(self, values):
         self.touch("configure_demodulators")
         names = {"rate_sps": "rate", "timeconstant_s": "timeconstant", "order": "order", "adcselect": "adcselect", "enable": "enable",
-                 "oscselect": "oscselect", "harmonic": "harmonic", "trigger": "trigger"}
+                 "oscselect": "oscselect", "harmonic": "harmonic", "trigger": "trigger", "phaseshift": "phaseshift", "sinc": "sinc"}
         for item in values:
             for key, node in names.items():
                 if key in item:
@@ -313,6 +335,8 @@ class HFService(InjectedService):
     def apply_preset(self, preset):
         self.touch("apply_preset")
         self.presets.append(deepcopy(preset.settings))
+        for oscillator in preset.settings.get("oscillators", []):
+            self.nodes[f"/{self.device_id}/oscs/{oscillator['index']}/freq"]["value"] = oscillator["frequency_hz"]
         self.configure_demodulators(preset.settings["demodulators"])
         for item in preset.settings["signal_inputs"].values():
             for key, node in (("ac", "ac"), ("impedance_50ohm", "imp50"), ("differential", "diff"), ("range_v", "range")):
@@ -414,11 +438,11 @@ def configured(tmp_path, monkeypatch, mode="dual", *, live=False, settings_overr
     context = ContextFactory(configuration_provider=lambda: config, save_root_provider=lambda: tmp_path,
                              real_device_factories={name: make(name) for name in ("hf2li", "mircat", "t660_1", "t660_2")},
                              ownership=coordinator).for_experiment("steady_state_slow_scan").for_mode(mode)
-    settings = SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1900.4,
+    settings = SlowScanSettings(mode=mode, replicates=2, lower_cm1=1900., upper_cm1=1900.4,
                                 requested_scan_speed_cm1_s=2., time_constant_s=.001, reference_time_constant_s=.002, reference_filter_order=3,
                                 condition=ConditionIdentity(configuration_id="fixture-config"))
     if live:
-        settings = SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1900.4, requested_scan_speed_cm1_s=2.)
+        settings = SlowScanSettings(mode=mode, replicates=2, lower_cm1=1900., upper_cm1=1900.4, requested_scan_speed_cm1_s=2.)
         plan, compiled = build_plan(settings), None
     else:
         inputs = simulation_inputs(settings)
@@ -632,7 +656,7 @@ def test_owned_installed_adapter_dark_and_descending_repetitions_retain_native(t
     assert demods[0]["order"] == 2
     if mode == "dual":
         assert demods[3]["order"] == 3 and demods[3]["timeconstant_s"] == .002
-        assert preset["signal_inputs"]["ch2"]["range_v"] == .002
+        assert preset["signal_inputs"]["ch2"]["range_v"] == 2.
     else:
         assert 3 not in demods
     assert all(not value for name in ("t660_1", "t660_2") for value in services[name].channels.values())
@@ -802,10 +826,11 @@ def test_hf_restore_defers_enables_and_retains_external_oscillator_drift_as_obse
         restored = backend.restore()
     assert restored["safe_verified"], restored["errors"]
     hf = services["hf2li"]
-    assert len(hf.reload_calls) == 2
+    assert len(hf.reload_calls) == 3
     assert all(not ("/demods/" in path and path.endswith("/enable")) for path in hf.reload_calls[0])
-    assert all("/demods/" in path and path.endswith("/enable") for path in hf.reload_calls[1])
-    assert all("/oscs/" not in path for batch in hf.reload_calls for path in batch)
+    assert all("/plls/" in path and path.endswith("/enable") for path in hf.reload_calls[1])
+    assert all("/demods/" in path and path.endswith("/enable") for path in hf.reload_calls[2])
+    assert all("/oscs/0/" not in path for batch in hf.reload_calls for path in batch)
     assert restored["records"]["verify HF2LI restoration"]["observed_oscillator_nodes"]
     context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True, detail="Observed oscillator drift retained")
 
@@ -825,7 +850,7 @@ def test_mircat_ignored_restore_command_is_detected_by_independent_readback(tmp_
         services["mircat"].set_qcl_pulse_params = lambda **kwargs: kwargs
         restored = backend.restore()
     assert not restored["safe_verified"]
-    assert any("current_ma restoration" in error for error in restored["errors"])
+    assert any("restoration readback differs" in error for error in restored["errors"])
     assert not services["mircat"].emission
     context.ownership.release(operation.ownership, safe_verified=False, preservation_verified=True, detail="MIRcat restoration failure retained")
     assert coordinator.snapshot()["state"] == "fault"
@@ -848,7 +873,7 @@ def test_safe_idle_uses_frame_commands_only_on_the_frame_capable_generator(tmp_p
 def test_current_drives_requested_range_and_real_coercion_is_used_and_restored(tmp_path, monkeypatch, mode, current, requested):
     from control_app.measurement_host.presentation import StartSnapshot
     from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
-    settings = SlowScanSettings(mode=mode,lower_cm1=1900.,upper_cm1=1900.4,current_ma=current,pulse_width_s=1.5e-6)
+    settings = SlowScanSettings(mode=mode,lower_cm1=1900.,upper_cm1=1900.4,current_ma=current,repetition_rate_hz=100000.,pulse_width_s=1.5e-6)
     context, coordinator, operation, _, draft, _, services = configured(tmp_path,monkeypatch,mode,live=True,settings_override=settings)
     original = HFService.__init__
     def initialize(self,*args):
@@ -898,7 +923,7 @@ def test_optical_duty_is_rechecked_before_emission_for_internal_and_external_rat
 
 
 def test_prepared_plan_retains_accepted_sdk_float_readbacks_for_compatibility(tmp_path,monkeypatch):
-    context, _, operation, backend, draft, _, services = configured(tmp_path,monkeypatch,live=True)
+    context, _, operation, backend, draft, _, services = configured(tmp_path,monkeypatch,live=True,settings_override=SlowScanSettings(mode="dual",lower_cm1=1900.,upper_cm1=1900.4,pulse_width_s=140e-9))
     original = QCLService.get_qcl_pulse_width
     monkeypatch.setattr(QCLService,"get_qcl_pulse_width",lambda self,qcl:original(self,qcl)*(1+1e-7))
     with context.hardware_scope(operation):
@@ -930,10 +955,11 @@ def test_fresh_readonly_pulse_checks_catch_changes_after_configuration_before_em
                 return value
             setattr(device,method,changed)
         if name == "mircat" and not fault.startswith("dds"):
-            method = "tune_to_wavenumber" if fault == "current_after_tune" else "start_sweep_scan" if fault.endswith("sweep") else "set_external_sweep_trigger_params"
+            method = "tune_to_wavenumber" if fault == "current_after_tune" else "start_sweep_scan" if fault.endswith("sweep") else "set_wavelength_trigger_params"
             original = getattr(device,method)
             def changed(*args,**kwargs):
                 value = original(*args,**kwargs)
+                if method == "set_wavelength_trigger_params" and kwargs.get("process_trigger_mode") != 2: return value
                 if fault.startswith("width"): device.pulse["pulse_width_ns"] = 1500.
                 elif fault.startswith("internal"): device.pulse["pulse_rate_hz"] = 130000.
                 elif fault == "limits_after_sweep":
@@ -952,7 +978,7 @@ def test_fresh_readonly_pulse_checks_catch_changes_after_configuration_before_em
         else:
             actual_plan = backend.prepare(plan,compiled,lambda:None,lambda *args:None)
             programmed_count = len(services["mircat"].pulse_history)
-            with pytest.raises(ValueError,match="DDS|readback differs|limits changed"):
+            with pytest.raises(ValueError,match="DDS|readback differs|limits changed|exceeds connected"):
                 backend.acquire_block(compiled.blocks[0],actual_plan,lambda:None,lambda *args:None)
             # No setter during the final checks may hide a changed actual value.
             assert len(services["mircat"].pulse_history) == programmed_count
@@ -962,7 +988,7 @@ def test_fresh_readonly_pulse_checks_catch_changes_after_configuration_before_em
         assert observed["pulse"] and observed["pulse_limits"] and observed["current_limits"]
         if fault.startswith("dds"):
             assert observed["external_rate_hz"] == 110000.
-            assert observed["external_duty_fraction"] == pytest.approx(.11)
+            assert observed["external_duty_fraction"] is None
         elif fault == "current_after_tune": assert observed["stage"] == "after_tune"
         else: assert observed["stage"] == "before_emission"
         assert "start_emission" not in services["mircat"].calls
@@ -1065,8 +1091,8 @@ def test_installed_default_descending_scan_uses_total_repetitions_without_ascend
     result = SlowScanRunner(context).run(StartSnapshot(operation,"measurement",draft,{}),worker())
     assert result["status"] == "completed" and result["restoration"]["safe_verified"]
     assert services["mircat"].sweep_history == [{"start_cm1":2050.,"stop_cm1":1650.,"scan_rate_cm1_s":40.,"qcl":1,"repetitions":3}]
-    assert len(services["mircat"].trigger_history) == 1
-    assert all(row["start_cm1"] == 2050. and row["stop_cm1"] == 1650. for row in services["mircat"].trigger_history)
+    assert len([x for x in services["mircat"].trigger_history if x["process_trigger_mode"] == 2]) == 1
+    assert all(row["start"] == 2050. and row["stop"] == 1650. for row in services["mircat"].trigger_history if row["process_trigger_mode"] == 2)
     assert services["mircat"].tune_history == [((2050.,),{"qcl":1})]
     assert len(result["sweeps"]) == len(result["spectra"]) == 3
     for sweep in result["sweeps"]:

@@ -65,6 +65,7 @@ class SpectralSegment:
 @dataclass(frozen=True)
 class SlowScanSettings:
     mode: str = "single"
+    laser_mode: str = "pulsed"
     condition: ConditionIdentity = field(default_factory=ConditionIdentity)
     lower_cm1: float = 1650.0
     upper_cm1: float = 2050.0
@@ -77,15 +78,19 @@ class SlowScanSettings:
     reference_time_constant_s: float | None = None
     reference_filter_order: int | None = None
     requested_reference_sample_rate_hz: float | None = None
-    replicates: int = 2
-    repetition_rate_hz: float | None = None
-    pulse_width_s: float | None = None
+    replicates: int = 1
+    repetition_rate_hz: float | None = 2_000_000.
+    pulse_width_s: float | None = 150e-9
     hardware: bool = True
     calibration_bundle_ids: tuple[str, ...] = ()
     plan_label: str = ""
     imported_requested_metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.laser_mode not in ("pulsed", "cw"):
+            raise ValueError("Laser mode must be pulsed or cw")
+        if self.current_ma is None:
+            object.__setattr__(self, "current_ma", 750. if self.laser_mode == "cw" else 1000.)
         if self.mode not in ("single", "dual"):
             raise ValueError("Slow scan mode must be single or dual")
         object.__setattr__(self, "calibration_bundle_ids", tuple(self.calibration_bundle_ids))

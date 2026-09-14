@@ -3,12 +3,14 @@
   "experiment_id": "steady_state_slow_scan",
   "status": "declarative architecture, no operating-value authority",
   "detector_modes": ["single", "dual"],
+  "laser_modes": ["pulsed", "cw"],
   "procedure": "Blank/Sample; optional sample and temperature annotations do not change operation",
   "recorder": "hf2li",
   "pump_outputs": {"t660_2.A": "OFF", "t660_2.B": "OFF"},
   "standing_exclusions": ["t660_1.D", "t660_2.D", "hf2li.DIO1", "mircat.DB9.5", "mircat.DB9.6", "mircat.DB9.8"],
   "timing": {
-    "probe_clock": "t660_1.A/B; selected from installed readbacks and supported overrides",
+    "laser_pulses": "MIRcat internal pulse generator in Pulsed mode; continuous emission in CW mode",
+    "probe_clock": "t660_1.A supplies the timing reference; B remains OFF",
     "frame_clock": "t660_1.C to t660_2.TRIG_IN",
     "process": "t660_2.C active-low to mircat.DB9.4; finite frame schedule",
     "upload": "T660Service.preload_frame_table with acknowledged pending fields and cancellation",
@@ -19,6 +21,7 @@
     "dual": ["automatic emission-OFF detector dark", "simultaneous sample and reference", "optional compatible Q0 for comparison"]
   },
   "claims": {
+    "detector_signal": "zero-frequency HF2LI demodulator magnitude; native signed X/Y retained; detector/preamp DC response unqualified",
     "Q": "S/R; reference-normalized signal",
     "delta_absorbance": "-log10(Q/Q0) only on valid compatible support",
     "absolute_absorbance": "-log10(Q/B) only with applicable measured path/background B",

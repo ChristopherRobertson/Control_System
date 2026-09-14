@@ -9,16 +9,20 @@ have independent settings, controls and results.
 1. Select the top-bar save location and the **Start** and **End** wavenumbers within
    the connected QCL 1 limits. Start must be higher than End; the defaults are
    **2050 → 1650 cm⁻¹** at **40 cm⁻¹/s**. Set **Scan speed** from 0.1 to 10,000 cm⁻¹/s,
-   **Current** in mA, repetition rate, **Pulse width** in ns and **Number of Scans**
-   for the total number of descending Start-to-End scans. Acquisition uses only
-   this direction. Pulse width
-   programs the MIRcat laser pulse duration; the T660 electrical trigger width
-   is selected automatically and remains separate. Repetition rate in Hz
+   and **Number of Scans** (default **1**) for the total number of descending
+   Start-to-End scans. Acquisition uses only this direction.
+   **MIRcat Settings** offers **Pulsed** (default) or **Continuous Wave**.
+   Selecting a mode resets **Current** to **1000 mA** for Pulsed or **750 mA** for CW.
+   The current remains editable and is checked against that mode's connected QCL limits.
+   Repetition rate and **Pulse width** are editable only in Pulsed mode, defaulting
+   to **2 MHz** and **150 ns**. These program the MIRcat's internal pulse generator;
+   the independent T660 clock schedules scan Process Triggers. Repetition rate in Hz
    multiplied by pulse width in seconds must not exceed the smaller of 0.30
    and the connected controller's
-   duty limit. The configured MIRcat internal pulse duty uses the same bound.
-   Connected current, frequency and pulse-width limits also apply. Overrides remain visible;
-   each can be changed independently. **Sampling rate (Sa/s)** in Advanced overrides
+   duty limit. The defaults give exactly **30%**. CW has no pulse duty limit;
+   dormant pulse settings are retained but do not determine CW output.
+   Connected frequency and pulse-width limits also apply in Pulsed mode.
+   **Sampling rate (Sa/s)** in **HF2LI Settings**
    accepts a supported detector sampling rate or **Auto**. Dual mode has independent
    sample and reference sampling-rate controls.
 2. In single mode, load the background when a blank is wanted and acquire
@@ -52,8 +56,11 @@ The requested voltage is sent to HF2LI. The instrument may select a different
 supported range. Both requested and actual values are retained, and control
 compatibility uses the actual readback.
 
-After configuration and immediately before emission, actual T660 repetition
-rate and MIRcat pulse, current and limit readbacks are checked and retained.
+After configuration and immediately before emission, the T660 timing clock and
+MIRcat mode, temperature setpoint, pulse, current and limit readbacks are checked
+and retained. CW additionally requires the controller to report CW support for QCL 1.
+Cleanup restores the prior laser mode, current, pulse parameters and temperature
+setpoint, as well as HF2LI settings, and verifies independent readbacks.
 
 Protein, sample, temperature and preparation annotations do not choose an
 acquisition recipe or prevent an operation. No promoted qualification profile is
@@ -71,6 +78,22 @@ is exclusive through the host until cleanup and preservation finish.
 
 HF2LI is the spectral recorder. Individual scans remain separate. Historical
 records retain their original directions and repeats.
+New runs use DC-coupled HF2LI signal inputs and oscillator index 1 at zero frequency
+with harmonic 1, phase 0 and sinc filtering disabled. Oscillator index 0 remains
+locked to the independent T660 timing reference. The internal MIRcat pulse mode
+allows the requested 2 MHz / 150 ns setting without an external-trigger headroom
+requirement. T660-1 B, formerly the laser pulse trigger, stays OFF.
+
+The plotted detector signal is the HF2LI zero-frequency demodulator magnitude,
+not a calibrated optical power or validated mean intensity. Signed X/Y readings
+are preserved in the native streams. The detector/preamp DC response remains
+unqualified: the retained VIGO datasheet lists AC and DC amplifier variants, and
+operation with a CW laser alone does not identify the installed coupling. An
+AC-coupled detector chain cannot provide steady CW intensity this way. Both
+mode and recording method are included in control compatibility, so older
+carrier-demodulated controls and Pulsed/CW controls cannot be mixed silently.
+The manual detector oscillator is restored and checked on completion or abort;
+frequencies controlled by a restored external PLL remain observations.
 Missing intervals are not filled automatically. Original detector streams,
 integer timestamps, controller markers and axes remain available alongside
 processed values and any applied corrections.
@@ -115,6 +138,7 @@ python -m pytest software/tests/measurement_modules/steady_state_slow_scan -q
 ```
 
 Verification exercises the installed adapters through injected transports in both
-detector modes, including Blank/Sample reuse, delayed PLL lock, cancellation,
+detector and laser modes, including mode-specific current limits, the inclusive
+30% pulse-duty boundary, one descending scan by default, Blank/Sample reuse, delayed PLL lock, cancellation,
 device failures and restoration. No physical measurements were taken during
 development.
