@@ -71,10 +71,12 @@ class SlowScanSettings:
     purpose: str = "survey"
     requested_scan_speed_cm1_s: float = 2.0
     current_ma: float | None = None
+    requested_sample_rate_hz: float | None = None
     time_constant_s: float | None = None
     filter_order: int | None = None
     reference_time_constant_s: float | None = None
     reference_filter_order: int | None = None
+    requested_reference_sample_rate_hz: float | None = None
     replicates: int = 2
     repetition_rate_hz: float | None = None
     pulse_width_s: float | None = None

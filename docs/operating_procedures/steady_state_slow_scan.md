@@ -6,16 +6,19 @@ have independent settings, controls and results.
 
 ## Operation
 
-1. Select the top-bar save location and one contiguous wavenumber range within
+1. Select the top-bar save location and the **Start** and **End** wavenumbers within
    the connected QCL 1 limits. Set **Scan speed** from 0.1 to 10,000 cm⁻¹/s,
-   **Current** in mA, repetition rate, **Pulse width** in ns and repeats. Pulse width
+   **Current** in mA, repetition rate, **Pulse width** in ns and **Number of Scans**
+   for each direction. Pulse width
    programs the MIRcat laser pulse duration; the T660 electrical trigger width
    is selected automatically and remains separate. Repetition rate in Hz
    multiplied by pulse width in seconds must not exceed the smaller of 0.30
    and the connected controller's
    duty limit. The configured MIRcat internal pulse duty uses the same bound.
    Connected current, frequency and pulse-width limits also apply. Overrides remain visible;
-   each can be changed independently.
+   each can be changed independently. **Sampling rate (Sa/s)** in Advanced overrides
+   accepts a supported detector sampling rate or **Auto**. Dual mode has independent
+   sample and reference sampling-rate controls.
 2. In single mode, load the background when a blank is wanted and acquire
    **Blank**. Then load the sample and acquire **Sample**. Detector dark data
    are acquired automatically

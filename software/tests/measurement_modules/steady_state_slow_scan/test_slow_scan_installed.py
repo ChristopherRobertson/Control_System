@@ -376,11 +376,13 @@ class HFService(InjectedService):
                     dio[(times >= edge) & (times <= edge + .001)] |= np.uint64(1 << 22)
         sample_rate = self.nodes[f"/{self.device_id}/demods/0/rate"]["value"]
         sample_ticks = ticks[::max(1, round(10000/sample_rate))]
+        reference_rate = self.nodes[f"/{self.device_id}/demods/3/rate"]["value"]
+        reference_ticks = ticks[::max(1, round(10000/reference_rate))]
         sample = np.linspace(.001, .0011, len(sample_ticks)) if generation == "dark" else np.linspace(.8, .9, len(sample_ticks))
-        reference = np.linspace(.0014, .0015, len(sample_ticks)) if generation == "dark" else np.ones(len(sample_ticks))
+        reference = np.linspace(.0014, .0015, len(reference_ticks)) if generation == "dark" else np.ones(len(reference_ticks))
         data = {f"/{self.device_id}/demods/0/sample": {"timestamp": sample_ticks, "x": sample, "y": np.zeros(len(sample_ticks))},
                 f"/{self.device_id}/demods/2/sample": {"timestamp": ticks, "dio": dio},
-                f"/{self.device_id}/demods/3/sample": {"timestamp": sample_ticks, "x": reference, "y": np.zeros(len(sample_ticks))}}
+                f"/{self.device_id}/demods/3/sample": {"timestamp": reference_ticks, "x": reference, "y": np.zeros(len(reference_ticks))}}
         record = {"data": data}
         self.native_delivered.append(record)
         return record
@@ -1012,3 +1014,32 @@ def test_final_mircat_idle_verification_retains_fault_and_attempts_all_cleanup(t
     assert coordinator.snapshot()["state"] == "fault"
     loaded = load_run(result["path"],expected_mode="dual")
     assert loaded["restoration"]["records"]["MIRcat final idle readbacks"] == record
+
+
+@pytest.mark.parametrize("mode,sample_request,reference_request", [("single",10000.,None),("dual",10000.,1000.),("dual",None,10000.)])
+def test_installed_sampling_overrides_configure_independent_native_rates_and_persist(tmp_path,monkeypatch,mode,sample_request,reference_request):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+    settings = SlowScanSettings(mode=mode,lower_cm1=1900.,upper_cm1=1900.4,
+        requested_sample_rate_hz=sample_request,requested_reference_sample_rate_hz=reference_request)
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path,monkeypatch,mode,live=True,settings_override=settings)
+    result = SlowScanRunner(context).run(StartSnapshot(operation,"measurement",draft,{}),worker())
+    assert result["status"] == "completed" and result["restoration"]["safe_verified"]
+    expected = {"sample":sample_request or 1000.}
+    if mode == "dual": expected["reference"] = reference_request or 1000.
+    demods = {item["index"]:item for item in services["hf2li"].presets[0]["demodulators"]}
+    first_record = services["hf2li"].native_delivered[0]["data"]
+    for role,rate in expected.items():
+        index = 0 if role == "sample" else 3
+        assert demods[index]["rate_sps"] == rate
+        assert result["plan"]["selected"]["hf2li"][role]["rate_sps"] == rate
+        ticks = first_record[f"/devTEST/demods/{index}/sample"]["timestamp"]
+        assert np.all(np.diff(ticks) == round(1e6/rate))
+    assert all(np.count_nonzero(spectrum.valid) > 20 for spectrum in result["spectra"])
+    loaded = load_run(result["path"],expected_mode=mode)
+    for field,requested in (("requested_sample_rate_hz",sample_request),("requested_reference_sample_rate_hz",reference_request)):
+        assert result["settings"][field] == loaded["settings"][field] == requested
+        assert result["plan"]["requested"][field] == requested
+    assert loaded["plan"]["selected"]["hf2li"] == result["plan"]["selected"]["hf2li"]
+    assert coordinator.snapshot()["state"] == "free"

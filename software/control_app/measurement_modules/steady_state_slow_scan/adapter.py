@@ -76,7 +76,7 @@ class SlowScanScientificAdapter:
             if tau and order and (label == "Sample" or self.context.mode == "dual"):
                 filters.append(f"{label} {tau*1000:g} ms, order {order}")
         return (("Range", f"{settings.lower_cm1:g}–{settings.upper_cm1:g} cm⁻¹"),
-                ("Speed / repeats", f"{settings.requested_scan_speed_cm1_s:g} cm⁻¹/s / {settings.replicates} each direction"),
+                ("Speed / scans", f"{settings.requested_scan_speed_cm1_s:g} cm⁻¹/s / {settings.replicates} each direction"),
                 ("Laser current", f"{current:g} mA" if current is not None else "Auto"),
                 ("Pulse duty", duty), ("HF2LI filters", "; ".join(filters) or "Auto"),
                 ("Estimated time", f"{duration:.3g} s" if duration and plan.blocks else "Available after device readback"))

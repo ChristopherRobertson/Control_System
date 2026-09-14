@@ -121,7 +121,8 @@ def build_plan(settings, inputs=None):
     if type(settings.replicates) is not int or not 1 <= settings.replicates <= 8191: errors.append("Replicates must be an integer in 1..8191")
     if not _positive(settings.lower_cm1) or not _positive(settings.upper_cm1) or settings.lower_cm1 >= settings.upper_cm1:
         errors.append("Enter finite lower < upper wavenumbers")
-    names = ("time_constant_s", "filter_order", "reference_time_constant_s", "reference_filter_order", "repetition_rate_hz", "pulse_width_s")
+    names = ("time_constant_s", "filter_order", "reference_time_constant_s", "reference_filter_order", "repetition_rate_hz", "pulse_width_s",
+             "requested_sample_rate_hz", "requested_reference_sample_rate_hz")
     for name in names:
         if getattr(settings, name) is not None and not _positive(getattr(settings, name)): errors.append(f"{name} must be Auto or finite and positive")
     if settings.current_ma is not None and (not isinstance(settings.current_ma, (int, float)) or isinstance(settings.current_ma, bool)
@@ -170,11 +171,20 @@ def build_plan(settings, inputs=None):
             live_tau = previous.get("timeconstant_s")
             tau = min(constants, key=lambda value: abs(value-live_tau)) if _positive(live_tau) else min(constants)
         response = _filter(order, tau)
-        supported = inputs.supported_sample_rates_hz if role == "sample" else (inputs.supported_reference_sample_rates_hz or inputs.supported_sample_rates_hz)
+        requested_rate = settings.requested_sample_rate_hz if role == "sample" else settings.requested_reference_sample_rate_hz
+        supported = inputs.supported_sample_rates_hz if role == "sample" else inputs.supported_reference_sample_rates_hz
+        if role == "reference" and requested_rate is None and not supported:
+            supported = inputs.supported_sample_rates_hz  # Preserve the existing Auto fallback for older profiles.
         supported = tuple(sorted(value for value in supported if _positive(value)))
         if not supported: readiness.append(f"Connected {role} sample rates unavailable"); continue
-        minimum = max(32 / duration, 2 * response["bandwidth_hz"])
-        rate = next((value for value in supported if value >= minimum), supported[-1])
+        if requested_rate is None:
+            minimum = max(32 / duration, 2 * response["bandwidth_hz"])
+            rate = next((value for value in supported if value >= minimum), supported[-1])
+        else:
+            rate = min(supported, key=lambda value: abs(value-requested_rate))
+            if not math.isclose(rate, requested_rate, rel_tol=1e-9, abs_tol=1e-12):
+                errors.append(f"{role} sampling rate unsupported; choose Auto or an installed rate")
+                continue
         if rate * duration < 2: errors.append(f"{role} stream cannot sample the requested scan duration")
         hf[role] = {**previous, "order": order, "timeconstant_s": tau, "rate_sps": rate}
         selected.update({fields[0]: rate, fields[1]: tau, fields[2]: order, f"{role}_filter_estimate": response})
@@ -197,7 +207,7 @@ def build_plan(settings, inputs=None):
                     intrinsic_resolution_known=_positive(profile.get("intrinsic_resolution_cm1")))
     target_step = seed / min(rates) if rates else None
     selected["target_native_spacing_cm1"] = target_step
-    selected["sampling_basis"] = "Smallest installed rate at least twice nominal filter bandwidth and 32 samples per sweep; no resolution target"
+    selected["sampling_basis"] = "Manual rates use supported installed values; Auto chooses the smallest installed rate at least twice nominal filter bandwidth and 32 samples per sweep"
     selected["scan_speed_cm1_s"] = seed
     def choose(name, auto=None):
         value = getattr(settings, name, None)

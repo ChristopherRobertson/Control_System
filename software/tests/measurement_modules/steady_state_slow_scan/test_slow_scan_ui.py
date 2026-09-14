@@ -159,6 +159,7 @@ def test_independent_auto_overrides_roundtrip_and_optional_metadata(app, tabs, t
     editor = panel.settings_editor
     editor.override_inputs["time_constant_s"].setText("0.017")
     editor.override_inputs["reference_filter_order"].setText("2")
+    editor.override_inputs["requested_sample_rate_hz"].setText("1000")
     loaded = editor.read_settings()
     loaded["condition"].update(condition_id="Arbitrary buffer condition", temperature_k=77.)
     editor.apply_settings(loaded)
@@ -167,6 +168,8 @@ def test_independent_auto_overrides_roundtrip_and_optional_metadata(app, tabs, t
     assert requested["filter_order"] is None
     assert requested["reference_filter_order"] == 2
     assert requested["reference_time_constant_s"] is None
+    assert requested["requested_sample_rate_hz"] == 1000.
+    assert requested["requested_reference_sample_rate_hz"] is None
     editor.apply_settings({**requested, "hardware": False})
     assert editor.read_settings()["hardware"] is True
     for control in editor.fields.values():
@@ -182,7 +185,8 @@ def test_visible_physical_controls_and_removed_preferences_do_not_return(app, ta
     from PySide6.QtWidgets import QLabel
     editor = tabs[0][1].widget.settings_editor
     assert set(editor.fields) == {"current_ma", "repetition_rate_hz", "pulse_width_s", "time_constant_s", "filter_order",
-                                  "reference_time_constant_s", "reference_filter_order"}
+                                  "reference_time_constant_s", "reference_filter_order", "requested_sample_rate_hz",
+                                  "requested_reference_sample_rate_hz"}
     assert editor.scan_speed.minimum() == .1
     assert editor.scan_speed.maximum() == 10000.
     editor.scan_speed.setValue(125.)
@@ -203,9 +207,62 @@ def test_visible_physical_controls_and_removed_preferences_do_not_return(app, ta
     editor.apply_settings(stale)
     current = editor.read_settings()
     assert current["pulse_width_s"] is None
+    assert current["requested_sample_rate_hz"] is None
+    assert current["requested_reference_sample_rate_hz"] is None
     assert all(key not in current for key in ("requested_resolution_cm1", "segments", "probe_width_s", "sample_rate_hz", "fit_peak_count", "dark_duration_s"))
     labels = " ".join(label.text().casefold() for label in editor.findChildren(QLabel))
     assert not any(word in labels for word in ("resolution", "marker", "settling", "fringe", "baseline", "line width", "peak components"))
+
+
+def test_scan_labels_and_independent_sampling_rate_plan_roundtrip(app, tabs, tmp_path):
+    from PySide6.QtWidgets import QLabel
+    single, dual = (handle.widget for handle in tabs[0])
+    for panel in (single, dual):
+        editor = panel.settings_editor
+        labels = {label.text() for label in editor.findChildren(QLabel)}
+        assert {"Start", "End", "Number of Scans"} <= labels
+        assert not {"From", "To", "Repeats per direction"} & labels
+        advanced_labels = {label.text() for label in editor.advanced_widget.findChildren(QLabel)}
+        assert "Sampling rate (Sa/s)" in advanced_labels
+        assert panel.band_lower.placeholderText() == "Start cm⁻¹"
+        assert panel.band_upper.placeholderText() == "End cm⁻¹"
+        assert panel.offband_lower.placeholderText() == "Start cm⁻¹"
+        assert panel.offband_upper.placeholderText() == "End cm⁻¹"
+        editor.repeats.setValue(3)
+        assert editor.read_settings()["replicates"] == 3
+        assert "each direction" in editor.repeats.toolTip()
+    assert "requested_reference_sample_rate_hz" not in single.settings_editor.fields
+    editor = dual.settings_editor
+    editor.fields["requested_sample_rate_hz"].setText("1000")
+    assert editor.read_settings()["requested_reference_sample_rate_hz"] is None
+    editor.fields["requested_reference_sample_rate_hz"].setText("500")
+    saved = tmp_path / "independent_sampling.json"
+    dual.save_plan(saved)
+    wait_for(app, dual)
+    editor.fields["requested_sample_rate_hz"].clear()
+    assert editor.read_settings()["requested_sample_rate_hz"] is None
+    assert editor.read_settings()["requested_reference_sample_rate_hz"] == 500.
+    dual.load_plan(saved)
+    wait_for(app, dual)
+    assert editor.read_settings()["requested_sample_rate_hz"] == 1000.
+    assert editor.read_settings()["requested_reference_sample_rate_hz"] == 500.
+    assert single.settings_editor.read_settings()["requested_sample_rate_hz"] is None
+    fractional = editor.read_settings()
+    fractional["requested_sample_rate_hz"] = 60e6 / 2**21
+    fractional["requested_reference_sample_rate_hz"] = 60e6 / 2**20
+    editor.apply_settings(fractional)
+    for key in ("requested_sample_rate_hz", "requested_reference_sample_rate_hz"):
+        assert editor.read_settings()[key] == fractional[key]
+    fractional_path = tmp_path / "fractional_sampling.json"
+    dual.save_plan(fractional_path)
+    wait_for(app, dual)
+    editor.fields["requested_sample_rate_hz"].setText("Auto")
+    assert editor.read_settings()["requested_sample_rate_hz"] is None
+    assert editor.read_settings()["requested_reference_sample_rate_hz"] == fractional["requested_reference_sample_rate_hz"]
+    dual.load_plan(fractional_path)
+    wait_for(app, dual)
+    for key in ("requested_sample_rate_hz", "requested_reference_sample_rate_hz"):
+        assert editor.read_settings()[key] == fractional[key]
 
 
 def test_long_output_location_keeps_plan_actions_visible_and_busy_status_unchanged(app, tabs, tmp_path, monkeypatch):

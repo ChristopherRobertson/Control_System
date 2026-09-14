@@ -42,10 +42,9 @@ class SlowScanSettingsWidget(QWidget):
     """One visible acquisition form; connected values supply independent Auto fields."""
 
     changed = Signal()
-    FILTER_FIELDS = (("time_constant_s", "Sample time constant (s)"),
-                     ("filter_order", "Sample filter order"),
-                     ("reference_time_constant_s", "Reference time constant (s)"),
-                     ("reference_filter_order", "Reference filter order"))
+    HF_OVERRIDE_ROWS = (("Time constant (s)", "time_constant_s", "reference_time_constant_s"),
+                        ("Filter order", "filter_order", "reference_filter_order"),
+                        ("Sampling rate (Sa/s)", "requested_sample_rate_hz", "requested_reference_sample_rate_hz"))
     AUTO_FIELDS = (("current_ma", "Current (mA)", 1.),
                    ("repetition_rate_hz", "Repetition rate (Hz)", 1.),
                    ("pulse_width_s", "Pulse width (ns)", 1e-9))
@@ -61,7 +60,7 @@ class SlowScanSettingsWidget(QWidget):
         layout.setSpacing(4)
         group = QGroupBox("Scan settings")
         form = QFormLayout(group)
-        form.setContentsMargins(6, 6, 6, 6)
+        form.setContentsMargins(4, 4, 4, 4)
         form.setVerticalSpacing(2)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.plan_label = QLineEdit()
@@ -76,8 +75,8 @@ class SlowScanSettingsWidget(QWidget):
             editor.setSuffix(" cm⁻¹")
             editor.setKeyboardTracking(False)
             editor.valueChanged.connect(self._changed)
-        form.addRow("From", self.lower)
-        form.addRow("To", self.upper)
+        form.addRow("Start", self.lower)
+        form.addRow("End", self.upper)
         self.scan_speed = QDoubleSpinBox()
         self.scan_speed.setObjectName("requested_scan_speed_cm1_s")
         self.scan_speed.setDecimals(3)
@@ -97,12 +96,13 @@ class SlowScanSettingsWidget(QWidget):
         self.repeats.setObjectName("replicates")
         self.repeats.setRange(1, 8192)
         self.repeats.valueChanged.connect(self._changed)
-        form.addRow("Repeats per direction", self.repeats)
+        self.repeats.setToolTip("Number of scans recorded in each direction.")
+        form.addRow("Number of Scans", self.repeats)
         self.advanced_widget = QWidget()
         filter_form = QGridLayout(self.advanced_widget)
         filter_form.setContentsMargins(0, 0, 0, 0)
         filter_form.setHorizontalSpacing(4)
-        filter_form.setVerticalSpacing(2)
+        filter_form.setVerticalSpacing(1)
         first_row = 1 if mode == "dual" else 0
         if mode == "dual":
             for column, label in ((1, "Sample"), (2, "Reference")):
@@ -110,18 +110,17 @@ class SlowScanSettingsWidget(QWidget):
                 heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 filter_form.addWidget(heading, 0, column)
                 filter_form.setColumnStretch(column, 1)
-        filter_form.addWidget(QLabel("Time constant (s)"), first_row, 0)
-        filter_form.addWidget(QLabel("Filter order"), first_row + 1, 0)
-        for key, _label in self.FILTER_FIELDS:
-            if mode == "single" and key.startswith("reference_"):
-                continue
-            editor = QLineEdit()
-            editor.setObjectName(key)
-            editor.setPlaceholderText("Auto")
-            editor.textChanged.connect(self._changed)
-            self.fields[key] = editor
-            row = first_row + int(key.endswith("filter_order"))
-            filter_form.addWidget(editor, row, 2 if key.startswith("reference_") else 1)
+        for offset, (label, sample_key, reference_key) in enumerate(self.HF_OVERRIDE_ROWS):
+            row = first_row + offset
+            filter_form.addWidget(QLabel(label), row, 0)
+            keys = (sample_key, reference_key) if mode == "dual" else (sample_key,)
+            for column, key in enumerate(keys, start=1):
+                editor = QLineEdit()
+                editor.setObjectName(key)
+                editor.setPlaceholderText("Auto")
+                editor.textChanged.connect(self._changed)
+                self.fields[key] = editor
+                filter_form.addWidget(editor, row, column)
         layout.addWidget(group)
         self.capability_button = QPushButton("Read connected settings")
         layout.addWidget(self.capability_button)
@@ -164,7 +163,8 @@ class SlowScanSettingsWidget(QWidget):
             scales = {key: scale for key, _label, scale in self.AUTO_FIELDS}
             for key, editor in self.fields.items():
                 value = data.get(key)
-                editor.setText("" if value is None else f"{value / scales.get(key, 1.):g}")
+                precision = ".17g" if key in ("requested_sample_rate_hz", "requested_reference_sample_rate_hz") else "g"
+                editor.setText("" if value is None else format(value / scales.get(key, 1.), precision))
         finally:
             self._applying = False
         self.changed.emit()
@@ -258,9 +258,10 @@ class SlowScanPanel(CompactMeasurementPanel):
         super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
         self.settings_editor = settings
         self.settings_layout.setContentsMargins(6, 6, 6, 6)
-        self.settings_layout.setSpacing(4)
+        self.settings_layout.setSpacing(2)
+        self.left_layout.setSpacing(4)
         self.settings_extras_layout.setSpacing(2)
-        self.advanced_layout.setContentsMargins(6, 6, 6, 6)
+        self.advanced_layout.setContentsMargins(4, 4, 4, 4)
         self.file_layout.setDirection(QBoxLayout.Direction.LeftToRight)
         self.preliminary_button.hide()
         self.start_button.setText("Sample")
@@ -334,7 +335,7 @@ class SlowScanPanel(CompactMeasurementPanel):
         for label, lower, upper in (("Band", self.band_lower, self.band_upper),
                                     ("Off-band", self.offband_lower, self.offband_upper)):
             selections.addWidget(QLabel(label))
-            for editor, placeholder in ((lower, "From"), (upper, "To")):
+            for editor, placeholder in ((lower, "Start"), (upper, "End")):
                 editor.setPlaceholderText(placeholder + " cm⁻¹")
                 editor.setMinimumWidth(40)
                 editor.setMaximumWidth(95)
@@ -563,7 +564,7 @@ class SlowScanPanel(CompactMeasurementPanel):
                 continue
             bounds = self._bounds(lower, upper)
             if bounds is None or bounds[0] >= bounds[1]:
-                raise ValueError(f"Enter a numeric {label} range with From below To")
+                raise ValueError(f"Enter a numeric {label} range with Start below End")
             peaks = ()
             if label == "band":
                 index = self.sweep_choice.currentIndex()

@@ -292,3 +292,54 @@ def test_internal_rate_ceiling_uses_sdk_float32_optical_width_not_unrounded_requ
     assert encoded_rate == params["pulse_rate_hz"]
     assert 150000. < encoded_rate < 199999.078125
     assert encoded_rate * encoded_width * 1e-9 <= .30
+
+
+@pytest.mark.parametrize("field", ["requested_sample_rate_hz", "requested_reference_sample_rate_hz"])
+@pytest.mark.parametrize("value", [0.,-1.,float("nan"),float("inf"),True])
+def test_sampling_override_requires_finite_positive_rate_before_discovery(field,value):
+    plan = build_plan(replace(SlowScanSettings(mode="dual"),**{field:value}))
+    assert field in " ".join(plan.errors)
+
+
+def test_sampling_overrides_are_independent_and_preserve_auto_filters_and_speed():
+    settings = SlowScanSettings(mode="dual",lower_cm1=1900.,upper_cm1=1901.)
+    automatic = plan_for(settings)
+    for field,role,other in (("requested_sample_rate_hz","sample","reference"),
+                            ("requested_reference_sample_rate_hz","reference","sample")):
+        selected = plan_for(replace(settings,**{field:10000.}))
+        assert selected.ready
+        assert selected.selected["hf2li"][role]["rate_sps"] == 10000.
+        assert selected.selected["hf2li"][other] == automatic.selected["hf2li"][other]
+        for key in ("order","timeconstant_s"):
+            assert selected.selected["hf2li"][role][key] == automatic.selected["hf2li"][role][key]
+        assert [block.scan_speed_cm1_s for block in selected.blocks] == [block.scan_speed_cm1_s for block in automatic.blocks]
+        assert selected.requested[field] == 10000.
+
+
+def test_sampling_override_uses_each_detectors_capabilities_and_aggregate_limits():
+    settings = SlowScanSettings(mode="dual",lower_cm1=1900.,upper_cm1=1901.,requested_reference_sample_rate_hz=10000.)
+    raw = live_readbacks("dual")
+    raw["hf2li"]["reference"]["rates_sps"] = (100.,1000.)
+    limited = plan_for(settings,raw)
+    assert "reference sampling rate unsupported" in " ".join(limited.errors)
+    manual = plan_for(replace(settings,requested_sample_rate_hz=10000.))
+    assert manual.ready and manual.selected["aggregate_rate_hz"] == 30000.
+    unknown_reference = build_plan(manual.settings,replace(manual.inputs,supported_reference_sample_rates_hz=()))
+    assert "reference sample rates unavailable" in " ".join(unknown_reference.readiness)
+    assert "reference_sample_rate_hz" not in unknown_reference.selected
+    assert "throughput" in " ".join(build_plan(manual.settings,replace(manual.inputs,aggregate_max_rate_hz=29000.)).errors)
+    short = plan_for(SlowScanSettings(lower_cm1=1900.,upper_cm1=1900.4,requested_scan_speed_cm1_s=100.,requested_sample_rate_hz=100.))
+    assert "sample stream cannot sample" in " ".join(short.errors)
+
+
+def test_sampling_override_roundtrip_keeps_retired_rate_preferences_inert():
+    current = SlowScanSettings(mode="dual",lower_cm1=1900.,upper_cm1=1901.,requested_sample_rate_hz=10000.)
+    imported = SlowScanSettings.from_dict({**current.to_dict(),"sample_rate_hz":333.,"reference_sample_rate_hz":444.})
+    assert imported.requested_sample_rate_hz == 10000. and imported.requested_reference_sample_rate_hz is None
+    assert imported.imported_requested_metadata["sample_rate_hz"] == 333.
+    assert imported.imported_requested_metadata["reference_sample_rate_hz"] == 444.
+    assert SlowScanSettings.from_dict(imported.to_dict()) == imported
+    assert plan_for(imported).selected == plan_for(current).selected
+    assert not build_plan(current).errors
+    unsupported = plan_for(replace(current,requested_sample_rate_hz=333.))
+    assert "sample sampling rate unsupported" in " ".join(unsupported.errors)

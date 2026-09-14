@@ -77,11 +77,13 @@ def test_plan_roundtrip_includes_derived_schedule_and_rejects_other_instances(tm
 def test_legacy_plan_requests_remain_metadata_after_normalization_and_resave(tmp_path):
     from control_app.measurement_modules.steady_state_slow_scan.settings import SlowScanSettings
     current = {"mode": "single", "lower_cm1": 1939, "upper_cm1": 1949,
-               "requested_scan_speed_cm1_s": 4., "repetition_rate_hz": 100000., "pulse_width_s": 1e-6}
+               "requested_scan_speed_cm1_s": 4., "repetition_rate_hz": 100000., "pulse_width_s": 1e-6,
+               "requested_sample_rate_hz": 1000., "requested_reference_sample_rate_hz": None}
     retired = {"requested_resolution_cm1": -1., "measured_linewidth_cm1": "unknown",
         "segments": [{"segment_id": "historical-QCL4", "qcl": 4, "lower_cm1": 1600, "upper_cm1": 1700}],
         "fit_peak_count": 0, "fit_line_shape": "historical-model", "fit_baseline_degree": 99,
-        "fit_fringe_periods_cm1": [-1], "probe_width_s": 150e-9}
+        "fit_fringe_periods_cm1": [-1], "probe_width_s": 150e-9,
+        "sample_rate_hz": 17., "reference_sample_rate_hz": 23.}
     original = {**current, **retired, "imported_requested_metadata": {"previous_note": "retained"}}
     first = save_plan(tmp_path / "legacy.json", original)
     assert load_plan(first) == original
@@ -98,6 +100,8 @@ def test_legacy_plan_requests_remain_metadata_after_normalization_and_resave(tmp
     assert load_plan(first) == original
     # A legacy T660 TTL width must never become the optical QCL pulse width.
     assert reloaded["pulse_width_s"] == current["pulse_width_s"]
+    assert reloaded["requested_sample_rate_hz"] == 1000.
+    assert reloaded["requested_reference_sample_rate_hz"] is None
 
 
 def test_native_roundtrip_is_exact_dtype_values_directions_flags_and_rich_results(tmp_path):
