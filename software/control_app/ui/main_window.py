@@ -7,7 +7,7 @@ from typing import Any
 from pathlib import Path
 from control_app.paths import default_save_location, default_tab_save_location, get_save_location, set_save_location
 
-from control_app.ui.contracts import WorkflowCommandHandler, blocked_handler
+from control_app.ui.contracts import WorkflowCommandHandler, WorkflowResult, blocked_handler
 from control_app.ui.widgets.mircat_widget import MircatWidget
 from control_app.ui.widgets.iris_widget import IrisWidget
 from control_app.ui.widgets.ndyag_widget import NdYagWidget
@@ -104,6 +104,7 @@ class ControlSystemMainWindow(QMainWindow):
         self.safe_shutdown_completed = False
         self.safe_shutdown_completed_callback: Callable[[], None] | None = None
         self._recovery_worker = None
+        self._shutdown_worker = None
         self.ownership = getattr(handler, "coordinator", None) or default_coordinator()
         self.measurement_lifecycle = MeasurementLifecycle(self.ownership)
         setattr(handler, "measurement_lifecycle", self.measurement_lifecycle)
@@ -325,6 +326,8 @@ class ControlSystemMainWindow(QMainWindow):
         return bool(self._close_blockers()) or self.ownership.snapshot()["state"] != "free"
 
     def _manual_destination_busy(self):
+        if self._shutdown_worker is not None:
+            return True
         if self.ownership.snapshot()["state"] != "free" or self._recovery_worker is not None:
             return True
         for widget in (self.mircat_widget, self.t660_widget, self.ndyag_widget, self.iris_widget):
@@ -471,6 +474,10 @@ class ControlSystemMainWindow(QMainWindow):
 
     def request_emergency_stop(self, reason):
         """Cancel all registered live hardware operations, preserving offline work."""
+        if getattr(self, "_shutdown_worker", None) is not None:
+            # A signal/Qt quit during normal close must not launch a second
+            # device cleanup while the first worker is still preserving data.
+            return WorkflowResult("accepted", "Application shutdown is already running; waiting for cleanup and saving.")
         errors = self.measurement_lifecycle.request_emergency_stop(reason)
         stop = getattr(self.command_handler, "emergency_stop", None)
         result = stop(reason=reason) if callable(stop) else None
@@ -481,6 +488,8 @@ class ControlSystemMainWindow(QMainWindow):
     def live_worker_blockers(self):
         """Include analysis workers when deciding whether Qt can be destroyed."""
         blockers = []
+        if getattr(self, "_shutdown_worker", None) is not None:
+            blockers.append("Application shutdown is still running.")
         for handle in self.measurement_lifecycle.handles:
             try:
                 if handle.command_running():
@@ -538,6 +547,8 @@ class ControlSystemMainWindow(QMainWindow):
         self._update_save_enabled()
 
     def _update_save_enabled(self):
+        if self._shutdown_worker is not None:
+            return
         if self.tabs.currentWidget() is None:
             return
         self._update_host_status()
@@ -590,7 +601,14 @@ class ControlSystemMainWindow(QMainWindow):
             self.save_location_status.setText(message)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override name
-        """Run safe shutdown before allowing application close."""
+        """Keep Qt responsive until background safe shutdown has finished."""
+
+        if self.safe_shutdown_completed:
+            event.accept()
+            return
+        if self._shutdown_worker is not None:
+            event.ignore()
+            return
 
         try:
             blockers = self._close_blockers()
@@ -615,42 +633,49 @@ class ControlSystemMainWindow(QMainWindow):
 
         shutdown = getattr(self.command_handler, "ui_safe_shutdown", None)
         if callable(shutdown):
-            try:
-                result = shutdown(reason="main_window_close")
-            except Exception as exc:  # noqa: BLE001 - show operator instructions instead of crashing
-                self._show_close_error(
-                    "Safe Shutdown Failed",
-                    "Safe shutdown raised an unexpected error, so the application will remain open.\n\n"
-                    f"{type(exc).__name__}: {exc}\n\n"
-                    "Use Safe Idle on the T660/Nd:YAG tabs and Emission Off, Disarm, "
-                    "or Deinitialize on the MIRcat tab before trying to close again.",
-                )
-                event.ignore()
-                return
-            status = getattr(result, "status", None)
-            message = str(getattr(result, "message", result))
-            if status != "complete":
-                instructions = (
-                    "Safe shutdown did not complete, so the application will remain open.\n\n"
-                    f"{message}\n\n"
-                    "Use Safe Idle on the T660/Nd:YAG tabs and Emission Off, Disarm, "
-                    "or Deinitialize on the MIRcat tab. If the UI cannot control hardware, "
-                    "physically stop/disable the instruments before exiting."
-                )
-                self._show_close_error("Safe Shutdown Failed", instructions)
-                event.ignore()
-                return
+            from control_app.measurement_host.presentation import OperationWorker
+            event.ignore()
+            self._save_timer.stop()
+            self.centralWidget().setEnabled(False)
+            self.statusBar().showMessage("Closing: waiting for instrument shutdown and saved records…")
+            worker = OperationWorker(lambda _: shutdown(reason="main_window_close"), self)
+            self._shutdown_worker = worker
+            worker.finished.connect(self._shutdown_finished)
+            worker.start()
+            return
 
+        self._finish_safe_close()
+        event.accept()
+
+    def _finish_safe_close(self):
         self.safe_shutdown_completed = True
         if self.safe_shutdown_completed_callback is not None:
             self.safe_shutdown_completed_callback()
         timer = getattr(self, "_save_timer", None)
         if timer is not None:
             timer.stop()
-        event.accept()
+
+    def _shutdown_finished(self):
+        worker = self._shutdown_worker
+        outcome = worker.outcome
+        self._shutdown_worker = None
+        worker.deleteLater()
+        if outcome is not None and outcome.state == "completed" and getattr(outcome.result, "status", None) == "complete":
+            self._finish_safe_close()
+            self.close()
+            return
+        message = (outcome.error if outcome is not None and outcome.state != "completed"
+                   else str(getattr(getattr(outcome, "result", None), "message", "Shutdown did not complete.")))
+        self.centralWidget().setEnabled(True)
+        self.statusBar().clearMessage()
+        self._save_timer.start()
+        self._update_save_enabled()
+        self._show_close_error("Safe Shutdown Failed", message + "\n\nThe application remains open; shutdown can be retried.")
 
     def _close_blockers(self) -> list[str]:
         blockers: list[str] = self.measurement_lifecycle.close_blockers()
+        if getattr(self, "_shutdown_worker", None) is not None:
+            blockers.append("Application shutdown is still running.")
         if self._recovery_worker is not None:
             blockers.append("Instrument recovery verification is running.")
         candidates = (

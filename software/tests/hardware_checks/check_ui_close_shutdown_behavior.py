@@ -1,103 +1,60 @@
 #!/usr/bin/env python3
-"""Validate application close handling does not leak shutdown exceptions through Qt."""
-
+"""Exercise asynchronous window shutdown with isolated handlers, never devices."""
 from __future__ import annotations
 
-from types import SimpleNamespace
+import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import time
 
-import _common  # noqa: F401 - adds repository root to sys.path
-
-from control_app.ui.contracts import WorkflowResult
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+import _common  # noqa: F401
+from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtWidgets import QApplication
+from control_app import paths
+from control_app.measurement_host.ownership import HardwareCoordinator
+from control_app.ui.contracts import WorkflowResult, blocked_handler
 from control_app.ui.main_window import ControlSystemMainWindow
 
 
 def main() -> int:
-    window = _window(_FailingShutdownHandler())
-    event = _FakeCloseEvent()
-    ControlSystemMainWindow.closeEvent(window, event)
-    assert event.ignored is True
-    assert event.accepted is False
-    assert window.close_errors
-    assert window.close_errors[-1][0] == "Safe Shutdown Failed"
-
-    completed = {"value": False}
-    window = _window(_CompleteShutdownHandler())
-    window.safe_shutdown_completed_callback = lambda: completed.__setitem__("value", True)
-    event = _FakeCloseEvent()
-    ControlSystemMainWindow.closeEvent(window, event)
-    assert event.accepted is True
-    assert event.ignored is False
-    assert window.safe_shutdown_completed is True
-    assert completed["value"] is True
-
-    window = _window(_BlockedShutdownHandler())
-    event = _FakeCloseEvent()
-    ControlSystemMainWindow.closeEvent(window, event)
-    assert event.ignored is True
-    assert window.close_errors[-1][0] == "Safe Shutdown Failed"
-
-    print("PASS UI close shutdown behavior is exception-safe")
+    app = QApplication.instance() or QApplication([])
+    previous_root, previous_selection = paths.RUN_ROOT, paths._selected_save_location
+    try:
+        with TemporaryDirectory(prefix="control-close-check-") as folder:
+            paths.RUN_ROOT = Path(folder) / "runs"
+            for outcome in ("exception", "failed", "complete"):
+                handler = blocked_handler("Shutdown regression; no hardware")
+                handler.coordinator = HardwareCoordinator(Path(folder) / (outcome + ".lock"))
+                def shutdown(*, reason, expected=outcome):
+                    if expected == "exception":
+                        raise RuntimeError("Injected shutdown failure")
+                    return WorkflowResult(expected, "Injected shutdown result")
+                handler.ui_safe_shutdown = shutdown
+                window = ControlSystemMainWindow(handler, module_discovery=())
+                errors, completed = [], []
+                window._show_close_error = lambda *args: errors.append(args)
+                window.safe_shutdown_completed_callback = lambda: completed.append(True)
+                try:
+                    window.show()
+                    window.close()
+                    deadline = time.monotonic() + 3
+                    while window._shutdown_worker is not None and time.monotonic() < deadline:
+                        app.processEvents()
+                        time.sleep(.002)
+                    assert window._shutdown_worker is None
+                    assert window.safe_shutdown_completed == (outcome == "complete")
+                    assert bool(completed) == (outcome == "complete")
+                    assert bool(errors) == (outcome != "complete")
+                    assert window.isVisible() == (outcome != "complete")
+                finally:
+                    window._save_timer.stop()
+                    window.deleteLater()
+                    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    finally:
+        paths.RUN_ROOT, paths._selected_save_location = previous_root, previous_selection
+    print("PASS asynchronous UI close is exception-safe and retains failed shutdowns")
     return 0
-
-
-def _window(handler) -> ControlSystemMainWindow:
-    window = ControlSystemMainWindow.__new__(ControlSystemMainWindow)
-    window.command_handler = handler
-    window.safe_shutdown_completed = False
-    window.safe_shutdown_completed_callback = None
-    window.measurement_lifecycle = SimpleNamespace(close_blockers=lambda: [])
-    window._recovery_worker = None
-    window.mircat_widget = _FakeWidget(False)
-    window.t660_widget = _FakeWidget(False)
-    window.ndyag_widget = _FakeWidget(False)
-    window.iris_widget = _FakeWidget(False)
-    window.close_errors = []
-    window._show_close_error = lambda title, message: window.close_errors.append((title, message))
-    return window
-
-
-class _FakeCloseEvent:
-    def __init__(self) -> None:
-        self.accepted = False
-        self.ignored = False
-
-    def accept(self) -> None:
-        self.accepted = True
-
-    def ignore(self) -> None:
-        self.ignored = True
-
-
-class _FakeWidget:
-    def __init__(self, running: bool) -> None:
-        self.running = running
-
-    def command_running(self) -> bool:
-        return self.running
-
-
-class _FailingShutdownHandler:
-    def ui_close_blockers(self) -> list[str]:
-        return []
-
-    def ui_safe_shutdown(self, *, reason: str) -> WorkflowResult:
-        raise RuntimeError(f"shutdown failed for {reason}")
-
-
-class _CompleteShutdownHandler:
-    def ui_close_blockers(self) -> list[str]:
-        return []
-
-    def ui_safe_shutdown(self, *, reason: str) -> WorkflowResult:
-        return WorkflowResult(status="complete", message=f"closed: {reason}")
-
-
-class _BlockedShutdownHandler:
-    def ui_close_blockers(self) -> list[str]:
-        return []
-
-    def ui_safe_shutdown(self, *, reason: str) -> WorkflowResult:
-        return WorkflowResult(status="failed", message=f"not closed: {reason}")
 
 
 if __name__ == "__main__":
