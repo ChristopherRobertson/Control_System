@@ -19,6 +19,7 @@ from typing import Any, TextIO
 import os
 import sys
 import time
+import math
 
 from control_app.config_loader import REPO_ROOT, load_hardware_config
 from control_app.paths import REFERENCES_ROOT, resolve_compat_path
@@ -57,6 +58,8 @@ RET_WARNING_DEPRECATED_PARAMETER = 117
 UNITS_MICRONS = 1
 UNITS_CM1 = 2
 PULSE_MODE_INTERNAL = 1
+LASER_MODE_PULSED = 1
+LASER_MODE_CW = 2
 PULSE_MODE_EXTERNAL_TRIGGER = 2
 PULSE_MODE_EXTERNAL_PASSTHRU = 3
 PROC_TRIG_MODE_INTERNAL = 1
@@ -601,6 +604,54 @@ class MircatService:
             "current_source": "preserved_existing" if current_ma is None else "requested",
         }
 
+    def _qcl_parameter(self, name, qcl, kind):
+        if type(qcl) is not int or not 1 <= qcl <= 4:
+            raise ValueError("QCL must be an integer from 1 through 4")
+        if self._sdk is not None and not hasattr(self._sdk, name):
+            raise MircatConfigurationError(f"MIRcat SDK does not provide {name}")
+        value = kind()
+        self._check(self._call(name, c_uint8(qcl), byref(value)), name)
+        return value.value
+
+    def get_qcl_operating_mode(self, qcl: int) -> int:
+        return int(self._qcl_parameter("MIRcatSDK_GetQCLOperatingMode", qcl, c_uint8))
+
+    def get_qcl_set_temperature(self, qcl: int) -> float:
+        return float(self._qcl_parameter("MIRcatSDK_GetQclSetTemperature", qcl, c_float))
+
+    def is_cw_allowed(self, qcl: int) -> bool:
+        return bool(self._qcl_parameter("MIRcatSDK_isCwAllowed", qcl, c_bool))
+
+    def get_qcl_cw_current_limits(self, qcl: int) -> tuple[float, float]:
+        return tuple(float(self._qcl_parameter(name, qcl, c_uint16)) for name in
+                     ("MIRcatSDK_GetQCLMinCwCurrent", "MIRcatSDK_GetQCLMaxCwCurrent"))
+
+    def set_qcl_operating_params(self, qcl: int, *, pulse_rate_hz: float,
+                                 pulse_width_ns: float, current_ma: float,
+                                 temperature_c: float, laser_mode: int) -> dict[str, Any]:
+        """Set SDK-validated parameters, returning fresh device readbacks.
+
+        Mode values are the SDK LaserModes constants, distinct from trigger
+        modes. Temperature is the QCL controller setpoint, not sample temperature.
+        """
+        if type(qcl) is not int or not 1 <= qcl <= 4:
+            raise ValueError("QCL must be an integer from 1 through 4")
+        if type(laser_mode) is not int or laser_mode not in (1, 2, 3, 6, 7, 8, 9, 10):
+            raise ValueError("Unsupported MIRcat laser mode")
+        values = [c_float(float(value)) for value in
+                  (pulse_rate_hz, pulse_width_ns, current_ma, temperature_c)]
+        if not all(math.isfinite(value.value) for value in values):
+            raise ValueError("QCL operating parameters must be finite float32 values")
+        name = "MIRcatSDK_SetAllQclParams"
+        if self._sdk is not None and not hasattr(self._sdk, name):
+            raise MircatConfigurationError(f"MIRcat SDK does not provide {name}")
+        self._check(self._call(name, c_uint8(qcl), *values, c_uint8(laser_mode), c_bool(True)), name)
+        return {"qcl": qcl, "pulse_rate_hz": self.get_qcl_pulse_rate(qcl),
+                "pulse_width_ns": self.get_qcl_pulse_width(qcl),
+                "current_ma": self.get_qcl_current(qcl),
+                "temperature_c": self.get_qcl_set_temperature(qcl),
+                "laser_mode": self.get_qcl_operating_mode(qcl)}
+
     def get_qcl_pulse_limits(self, qcl: int) -> dict[str, float]:
         """Return pulse-rate, pulse-width, and duty-cycle (percent) limits for a QCL."""
 
@@ -1100,6 +1151,19 @@ class MircatService:
         sdk.MIRcatSDK_GetQCLCurrent.restype = c_uint32
         sdk.MIRcatSDK_SetQCLParams.argtypes = [c_uint8, c_float, c_float, c_float]
         sdk.MIRcatSDK_SetQCLParams.restype = c_uint32
+        # Optional to retain compatibility with older SDK installations.
+        for name, signature in {
+            "MIRcatSDK_GetQCLOperatingMode": [c_uint8, POINTER(c_uint8)],
+            "MIRcatSDK_GetQclSetTemperature": [c_uint8, POINTER(c_float)],
+            "MIRcatSDK_isCwAllowed": [c_uint8, POINTER(c_bool)],
+            "MIRcatSDK_GetQCLMinCwCurrent": [c_uint8, POINTER(c_uint16)],
+            "MIRcatSDK_GetQCLMaxCwCurrent": [c_uint8, POINTER(c_uint16)],
+            "MIRcatSDK_SetAllQclParams": [c_uint8, c_float, c_float, c_float, c_float, c_uint8, c_bool],
+        }.items():
+            function = getattr(sdk, name, None)
+            if function is not None:
+                function.argtypes = signature
+                function.restype = c_uint32
         sdk.MIRcatSDK_GetQCLPulseLimits.argtypes = [
             c_uint8,
             POINTER(c_float),
