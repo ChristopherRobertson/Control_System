@@ -74,7 +74,7 @@ def test_compact_tabs_construct_without_devices_or_approval_state(app, tabs):
     from PySide6.QtWidgets import QCheckBox
     from control_app.measurement_host.presentation import CompactMeasurementPanel
     handles, preferences, _ = tabs
-    assert [h.title for h in handles] == ["Slow Scan", "Dual-Detector Slow Scan"]
+    assert [h.title for h in handles] == ["Slow Scan", "DD Slow Scan"]
     first, second = (h.widget for h in handles)
     assert isinstance(first, CompactMeasurementPanel)
     assert first.adapter.runner is second.adapter.runner is None
@@ -206,6 +206,38 @@ def test_visible_physical_controls_and_removed_preferences_do_not_return(app, ta
     assert all(key not in current for key in ("requested_resolution_cm1", "segments", "probe_width_s", "sample_rate_hz", "fit_peak_count", "dark_duration_s"))
     labels = " ".join(label.text().casefold() for label in editor.findChildren(QLabel))
     assert not any(word in labels for word in ("resolution", "marker", "settling", "fringe", "baseline", "line width", "peak components"))
+
+
+def test_long_output_location_keeps_plan_actions_visible_and_busy_status_unchanged(app, tabs, tmp_path, monkeypatch):
+    from PySide6.QtCore import QPoint, QRect
+    from PySide6.QtGui import QFont, QFontDatabase
+
+    destination = tmp_path / ("long output folder " * 8) / "2026-09-14" / "DD Slow Scan"
+    previous_font = app.font()
+    QFontDatabase.addApplicationFont("C:/Windows/Fonts/segoeui.ttf")
+    app.setFont(QFont("Segoe UI", 9))
+    try:
+        for handle in tabs[0]:
+            panel = handle.widget
+            panel.resize(1100, 780)
+            panel.show()
+            panel.output_location_changed(destination)
+            app.processEvents()
+            assert str(destination) not in panel.status.text()
+            assert panel.status.toolTip() == str(destination)
+            viewport = panel.settings_scroll.viewport()
+            for button in (panel.save_plan_button, panel.load_plan_button):
+                bounds = QRect(button.mapTo(viewport, QPoint()), button.size())
+                assert viewport.rect().contains(bounds), (handle.instance_id, button.text(), bounds, viewport.rect())
+            with monkeypatch.context() as busy:
+                busy.setattr(panel, "command_running", lambda: True)
+                panel.status.setText("Saving partial records")
+                panel.output_location_changed(tmp_path / "later")
+                assert panel.status.text() == "Saving partial records"
+                assert panel.status.toolTip() == str(destination)
+            panel.hide()
+    finally:
+        app.setFont(previous_font)
 
 
 def test_actual_shell_keeps_entire_input_rectangles_visible_at_1100_by_780(app, tmp_path):

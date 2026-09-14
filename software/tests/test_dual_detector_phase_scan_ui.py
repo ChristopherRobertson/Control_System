@@ -127,7 +127,7 @@ def test_dual_main_window_keeps_offline_tabs_accessible_on_short_desktop(qt_app)
     window = ControlSystemMainWindow()
     try:
         dual = window.dual_detector_phase_scan_widget
-        assert window.tabs.tabText(window.tabs.indexOf(dual)) == "Dual-Detector Phase Scan"
+        assert window.tabs.tabText(window.tabs.indexOf(dual)) == "DD Phase Scan"
         window.resize(1100, 780)
         window.show()
         window.tabs.setCurrentWidget(dual)
@@ -195,7 +195,7 @@ def test_dual_surface_numeric_inputs_toolbar_export_and_new_run(qt_app, tmp_path
     from test_regular_phase_scan_ui import reconstruction
     from control_app.workflows.phase_scan_data import save_native
     from control_app.ui.widgets.phase_scan_surface import export_quantitative_csv
-    dual = dual_widget()
+    dual = dual_widget(save_root_provider=lambda: tmp_path)
     try:
         result = synthetic_result()
         dual.show_reconstruction(result)

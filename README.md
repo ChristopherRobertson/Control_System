@@ -60,18 +60,34 @@ manifest. A plan, recipe, directory, or registry row never authorizes hardware o
 changes scientific status.
 
 The desktop is composed by the small `software/control_app/measurement_host/`
-host. **Phase Scan** and **Dual-Detector Phase Scan** retain their scientific
-workflows, native files, timing and review controls. Additional measurements
-register their own pair through
+host. The top-level detector selector starts on **Single**; select **Dual** to
+show the matching dual-detector pages. Each mode shows these six methods in order:
+
+| Single | Dual |
+| --- | --- |
+| [Slow Scan](docs/operating_procedures/steady_state_slow_scan.md) | DD Slow Scan |
+| [Fixed Wavenumber](docs/operating_procedures/fixed_wavenumber_kinetics.md) | DD Fixed Wavenumber |
+| [Nanosecond Stroboscopy](docs/operating_procedures/nanosecond_stroboscopy.md) | DD Nanosecond Stroboscopy |
+| [Microsecond Stroboscopy](docs/operating_procedures/microsecond_stroboscopy.md) | DD Microsecond Stroboscopy |
+| [Single Scan Phase Delay](docs/operating_procedures/single_pump_scan_burst.md) | DD Single Scan Phase Delay |
+| [Rapid Scan Phase Delay](docs/operating_procedures/repeated_rapid_scan.md) | DD Rapid Scan Phase Delay |
+
+The matching [Phase Scan](docs/operating_procedures/phase_scan_tab.md) or
+[DD Phase Scan](docs/operating_procedures/dual_detector_phase_scan_tab.md) follows
+these six methods, then MIRcat, T660-1, Nd:YAG, OPO Iris and Plotter. Both Phase
+Scan pages retain their scientific workflows, native files, timing and review
+controls. Additional measurements register their own pair through
 `software/control_app/measurement_modules/<experiment_id>/registration.py`.
 Discovery sorts descriptors by display order and stable ID, isolates optional
-import/construction failures, and adds the pairs before the unchanged MIRcat,
-T660-1, Nd:YAG, OPO Iris and Plotter device-tab order. The horizontal tab bar's
-native scroll arrows keep every tab reachable. Offline analysis, simulation and
-plan editing can continue while another tab owns the instrument.
+import/construction failures, and retains the device-tab order. The horizontal
+tab bar's native scroll arrows keep every visible tab reachable. Offline analysis,
+simulation and plan editing can continue while another tab owns the instrument.
 
 This checkout includes all six measurement packages, each with single- and
-dual-detector tabs, for nineteen tabs in total. Restart an already-running UI
+dual-detector tabs. All **19 tabs remain instantiated**, with **12 visible in
+each mode**: six methods, the matching Phase Scan and five device pages. Switching
+modes preserves each page's settings and active work; hidden pages still participate
+in ownership, emergency stop and close checks. Restart an already-running UI
 after updating the checkout so it discovers the installed packages. Hidden
 measurement pages do not change the existing Phase Scan pages' layout size.
 The twelve new pages use compact scientific inputs and calculated settings with
@@ -105,11 +121,23 @@ have been verified. The procedure does not restart an experiment. External vendo
 software does not participate in this lock; release its device sessions before
 using the application.
 
+New measurement output defaults to
+`evidence/experiments/runs/YYYY-MM-DD/<exact current tab title>/`, using the local
+calendar date and the displayed title, including the `DD ` prefix in Dual mode.
+For example, a new DD Slow Scan run is saved below
+`evidence/experiments/runs/YYYY-MM-DD/DD Slow Scan/<run_uuid>/`. A custom save
+destination belongs to the selected page and detector mode; it does not change
+another page's destination. Each operation freezes its root before starting, so
+changing pages, dates or save destinations cannot redirect active work. Phase
+Scan keeps its existing native run-directory names and schemas beneath its page
+root. Nd:YAG never becomes a folder name; its device page and standalone device
+output use the plain dated root `evidence/experiments/runs/YYYY-MM-DD/` by default.
+These defaults apply to new output only; historical files are not moved or renamed.
+
 The Phase Scan adapter migrates only the old regular/dual settings and HF2 choice
-keys into `measurements/phase_scan/<mode>/v1/`, preserving the old values. New
-feature runs use the frozen destination
-`<save_root>/measurements/<experiment_id>/<mode>/<run_uuid>/`; existing Phase Scan
-native directory names and schemas remain unchanged. Selected instrument
+keys into `measurements/phase_scan/<mode>/v1/`, preserving the old values. Stable
+experiment IDs, preference namespaces and native record schemas are unchanged.
+Selected instrument
 calibration is loaded only through promoted-bundle access. Accepted sample
 spectral selections are independent versioned data with producer, condition,
 source and uncertainty; they do not require the Slow Scan package to be installed.

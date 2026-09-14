@@ -260,6 +260,7 @@ class ContextFactory:
         simulated_device_factories: Mapping[str, Callable] | None = None,
         promoted_bundle_loader: Callable[[str], Any] | None = None,
         save_root_provider: Callable[[], str | Path] | None = None,
+        instance_save_root_provider: Callable[[str], str | Path] | None = None,
         preference_backend: Any = None, ownership: Any = None, lifecycle: Any = None,
     ):
         from control_app.paths import get_save_location
@@ -273,6 +274,7 @@ class ContextFactory:
             simulated_device_factories=dict(simulated_device_factories or {}),
             promoted_bundle_loader=promoted_bundle_loader or load_promoted_bundle,
             save_root_provider=save_root_provider or get_save_location,
+            instance_save_root_provider=instance_save_root_provider,
             preference_backend={} if preference_backend is None else preference_backend,
             ownership=ownership, lifecycle=lifecycle,
         )
@@ -328,6 +330,10 @@ class MeasurementContext:
         return deepcopy(self.__services["promoted_bundle_loader"](bundle_id))
 
     def save_root(self) -> Path:
+        provider = self.__services.get("instance_save_root_provider")
+        if provider is not None:
+            self._require_mode()
+            return Path(provider(self.instance_id)).expanduser().resolve()
         return Path(self.__services["save_root_provider"]()).expanduser().resolve()
 
     def new_plan(self, settings: Mapping[str, Any]) -> PlanSnapshot:
@@ -365,7 +371,10 @@ class MeasurementContext:
         samples = tuple(freeze_data(value) for value in sample_records)
         root = self.save_root()
         run_id = str(uuid4())
-        output = root / "measurements" / self.experiment_id / self.mode / run_id
+        if self.__services.get("instance_save_root_provider") is not None:
+            output = root / run_id
+        else:
+            output = root / "measurements" / self.experiment_id / self.mode / run_id
         started = datetime.now(timezone.utc).isoformat()
         token = self.ownership.acquire(run_id, purpose=purpose, cancel=cancel) if hardware else None
         return OperationSnapshot(1, self.instance_id, plan.plan_id, run_id, started, hardware,

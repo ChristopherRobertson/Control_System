@@ -73,16 +73,16 @@ def test_seven_tab_gui_shell_instantiates_without_hardware(monkeypatch, tmp_path
         assert handles[1].widget is window.dual_detector_phase_scan_widget
         legacy_tabs = [
             ("Phase Scan", window.phase_scan_widget),
-            ("Dual-Detector Phase Scan", window.dual_detector_phase_scan_widget),
+            ("DD Phase Scan", window.dual_detector_phase_scan_widget),
             ("MIRcat", window.mircat_widget),
             ("T660-1", window.t660_widget),
             ("Nd:YAG", window.ndyag_widget),
             ("OPO Iris", window.iris_widget),
             ("Plotter", window.scan_plotter_widget),
         ]
-        # Accepted optional pairs are inserted after the two phase tabs. Use
+        # Accepted optional pairs are inserted before the two phase tabs. Use
         # their actual handles, since invalid optional pairs may be excluded.
-        expected_tabs = [(handle.title, handle.widget) for handle in handles] + legacy_tabs[2:]
+        expected_tabs = [(handle.title, handle.widget) for handle in handles[2:] + handles[:2]] + legacy_tabs[2:]
         assert window.tabs.count() == len(expected_tabs)
         for index, (title, widget) in enumerate(expected_tabs):
             assert window.tabs.tabText(index) == title
@@ -98,7 +98,7 @@ def test_seven_tab_gui_shell_instantiates_without_hardware(monkeypatch, tmp_path
         window.tabs.tabBar().setCurrentIndex(window.tabs.count() - 1)
         assert window.tabs.currentWidget() is window.scan_plotter_widget
         window.tabs.tabBar().setCurrentIndex(0)
-        assert window.tabs.currentWidget() is window.phase_scan_widget
+        assert window.tabs.currentWidget() is expected_tabs[0][1]
         if discovery_case != "installed":
             assert window.registration_issues == ()
             assert window.tabs.count() == (7 if discovery_case == "empty" else 9)

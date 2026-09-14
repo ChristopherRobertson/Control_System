@@ -67,7 +67,7 @@ def test_ns_production_discovery_live_default_compact_no_review(ns_qt, ns_factor
     descriptor = next(item for item in discovery.descriptors if item.experiment_id == "nanosecond_stroboscopy")
     created = create_registered_tabs([descriptor], ns_factory[0])
     assert not created.issues
-    assert [handle.title for handle in created.handles] == ["Nanosecond Stroboscopy", "Dual-Detector Nanosecond Stroboscopy"]
+    assert [handle.title for handle in created.handles] == ["Nanosecond Stroboscopy", "DD Nanosecond Stroboscopy"]
     for handle in created.handles:
         panel = handle.widget
         assert isinstance(panel, CompactMeasurementPanel)

@@ -69,7 +69,7 @@ def test_us_registration_creates_exact_two_compact_independent_hardware_free_tab
     assert DESCRIPTOR.experiment_id == "microsecond_stroboscopy"
     assert [(tab.instance_id, tab.title) for tab in tabs] == [
         ("microsecond_stroboscopy:single", "Microsecond Stroboscopy"),
-        ("microsecond_stroboscopy:dual", "Dual-Detector Microsecond Stroboscopy")]
+        ("microsecond_stroboscopy:dual", "DD Microsecond Stroboscopy")]
     single, dual = [tab.widget for tab in tabs]
     assert single.adapter is not dual.adapter and single.settings_widget is not dual.settings_widget
     single.settings_widget._controls["averages"][0].setValue(1)
@@ -103,7 +103,7 @@ def test_us_actual_host_discovery_preserves_reserved_phase_scan_pair(qt_app, tmp
     selected = [entry for entry in discovered.descriptors if entry.experiment_id == "microsecond_stroboscopy"]
     assert len(selected) == 1
     result = create_registered_tabs(selected, ContextFactory(save_root_provider=lambda: tmp_path),
-        existing_titles=("Phase Scan", "Dual-Detector Phase Scan"),
+        existing_titles=("Phase Scan", "DD Phase Scan"),
         existing_instance_ids=("phase_scan:single", "phase_scan:dual"))
     assert not result.issues
     assert {handle.instance_id for handle in result.handles} == {"microsecond_stroboscopy:single", "microsecond_stroboscopy:dual"}

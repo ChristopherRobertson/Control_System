@@ -1,8 +1,8 @@
-# Fixed-Wavenumber Kinetics
+# Fixed Wavenumber
 
-The independently registered tabs are **Fixed-Wavenumber Kinetics**
-(`fixed_wavenumber_kinetics:single`) and **Dual-Detector Fixed-Wavenumber
-Kinetics** (`fixed_wavenumber_kinetics:dual`). They share implementation within
+The independently registered tabs are **Fixed Wavenumber**
+(`fixed_wavenumber_kinetics:single`) and **DD Fixed Wavenumber**
+(`fixed_wavenumber_kinetics:dual`). They share implementation within
 this module and keep separate settings, data, cancellation and operation state.
 
 ## Operation

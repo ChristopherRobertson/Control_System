@@ -353,7 +353,7 @@ def test_load_export_image_keeps_missing_values_and_existing_files(qt_app, tmp_p
     result = reconstruction()
     path = tmp_path / "run"
     save_native(path / "processed" / "reconstruction.npz", result)
-    widget = PhaseScanReconstructionWidget()
+    widget = PhaseScanReconstructionWidget(save_root_provider=lambda: tmp_path)
     widget.load_run(path)
     np.testing.assert_equal(widget.result["absorbance"], result["absorbance"])
     np.testing.assert_equal(widget.result["delta_absorbance"], result["delta_absorbance"])

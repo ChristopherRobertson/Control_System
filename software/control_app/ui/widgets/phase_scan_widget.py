@@ -747,7 +747,7 @@ class PhaseScanWidget(QWidget):
         self.scan_status.setText("Abort requested. Retaining partial records and restoring safe idle state…")
 
     def _load_background(self):
-        path = QFileDialog.getExistingDirectory(self, "Select a saved buffer blank sequence", str(get_save_location()))
+        path = QFileDialog.getExistingDirectory(self, "Select a saved buffer blank sequence", str(self.save_root_provider()))
         if path:
             self._pending_background_path = Path(path)
             try:
@@ -859,7 +859,7 @@ class PhaseScanWidget(QWidget):
         self._update_buttons()
 
     def _load_plan(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Load phase-scan plan", str(get_save_location()), "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Load phase-scan plan", str(self.save_root_provider()), "JSON (*.json)")
         if path:
             try:
                 self.load_plan(path)
@@ -869,11 +869,18 @@ class PhaseScanWidget(QWidget):
     def _save_plan(self):
         if self.plan is None:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Save phase-scan plan", str(get_save_location() / ("dual_detector_phase_scan_plan.json" if self.dual_detector else "phase_scan_plan.json")), "JSON (*.json)")
+        try:
+            root = Path(self.save_root_provider()).expanduser().resolve()
+            root.mkdir(parents=True, exist_ok=True)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Save phase-scan plan", str(exc))
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save phase-scan plan", str(root / ("dual_detector_phase_scan_plan.json" if self.dual_detector else "phase_scan_plan.json")), "JSON (*.json)")
         if path:
             try:
                 payload = self.plan.to_dict()
                 payload["saved_at_utc"] = datetime.now(UTC).isoformat()
+                Path(path).parent.mkdir(parents=True, exist_ok=True)
                 with Path(path).open("x", encoding="utf-8") as handle:
                     json.dump(payload, handle, indent=2, allow_nan=False)
                 self.save_status.setText(f"Plan saved: {path}")

@@ -47,7 +47,7 @@ def test_fixed_point_real_pair_constructs_without_hardware_and_scopes_preference
     from control_app.measurement_host.contracts import validate_handles
     from control_app.measurement_modules.fixed_wavenumber_kinetics.registration import DESCRIPTOR
     validate_handles(DESCRIPTOR, pair)
-    assert [h.title for h in pair] == ["Fixed-Wavenumber Kinetics", "Dual-Detector Fixed-Wavenumber Kinetics"]
+    assert [h.title for h in pair] == ["Fixed Wavenumber", "DD Fixed Wavenumber"]
     assert [h.instance_id for h in pair] == ["fixed_wavenumber_kinetics:single", "fixed_wavenumber_kinetics:dual"]
     assert pair[0].widget.adapter is not pair[1].widget.adapter
     assert all(key.startswith("measurements/fixed_wavenumber_kinetics/") for key in prefs)
@@ -515,8 +515,8 @@ def test_fixed_point_plot_relative_fallback_and_sequential_blank_labels():
     assert figure.axes[1].texts[0].get_text() == "No normalized signal"
 
 
-@pytest.mark.parametrize("index", [2, 3])
-def test_fixed_point_actual_shell_fits_and_keeps_plot_labels_visible(app, tmp_path, index):
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_fixed_point_actual_shell_fits_and_keeps_plot_labels_visible(app, tmp_path, mode):
     import numpy as np
     from PySide6.QtCore import QPoint, QRect
     from control_app.ui.main_window import ControlSystemMainWindow
@@ -526,15 +526,17 @@ def test_fixed_point_actual_shell_fits_and_keeps_plot_labels_visible(app, tmp_pa
     handler = blocked_handler("Injected layout test")
     handler.coordinator = HardwareCoordinator(tmp_path/"shell.lock")
     window = ControlSystemMainWindow(command_handler=handler, module_discovery=DiscoveryResult((DESCRIPTOR,), ()))
-    for position in (2, 3):
-        window.tabs.widget(position)._capability_check_attempted = True
-    panel = window.tabs.widget(index)
+    pair = [handle for handle in window.measurement_lifecycle.handles
+            if handle.instance_id.startswith("fixed_wavenumber_kinetics:")]
+    for handle in pair:
+        handle.widget._capability_check_attempted = True
+    panel = next(handle.widget for handle in pair if handle.instance_id.endswith(":" + mode))
     panel.editor.wavenumber.setValue(1930)
     event = {"time_s": np.linspace(-.2, 3., 40), "sample": np.ones(40), "ratio": np.ones(40),
              "delta_absorbance": np.zeros(40), "wavenumber_cm1": 1930., "recovery_fit": {}}
     panel.show_record({"mode": panel.context.mode, "analysis": {"events": [event]}})
     window.resize(1100, 780)
-    window.tabs.setCurrentIndex(index)
+    window.tabs.setCurrentWidget(panel)
     window.show()
     app.processEvents()
     panel.plot.canvas.draw()

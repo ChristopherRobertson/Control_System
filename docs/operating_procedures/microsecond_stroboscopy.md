@@ -1,7 +1,7 @@
 # Microsecond Stroboscopy
 
-The two independent tabs are **Microsecond Stroboscopy** and **Dual-Detector
-Microsecond Stroboscopy**. Their instance IDs remain
+The two independent tabs are **Microsecond Stroboscopy** and **DD Microsecond
+Stroboscopy**. Their instance IDs remain
 `microsecond_stroboscopy:single` and `microsecond_stroboscopy:dual`.
 Each tab has its own settings, retained references, results and cancellation.
 

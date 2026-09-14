@@ -1,12 +1,13 @@
 """Frozen host-v1 registration; constructing tabs performs no device access."""
 from control_app.measurement_host import API_VERSION, ModuleDescriptor
+from control_app.measurement_host.naming import tab_title
 
 
 def create_tabs(context):
     from .widgets import make_handle
     return (
-        make_handle(context.for_mode("single"), title="Nanosecond Stroboscopy"),
-        make_handle(context.for_mode("dual"), title="Dual-Detector Nanosecond Stroboscopy"),
+        make_handle(context.for_mode("single"), title=tab_title("nanosecond_stroboscopy", "single")),
+        make_handle(context.for_mode("dual"), title=tab_title("nanosecond_stroboscopy", "dual")),
     )
 
 

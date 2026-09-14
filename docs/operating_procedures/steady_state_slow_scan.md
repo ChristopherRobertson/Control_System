@@ -1,6 +1,6 @@
 # Steady-state slow scans
 
-The **Slow Scan** and **Dual-Detector Slow Scan** tabs acquire unpumped static
+The **Slow Scan** and **DD Slow Scan** tabs acquire unpumped static
 sample spectra and keep pump FIRE and Q-switch outputs OFF. Single and dual tabs
 have independent settings, controls and results.
 

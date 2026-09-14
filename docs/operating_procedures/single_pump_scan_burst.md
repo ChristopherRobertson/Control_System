@@ -1,6 +1,6 @@
-# Single-pump scan bursts
+# Single Scan Phase Delay
 
-The **Single-Pump Scan Bursts** and **Dual-Detector Single-Pump Scan Bursts**
+The **Single Scan Phase Delay** and **DD Single Scan Phase Delay**
 tabs acquire an initial rapid sequence and later logarithmically spaced bursts
 after one pump trigger. Each tab has independent settings, records and output.
 

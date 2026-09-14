@@ -1,6 +1,6 @@
 # Nanosecond stroboscopy
 
-The **Nanosecond Stroboscopy** and **Dual-Detector Nanosecond Stroboscopy** tabs
+The **Nanosecond Stroboscopy** and **DD Nanosecond Stroboscopy** tabs
 use the common compact measurement panel. Normal operations use installed device
 factories. There is no execution-mode selector, review checkbox, temperature
 branch, or promoted-evidence gate for raw measurement.

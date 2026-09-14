@@ -1,7 +1,7 @@
 # Phase Scan tab
 
 For simultaneous sample/reference detection, use the separate
-[Dual-Detector Phase Scan tab](dual_detector_phase_scan_tab.md). The workflow
+[DD Phase Scan tab](dual_detector_phase_scan_tab.md). The workflow
 below and saved single-detector runs retain their existing meaning.
 
 Use **Phase Scan** for the regular single-detector swept-wavenumber phase

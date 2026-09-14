@@ -1,4 +1,4 @@
-# Dual-Detector Phase Scan tab
+# DD Phase Scan tab
 
 This tab reuses the Phase Scan controls, continuous execution and reconstruction
 views. Sample and matched-buffer reference are recorded simultaneously. It does
@@ -7,7 +7,7 @@ and its saved single-detector runs remain available.
 
 ## App-only operation
 
-1. Open **Dual-Detector Phase Scan**, choose the save location, and load the sample.
+1. Select **Dual** and open **DD Phase Scan**, choose the save location, and load the sample.
    Keep the matched buffer blank in the reference path. Set the same acquisition
    parameters used by Phase Scan. Review the automatically resolved **Sample**,
    **Reference**, timing and combined resolution settings in the existing summary.

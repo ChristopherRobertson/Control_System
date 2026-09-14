@@ -68,12 +68,12 @@ def test_rrs_actual_pair_discovery_and_construction_are_hardware_free(app, tmp_p
     def forbidden(**kwargs):
         raise AssertionError("Factory invoked while constructing tabs")
     factory = ContextFactory(real_device_factories={name: forbidden for name in ("hf2li", "mircat", "t660_1", "t660_2")},
-                             save_root_provider=lambda: tmp_path)
+                             save_root_provider=lambda: tmp_path, ownership=HardwareCoordinator(tmp_path / "discovery.lock"))
     discovered = discover_modules()
     assert DESCRIPTOR in discovered.descriptors
     result = create_registered_tabs((DESCRIPTOR,), factory)
     assert not result.issues
-    assert [h.title for h in result.handles] == ["Repeated Rapid-Scan Phase Delay", "Dual-Detector Repeated Rapid-Scan Phase Delay"]
+    assert [h.title for h in result.handles] == ["Rapid Scan Phase Delay", "DD Rapid Scan Phase Delay"]
     assert [h.instance_id for h in result.handles] == ["repeated_rapid_scan:single", "repeated_rapid_scan:dual"]
     single, dual = [h.widget for h in result.handles]
     assert single.adapter.session is not dual.adapter.session
@@ -385,14 +385,21 @@ def test_rrs_check_device_with_invalid_spectral_inputs_is_owned_read_only(app, t
     assert panel.adapter.runner.last_result["status"] == "complete"
 
 
-def test_rrs_production_pair_installs_in_main_window_without_sibling_packages(app):
+def test_rrs_production_pair_installs_in_main_window_without_sibling_packages(app, tmp_path):
     from control_app.ui.main_window import ControlSystemMainWindow
-    window = ControlSystemMainWindow(module_discovery=(DESCRIPTOR,))
+    from control_app.ui.contracts import blocked_handler
+    handler = blocked_handler("rapid-scan integration; no hardware")
+    handler.coordinator = HardwareCoordinator(tmp_path / "instrument.lock")
+    window = ControlSystemMainWindow(handler, module_discovery=(DESCRIPTOR,))
     try:
         titles = [window.tabs.tabText(i) for i in range(window.tabs.count())]
-        assert titles.count("Repeated Rapid-Scan Phase Delay") == 1
-        assert titles.count("Dual-Detector Repeated Rapid-Scan Phase Delay") == 1
-        assert "Phase Scan" in titles and "Dual-Detector Phase Scan" in titles
+        assert titles.count("Rapid Scan Phase Delay") == 1
+        assert titles.count("DD Rapid Scan Phase Delay") == 1
+        assert "Phase Scan" in titles and "DD Phase Scan" in titles
+        for mode, title in (("single", "Rapid Scan Phase Delay"), ("dual", "DD Rapid Scan Phase Delay")):
+            window.set_detector_mode(mode)
+            visible = [window.tabs.tabText(i) for i in range(window.tabs.count()) if window.tabs.isTabVisible(i)]
+            assert visible[0] == title
     finally:
         window.deleteLater()
 

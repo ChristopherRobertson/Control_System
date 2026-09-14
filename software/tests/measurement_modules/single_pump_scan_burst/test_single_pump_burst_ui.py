@@ -93,8 +93,8 @@ def test_discovery_exact_tabs_compact_essentials_no_operator_gates(qt_app, tmp_p
     result = create_registered_tabs(descriptors, factory)
     assert not result.issues
     assert [(item.instance_id, item.title) for item in result.handles] == [
-        ("single_pump_scan_burst:single", "Single-Pump Scan Bursts"),
-        ("single_pump_scan_burst:dual", "Dual-Detector Single-Pump Scan Bursts")]
+        ("single_pump_scan_burst:single", "Single Scan Phase Delay"),
+        ("single_pump_scan_burst:dual", "DD Single Scan Phase Delay")]
     first, second = [item.widget for item in result.handles]
     assert isinstance(first, CompactMeasurementPanel)
     assert first.adapter is not second.adapter

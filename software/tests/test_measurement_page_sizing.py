@@ -46,21 +46,32 @@ def settle(app):
         app.processEvents()
 
 
-@pytest.mark.parametrize("legacy_index", (0, 1), ids=("single_phase_scan", "dual_phase_scan"))
-def test_hidden_optional_pages_preserve_legacy_geometry_and_selected_native_size(legacy_index):
+@pytest.mark.parametrize("mode", ("single", "dual"))
+def test_hidden_optional_pages_preserve_legacy_geometry_and_selected_native_size(mode, tmp_path, monkeypatch):
+    from control_app import paths
+    from control_app.measurement_host.ownership import HardwareCoordinator
+    from control_app.ui.contracts import blocked_handler
+
+    monkeypatch.setattr(paths, "RUN_ROOT", tmp_path / "runs")
+    monkeypatch.setattr(paths, "_selected_save_location", None)
     app = QApplication.instance() or QApplication([])
     descriptor = ModuleDescriptor(1, "oversized_measurement", 1, oversized_pair)
-    legacy = ControlSystemMainWindow(module_discovery=())
-    integrated = ControlSystemMainWindow(module_discovery=(descriptor,))
+    def handler(name):
+        result = blocked_handler("isolated geometry test")
+        result.coordinator = HardwareCoordinator(tmp_path / f"{name}.lock")
+        return result
+    legacy = ControlSystemMainWindow(handler("legacy"), module_discovery=())
+    integrated = ControlSystemMainWindow(handler("integrated"), module_discovery=(descriptor,))
     try:
         for window in (legacy, integrated):
             window.resize(1100, 780)
-            window.tabs.setCurrentIndex(legacy_index)
+            window.tabs.setCurrentWidget(window.phase_scan_widget if mode == "single"
+                                         else window.dual_detector_phase_scan_widget)
             window.show()
         settle(app)
         baseline_hint = legacy.tabs.minimumSizeHint()
-        baseline_phase = legacy.tabs.widget(legacy_index).size()
-        phase_page = integrated.tabs.widget(legacy_index)
+        baseline_phase = legacy.tabs.currentWidget().size()
+        phase_page = integrated.tabs.currentWidget()
         legacy_policies = [QSizePolicy(legacy.tabs.widget(i).sizePolicy()) for i in range(legacy.tabs.count())]
         assert integrated.tabs.minimumSizeHint() == baseline_hint
         assert phase_page.size() == baseline_phase

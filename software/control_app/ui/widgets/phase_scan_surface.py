@@ -124,9 +124,10 @@ if QWidget is not None:
     class PhaseScanReconstructionWidget(QWidget):
         run_loaded = Signal(object, str)
 
-        def __init__(self, parent=None, *, detector_mode="single_ch1_buffer_blank"):
+        def __init__(self, parent=None, *, detector_mode="single_ch1_buffer_blank", save_root_provider=None):
             super().__init__(parent)
             self.detector_mode = detector_mode
+            self._save_root_provider = save_root_provider
             from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
             from matplotlib.figure import Figure
             self.result, self.run_path = None, None
@@ -411,28 +412,48 @@ if QWidget is not None:
                 self.time_slider.setValue(nearest[0])
                 self.spectral_slider.setValue(nearest[1])
 
+        def _dialog_root(self, *, create=False):
+            provider = self._save_root_provider
+            parent = self.parentWidget()
+            while provider is None and parent is not None:
+                candidate = getattr(parent, "save_root_provider", None)
+                if callable(candidate):
+                    provider = candidate
+                parent = parent.parentWidget()
+            if provider is None:
+                from control_app.paths import get_save_location
+                provider = get_save_location
+            root = Path(provider()).expanduser().resolve()
+            if create:
+                root.mkdir(parents=True, exist_ok=True)
+            return root
+
         def _choose_load(self):
-            path = QFileDialog.getExistingDirectory(self, "Load saved phase-scan run")
-            if path:
-                try:
+            try:
+                path = QFileDialog.getExistingDirectory(self, "Load saved phase-scan run", str(self._dialog_root()))
+                if path:
                     self.load_run(path)
-                except Exception as exc:
-                    QMessageBox.warning(self, "Load phase scan", str(exc))
+            except Exception as exc:
+                QMessageBox.warning(self, "Load phase scan", str(exc))
 
         def _choose_export(self):
-            path, _ = QFileDialog.getSaveFileName(self, "Export quantitative phase-scan data", "phase_scan.csv", "CSV (*.csv)")
-            if path:
-                try:
+            try:
+                root = self._dialog_root(create=True)
+                path, _ = QFileDialog.getSaveFileName(self, "Export quantitative phase-scan data", str(root / "phase_scan.csv"), "CSV (*.csv)")
+                if path:
+                    Path(path).parent.mkdir(parents=True, exist_ok=True)
                     export_quantitative_csv(path, self.result)
-                except Exception as exc:
-                    QMessageBox.warning(self, "Export phase scan", str(exc))
+            except Exception as exc:
+                QMessageBox.warning(self, "Export phase scan", str(exc))
 
         def _choose_image(self):
-            path, _ = QFileDialog.getSaveFileName(self, "Save phase-scan plot image", "phase_scan.png", "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)")
-            if path:
-                try:
+            try:
+                root = self._dialog_root(create=True)
+                path, _ = QFileDialog.getSaveFileName(self, "Save phase-scan plot image", str(root / "phase_scan.png"), "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)")
+                if path:
                     if Path(path).exists():
                         raise FileExistsError("Choose a new filename to preserve existing images")
+                    Path(path).parent.mkdir(parents=True, exist_ok=True)
                     self.figure.savefig(path, dpi=180)
-                except Exception as exc:
-                    QMessageBox.warning(self, "Save phase-scan image", str(exc))
+            except Exception as exc:
+                QMessageBox.warning(self, "Save phase-scan image", str(exc))

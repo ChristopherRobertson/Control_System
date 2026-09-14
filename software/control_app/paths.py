@@ -54,22 +54,49 @@ def default_save_location() -> Path:
     return RUN_ROOT / date.today().isoformat()
 
 
+def default_tab_save_location(tab_name: str) -> Path:
+    """Return today's exact tab-named folder without filesystem access.
+
+    Display names must be one valid Windows filename component. Reject unsafe
+    names instead of silently changing the name used in the application.
+    """
+    if (not isinstance(tab_name, str) or not tab_name or tab_name != tab_name.strip()
+            or tab_name in {".", ".."} or tab_name.endswith(".")
+            or any(ord(char) < 32 or char in '<>:"/\\|?*' for char in tab_name)):
+        raise ValueError("Tab name must be a safe, nonempty single path segment")
+    device_name = tab_name.split(".", 1)[0].rstrip(" ").upper()
+    reserved = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+    reserved.update(prefix + digit for prefix in ("COM", "LPT") for digit in "123456789¹²³")
+    if device_name in reserved or len(tab_name.encode("utf-16-le")) > 510:
+        raise ValueError("Tab name must be a safe, nonempty single path segment")
+    return default_save_location() / tab_name
+
+
 def get_save_location() -> Path:
     return _selected_save_location or default_save_location()
 
 
-def set_save_location(value: str | Path) -> Path:
+def set_save_location(value: str | Path, *, create: bool = True) -> Path:
+    """Select an output folder; explicit choices create and check write access.
+
+    The shell can select an idle tab's default with create=False without making
+    directories or probing the destination. A native saver validates it on use.
+    """
     global _selected_save_location
     if not str(value).strip():
         raise ValueError("Choose a non-empty save location")
-    path = Path(value).expanduser().resolve()
-    path.mkdir(parents=True, exist_ok=True)
-    if not path.is_dir():
-        raise ValueError("Save Location must be a folder")
-    # Check actual write access, including network shares and Windows ACLs.
-    from tempfile import TemporaryFile
-    with TemporaryFile(dir=path):
-        pass
+    path = Path(value).expanduser()
+    if create:
+        path = path.resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        if not path.is_dir():
+            raise ValueError("Save Location must be a folder")
+        # Check actual write access, including network shares and Windows ACLs.
+        from tempfile import TemporaryFile
+        with TemporaryFile(dir=path):
+            pass
+    else:
+        path = Path(os.path.abspath(path))
     _selected_save_location = path
     return path
 

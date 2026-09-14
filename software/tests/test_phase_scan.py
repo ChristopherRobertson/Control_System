@@ -353,18 +353,23 @@ def test_background_worker_enables_start_only_after_success(qt_app, monkeypatch,
     widget.deleteLater()
 
 
-def test_global_save_location_creates_folder_and_blocks_changes_during_activity(qt_app, monkeypatch, tmp_path):
+def test_tab_save_location_creates_folder_and_blocks_changes_during_activity(qt_app, monkeypatch, tmp_path):
     from control_app import paths
     from control_app.ui.main_window import ControlSystemMainWindow
+    from control_app.ui.contracts import blocked_handler
+    from control_app.measurement_host.ownership import HardwareCoordinator
     monkeypatch.setattr(paths, "_selected_save_location", None)
-    window = ControlSystemMainWindow(persist_settings=False)
+    monkeypatch.setattr(paths, "RUN_ROOT", tmp_path / "runs")
+    handler = blocked_handler("isolated shell test")
+    handler.coordinator = HardwareCoordinator(tmp_path / "owner.lock")
+    window = ControlSystemMainWindow(handler, persist_settings=False)
     target = tmp_path / "experiment data" / "new folder"
     window.save_location.setText(str(target))
     window._apply_save_location()
     assert target.is_dir()
     assert paths.output_run_root() == target
     assert paths.output_log_root() == target / "logs"
-    assert window.scan_plotter_widget.destination.text() == str(target)
+    assert window.scan_plotter_widget.destination.text() == str(paths.default_tab_save_location("Plotter"))
     monkeypatch.setattr(window, "_close_blockers", lambda: ["active test operation"])
     window._update_save_enabled()
     assert not window.save_location.isEnabled()

@@ -7,6 +7,8 @@ import importlib
 from pathlib import Path
 from typing import Iterable
 
+from control_app.paths import default_tab_save_location
+
 from .contracts import ContractError, ModuleDescriptor, TabHandle, validate_descriptor, validate_handles
 
 
@@ -85,6 +87,16 @@ def create_registered_tabs(
             pair = tuple(descriptor.create_tabs(context))
             pair = validate_handles(descriptor, pair)
             for handle in pair:
+                # Desktop destinations preserve display titles exactly. Validate
+                # both names before publishing either member of an optional pair.
+                # The path helper is lexical only: no folder or device access.
+                try:
+                    default_tab_save_location(handle.title)
+                except ValueError as exc:
+                    raise ContractError(
+                        f"{handle.instance_id} tab title {handle.title!r} cannot be used "
+                        f"as an exact Windows folder name: {exc}"
+                    ) from exc
                 if handle.instance_id in instances:
                     raise ContractError(f"Duplicate instance ID {handle.instance_id!r}")
                 if handle.title.strip().casefold() in titles:

@@ -209,7 +209,7 @@ try:
     from PySide6.QtCore import Qt, QThread, Signal
     from PySide6.QtWidgets import (
         QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-        QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter,
+        QMessageBox, QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter,
         QVBoxLayout, QWidget,
     )
 except ImportError:  # Optional UI dependencies must not block module discovery.
@@ -395,11 +395,12 @@ if QWidget is not None:
 
         error = Signal(str)
 
-        def __init__(self, adapter: PlotAdapter, parent=None):
+        def __init__(self, adapter: PlotAdapter, parent=None, *, save_root_provider=None):
             super().__init__(parent)
             from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
             from matplotlib.figure import Figure
             self.adapter, self.result = adapter, None
+            self._image_root_provider = save_root_provider
             # The toolbar subplot editor requires an unconstrained layout engine.
             self.figure = Figure(figsize=(8, 5), layout="none")
             self.canvas = FigureCanvasQTAgg(self.figure)
@@ -440,18 +441,36 @@ if QWidget is not None:
             self.reset_view()
 
         def save_image(self, path: Path):
-            path = Path(path)
+            path = Path(path).expanduser().resolve()
             if path.exists():
                 raise FileExistsError("Choose a new filename to preserve existing images")
+            path.parent.mkdir(parents=True, exist_ok=True)
             self.figure.savefig(path, dpi=180)
 
+        def _image_save_root(self):
+            provider = self._image_root_provider
+            parent = self.parentWidget()
+            while provider is None and parent is not None:
+                candidate = getattr(parent, "save_root_provider", None)
+                if callable(candidate):
+                    provider = candidate
+                parent = parent.parentWidget()
+            if provider is None:
+                from control_app.paths import get_save_location
+                provider = get_save_location
+            return Path(provider()).expanduser().resolve()
+
         def _choose_image(self):
-            path, _ = QFileDialog.getSaveFileName(self, "Save plot image", "measurement.png", "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)")
-            if path:
-                try:
+            try:
+                root = self._image_save_root()
+                root.mkdir(parents=True, exist_ok=True)
+                path, _ = QFileDialog.getSaveFileName(self, "Save plot image", str(root / "measurement.png"), "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)")
+                if path:
                     self.save_image(Path(path))
-                except Exception as exc:
-                    self.error.emit(f"{type(exc).__name__}: {exc}")
+            except Exception as exc:
+                message = f"{type(exc).__name__}: {exc}"
+                self.error.emit(message)
+                QMessageBox.warning(self, "Save plot image", message)
 
 
     class GuidedMeasurementPanel(QWidget):
@@ -712,7 +731,11 @@ if QWidget is not None:
             if self.plan is None:
                 raise ValueError("A valid plan is required")
             settings, plan = deepcopy(self.adapter.read_settings()), deepcopy(self.plan)
-            self._launch(lambda _worker: self.adapter.save_plan(Path(path), settings, plan), "save_plan", path)
+            path = Path(path).expanduser().resolve()
+            def save(_worker):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                return self.adapter.save_plan(path, settings, plan)
+            self._launch(save, "save_plan", path)
 
         def load_plan(self, path):
             self._launch(lambda _worker: self.adapter.load_plan(Path(path)), "load_plan", path)
@@ -724,10 +747,27 @@ if QWidget is not None:
             if self.result is None:
                 raise ValueError("Load or acquire a native result before export")
             result = deepcopy(self.result)
-            self._launch(lambda _worker: self.adapter.export_run(Path(path), result), "export_run", path)
+            path = Path(path).expanduser().resolve()
+            def export(_worker):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                return self.adapter.export_run(path, result)
+            self._launch(export, "export_run", path)
+
+        def _prepare_save_folder(self, action):
+            try:
+                root = Path(self.save_root_provider()).expanduser().resolve()
+                root.mkdir(parents=True, exist_ok=True)
+            except (OSError, ValueError) as exc:
+                self.status.setText(f"Cannot prepare the {action} folder.")
+                self.status.setToolTip(str(exc))
+                return None
+            return root
 
         def _choose_save_plan(self):
-            path, _ = QFileDialog.getSaveFileName(self, "Save plan", str(self.save_root_provider()), "Plan files (*)")
+            root = self._prepare_save_folder("Save Plan")
+            if root is None:
+                return
+            path, _ = QFileDialog.getSaveFileName(self, "Save plan", str(root), "Plan files (*)")
             if path:
                 self.save_plan(path)
 
@@ -742,7 +782,10 @@ if QWidget is not None:
                 self.load_run(path)
 
         def _choose_export(self):
-            path, _ = QFileDialog.getSaveFileName(self, "Export data", str(self.save_root_provider()), "Data files (*)")
+            root = self._prepare_save_folder("Export")
+            if root is None:
+                return
+            path, _ = QFileDialog.getSaveFileName(self, "Export data", str(root), "Data files (*)")
             if path:
                 self.export_run(path)
 
@@ -878,6 +921,7 @@ if QWidget is not None:
         load_plan = GuidedMeasurementPanel.load_plan
         load_run = GuidedMeasurementPanel.load_run
         export_run = GuidedMeasurementPanel.export_run
+        _prepare_save_folder = GuidedMeasurementPanel._prepare_save_folder
         _choose_save_plan = GuidedMeasurementPanel._choose_save_plan
         _choose_load_plan = GuidedMeasurementPanel._choose_load_plan
         _choose_load_run = GuidedMeasurementPanel._choose_load_run

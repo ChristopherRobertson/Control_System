@@ -20,13 +20,14 @@ from `registration.py`:
 
 ```python
 from control_app.measurement_host import API_VERSION, ModuleDescriptor
+from control_app.measurement_host.naming import tab_title
 
 def create_tabs(context):
     # Defer Qt/widget imports until the host constructs the pair on the UI thread.
     from .widgets import make_handle
     return (
-        make_handle(context.for_mode("single"), title="Slow Scan"),
-        make_handle(context.for_mode("dual"), title="Dual-Detector Slow Scan"),
+        make_handle(context.for_mode("single"), title=tab_title("steady_state_slow_scan", "single")),
+        make_handle(context.for_mode("dual"), title=tab_title("steady_state_slow_scan", "dual")),
     )
 
 DESCRIPTOR = ModuleDescriptor(
@@ -77,26 +78,36 @@ native/partial saving and any persistent session have actually finished. An
 abort request preserves the distinction between intentional cancellation and
 runtime failure. Callback exceptions must not bypass cleanup or data saving.
 
-The reserved compatibility pairs are exercised as real temporary registration
-packages in `software/tests/test_measurement_host_contract.py`:
+`naming.py` defines the visible order and labels independently of stable module
+and native record IDs. `EXPERIMENT_ORDER` lists the six methods in the following
+order; `tab_title(experiment_id, mode)` uses the Single label or its `DD ` variant.
+The top-level mode selector defaults to **Single**; **Dual** shows the `DD `
+pages. The matching **Phase Scan** or **DD Phase Scan** follows these six methods,
+then MIRcat, T660-1, Nd:YAG, OPO Iris and Plotter. The application retains all
+**19 tab instances** and shows **12 per mode**. A mode change only changes
+visibility: settings, active operations, ownership, emergency-stop routing and
+close checks remain attached to every instance, including hidden pages.
 
 | Stable ID | Single | Dual |
 | --- | --- | --- |
-| `steady_state_slow_scan` | Slow Scan | Dual-Detector Slow Scan |
-| `fixed_wavenumber_kinetics` | Fixed-Wavenumber Kinetics | Dual-Detector Fixed-Wavenumber Kinetics |
-| `nanosecond_stroboscopy` | Nanosecond Stroboscopy | Dual-Detector Nanosecond Stroboscopy |
-| `microsecond_stroboscopy` | Microsecond Stroboscopy | Dual-Detector Microsecond Stroboscopy |
-| `repeated_rapid_scan` | Repeated Rapid-Scan Phase Delay | Dual-Detector Repeated Rapid-Scan Phase Delay |
-| `single_pump_scan_burst` | Single-Pump Scan Bursts | Dual-Detector Single-Pump Scan Bursts |
+| `steady_state_slow_scan` | Slow Scan | DD Slow Scan |
+| `fixed_wavenumber_kinetics` | Fixed Wavenumber | DD Fixed Wavenumber |
+| `nanosecond_stroboscopy` | Nanosecond Stroboscopy | DD Nanosecond Stroboscopy |
+| `microsecond_stroboscopy` | Microsecond Stroboscopy | DD Microsecond Stroboscopy |
+| `single_pump_scan_burst` | Single Scan Phase Delay | DD Single Scan Phase Delay |
+| `repeated_rapid_scan` | Rapid Scan Phase Delay | DD Rapid Scan Phase Delay |
 
-These fixtures are synthetic widgets, not production feature directories.
+Compatibility fixtures remain in `software/tests/test_measurement_host_contract.py`;
+the installed-module smoke test checks the actual six production pairs.
 
 ## Scoped context and operation snapshots
 
 Only the application constructs `ContextFactory`. Its keyword arguments are
 `configuration_provider`, `real_device_factories`, `simulated_device_factories`,
 `promoted_bundle_loader`, `save_root_provider`, `preference_backend`, `ownership`,
-and `lifecycle`. Modules receive an experiment context and immediately create
+`lifecycle`, and optional `instance_save_root_provider`. The application supplies
+`instance_save_root_provider(instance_id: str) -> str | Path` to resolve each
+page's destination independently. Modules receive an experiment context and immediately create
 their two detector contexts with `.for_mode("single" | "dual")`. A detector
 context cannot select another detector mode. It offers:
 
@@ -105,7 +116,7 @@ context cannot select another detector mode. It offers:
 | `.instance_id`, `.experiment_id`, `.mode` | Stable scope identities |
 | `.configuration() -> dict` | Detached configuration copy |
 | `.promoted_bundle(bundle_id) -> PromotedBundle` | Detached result of the injected promotion-validating loader |
-| `.save_root() -> Path` | Current root for the next operation |
+| `.save_root() -> Path` | This detector instance's current root for the next operation |
 | `.preferences` | Scoped `value`, `setValue`, `contains`, `remove`, `sync` subset |
 | `.new_plan(settings: Mapping) -> PlanSnapshot` | New UUID and recursively immutable settings |
 | `.begin_operation(...) -> OperationSnapshot` | Freeze inputs and optionally acquire hardware before dispatch |
@@ -146,12 +157,31 @@ Record data accepts mappings, dataclasses, lists/tuples, paths and scalar values
 mutable SDK/runner objects are rejected. Scientific arrays should be represented
 by explicit selected values or native-file references, not live analysis objects.
 
-New modules save under the frozen path
-`<save_root>/measurements/<experiment_id>/<mode>/<run_uuid>/`. Begin does not
-create folders. The native saver creates them and preserves partial, rejected,
-diagnostic and restoration records. Later settings, baseline selections or global
-save-location changes cannot retarget an active operation. Legacy Phase Scan
-retains its established native output directories and formats.
+In the desktop application, each measurement page defaults to
+`evidence/experiments/runs/YYYY-MM-DD/<exact current tab title>/`, using the local
+calendar date. Titles are preserved exactly, including spaces and the `DD ` prefix.
+The instance provider resolves either that default or the custom destination
+chosen for that page and detector mode. Choosing a custom destination does not
+retarget another page. `begin_operation` freezes this `save_root` and produces
+`output_path = <save_root>/<run_uuid>/`; for example, the default Dual Slow Scan
+destination is `evidence/experiments/runs/YYYY-MM-DD/DD Slow Scan/<run_uuid>/`.
+
+Begin does not create folders. The native saver creates them and preserves
+partial, rejected, diagnostic and restoration records. Later settings, baseline
+selections, date rollover, mode switches or save-location changes cannot retarget
+an active operation. Legacy Phase Scan retains its established native run-directory
+names and formats under the matching Phase Scan or DD Phase Scan page root.
+Historical files and their paths are never moved or renamed by this change.
+Nd:YAG is a device-page label and never a folder name; that page and standalone
+device output default to the plain dated root
+`evidence/experiments/runs/YYYY-MM-DD/`.
+
+For compatibility, an embedding that supplies only the original zero-argument
+`save_root_provider` retains the version 1 output layout
+`<save_root>/measurements/<experiment_id>/<mode>/<run_uuid>/`. The desktop uses
+the instance provider described above. Stable experiment IDs, preference
+namespaces and native record schemas are independent of these display names
+and destination defaults.
 
 Device factories implement
 `factory(*, configuration: Mapping[str, Any], **kwargs) -> fresh_service`.

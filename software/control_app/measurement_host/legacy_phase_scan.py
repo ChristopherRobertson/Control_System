@@ -7,6 +7,7 @@ register independently in measurement_modules, never in this adapter.
 from __future__ import annotations
 
 from .contracts import TabHandle
+from .naming import tab_title
 
 
 class LegacyPhasePreferences:
@@ -44,8 +45,8 @@ def create_phase_scan_tabs(context, *, single_runner=None, dual_runner=None,
 
     handles = []
     for mode, title, runner in (
-        ("single", "Phase Scan", single_runner),
-        ("dual", "Dual-Detector Phase Scan", dual_runner),
+        ("single", tab_title("phase_scan", "single"), single_runner),
+        ("dual", tab_title("phase_scan", "dual"), dual_runner),
     ):
         scoped = context.for_mode(mode)
         widget = PhaseScanWidget(

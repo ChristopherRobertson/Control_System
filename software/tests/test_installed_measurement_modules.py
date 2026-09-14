@@ -11,12 +11,12 @@ import pytest
 
 
 TITLES = {
-    "steady_state_slow_scan": ("Slow Scan", "Dual-Detector Slow Scan"),
-    "fixed_wavenumber_kinetics": ("Fixed-Wavenumber Kinetics", "Dual-Detector Fixed-Wavenumber Kinetics"),
-    "nanosecond_stroboscopy": ("Nanosecond Stroboscopy", "Dual-Detector Nanosecond Stroboscopy"),
-    "microsecond_stroboscopy": ("Microsecond Stroboscopy", "Dual-Detector Microsecond Stroboscopy"),
-    "repeated_rapid_scan": ("Repeated Rapid-Scan Phase Delay", "Dual-Detector Repeated Rapid-Scan Phase Delay"),
-    "single_pump_scan_burst": ("Single-Pump Scan Bursts", "Dual-Detector Single-Pump Scan Bursts"),
+    "steady_state_slow_scan": ("Slow Scan", "DD Slow Scan"),
+    "fixed_wavenumber_kinetics": ("Fixed Wavenumber", "DD Fixed Wavenumber"),
+    "nanosecond_stroboscopy": ("Nanosecond Stroboscopy", "DD Nanosecond Stroboscopy"),
+    "microsecond_stroboscopy": ("Microsecond Stroboscopy", "DD Microsecond Stroboscopy"),
+    "single_pump_scan_burst": ("Single Scan Phase Delay", "DD Single Scan Phase Delay"),
+    "repeated_rapid_scan": ("Rapid Scan Phase Delay", "DD Rapid Scan Phase Delay"),
 }
 
 
@@ -71,15 +71,19 @@ def test_all_six_delivered_modules_install_together_without_hardware(monkeypatch
         assert len(handles) == 14 and len(features) == 12
         assert window.tabs.count() == 19
         assert not hasattr(window, "tab_selector")
-        assert [window.tabs.tabText(index) for index in range(2)] == ["Phase Scan", "Dual-Detector Phase Scan"]
+        assert window.detector_mode.currentData() == "single"
+        assert [window.tabs.tabText(index) for index in range(12, 14)] == ["Phase Scan", "DD Phase Scan"]
+        assert [window.tabs.tabText(index) for index in range(12) if window.tabs.isTabVisible(index)] == [titles[0] for titles in TITLES.values()]
         assert [window.tabs.tabText(index) for index in range(14, 19)] == ["MIRcat", "T660-1", "Nd:YAG", "OPO Iris", "Plotter"]
         for identity, title in expected.items():
             handle = features[identity]
             assert handle.title == title
             index = window.tabs.indexOf(handle.widget)
-            assert 2 <= index < 14 and window.tabs.tabText(index) == title
+            assert 0 <= index < 12 and window.tabs.tabText(index) == title
             window.tabs.setCurrentIndex(index)
             assert window.tabs.currentWidget() is handle.widget
+            assert window.detector_mode.currentData() == identity.rsplit(":", 1)[1]
+            assert window.tabs.isTabVisible(index)
             assert not handle.command_running()
 
         widgets = [handle.widget for handle in features.values()]

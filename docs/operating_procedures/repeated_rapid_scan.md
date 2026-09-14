@@ -1,7 +1,7 @@
-# Repeated Rapid-Scan Phase Delay
+# Rapid Scan Phase Delay
 
-The installed tabs are **Repeated Rapid-Scan Phase Delay** and **Dual-Detector
-Repeated Rapid-Scan Phase Delay**, registered as `repeated_rapid_scan:single`
+The installed tabs are **Rapid Scan Phase Delay** and **DD Rapid Scan Phase Delay**,
+registered as `repeated_rapid_scan:single`
 and `repeated_rapid_scan:dual`. They share pure algorithms and have independent
 settings, native records, cancellation and instrument ownership.
 

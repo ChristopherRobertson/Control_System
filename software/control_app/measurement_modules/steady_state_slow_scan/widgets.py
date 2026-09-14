@@ -432,7 +432,8 @@ class SlowScanPanel(CompactMeasurementPanel):
 
     def output_location_changed(self, path):
         if not self.command_running():
-            self.status.setText(f"Next run save root: {path}")
+            self.status.setText("Save location updated for the next run.")
+            self.status.setToolTip(str(path))
 
     def instrument_state_changed(self, change):
         self.adapter.invalidate_instrument_state(change.reason)
