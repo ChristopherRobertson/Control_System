@@ -123,7 +123,10 @@ def test_shown_compact_sample_without_preliminary_saves_loads_and_exports(app, t
     assert panel.adapter.controls["dark"] is not None
     assert panel.adapter.controls["q0"]["run_id"] == panel.result["run_id"]
     assert panel.result["spectra"][0].quantity == ("raw_sample_signal" if mode == "single" else "reference_normalized_ratio")
-    assert len(panel.result["spectra"]) == 4
+    assert len(panel.result["spectra"]) == 2
+    assert {spectrum.native.direction for spectrum in panel.result["spectra"]} == {"reverse"}
+    assert all(spectrum.native.axis_cm1[0] > spectrum.native.axis_cm1[-1]
+               for spectrum in panel.result["spectra"])
     assert len(panel.plot.figure.axes) == 1
     assert not panel.result["fits"]
     panel.analysis_button.setChecked(True)
@@ -177,8 +180,8 @@ def test_independent_auto_overrides_roundtrip_and_optional_metadata(app, tabs, t
     assert all(editor.read_settings()[key] is None for key in editor.override_inputs)
     assert editor.read_settings()["condition"] == loaded["condition"]
     assert panel.start_button.isEnabled(), panel.validation.text()
-    assert editor.lower.value() == 1900.
-    assert editor.upper.value() == 1975.
+    assert editor.end.value() == 1650.
+    assert editor.start.value() == 2050.
 
 
 def test_visible_physical_controls_and_removed_preferences_do_not_return(app, tabs):
@@ -222,15 +225,24 @@ def test_scan_labels_and_independent_sampling_rate_plan_roundtrip(app, tabs, tmp
         labels = {label.text() for label in editor.findChildren(QLabel)}
         assert {"Start", "End", "Number of Scans"} <= labels
         assert not {"From", "To", "Repeats per direction"} & labels
+        form = editor.start.parentWidget().layout()
+        assert form.labelForField(editor.upper).text() == "Start"
+        assert form.labelForField(editor.lower).text() == "End"
+        assert editor.start.value() == 2050.
+        assert editor.end.value() == 1650.
+        assert editor.scan_speed.value() == 40.
+        rows = dict(panel.adapter.summarize_plan(panel.plan))
+        assert rows["Range"] == "2050 → 1650 cm⁻¹"
+        assert rows["Speed / scans"] == "40 cm⁻¹/s / 2 scans"
         advanced_labels = {label.text() for label in editor.advanced_widget.findChildren(QLabel)}
         assert "Sampling rate (Sa/s)" in advanced_labels
-        assert panel.band_lower.placeholderText() == "Start cm⁻¹"
-        assert panel.band_upper.placeholderText() == "End cm⁻¹"
-        assert panel.offband_lower.placeholderText() == "Start cm⁻¹"
-        assert panel.offband_upper.placeholderText() == "End cm⁻¹"
+        assert panel.band_lower.placeholderText() == "Lower cm⁻¹"
+        assert panel.band_upper.placeholderText() == "Upper cm⁻¹"
+        assert panel.offband_lower.placeholderText() == "Lower cm⁻¹"
+        assert panel.offband_upper.placeholderText() == "Upper cm⁻¹"
         editor.repeats.setValue(3)
         assert editor.read_settings()["replicates"] == 3
-        assert "each direction" in editor.repeats.toolTip()
+        assert "Total number of descending scans" in editor.repeats.toolTip()
     assert "requested_reference_sample_rate_hz" not in single.settings_editor.fields
     editor = dual.settings_editor
     editor.fields["requested_sample_rate_hz"].setText("1000")

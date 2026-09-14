@@ -184,6 +184,9 @@ class QCLService(InjectedService):
         self.scan_status = {"scan_in_progress": False, "scan_active": False, "scan_paused": False}
         self.waiting_for_process_trigger = False
         self.sweep = {}
+        self.sweep_history = []
+        self.trigger_history = []
+        self.tune_history = []
         self.pulse = {"pulse_rate_hz": 120000., "pulse_width_ns": 1000., "current_ma": 500.}
         self.pulse_history = []
         self.trigger = {"pulse_mode": 2, "process_trigger_mode": 1, "start": 1900., "stop": 1900.4,
@@ -201,7 +204,7 @@ class QCLService(InjectedService):
     def cancel_manual_tune(self): self.touch("cancel_manual_tune")
     def are_tecs_ready(self): self.touch("are_tecs_ready"); return True
     def is_tuned(self): self.touch("is_tuned"); return True
-    def tune_to_wavenumber(self, *args, **kwargs): self.touch("tune_to_wavenumber")
+    def tune_to_wavenumber(self, *args, **kwargs): self.touch("tune_to_wavenumber"); self.tune_history.append((args,kwargs))
     def get_num_installed_qcls(self): self.touch("get_num_installed_qcls"); return 1
     def get_qcl_tuning_range(self, qcl): self.touch("get_qcl_tuning_range"); return {"qcl": qcl, "min_cm1": 1800., "max_cm1": 2000.}
     def get_qcl_pulse_limits(self, qcl): return {"max_pulse_rate_hz": 200000., "max_pulse_width_ns": 2000., "max_duty_cycle": 30.}
@@ -227,6 +230,7 @@ class QCLService(InjectedService):
 
     def set_external_sweep_trigger_params(self, **params):
         self.touch("set_external_sweep_trigger_params")
+        self.trigger_history.append(deepcopy(params))
         self.trigger.update(start=params["start_cm1"], stop=params["stop_cm1"],
                             interval=params["wavelength_trigger_interval_cm1"], process_trigger_mode=2)
 
@@ -242,6 +246,7 @@ class QCLService(InjectedService):
     def start_sweep_scan(self, **params):
         self.touch("start_sweep_scan")
         self.sweep = deepcopy(params)
+        self.sweep_history.append(deepcopy(params))
         self.sweep_generation += 1
         self.scan_status.update(scan_in_progress=True, scan_active=True)
         self.waiting_for_process_trigger = True
@@ -373,7 +378,7 @@ class HFService(InjectedService):
                     dio[active] |= np.uint64(1 << 20)
                 for step in range(count):
                     edge = start + .005 + step * qcl.trigger["interval"]/qcl.sweep["scan_rate_cm1_s"]
-                    dio[(times >= edge) & (times <= edge + .001)] |= np.uint64(1 << 22)
+                    dio[(times >= edge) & (times <= edge + qcl.width_us*1e-6)] |= np.uint64(1 << 22)
         sample_rate = self.nodes[f"/{self.device_id}/demods/0/rate"]["value"]
         sample_ticks = ticks[::max(1, round(10000/sample_rate))]
         reference_rate = self.nodes[f"/{self.device_id}/demods/3/rate"]["value"]
@@ -410,10 +415,10 @@ def configured(tmp_path, monkeypatch, mode="dual", *, live=False, settings_overr
                              real_device_factories={name: make(name) for name in ("hf2li", "mircat", "t660_1", "t660_2")},
                              ownership=coordinator).for_experiment("steady_state_slow_scan").for_mode(mode)
     settings = SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1900.4,
-                                time_constant_s=.001, reference_time_constant_s=.002, reference_filter_order=3,
+                                requested_scan_speed_cm1_s=2., time_constant_s=.001, reference_time_constant_s=.002, reference_filter_order=3,
                                 condition=ConditionIdentity(configuration_id="fixture-config"))
     if live:
-        settings = SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1900.4)
+        settings = SlowScanSettings(mode=mode, lower_cm1=1900., upper_cm1=1900.4, requested_scan_speed_cm1_s=2.)
         plan, compiled = build_plan(settings), None
     else:
         inputs = simulation_inputs(settings)
@@ -451,10 +456,10 @@ def test_default_runner_resolves_live_factories_acquires_automatic_dark_and_samp
     assert result["plan"]["selected"]["measured_response_s"] is None
     assert result["plan"]["selected"]["intrinsic_resolution_cm1"] is None
     assert result["automatic_dark"]["dark"]["sample"] < .01
-    assert len(result["sweeps"]) == 4 and len(result["spectra"]) == 4
+    assert len(result["sweeps"]) == 2 and len(result["spectra"]) == 2
     assert all(np.count_nonzero(item.valid) > 20 for item in result["spectra"])
     assert all(item.metadata["effective_resolution_cm1"] is None for item in result["sweeps"])
-    assert result["readbacks"]["direction_bit_observation"]["association"] == {"forward": 1, "reverse": 0}
+    assert result["readbacks"]["direction_bit_observation"]["association"] == {"reverse": 0}
     assert result["restoration"]["safe_verified"]
     assert all(device.closed for device in services.values())
     assert all(not enabled for name in ("t660_1", "t660_2") for enabled in services[name].channels.values())
@@ -462,7 +467,7 @@ def test_default_runner_resolves_live_factories_acquires_automatic_dark_and_samp
     assert "start_emission" in services["mircat"].calls
     assert services["hf2li"].calls.count("connect") == 1
     loaded = load_run(result["path"], expected_mode=mode)
-    assert len(loaded["sweeps"]) == 4 and loaded["restoration"]["safe_verified"]
+    assert len(loaded["sweeps"]) == 2 and loaded["restoration"]["safe_verified"]
     assert loaded["partial_native_records"]
     assert coordinator.snapshot()["state"] == "free"
 
@@ -561,7 +566,7 @@ def test_live_direction_mapping_can_be_inverted_and_is_learned_from_observed_swe
     context, _, operation, _, draft, _, _ = configured(tmp_path, monkeypatch, live=True)
     result = SlowScanRunner(context).run(StartSnapshot(operation, "measurement", draft, {}), worker())
     assert result["status"] == "completed"
-    assert result["readbacks"]["direction_bit_observation"]["association"] == {"forward": 0, "reverse": 1}
+    assert result["readbacks"]["direction_bit_observation"]["association"] == {"reverse": 1}
     assert all(np.any(item.valid) for item in result["spectra"])
 
 
@@ -603,7 +608,7 @@ def test_default_installed_single_blank_then_sample_reuses_controls_on_distinct_
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
-def test_owned_installed_adapter_dark_and_both_directions_retain_native(tmp_path, monkeypatch, mode):
+def test_owned_installed_adapter_dark_and_descending_repetitions_retain_native(tmp_path, monkeypatch, mode):
     context, coordinator, operation, backend, plan, compiled, services = configured(tmp_path, monkeypatch, mode)
     updates = []
     with context.hardware_scope(operation):
@@ -615,9 +620,9 @@ def test_owned_installed_adapter_dark_and_both_directions_retain_native(tmp_path
             trajectories.extend(backend.acquire_block(block, plan, lambda: None, lambda *args: updates.append(args)))
         result = backend.restore()
     assert result["safe_verified"], result["errors"]
-    assert len(trajectories) == 4
-    assert {sweep["direction_bit"] for sweep in trajectories} == {0, 1}
-    assert trajectories[2]["timestamps_s"][0] > trajectories[1]["timestamps_s"][-1]
+    assert len(trajectories) == 2
+    assert {sweep["direction_bit"] for sweep in trajectories} == {0}
+    assert trajectories[1]["timestamps_s"][0] > trajectories[0]["timestamps_s"][-1]
     assert len({sweep["time_origin_ticks"] for sweep in trajectories}) == 1
     assert all(np.count_nonzero(sweep["valid"]) > 100 for sweep in trajectories)
     assert all(not sweep["flags"] for sweep in trajectories)
@@ -741,7 +746,7 @@ def test_installed_clock_mismatch_blocks_before_emission(tmp_path, monkeypatch):
 
 def test_installed_wrong_direction_is_retained_but_invalid(tmp_path, monkeypatch):
     context, _, operation, backend, plan, compiled, services = configured(tmp_path, monkeypatch)
-    plan.inputs.scientific_profile["direction_bit_by_direction"]["forward"] = 0
+    plan.inputs.scientific_profile["direction_bit_by_direction"]["reverse"] = 1
     with context.hardware_scope(operation):
         backend.prepare(plan, compiled, lambda: None, lambda *args: None)
         sweeps = backend.acquire_block(compiled.blocks[0], plan, lambda: None, lambda *args: None)
@@ -1022,7 +1027,7 @@ def test_installed_sampling_overrides_configure_independent_native_rates_and_per
     from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
     from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
     settings = SlowScanSettings(mode=mode,lower_cm1=1900.,upper_cm1=1900.4,
-        requested_sample_rate_hz=sample_request,requested_reference_sample_rate_hz=reference_request)
+        requested_scan_speed_cm1_s=2.,requested_sample_rate_hz=sample_request,requested_reference_sample_rate_hz=reference_request)
     context, coordinator, operation, _, draft, _, services = configured(tmp_path,monkeypatch,mode,live=True,settings_override=settings)
     result = SlowScanRunner(context).run(StartSnapshot(operation,"measurement",draft,{}),worker())
     assert result["status"] == "completed" and result["restoration"]["safe_verified"]
@@ -1042,4 +1047,38 @@ def test_installed_sampling_overrides_configure_independent_native_rates_and_per
         assert result["settings"][field] == loaded["settings"][field] == requested
         assert result["plan"]["requested"][field] == requested
     assert loaded["plan"]["selected"]["hf2li"] == result["plan"]["selected"]["hf2li"]
+    assert coordinator.snapshot()["state"] == "free"
+
+
+@pytest.mark.parametrize("mode", ["single","dual"])
+def test_installed_default_descending_scan_uses_total_repetitions_without_ascending_commands(tmp_path,monkeypatch,mode):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+    settings = SlowScanSettings(mode=mode,replicates=3)
+    def coverage(self,qcl):
+        self.touch("get_qcl_tuning_range")
+        assert qcl == 1
+        return {"qcl":1,"min_cm1":1600.,"max_cm1":2100.}
+    monkeypatch.setattr(QCLService,"get_qcl_tuning_range",coverage)
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path,monkeypatch,mode,live=True,settings_override=settings)
+    result = SlowScanRunner(context).run(StartSnapshot(operation,"measurement",draft,{}),worker())
+    assert result["status"] == "completed" and result["restoration"]["safe_verified"]
+    assert services["mircat"].sweep_history == [{"start_cm1":2050.,"stop_cm1":1650.,"scan_rate_cm1_s":40.,"qcl":1,"repetitions":3}]
+    assert len(services["mircat"].trigger_history) == 1
+    assert all(row["start_cm1"] == 2050. and row["stop_cm1"] == 1650. for row in services["mircat"].trigger_history)
+    assert services["mircat"].tune_history == [((2050.,),{"qcl":1})]
+    assert len(result["sweeps"]) == len(result["spectra"]) == 3
+    for sweep in result["sweeps"]:
+        assert sweep.direction == "reverse"
+        axis = sweep.axis_cm1[np.asarray(sweep.valid,bool)]
+        assert len(axis) > 100 and np.all(np.diff(axis) < 0)
+        assert 1650. <= axis[-1] < axis[0] <= 2050.
+    assert result["compiled_timing"]["event_counts"]["process"] == 3
+    assert result["compiled_timing"]["event_counts"]["physical_frames"] == 4
+    assert len(services["t660_2"].frames) == 4 and services["t660_2"].frames[-1]["inert_terminator"]
+    assert all(not frame["channels"][name]["enabled"] for frame in services["t660_2"].frames for name in "ABD")
+    assert result["plan"]["estimates"]["sample_sweep_count"] == 3
+    loaded = load_run(result["path"],expected_mode=mode)
+    assert len(loaded["sweeps"]) == 3 and all(sweep.direction == "reverse" for sweep in loaded["sweeps"])
     assert coordinator.snapshot()["state"] == "free"

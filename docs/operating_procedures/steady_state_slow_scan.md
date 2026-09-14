@@ -7,9 +7,11 @@ have independent settings, controls and results.
 ## Operation
 
 1. Select the top-bar save location and the **Start** and **End** wavenumbers within
-   the connected QCL 1 limits. Set **Scan speed** from 0.1 to 10,000 cm⁻¹/s,
+   the connected QCL 1 limits. Start must be higher than End; the defaults are
+   **2050 → 1650 cm⁻¹** at **40 cm⁻¹/s**. Set **Scan speed** from 0.1 to 10,000 cm⁻¹/s,
    **Current** in mA, repetition rate, **Pulse width** in ns and **Number of Scans**
-   for each direction. Pulse width
+   for the total number of descending Start-to-End scans. Acquisition uses only
+   this direction. Pulse width
    programs the MIRcat laser pulse duration; the T660 electrical trigger width
    is selected automatically and remains separate. Repetition rate in Hz
    multiplied by pulse width in seconds must not exceed the smaller of 0.30
@@ -24,7 +26,7 @@ have independent settings, controls and results.
    are acquired automatically
    when no compatible dark is available. A blank is optional for raw sample data;
    in dual mode sample and reference are recorded together.
-3. Inspect the spectra by direction and repeat. Select raw signals,
+3. Inspect each recorded scan. Select raw signals,
    reference-normalized ratio or available absorbance. Numeric coordinates
    select actual observations. Acquisition does not assume a peak model or fit
    peaks automatically. Existing fits in loaded records remain available.
@@ -67,7 +69,8 @@ is exclusive through the host until cleanup and preservation finish.
 
 ## Quantities and interpretation
 
-HF2LI is the spectral recorder. Individual directions and repeats remain separate.
+HF2LI is the spectral recorder. Individual scans remain separate. Historical
+records retain their original directions and repeats.
 Missing intervals are not filled automatically. Original detector streams,
 integer timestamps, controller markers and axes remain available alongside
 processed values and any applied corrections.

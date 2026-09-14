@@ -23,13 +23,13 @@ def live_readbacks(mode="single"):
         nodes[f"/{device}/sigins/{index}/range"] = {"value":1.,"type":"double"}
         nodes[f"/{device}/sigins/{index}/imp50"] = {"value":0,"type":"int"}
     return {"hf2li":caps,"hf2li_settings":{"nodes":nodes,"read_errors":[]},
-            "qcl_windows":[{"qcl":1,"min_cm1":1800.,"max_cm1":2050.}],"qcl_pulse_params":{"1":{"pulse_rate_hz":120000.,"pulse_width_ns":1000.,"current_ma":1.}},
+            "qcl_windows":[{"qcl":1,"min_cm1":1600.,"max_cm1":2100.}],"qcl_pulse_params":{"1":{"pulse_rate_hz":120000.,"pulse_width_ns":1000.,"current_ma":1.}},
             "t660_1":{"queries":{"synth_frequency":{"ok":True,"response":"100000Hz"}},"channels":{"B":{"width_edge":{"ok":True,"response":"1000ns"}}}},
             "qcl_current_limits":{"1":(0.,1000.)},"qcl_pulse_limits":{"1":{"max_pulse_rate_hz":300000.,"max_pulse_width_ns":5000.,"max_duty_cycle":30.}},"probe_width_s":1e-6,"t660_frame_capacity":8192,"marker_width_us":1000,"sweep":{"scan_rate_cm1_s":2.}}
 
 
 def plan_for(settings=None, readbacks=None):
-    settings = settings or SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.)
+    settings = settings or SlowScanSettings(lower_cm1=1900.,upper_cm1=1901.,requested_scan_speed_cm1_s=2.)
     return build_plan(settings,resolve_runtime_inputs({},readbacks or live_readbacks(settings.mode),settings))
 
 
@@ -302,7 +302,7 @@ def test_sampling_override_requires_finite_positive_rate_before_discovery(field,
 
 
 def test_sampling_overrides_are_independent_and_preserve_auto_filters_and_speed():
-    settings = SlowScanSettings(mode="dual",lower_cm1=1900.,upper_cm1=1901.)
+    settings = SlowScanSettings(mode="dual",lower_cm1=1900.,upper_cm1=1901.,requested_scan_speed_cm1_s=2.)
     automatic = plan_for(settings)
     for field,role,other in (("requested_sample_rate_hz","sample","reference"),
                             ("requested_reference_sample_rate_hz","reference","sample")):
@@ -343,3 +343,36 @@ def test_sampling_override_roundtrip_keeps_retired_rate_preferences_inert():
     assert not build_plan(current).errors
     unsupported = plan_for(replace(current,requested_sample_rate_hz=333.))
     assert "sample sampling rate unsupported" in " ".join(unsupported.errors)
+
+
+@pytest.mark.parametrize("count", [1,3])
+def test_default_start_to_end_plan_has_total_scan_count_and_one_terminal_frame(count):
+    settings = SlowScanSettings(replicates=count)
+    assert (settings.upper_cm1,settings.lower_cm1,settings.requested_scan_speed_cm1_s) == (2050.,1650.,40.)
+    assert SlowScanSettings.from_dict({"requested_scan_speed_cm1_s":None}).requested_scan_speed_cm1_s == 40.
+    plan = plan_for(settings)
+    assert plan.ready and len(plan.blocks) == 1
+    block = plan.blocks[0]
+    assert (block.direction,block.start_cm1,block.stop_cm1,block.scan_speed_cm1_s,block.replicates) == ("reverse",2050.,1650.,40.,count)
+    assert block.scan_duration_s == 10.
+    compiled = compile_timing(plan)
+    assert len(compiled.blocks) == 1 and len(compiled.blocks[0].frames) == count+1
+    assert compiled.event_counts["process"] == count and compiled.event_counts["physical_frames"] == count+1
+    assert compiled.blocks[0].frames[-1]["inert_terminator"]
+    assert plan.estimates["sample_sweep_count"] == count
+    assert plan.estimates["sample_physical_frame_count"] == count+1
+    assert plan.estimates["sample_acquisition_s"] == pytest.approx((count+1)*block.frame_period_s)
+    assert plan.estimates["wall_clock_s"] == pytest.approx((count+1)*block.frame_period_s+plan.estimates["dark_s"])
+
+
+@pytest.mark.parametrize("start,end", [(1650.,2050.),(2050.,2050.)])
+def test_start_must_exceed_end(start,end):
+    plan = build_plan(SlowScanSettings(upper_cm1=start,lower_cm1=end))
+    assert "Start must be greater than End" in " ".join(plan.errors)
+
+
+def test_compiler_refuses_an_ascending_trajectory_even_if_imported_block_is_mutated():
+    plan = plan_for()
+    ascending = replace(plan.blocks[0],direction="forward",start_cm1=plan.settings.lower_cm1,stop_cm1=plan.settings.upper_cm1)
+    with pytest.raises(ValueError,match="descending Start-to-End"):
+        compile_timing(replace(plan,blocks=(ascending,)))

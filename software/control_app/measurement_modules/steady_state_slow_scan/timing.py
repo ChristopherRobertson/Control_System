@@ -126,6 +126,8 @@ def compile_timing(plan: SlowScanPlan) -> CompiledTiming:
     compiled: list[TimingBlock] = []
     delays: dict[str, float] = {}
     for block in plan.blocks:
+        if block.direction != "reverse" or not block.start_cm1 > block.stop_cm1:
+            raise ValueError("Slow scan requires a descending Start-to-End trajectory")
         if not isinstance(inp.t660_frame_capacity, int) or block.replicates + 1 > inp.t660_frame_capacity:
             raise ValueError("Declared continuous block exceeds verified physical frame memory")
         delay = quantize_seconds(block.settle_s, tick, maximum, allow_zero=True)

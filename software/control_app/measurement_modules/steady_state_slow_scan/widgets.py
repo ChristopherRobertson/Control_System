@@ -68,6 +68,7 @@ class SlowScanSettingsWidget(QWidget):
         self.plan_label.textChanged.connect(self._changed)
         form.addRow("Run label", self.plan_label)
         self.lower, self.upper = QDoubleSpinBox(), QDoubleSpinBox()
+        self.start, self.end = self.upper, self.lower
         for editor, name in ((self.lower, "lower_cm1"), (self.upper, "upper_cm1")):
             editor.setObjectName(name)
             editor.setDecimals(3)
@@ -75,8 +76,8 @@ class SlowScanSettingsWidget(QWidget):
             editor.setSuffix(" cm⁻¹")
             editor.setKeyboardTracking(False)
             editor.valueChanged.connect(self._changed)
-        form.addRow("Start", self.lower)
-        form.addRow("End", self.upper)
+        form.addRow("Start", self.start)
+        form.addRow("End", self.end)
         self.scan_speed = QDoubleSpinBox()
         self.scan_speed.setObjectName("requested_scan_speed_cm1_s")
         self.scan_speed.setDecimals(3)
@@ -96,7 +97,7 @@ class SlowScanSettingsWidget(QWidget):
         self.repeats.setObjectName("replicates")
         self.repeats.setRange(1, 8192)
         self.repeats.valueChanged.connect(self._changed)
-        self.repeats.setToolTip("Number of scans recorded in each direction.")
+        self.repeats.setToolTip("Total number of descending scans from Start to End.")
         form.addRow("Number of Scans", self.repeats)
         self.advanced_widget = QWidget()
         filter_form = QGridLayout(self.advanced_widget)
@@ -158,7 +159,7 @@ class SlowScanSettingsWidget(QWidget):
             self.plan_label.setText(data.get("plan_label", ""))
             self.lower.setValue(data["lower_cm1"])
             self.upper.setValue(data["upper_cm1"])
-            self.scan_speed.setValue(data.get("requested_scan_speed_cm1_s") or 2.)
+            self.scan_speed.setValue(data.get("requested_scan_speed_cm1_s") or 40.)
             self.repeats.setValue(data["replicates"])
             scales = {key: scale for key, _label, scale in self.AUTO_FIELDS}
             for key, editor in self.fields.items():
@@ -335,7 +336,7 @@ class SlowScanPanel(CompactMeasurementPanel):
         for label, lower, upper in (("Band", self.band_lower, self.band_upper),
                                     ("Off-band", self.offband_lower, self.offband_upper)):
             selections.addWidget(QLabel(label))
-            for editor, placeholder in ((lower, "Start"), (upper, "End")):
+            for editor, placeholder in ((lower, "Lower"), (upper, "Upper")):
                 editor.setPlaceholderText(placeholder + " cm⁻¹")
                 editor.setMinimumWidth(40)
                 editor.setMaximumWidth(95)
@@ -564,7 +565,7 @@ class SlowScanPanel(CompactMeasurementPanel):
                 continue
             bounds = self._bounds(lower, upper)
             if bounds is None or bounds[0] >= bounds[1]:
-                raise ValueError(f"Enter a numeric {label} range with Start below End")
+                raise ValueError(f"Enter a numeric {label} range with Lower below Upper")
             peaks = ()
             if label == "band":
                 index = self.sweep_choice.currentIndex()

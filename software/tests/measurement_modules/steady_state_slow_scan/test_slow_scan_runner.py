@@ -54,8 +54,9 @@ def test_complete_guided_slow_scan_retains_native_and_separate_controls(tmp_path
     result = runner.run(operation(context, plan, "measurement", controls), worker)
     assert result["status"] == "completed"
     assert result["restoration"]["safe_verified"]
-    assert len(result["sweeps"]) == 4
-    assert {s.direction for s in result["sweeps"]} == {"forward", "reverse"}
+    assert len(result["sweeps"]) == plan.settings.replicates
+    assert {s.direction for s in result["sweeps"]} == {"reverse"}
+    assert all(np.all(np.diff(s.axis_cm1) < 0) for s in result["sweeps"])
     assert all(s.native is n for s, n in zip(result["spectra"], result["sweeps"]))
     loaded = load_run(result["path"], expected_mode=mode)
     for before, after in zip(result["sweeps"], loaded["sweeps"]):
@@ -78,6 +79,29 @@ def test_control_compatibility_ignores_metadata_but_detects_acquisition_changes(
     assert "settings mismatch" in " ".join(compatibility_errors(dark, changed))
     assert "Detector mode" in " ".join(compatibility_errors({**dark, "mode": "dual"}, plan))
     assert not compatibility_errors(dark, plan)
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+@pytest.mark.parametrize("scan_count", [1, 3])
+def test_number_of_scans_is_total_descending_start_to_end_acquisitions(tmp_path, mode, scan_count):
+    _, context, _ = setup(tmp_path, mode)
+    settings = SlowScanSettings(mode=mode, hardware=False, replicates=scan_count)
+    plan = build_plan(settings, simulation_inputs(settings))
+    result = SlowScanRunner(context).run(operation(context, plan, "measurement"), Worker())
+    assert result["status"] == "completed"
+    assert len(result["sweeps"]) == scan_count
+    assert len(result["compiled_timing"]["blocks"]) == 1
+    timing = result["compiled_timing"]["blocks"][0]
+    assert timing["expected_process_events"] == scan_count
+    assert timing["physical_frame_count"] == scan_count + 1  # Terminal OFF frame is not a scan.
+    assert timing["block"]["scan_speed_cm1_s"] == 40.
+    for sweep in result["sweeps"]:
+        assert sweep.axis_cm1[0] == 2050.
+        assert sweep.axis_cm1[-1] == 1650.
+        assert np.all(np.diff(sweep.axis_cm1) < 0)
+    loaded = load_run(result["path"], expected_mode=mode)
+    assert len(loaded["sweeps"]) == scan_count
+    assert all(s.direction == "reverse" for s in loaded["sweeps"])
 
 
 def test_controls_reject_foreign_identities_and_simulation_for_connected_use(tmp_path):

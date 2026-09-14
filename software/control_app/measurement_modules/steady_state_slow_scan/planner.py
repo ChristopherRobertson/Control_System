@@ -120,7 +120,7 @@ def build_plan(settings, inputs=None):
         errors.append("Scan speed must be in 0.1–10000 cm^-1/s")
     if type(settings.replicates) is not int or not 1 <= settings.replicates <= 8191: errors.append("Replicates must be an integer in 1..8191")
     if not _positive(settings.lower_cm1) or not _positive(settings.upper_cm1) or settings.lower_cm1 >= settings.upper_cm1:
-        errors.append("Enter finite lower < upper wavenumbers")
+        errors.append("Start must be greater than End; both wavenumbers must be finite and positive")
     names = ("time_constant_s", "filter_order", "reference_time_constant_s", "reference_filter_order", "repetition_rate_hz", "pulse_width_s",
              "requested_sample_rate_hz", "requested_reference_sample_rate_hz")
     for name in names:
@@ -315,8 +315,8 @@ def build_plan(settings, inputs=None):
         count = math.floor((segment.upper_cm1-segment.lower_cm1)/interval+1e-8)+1
         if not 2 <= count <= 65535: errors.append("Marker schedule needs 2–65535 targets")
         if marker_width and marker_width >= interval/speed: errors.append("Wavelength marker pulses overlap")
-        for direction, start, stop in (("forward", segment.lower_cm1, segment.upper_cm1), ("reverse", segment.upper_cm1, segment.lower_cm1)):
-            blocks.append(ScanBlock(f"{segment.segment_id}:{direction}", segment.segment_id, window.qcl, direction, start, stop, speed, duration, settle_s, settings.replicates, divider/probe_rate, divider, count))
+        blocks.append(ScanBlock(f"{segment.segment_id}:reverse", segment.segment_id, window.qcl, "reverse",
+            segment.upper_cm1, segment.lower_cm1, speed, duration, settle_s, settings.replicates, divider/probe_rate, divider, count))
     if not hf.get("pll") or not hf.get("timing"): readiness.append("Connected HF2LI reference/timing configuration unavailable")
     if hf.get("pll") and probe_rate: hf["pll"]["freqcenter_hz"] = probe_rate
     native_spacing = max((block.scan_speed_cm1_s/min(rates) for block in blocks), default=target_step)
@@ -426,7 +426,7 @@ def simulation_inputs(settings: SlowScanSettings) -> PlannerInputs:
     """Explicit synthetic fixture profile, never used automatically for hardware."""
     effective_segments = (SpectralSegment("qcl-1", 1, settings.lower_cm1, settings.upper_cm1),)
     profile = {
-        "measured_linewidth_cm1": 2., "requested_scan_speed_cm1_s": 2., "sample_rate_hz": 1000.,
+        "measured_linewidth_cm1": 2., "requested_scan_speed_cm1_s": settings.requested_scan_speed_cm1_s, "sample_rate_hz": 1000.,
         "time_constant_s": .001, "filter_order": 2, "settle_s": .02,
         "marker_interval_cm1": .1, "marker_width_s": .001, "probe_rate_hz": 100000.,
         "probe_width_s": 1e-6, "process_pulse_width_s": .001, "dark_duration_s": .1,

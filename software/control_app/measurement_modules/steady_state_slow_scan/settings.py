@@ -66,10 +66,10 @@ class SpectralSegment:
 class SlowScanSettings:
     mode: str = "single"
     condition: ConditionIdentity = field(default_factory=ConditionIdentity)
-    lower_cm1: float = 1900.0
-    upper_cm1: float = 1975.0
+    lower_cm1: float = 1650.0
+    upper_cm1: float = 2050.0
     purpose: str = "survey"
-    requested_scan_speed_cm1_s: float = 2.0
+    requested_scan_speed_cm1_s: float = 40.0
     current_ma: float | None = None
     requested_sample_rate_hz: float | None = None
     time_constant_s: float | None = None
@@ -118,7 +118,7 @@ class SlowScanSettings:
             data.setdefault("repetition_rate_hz", previous_rate)
         data["imported_requested_metadata"] = imported
         if data.get("requested_scan_speed_cm1_s") is None:
-            data["requested_scan_speed_cm1_s"] = 2.0
+            data["requested_scan_speed_cm1_s"] = 40.0
         values = _known(cls, data)
         if isinstance(values.get("condition"), Mapping):
             values["condition"] = ConditionIdentity.from_dict(values["condition"])

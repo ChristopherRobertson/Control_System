@@ -1,7 +1,7 @@
 """Installed-device slow-scan adapter. All calls execute inside host ownership.
 
 Polling retrieves native data and observes completion; T660 frames schedule all
-electrical edges. Each direction/QCL block is declared by the typed planner.
+electrical edges. The typed planner declares one descending QCL-1 trajectory.
 """
 from __future__ import annotations
 
@@ -369,6 +369,8 @@ class InstalledSlowScanBackend:
         check()
         if scan.qcl != 1:
             raise ValueError("Slow scan can route only installed QCL 1")
+        if scan.direction != "reverse" or not scan.start_cm1 > scan.stop_cm1:
+            raise ValueError("Slow scan requires a descending Start-to-End trajectory")
         profile = plan.inputs.scientific_profile
         coverage = self.qcl.get_qcl_tuning_range(scan.qcl)
         if not coverage["min_cm1"] <= min(scan.start_cm1, scan.stop_cm1) < max(scan.start_cm1, scan.stop_cm1) <= coverage["max_cm1"]:
