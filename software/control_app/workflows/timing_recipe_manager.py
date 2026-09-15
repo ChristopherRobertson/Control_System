@@ -7,6 +7,9 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, TextIO
 import json
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from io import StringIO
 
 import yaml
 
@@ -141,6 +144,43 @@ class TimingRecipeManager:
         if readback["mismatches"]:
             raise TimingRecipeError(f"readback mismatch: {readback['mismatches']}")
         return readback
+
+    def apply_safe_idle(self, *, output_path: str | Path) -> dict[str, Any]:
+        """Apply the all-off recipe independently to each timing unit."""
+        from control_app.paths import RECIPE_ROOT
+        recipe = self.load_recipe(RECIPE_ROOT / "safe_idle.yaml")
+        resolved = self._resolve_recipe(recipe)
+        for unit in resolved.values():
+            if (unit.get("trigger_source") != "OFF" or unit.get("frames_engine", "OFF") != "OFF"
+                    or set(unit["channels"]) != set("ABCD")
+                    or any(channel.get("enabled") is not False for channel in unit["channels"].values())):
+                raise TimingRecipeError("Concurrent safe idle requires all triggers, frames and channels OFF")
+        target = Path(output_path)
+        logs = {unit: StringIO() for unit in resolved}
+        def apply(unit):
+            manager = TimingRecipeManager(self.inventory, command_log=logs[unit])
+            unit_recipe = {**recipe, "t660": {unit: recipe["t660"][unit]}}
+            return manager.apply_recipe(unit_recipe, output_path=target.with_name(f"{target.stem}_{unit}{target.suffix}"))
+        results, errors = {}, {}
+        with ThreadPoolExecutor(max_workers=len(resolved), thread_name_prefix="timing-safe-idle") as pool:
+            jobs = {unit: pool.submit(copy_context().run, apply, unit) for unit in resolved}
+            for unit, job in jobs.items():
+                try:
+                    results[unit] = job.result()
+                except Exception as exc:
+                    errors[unit] = str(exc)
+        if self.command_log is not None:
+            for log in logs.values():
+                self.command_log.write(log.getvalue())
+            self.command_log.flush()
+        result = {"recipe_name": "safe_idle", "resolved_settings": resolved,
+                  "devices": {unit: data["devices"][unit] for unit, data in results.items()},
+                  "matches_recipe": not errors, "errors": errors, "unit_results": results}
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if errors:
+            raise TimingRecipeError(f"Safe idle failed: {errors}")
+        return result
 
     def validate_recipe(self, recipe: str | Path | dict[str, Any]) -> dict[str, Any]:
         """Resolve and safety-check a timing recipe without opening hardware."""

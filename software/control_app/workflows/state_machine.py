@@ -1272,10 +1272,41 @@ class WorkflowStateMachine:
             "hf2li": None,
         }
         errors: list[str] = []
-        optical_log, timing_log = StringIO(), StringIO()
+        optical_log, timing_log, pico_log, hf_log = (StringIO() for _ in range(4))
+
+        alignment_active = (ui_shutdown is not None and self._mircat_handler is not None and
+                            (getattr(self._mircat_handler, "alignment_workflow", None) is not None or
+                             getattr(self._mircat_handler, "alignment_running", False)))
+        alignment_workflow = getattr(self._mircat_handler, "alignment_workflow", None)
+        alignment_hf = getattr(alignment_workflow, "hf2li_service", None)
+        alignment_summary = {}
+        def pico_shutdown():
+            if self._picoscope_service is not None:
+                self._picoscope_service.command_log = pico_log
+                try:
+                    self._picoscope_service.stop()
+                    self._picoscope_service.close_unit()
+                    actions["picoscope"] = "stopped_and_closed"
+                except Exception as exc:  # noqa: BLE001 - safe-state report records exact device failure
+                    errors.append(f"PicoScope safe stop failed: {exc}")
+                finally:
+                    self._picoscope_service = None
+
+        def hf_shutdown():
+            if self._hf2li_service is not None:
+                self._hf2li_service.command_log = hf_log
+                try:
+                    self._hf2li_service.close()
+                    actions["hf2li"] = "closed"
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"HF2LI close failed: {exc}")
+                finally:
+                    self._hf2li_service = None
+                    self._hf2li_preset = None
 
         def optical_shutdown():
-            for service in (self._mircat_service, self._picoscope_service, self._hf2li_service):
+            nonlocal alignment_summary
+            for service in (self._mircat_service,):
                 if service is not None:
                     service.command_log = optical_log
             widget_closed = False
@@ -1287,31 +1318,21 @@ class WorkflowStateMachine:
                     )
                     actions["mircat_widget_shutdown"] = result.to_dict()
                     widget_closed = result.status == "complete" and bool(result.data.get("mircat_shutdown"))
+                    alignment_summary = (result.data.get("alignment_stop") or {}).get("data", {}).get("alignment_stop_summary", {})
+                    if alignment_summary.get("status") == "STOPPED":
+                        widget_closed = result.status == "complete"
+                        if alignment_hf is not None and self._hf2li_service is alignment_hf and alignment_summary.get("hf2li_close_result") == "closed":
+                            self._hf2li_service = None
+                            actions["hf2li"] = "closed_by_alignment"
                     if result.status != "complete":
                         errors.append(result.message)
                 except Exception as exc:
                     errors.append(f"MIRcat widget shutdown failed: {exc}")
                     actions["mircat_widget_shutdown"] = {"status": "failed", "error": str(exc)}
 
-            if self._picoscope_service is not None:
-                try:
-                    self._picoscope_service.stop()
-                    self._picoscope_service.close_unit()
-                    actions["picoscope"] = "stopped_and_closed"
-                except Exception as exc:  # noqa: BLE001 - safe-state report records exact device failure
-                    errors.append(f"PicoScope safe stop failed: {exc}")
-                finally:
-                    self._picoscope_service = None
-
-            if self._hf2li_service is not None:
-                try:
-                    self._hf2li_service.close()
-                    actions["hf2li"] = "closed"
-                except Exception as exc:  # noqa: BLE001
-                    errors.append(f"HF2LI close failed: {exc}")
-                finally:
-                    self._hf2li_service = None
-                    self._hf2li_preset = None
+            if alignment_active:
+                pico_shutdown()
+                hf_shutdown()
 
             if widget_closed:
                 self._mircat_service = None
@@ -1349,18 +1370,28 @@ class WorkflowStateMachine:
 
         def timing_shutdown():
             try:
+                if alignment_summary.get("status") == "STOPPED" and alignment_summary.get("safe_idle_after_alignment"):
+                    actions["t660"] = {"reused_alignment_safe_idle": alignment_summary["safe_idle_after_alignment"]}
+                    return
                 manager = TimingRecipeManager(self.inventory, command_log=timing_log)
                 output_path = self._artifact_path(f"workflow_{label}_safe_idle_readback.json")
-                actions["t660"] = manager.apply_recipe(RECIPE_ROOT / "safe_idle.yaml", output_path=output_path)
+                actions["t660"] = manager.apply_safe_idle(output_path=output_path)
                 self._remember_readback(output_path)
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"T660 safe_idle failed: {exc}")
 
         # Each worker needs its own copied ownership context. Optical clients
         # share SDK/session state and stay serialized; timing is independent.
-        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="instrument-shutdown") as pool:
+        if alignment_active:
+            # Retained alignment owns timing and optical clients together.
+            # Finish it before dispatching other work on those same ports.
+            optical_shutdown()
+            callbacks = [timing_shutdown]
+        else:
+            callbacks = [optical_shutdown, timing_shutdown, pico_shutdown, hf_shutdown]
+        with ThreadPoolExecutor(max_workers=len(callbacks), thread_name_prefix="instrument-shutdown") as pool:
             jobs = [pool.submit(copy_context().run, callback)
-                    for callback in (optical_shutdown, timing_shutdown)]
+                    for callback in callbacks]
             for job in jobs:
                 try:
                     job.result()
@@ -1368,7 +1399,7 @@ class WorkflowStateMachine:
                     errors.append(f"Device shutdown failed: {exc}")
 
         if self.command_log is not None:
-            for log in (optical_log, timing_log):
+            for log in (optical_log, timing_log, pico_log, hf_log):
                 self.command_log.write(log.getvalue())
             self.command_log.flush()
         actions["errors"] = list(errors)
