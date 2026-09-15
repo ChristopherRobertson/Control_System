@@ -417,10 +417,30 @@ class HFService(InjectedService):
         return record
 
 
+@pytest.mark.parametrize("mode,count,valid", [("single", 1, True), ("single", 2, True),
+                                            ("single", 0, False), ("dual", 1, False), ("dual", 2, True)])
+def test_app_inventory_preserves_detector_paths_and_checks_only_required_count(mode, count, valid):
+    from pathlib import Path
+    from control_app.config_loader import load_hardware_config, build_config_inventory
+    path = Path(__file__).resolve().parents[4] / "instrument" / "hardware_configuration.yaml"
+    config, path, _ = load_hardware_config(path)
+    config["system"]["default_detector_connections"] = config["system"]["default_detector_connections"][:count]
+    inventory = build_config_inventory(config, path).to_dict()
+    assert inventory["system"]["default_detector_connections"] == config["system"]["default_detector_connections"]
+    if valid:
+        acquisition.validate_topology(inventory, mode)
+    else:
+        with pytest.raises(ValueError, match="missing from application configuration"):
+            acquisition.validate_topology(inventory, mode)
+
+
 def configured(tmp_path, monkeypatch, mode="dual", *, live=False, settings_override=None):
     from pathlib import Path
+    from control_app.config_loader import build_config_inventory
     configuration_path = Path(__file__).resolve().parents[4] / "instrument" / "hardware_configuration.yaml"
     config = yaml.safe_load(configuration_path.read_text(encoding="utf-8"))
+    # The real app hands the host this inventory, not the raw YAML mapping.
+    config = build_config_inventory(config, configuration_path).to_dict()
     coordinator = HardwareCoordinator(tmp_path / "owned.lock")
     active, services = {}, {}
     clock = VirtualClock()

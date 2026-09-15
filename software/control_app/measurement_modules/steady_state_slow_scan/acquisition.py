@@ -53,7 +53,7 @@ def _absolute_edges(settings, references):
     return values
 
 
-def validate_topology(configuration):
+def validate_topology(configuration, mode="dual"):
     """Check maintained connected routes, never invent a shutter or sensor."""
     expected = {"t660_1": {"A": "hf2li_extref", "B": "mircat_trig_in", "C": "t660_2_trig_in", "D": None},
                 "t660_2": {"A": "ndyag_fire", "B": "ndyag_q_switch", "C": "mircat_db9_pin_4_process_trigger", "D": None}}
@@ -66,8 +66,12 @@ def validate_topology(configuration):
             raise ValueError(f"Installed {name} timing route is missing or incompatible")
     if routes.get("optional_acquisition_window", {}).get("connected"):
         raise ValueError("This adapter requires the maintained unwired DIO1 topology")
-    if len(configuration.get("system", {}).get("default_detector_connections", ())) != 2:
-        raise ValueError("Both maintained detector tee/receiver paths must be declared")
+    connections = configuration.get("system", {}).get("default_detector_connections", ())
+    required = 1 if mode == "single" else 2
+    if (not isinstance(connections, (list, tuple)) or len(connections) < required
+            or any(not isinstance(path, str) or not path.strip() for path in connections)):
+        label = "Sample detector path" if mode == "single" else "Sample and reference detector paths"
+        raise ValueError(f"{label} missing from application configuration (system.default_detector_connections)")
 
 
 class InstalledSlowScanBackend:
@@ -92,7 +96,7 @@ class InstalledSlowScanBackend:
         return device
 
     def connect(self, check):
-        validate_topology(self.operation.configuration)
+        validate_topology(self.operation.configuration, self.context.mode)
         if self.devices:
             if set(self.devices) == {"t660_2", "t660_1", "hf2li", "mircat"}:
                 return
