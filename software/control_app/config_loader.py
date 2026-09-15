@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 import json
@@ -35,6 +36,7 @@ class ConfigInventory:
     mux_routes: dict[str, Any]
     picoscope_settings: dict[str, Any]
     warnings: list[str]
+    system: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable inventory dictionary."""
@@ -79,6 +81,10 @@ def build_config_inventory(
     """Build a flexible inventory from the available configuration sections."""
 
     warnings: list[str] = []
+    system = config.get("system", {})
+    if not isinstance(system, dict):
+        warnings.append("system must be a mapping when present")
+        system = {}
     devices = config.get("devices")
     if not isinstance(devices, dict) or not devices:
         raise HardwareConfigError("hardware_configuration.yaml is missing devices")
@@ -218,6 +224,7 @@ def build_config_inventory(
         mux_routes=mux_routes,
         picoscope_settings=picoscope_settings,
         warnings=warnings,
+        system=deepcopy(system),
     )
 
 
