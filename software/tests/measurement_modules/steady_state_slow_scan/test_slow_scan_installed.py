@@ -487,6 +487,30 @@ def worker():
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
+def test_app_close_reuses_completed_slow_scan_idle_without_hardware_reverification(tmp_path, monkeypatch, mode):
+    from pathlib import Path
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    from control_app.workflows.state_machine import WorkflowStateMachine
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path, monkeypatch, mode, live=True)
+    result = SlowScanRunner(context).run(StartSnapshot(operation, "measurement", draft, {}), worker())
+    assert result["status"] == "completed" and result["restoration"]["safe_verified"]
+    assert coordinator.snapshot()["state"] == "free"
+    assert all(device.closed for device in services.values())
+    native = Path(result["path"]) / "native.npz"
+    saved = native.read_bytes()
+    calls = {name: list(device.calls) for name, device in services.items()}
+    machine = WorkflowStateMachine(operator="offline close regression", run_dir=tmp_path / "close", coordinator=coordinator)
+    def forbidden(**kwargs):
+        raise AssertionError("Closing after verified Slow Scan cleanup must not reconnect or repeat idle checks")
+    monkeypatch.setattr(machine, "_ui_shutdown_actions", forbidden)
+    closed = machine.ui_safe_shutdown()
+    assert closed.status == "complete", closed.message
+    assert native.read_bytes() == saved
+    assert {name: device.calls for name, device in services.items()} == calls
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
 def test_default_runner_resolves_live_factories_acquires_automatic_dark_and_sample(tmp_path, monkeypatch, mode):
     from control_app.measurement_host.presentation import StartSnapshot
     from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
