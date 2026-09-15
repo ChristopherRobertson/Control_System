@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any, TextIO
 import json
 from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from io import StringIO
 
 from control_app.measurement_host.ownership import HardwareCoordinator, OwnershipError, default_coordinator
 
@@ -400,6 +403,9 @@ class WorkflowStateMachine:
             return WorkflowResult(status="blocked", message="Wait for the owning command to finish safety cleanup and saving.")
         token = None
         try:
+            if not emergency and self.coordinator.current_session_idle_verified():
+                return WorkflowResult(status="complete", message="Current session cleanup already completed.",
+                                      data={"reused_verified_idle": True})
             previous = self.coordinator.snapshot()
             if self._manual_token is not None and previous["state"] != "fault":
                 token = self._manual_token
@@ -568,27 +574,15 @@ class WorkflowStateMachine:
                         getattr(self._mircat_handler, "service", None),
                         getattr(getattr(self._mircat_handler, "alignment_workflow", None), "mircat_service", None)):
             adopt_recovery_session(service)
-        if self._mircat_handler is not None:
-            try:
-                result = self._mircat_handler.shutdown_for_ui_close(
-                    emergency=emergency,
-                    reason=reason,
-                )
-                actions["mircat_widget_shutdown"] = result.to_dict()
-                if result.status != "complete":
-                    errors.append(result.message)
-            except Exception as exc:
-                errors.append(f"MIRcat widget shutdown failed: {exc}")
-                actions["mircat_widget_shutdown"] = {"status": "failed", "error": str(exc)}
-
         safe_result = self._handle_workflow_command(
             "safe_shutdown", WorkflowCommand(
                 device_key="workflow",
                 command="workflow.safe_shutdown",
-                parameters={"reason": reason, "emergency": emergency},
+                parameters={"reason": reason, "emergency": emergency, "ui_shutdown": True},
             )
         )
         actions["workflow_safe_shutdown"] = safe_result.to_dict()
+        actions["mircat_widget_shutdown"] = safe_result.data.get("safe_actions", {}).get("mircat_widget_shutdown")
         if safe_result.status != "complete":
             errors.append(safe_result.message)
 
@@ -783,7 +777,8 @@ class WorkflowStateMachine:
                     ],
                 },
             )
-        safe_actions = self._send_safe_actions("safe_shutdown")
+        safe_actions = (self._send_safe_actions("safe_shutdown", ui_shutdown=command.parameters)
+                        if command.parameters.get("ui_shutdown") else self._send_safe_actions("safe_shutdown"))
         return self._complete(
             command.command,
             "SAFE_SHUTDOWN_SENT",
@@ -1266,7 +1261,7 @@ class WorkflowStateMachine:
         metadata["metadata_path"] = str(metadata_path)
         return metadata
 
-    def _send_safe_actions(self, label: str) -> dict[str, Any]:
+    def _send_safe_actions(self, label: str, *, ui_shutdown=None) -> dict[str, Any]:
         actions: dict[str, Any] = {
             "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
             "label": label,
@@ -1277,65 +1272,106 @@ class WorkflowStateMachine:
             "hf2li": None,
         }
         errors: list[str] = []
+        optical_log, timing_log = StringIO(), StringIO()
 
-        if self._picoscope_service is not None:
-            try:
-                self._picoscope_service.stop()
-                self._picoscope_service.close_unit()
-                actions["picoscope"] = "stopped_and_closed"
-            except Exception as exc:  # noqa: BLE001 - safe-state report records exact device failure
-                errors.append(f"PicoScope safe stop failed: {exc}")
-            finally:
-                self._picoscope_service = None
+        def optical_shutdown():
+            for service in (self._mircat_service, self._picoscope_service, self._hf2li_service):
+                if service is not None:
+                    service.command_log = optical_log
+            widget_closed = False
+            if ui_shutdown is not None and self._mircat_handler is not None:
+                try:
+                    result = self._mircat_handler.shutdown_for_ui_close(
+                        emergency=ui_shutdown["emergency"],
+                        reason=ui_shutdown["reason"],
+                    )
+                    actions["mircat_widget_shutdown"] = result.to_dict()
+                    widget_closed = result.status == "complete" and bool(result.data.get("mircat_shutdown"))
+                    if result.status != "complete":
+                        errors.append(result.message)
+                except Exception as exc:
+                    errors.append(f"MIRcat widget shutdown failed: {exc}")
+                    actions["mircat_widget_shutdown"] = {"status": "failed", "error": str(exc)}
 
-        if self._hf2li_service is not None:
-            try:
-                self._hf2li_service.close()
-                actions["hf2li"] = "closed"
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"HF2LI close failed: {exc}")
-            finally:
-                self._hf2li_service = None
-                self._hf2li_preset = None
+            if self._picoscope_service is not None:
+                try:
+                    self._picoscope_service.stop()
+                    self._picoscope_service.close_unit()
+                    actions["picoscope"] = "stopped_and_closed"
+                except Exception as exc:  # noqa: BLE001 - safe-state report records exact device failure
+                    errors.append(f"PicoScope safe stop failed: {exc}")
+                finally:
+                    self._picoscope_service = None
 
-        if self._mircat_service is None:
-            try:
-                self._mircat_service = MircatService.from_config(config_path=self.config_path, command_log=self.command_log)
-                self._mircat_service.initialize()
-            except Exception as exc:
-                errors.append(f"MIRcat recovery connection/initialization failed: {exc}")
-        if self._mircat_service is not None:
-            try:
-                stop_status = self._mircat_service.stop_scan_if_needed()
-                if stop_status == RET_NOT_INITIALIZED:
-                    actions["mircat"] = {
-                        "safe_state": "already_deinitialized",
-                        "stop_scan_return_code": stop_status,
-                    }
-                else:
-                    self._mircat_service.turn_emission_off()
-                    self._mircat_service.disarm()
-                    state = self._mircat_service.read_state().to_dict()
-                    if any(state.get(key) is not False for key in ("emission_on", "armed", "scan_in_progress")):
-                        errors.append("MIRcat safe shutdown readbacks did not verify emission off, disarmed and scan stopped")
-                    self._mircat_service.deinitialize()
-                    actions["mircat"] = {
-                        "safe_state": "emission_off_disarmed_deinitialized",
-                        "state": state,
-                    }
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"MIRcat safe shutdown failed: {exc}")
-            finally:
+            if self._hf2li_service is not None:
+                try:
+                    self._hf2li_service.close()
+                    actions["hf2li"] = "closed"
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"HF2LI close failed: {exc}")
+                finally:
+                    self._hf2li_service = None
+                    self._hf2li_preset = None
+
+            if widget_closed:
                 self._mircat_service = None
+                actions["mircat"] = actions["mircat_widget_shutdown"]
+                return
+            if self._mircat_service is None:
+                try:
+                    self._mircat_service = MircatService.from_config(config_path=self.config_path, command_log=optical_log)
+                    self._mircat_service.initialize()
+                except Exception as exc:
+                    errors.append(f"MIRcat recovery connection/initialization failed: {exc}")
+            if self._mircat_service is not None:
+                try:
+                    stop_status = self._mircat_service.stop_scan_if_needed()
+                    if stop_status == RET_NOT_INITIALIZED:
+                        actions["mircat"] = {
+                            "safe_state": "already_deinitialized",
+                            "stop_scan_return_code": stop_status,
+                        }
+                    else:
+                        self._mircat_service.turn_emission_off()
+                        self._mircat_service.disarm()
+                        state = self._mircat_service.read_state().to_dict()
+                        if any(state.get(key) is not False for key in ("emission_on", "armed", "scan_in_progress")):
+                            errors.append("MIRcat safe shutdown readbacks did not verify emission off, disarmed and scan stopped")
+                        self._mircat_service.deinitialize()
+                        actions["mircat"] = {
+                            "safe_state": "emission_off_disarmed_deinitialized",
+                            "state": state,
+                        }
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"MIRcat safe shutdown failed: {exc}")
+                finally:
+                    self._mircat_service = None
 
-        try:
-            manager = TimingRecipeManager(self.inventory, command_log=self.command_log)
-            output_path = self._artifact_path(f"workflow_{label}_safe_idle_readback.json")
-            actions["t660"] = manager.apply_recipe(RECIPE_ROOT / "safe_idle.yaml", output_path=output_path)
-            self._remember_readback(output_path)
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"T660 safe_idle failed: {exc}")
+        def timing_shutdown():
+            try:
+                manager = TimingRecipeManager(self.inventory, command_log=timing_log)
+                output_path = self._artifact_path(f"workflow_{label}_safe_idle_readback.json")
+                actions["t660"] = manager.apply_recipe(RECIPE_ROOT / "safe_idle.yaml", output_path=output_path)
+                self._remember_readback(output_path)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"T660 safe_idle failed: {exc}")
 
+        # Each worker needs its own copied ownership context. Optical clients
+        # share SDK/session state and stay serialized; timing is independent.
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="instrument-shutdown") as pool:
+            jobs = [pool.submit(copy_context().run, callback)
+                    for callback in (optical_shutdown, timing_shutdown)]
+            for job in jobs:
+                try:
+                    job.result()
+                except Exception as exc:
+                    errors.append(f"Device shutdown failed: {exc}")
+
+        if self.command_log is not None:
+            for log in (optical_log, timing_log):
+                self.command_log.write(log.getvalue())
+            self.command_log.flush()
+        actions["errors"] = list(errors)
         readback_path = self._write_readback(f"workflow_{label}_safe_actions.json", actions)
         actions["readback_path"] = str(readback_path)
         if errors:

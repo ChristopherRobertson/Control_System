@@ -55,6 +55,7 @@ class HardwareCoordinator:
         self._token = None
         self._cancel = None
         self._fault = False
+        self._verified_idle_token = None
 
     def _read(self):
         try:
@@ -123,6 +124,7 @@ class HardwareCoordinator:
         if not isinstance(instance_id, str) or not instance_id.strip():
             raise ValueError("Ownership requires a stable instance_id")
         with self._mutex:
+            self._verified_idle_token = None
             if self._token is not None and not (recovery and self._fault):
                 raise OwnershipError(f"Coupled spectrometer is owned by {self._token.instance_id}: {self._token.operation_id}")
             if self._file is None:
@@ -174,6 +176,8 @@ class HardwareCoordinator:
                 self._fault = True
                 raise
             self._token, self._cancel, self._fault = None, None, False
+            if not token.instance_id.startswith("manual:") or token.instance_id == "manual:recovery":
+                self._verified_idle_token = token
             self._unlock_os()
 
     def complete_reset(self, token, *, previous, checks):
@@ -193,7 +197,31 @@ class HardwareCoordinator:
                         prior_run_restoration_verified=False,
                         prior_run_preservation_verified=False)
             self._token, self._cancel, self._fault = None, None, False
+            self._verified_idle_token = token
             self._unlock_os()
+
+    def current_session_idle_verified(self):
+        """Reuse only this coordinator's completed cleanup, with no device I/O.
+
+        Briefly take the OS lock to detect intervening work by another process.
+        A free record alone never supplies a current-session idle receipt.
+        """
+        with self._mutex:
+            token = self._verified_idle_token
+            if token is None or token.pid != os.getpid() or self._token is not None:
+                return False
+            try:
+                self._lock_os()
+                record = self._read()
+                valid = record["state"] == "free" and record.get("owner") == asdict(token)
+                if not valid:
+                    self._verified_idle_token = None
+                return valid
+            except OwnershipError:
+                self._verified_idle_token = None
+                return False
+            finally:
+                self._unlock_os()
 
     def snapshot(self):
         with self._mutex:
