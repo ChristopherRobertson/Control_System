@@ -795,7 +795,18 @@ class HF2LIService:
         """Probe both detector demods with all three streams enabled, restoring nodes."""
         return self._discover_phase_scan_capabilities((0, 3))
 
-    def _discover_phase_scan_capabilities(self, detector_indices: tuple[int, ...]) -> dict[str, Any]:
+    def discover_slow_scan_capabilities(self, *, dual=False, filter_requests=None) -> dict[str, Any]:
+        """Verify selected filters and available rates without a filter sweep.
+
+        Auto retains each detector's current filter. Explicit requests are
+        checked by the device. The established Phase Scan enumeration remains
+        separate because its menus need the complete filter choices.
+        """
+        return self._discover_phase_scan_capabilities((0, 3) if dual else (0,),
+                                                     filter_requests=filter_requests or {})
+
+    def _discover_phase_scan_capabilities(self, detector_indices: tuple[int, ...], *,
+                                          filter_requests=None) -> dict[str, Any]:
         """Probe accepted demodulator settings, then restore the prior settings.
 
         This is configuration-only: no poll, DAQ execution, signal output or
@@ -850,22 +861,34 @@ class HF2LIService:
                             rates.add(float(actual))
                 # Documented orders 1–8, TC >= 0.8 us; only idempotent actual
                 # readbacks enter each detector's supported-value dropdowns.
-                for order in range(1, 9):
+                selected_filter = None if filter_requests is None else filter_requests.get(demod, {})
+                if selected_filter is None:
+                    candidate_orders = range(1, 9)
+                    candidate_constants = tuple(value * 1e-6 for value in (.8, 1., 2., 5., 8., 10., 20., 50., 100., 200., 500., 1000.))
+                else:
+                    order = selected_filter.get("order")
+                    tau = selected_filter.get("timeconstant_s")
+                    order = before[f"{prefix}/order"]["value"] if order is None else order
+                    tau = before[f"{prefix}/timeconstant"]["value"] if tau is None else tau
+                    if type(order) is not int or not 1 <= order <= 8 or not isinstance(tau, (int, float)) or not math.isfinite(tau) or tau <= 0:
+                        raise HF2LIConfigurationError("Invalid requested Slow Scan filter")
+                    candidate_orders, candidate_constants = (order,), (tau,)
+                for order in candidate_orders:
                     try:
                         accepted_order = set_read(f"{prefix}/order", order, "int")
                         if accepted_order != order:
                             continue
                         values = []
-                        for nominal_us in (.8, 1., 2., 5., 8., 10., 20., 50., 100., 200., 500., 1000.):
+                        for requested_tau in candidate_constants:
                             try:
-                                actual = set_read(f"{prefix}/timeconstant", nominal_us*1e-6)
+                                actual = set_read(f"{prefix}/timeconstant", requested_tau)
                                 if actual > 0 and unique(values, actual):
                                     repeated = set_read(f"{prefix}/timeconstant", actual)
                                     if math.isclose(actual, repeated, rel_tol=1e-9, abs_tol=1e-15):
                                         values.append(float(actual))
                             except Exception as exc:
                                 observations.append({"demodulator": demod, "order": order,
-                                    "requested_timeconstant_s": nominal_us*1e-6, "rejected": str(exc)})
+                                    "requested_timeconstant_s": requested_tau, "rejected": str(exc)})
                         if values:
                             orders.append(order)
                             constants[order] = tuple(sorted(values))
