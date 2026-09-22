@@ -85,12 +85,13 @@ class ELL15IrisService:
         device = (config.get("devices") or {}).get("opo_iris")
         if not isinstance(device, dict):
             raise ELL15ConfigurationError("devices.opo_iris is not configured")
-        return cls(
+        from control_app.measurement_host.application_session import shared_device
+        return shared_device("opo_iris", lambda: cls(
             device,
             allow_motion=allow_motion,
             timeout_s=timeout_s,
             command_log=command_log,
-        )
+        ), allow_motion=allow_motion, command_log=command_log)
 
     def connect(self) -> None:
         if self.serial_factory is None:

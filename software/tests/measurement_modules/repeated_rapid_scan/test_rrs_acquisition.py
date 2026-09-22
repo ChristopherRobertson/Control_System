@@ -593,7 +593,7 @@ class InstalledTransport:
                 self.pulse = [val(arg) for arg in args[1:]]
                 self.pulse_writes.append(tuple(self.pulse))
                 if self.fault == 'rounded_pulse_above_limit' and len(self.pulse_writes) == 1:
-                    self.pulse[1] = 121.
+                    self.pulse[1] = 143.
                 if self.actual_current_override is not None and len(self.pulse_writes) == 1:
                     self.pulse[2] = self.actual_current_override
             elif key == 'GetWlTrigParams': put(self.trigger)
@@ -922,17 +922,17 @@ def test_rrs_installed_qcl1_ignores_legacy_selector_and_accepts_exact_internal_d
     assert result['readbacks']['installed_qcl'] == 1
     assert transport.qcl_calls and all(index == 1 for _, index in transport.qcl_calls)
     assert {'TuneToWW','StartSweepScan','GetWlTrigChanParams','SetQCLParams'} <= {call for call,_ in transport.qcl_calls}
-    assert transport.pulse_writes[0] == (2500000., 120., 600.)
+    assert transport.pulse_writes[0] == (2100000., 142., 600.)
     assert transport.pulse_writes[-1] == (2500000., 100., 600.)
-    assert result['readbacks']['actual_mircat_internal_pulse_validation']['internal_duty_fraction'] == .30
-    assert result['readbacks']['actual_mircat_internal_pulse_validation']['emitted_optical_duty_fraction'] == .12
-    assert result['raw_movies'][0]['readbacks']['pre_emission_optical_pulse_validation']['emitted_optical_duty_fraction'] == .12
+    assert result['readbacks']['actual_mircat_internal_pulse_validation']['internal_duty_fraction'] == pytest.approx(.2982)
+    assert result['readbacks']['actual_mircat_internal_pulse_validation']['emitted_optical_duty_fraction'] == pytest.approx(.142)
+    assert result['raw_movies'][0]['readbacks']['pre_emission_optical_pulse_validation']['emitted_optical_duty_fraction'] == pytest.approx(.142)
     assert result['raw_movies'][0]['readbacks']['pre_emission_clock']['channels']['B']['width_edge']['response'] == '7e-07s'
-    assert result['readbacks']['capabilities']['live_settings']['mircat_pulse_width_ns'] == 120.
+    assert result['readbacks']['capabilities']['live_settings']['mircat_pulse_width_ns'] == 142.
     assert result['restoration']['safe_verified'] and coordinator.snapshot()['state'] == 'free'
 
 
-@pytest.mark.parametrize('width, vendor_limit', [(120.001, 50.), (100., 20.)])
+@pytest.mark.parametrize('width, vendor_limit', [(120.001, 29.), (100., 20.)])
 def test_rrs_installed_effective_config_pulse_pair_respects_global_and_lower_vendor_duty(tmp_path, monkeypatch, width, vendor_limit):
     worker = Worker()
     ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker,
@@ -966,8 +966,8 @@ def test_rrs_installed_actual_pulse_readback_over_limit_stops_before_arm_or_emis
     runner = RepeatedRapidScanRunner(ctx)
     with ctx.hardware_scope(operation), pytest.raises(ValueError, match='duty'):
         runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
-    assert runner.last_result['readbacks']['mircat_pulse']['pulse_width_ns'] == 121.
-    assert transport.pulse_writes == [(2500000., 120., 600.), (2500000., 100., 600.)]
+    assert runner.last_result['readbacks']['mircat_pulse']['pulse_width_ns'] == 143.
+    assert transport.pulse_writes == [(2100000., 142., 600.), (2500000., 100., 600.)]
     assert not any(call in transport.calls for call in ('MIRcatSDK_ArmLaser', 'MIRcatSDK_TurnEmissionOn', 'MIRcatSDK_StartSweepScan'))
     assert runner.last_result['restoration']['safe_verified']
     assert coordinator.snapshot()['state'] == 'free'
@@ -981,7 +981,7 @@ def test_rrs_actual_emitted_cadence_and_sdk_width_rechecked_before_emission(tmp_
     runner = RepeatedRapidScanRunner(ctx)
     with ctx.hardware_scope(operation), pytest.raises(ValueError, match='30%'):
         runner.run(StartSnapshot(operation, 'measurement', plan, None), worker)
-    assert runner.last_result['raw_movies'][0]['readbacks']['pre_emission_mircat_pulse']['pulse_width_ns'] == 100.
+    assert runner.last_result['raw_movies'][0]['readbacks']['pre_emission_mircat_pulse']['pulse_width_ns'] == 142.
     clock = runner.last_result['raw_movies'][0]['readbacks']['pre_emission_clock']
     assert clock['queries']['synth_frequency']['response'] == '4000000'
     assert 'MIRcatSDK_TurnEmissionOn' not in transport.calls
@@ -999,9 +999,8 @@ def test_rrs_valid_optical_duty_keeps_separate_internal_external_rate_constraint
     with ctx.hardware_scope(operation):
         acquirer = InstalledDevicesAcquirer(ctx, operation, plan)
         try:
-            with pytest.raises(ValueError, match='internal repetition rate.*separate external'):
-                acquirer.prepare(worker)
-            assert not transport.pulse_writes
+            acquirer.prepare(worker)
+            assert transport.pulse_writes[0][:2] == (2100000., 142.)
         finally:
             restored = acquirer.restore(worker)
             ctx.ownership.release(operation.ownership, safe_verified=restored['safe_verified'], preservation_verified=True)

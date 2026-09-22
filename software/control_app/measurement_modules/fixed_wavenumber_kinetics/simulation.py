@@ -152,7 +152,8 @@ class SimulatedDevices:
             signal *= 1+common
             drift = float(self.faults.get("baseline_drift_per_s", 0))
             signal *= 1+drift*seconds
-            dio = np.zeros(len(ticks), dtype=np.uint64)
+            marker_bit = np.uint64(1 << int(self.resolved["pump_marker_bit"]))
+            dio = np.full(len(ticks), marker_bit, dtype=np.uint64)
             for pump in self.pumps:
                 dt = seconds-pump
                 active = dt >= 0
@@ -165,9 +166,9 @@ class SimulatedDevices:
                     signal *= 10**(-amplitude*transient*active)
                 if not self.faults.get("missing_marker"):
                     pulse = active & (dt < .002)
-                    dio[pulse] |= np.uint64(1 << int(self.resolved["pump_marker_bit"]))
+                    dio[pulse] &= ~marker_bit
                 if self.faults.get("extra_marker"):
-                    dio[(dt >= .01) & (dt < .012)] |= np.uint64(1 << int(self.resolved["pump_marker_bit"]))
+                    dio[(dt >= .01) & (dt < .012)] &= ~marker_bit
             if self.faults.get("missing_reference") and role == "reference":
                 signal[:] = np.nan
             if self.faults.get("gap_at") == self.read_count:
@@ -187,6 +188,10 @@ class SimulatedDevices:
     def finish_event(self):
         return {"frames_status": "ERROR" if self.faults.get("timing_error") else "DONE",
             "frame_shot_count": len(self.current_program["frames"]), "simulation": True}
+
+    def idle(self, duration_s, check):
+        check()
+        self.time += duration_s
 
     def stop_stream(self):
         self.streaming = False

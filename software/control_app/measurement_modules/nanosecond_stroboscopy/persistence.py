@@ -100,6 +100,10 @@ def acquisition_settings(settings):
     contract = {key: selected[key] for key in fields if key in selected}
     contract["overrides"] = {key: value for key, value in selected.get("overrides", {}).items()
                              if value not in (None, "Auto", "auto")}
+    optical = {key: value for key, value in selected.get("laser_settings", {}).items()
+               if key in ("qcl_current_ma", "probe_pulse_width_ns", "probe_repetition_rate_hz", "pump_repetition_rate_hz", "fire_to_qswitch_us")}
+    if optical:
+        contract["laser_settings"] = optical
     return contract
 
 

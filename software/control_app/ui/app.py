@@ -38,6 +38,7 @@ def main() -> int:
     window = ControlSystemMainWindow(
         command_handler=handler,
         persist_settings=True,
+        connect_devices_on_startup=True,
     )
     window.resize(1100, 780)
     if "--mircat-scan" in sys.argv:

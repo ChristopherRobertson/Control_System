@@ -208,7 +208,7 @@ class CompactScientificAdapter(Protocol):
 try:
     from PySide6.QtCore import Qt, QThread, Signal
     from PySide6.QtWidgets import (
-        QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
+        QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
         QMessageBox, QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter,
         QVBoxLayout, QWidget,
     )
@@ -404,7 +404,7 @@ if QWidget is not None:
             # The toolbar subplot editor requires an unconstrained layout engine.
             self.figure = Figure(figsize=(8, 5), layout="none")
             self.canvas = FigureCanvasQTAgg(self.figure)
-            self.canvas.setMinimumHeight(300)
+            self.canvas.setMinimumHeight(215)
             self.toolbar = NavigationToolbar2QT(self.canvas, self)
             self.select_action = self.toolbar.addAction("Mouse selection")
             self.toolbar.insertAction(self.toolbar._actions["pan"], self.select_action)
@@ -415,8 +415,14 @@ if QWidget is not None:
             self.toolbar._actions["save_figure"].triggered.connect(self._choose_image)
             layout = QVBoxLayout(self)
             layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(3)
             layout.addWidget(self.toolbar)
-            layout.addWidget(self.canvas, 1)
+            self.axis_limits = AxisLimitsWidget(self.figure, self.canvas)
+            self.toolbar.addSeparator()
+            self.toolbar.addWidget(QLabel("Axes:"))
+            self.toolbar.addWidget(self.axis_limits.axes_choice)
+            self.toolbar.addWidget(self.axis_limits.auto_button)
+            layout.addWidget(self.axis_limits)
 
         def mouse_selection(self):
             if self.toolbar.mode == "pan/zoom":
@@ -433,6 +439,7 @@ if QWidget is not None:
             self.figure.clear()
             if self.result is not None:
                 self.adapter.draw(self.figure, self.result)
+            self.axis_limits.refresh_axes()
             self.toolbar.update()
             self.canvas.draw_idle()
 
@@ -463,7 +470,6 @@ if QWidget is not None:
         def _choose_image(self):
             try:
                 root = self._image_save_root()
-                root.mkdir(parents=True, exist_ok=True)
                 path, _ = QFileDialog.getSaveFileName(self, "Save plot image", str(root / "measurement.png"), "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)")
                 if path:
                     self.save_image(Path(path))
@@ -471,6 +477,126 @@ if QWidget is not None:
                 message = f"{type(exc).__name__}: {exc}"
                 self.error.emit(message)
                 QMessageBox.warning(self, "Save plot image", message)
+
+
+    class AxisLimitsWidget(QWidget):
+        """Editable display limits for every axes in a Matplotlib figure."""
+
+        def __init__(self, figure, canvas, parent=None):
+            super().__init__(parent)
+            self.figure, self.canvas = figure, canvas
+            self._axes = []
+            self._syncing = False
+            self.axes_choice = QComboBox()
+            self.axes_choice.setObjectName("plot_axes_choice")
+            self.axes_choice.setMaximumWidth(120)
+            self.axes_choice.setFixedHeight(19)
+            self.inputs = {}
+            for key, label in (("xmin", "X min"), ("xmax", "X max"),
+                               ("ymin", "Y min"), ("ymax", "Y max")):
+                editor = QLineEdit()
+                editor.setObjectName("plot_" + key)
+                editor.setFixedWidth(92)
+                editor.setPlaceholderText("Auto")
+                editor.setToolTip(f"Editable {label.lower()} for the selected axes")
+                editor.editingFinished.connect(self.apply)
+                self.inputs[key] = editor
+            self.auto_button = QPushButton("Auto")
+            self.auto_button.setToolTip("Restore automatic limits for the selected axes")
+            self.auto_button.clicked.connect(self.restore_auto)
+            layout = QGridLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setHorizontalSpacing(4)
+            layout.setVerticalSpacing(2)
+            layout.addWidget(self.canvas, 0, 0)
+            y_rail = QWidget()
+            y_layout = QVBoxLayout(y_rail)
+            y_layout.setContentsMargins(0, 0, 0, 0)
+            y_layout.setSpacing(2)
+            y_layout.addWidget(QLabel("Y max"))
+            y_layout.addWidget(self.inputs["ymax"])
+            y_layout.addStretch(1)
+            y_layout.addWidget(QLabel("Y min"))
+            y_layout.addWidget(self.inputs["ymin"])
+            layout.addWidget(y_rail, 0, 1)
+            x_rail = QWidget()
+            x_layout = QHBoxLayout(x_rail)
+            x_layout.setContentsMargins(0, 0, 0, 0)
+            x_layout.setSpacing(4)
+            x_layout.addWidget(QLabel("X min"))
+            x_layout.addWidget(self.inputs["xmin"])
+            x_layout.addStretch(1)
+            x_layout.addWidget(QLabel("X max"))
+            x_layout.addWidget(self.inputs["xmax"])
+            layout.addWidget(x_rail, 1, 0)
+            layout.setRowStretch(0, 1)
+            layout.setColumnStretch(0, 1)
+            self.axes_choice.currentIndexChanged.connect(self._sync_from_axes)
+            self.setEnabled(False)
+
+        @staticmethod
+        def _label(axis, index):
+            title = axis.get_title().strip()
+            xlabel, ylabel = axis.get_xlabel().strip(), axis.get_ylabel().strip()
+            detail = title or " / ".join(value for value in (xlabel, ylabel) if value)
+            return detail or f"Axes {index + 1}"
+
+        def refresh_axes(self):
+            previous = self.axes_choice.currentIndex()
+            self._axes = list(self.figure.axes)
+            self.axes_choice.blockSignals(True)
+            self.axes_choice.clear()
+            for index, axis in enumerate(self._axes):
+                self.axes_choice.addItem(self._label(axis, index), index)
+            self.axes_choice.setCurrentIndex(min(max(previous, 0), len(self._axes)-1))
+            self.axes_choice.blockSignals(False)
+            self.setEnabled(bool(self._axes))
+            self._sync_from_axes()
+
+        def _selected(self):
+            index = self.axes_choice.currentIndex()
+            return self._axes[index] if 0 <= index < len(self._axes) else None
+
+        def _sync_from_axes(self, *_):
+            axis = self._selected()
+            self._syncing = True
+            try:
+                limits = (*axis.get_xlim(), *axis.get_ylim()) if axis is not None else (None,)*4
+                values = (min(limits[:2]), max(limits[:2]), min(limits[2:]), max(limits[2:])) if axis is not None else limits
+                for key, value in zip(("xmin", "xmax", "ymin", "ymax"), values):
+                    self.inputs[key].setText("" if value is None else f"{value:.12g}")
+            finally:
+                self._syncing = False
+
+        def apply(self):
+            if self._syncing:
+                return
+            axis = self._selected()
+            if axis is None:
+                return
+            try:
+                values = {key: float(editor.text()) for key, editor in self.inputs.items()}
+                if not all(math.isfinite(value) for value in values.values()):
+                    raise ValueError
+                if values["xmin"] >= values["xmax"] or values["ymin"] >= values["ymax"]:
+                    raise ValueError
+            except ValueError:
+                self._sync_from_axes()
+                return
+            x_inverted = axis.get_xlim()[0] > axis.get_xlim()[1]
+            y_inverted = axis.get_ylim()[0] > axis.get_ylim()[1]
+            axis.set_xlim((values["xmax"], values["xmin"]) if x_inverted else (values["xmin"], values["xmax"]))
+            axis.set_ylim((values["ymax"], values["ymin"]) if y_inverted else (values["ymin"], values["ymax"]))
+            self.canvas.draw_idle()
+
+        def restore_auto(self):
+            axis = self._selected()
+            if axis is None:
+                return
+            axis.relim()
+            axis.autoscale(enable=True, axis="both", tight=False)
+            self.canvas.draw_idle()
+            self._sync_from_axes()
 
 
     class GuidedMeasurementPanel(QWidget):
@@ -756,7 +882,6 @@ if QWidget is not None:
         def _prepare_save_folder(self, action):
             try:
                 root = Path(self.save_root_provider()).expanduser().resolve()
-                root.mkdir(parents=True, exist_ok=True)
             except (OSError, ValueError) as exc:
                 self.status.setText(f"Cannot prepare the {action} folder.")
                 self.status.setToolTip(str(exc))
@@ -988,6 +1113,7 @@ if QWidget is not None:
             while self.summary_form.rowCount():
                 self.summary_form.removeRow(0)
             self.summary_values.clear()
+            self.summary_form.setVerticalSpacing(2)
             for label, value in rows:
                 display = QLabel(str(value))
                 display.setWordWrap(True)
@@ -998,9 +1124,18 @@ if QWidget is not None:
         def refresh_plan(self, *_):
             if self._busy:
                 return
+            from .parameter_feedback import required_parameter_prompts, plan_parameter_prompts, live_parameter_updates
+            if not getattr(self, "_live_parameters_connected", False):
+                live_parameter_updates(self.settings_widget, self.refresh_plan)
+                self._live_parameters_connected = True
             try:
+                missing = required_parameter_prompts(self.settings_widget)
+                if missing:
+                    raise ValueError("\n".join(missing))
                 settings = deepcopy(self.adapter.read_settings())
                 candidate = self.adapter.make_plan(settings)
+                from .uniform_layout import effective_hf2_values
+                effective_hf2_values(self, candidate)
                 self._plan_issues = tuple(self.adapter.validate_plan(candidate))
                 self.set_summary_rows(self.adapter.summarize_plan(candidate))
                 self.plan = None if self._plan_issues else candidate
@@ -1009,6 +1144,8 @@ if QWidget is not None:
                 self.plan = self._host_plan = None
                 self._plan_issues = (str(exc),)
                 self.set_summary_rows(())
+            if self._plan_issues:
+                self.set_summary_rows((("Required settings", plan_parameter_prompts(self._plan_issues)),))
             # Keep scientific data; compatibility, not a manual flag, determines
             # whether it remains usable after settings or device changes.
             self.refresh_readiness()

@@ -70,9 +70,8 @@ def test_explicit_selection_still_creates_and_checks_write_access(private_paths,
     monkeypatch.setattr(tempfile, "TemporaryFile", probe)
     destination = paths.default_tab_save_location("Phase Scan - Single Detector")
     assert paths.set_save_location(destination) == destination
-    assert destination.is_dir()
-    assert probes == [destination]
-    assert list(destination.iterdir()) == []
+    assert not destination.exists()
+    assert probes == []
 
 
 def test_failed_write_probe_does_not_replace_selected_root(private_paths, monkeypatch):
@@ -85,7 +84,7 @@ def test_failed_write_probe_does_not_replace_selected_root(private_paths, monkey
 
     monkeypatch.setattr(tempfile, "TemporaryFile", denied)
     with pytest.raises(PermissionError, match="not writable"):
-        paths.set_save_location(paths.RUN_ROOT / "denied")
+        paths.set_save_location(paths.RUN_ROOT / "denied", create=True)
     assert paths.get_save_location() == previous
 
 
@@ -172,7 +171,7 @@ def test_phase_file_dialogs_use_their_own_provider_without_touching_settings(pri
     filename = "dual_detector_phase_scan_plan.json" if dual else "phase_scan_plan.json"
     assert dialogs == [("blank", destination), ("load", destination), ("save", destination / filename)]
     assert paths.get_save_location() == selected_elsewhere
-    assert destination.is_dir() and list(destination.iterdir()) == []
+    assert not destination.exists()
     assert not selected_elsewhere.exists()
 
 
@@ -189,7 +188,7 @@ def test_phase_save_prepares_selected_parent_and_preserves_plan_payload(private_
     widget = SimpleNamespace(save_root_provider=lambda: root, dual_detector=dual,
         plan=SimpleNamespace(to_dict=lambda: dict(payload)), save_status=SimpleNamespace(setText=status.append))
     def choose(*args):
-        assert root.is_dir() and not selected.parent.exists()
+        assert not root.exists() and not selected.parent.exists()
         return str(selected), ""
     monkeypatch.setattr(phase_ui.QFileDialog, "getSaveFileName", choose)
     assert not root.exists()
@@ -199,18 +198,19 @@ def test_phase_save_prepares_selected_parent_and_preserves_plan_payload(private_
     assert saved["saved_at_utc"] and status
 
 
-def test_phase_save_folder_failure_is_shown_without_opening_dialog(private_paths, monkeypatch):
+def test_phase_save_folder_failure_is_shown_when_writing(private_paths, monkeypatch):
     pytest.importorskip("PySide6")
     from control_app.ui.widgets import phase_scan_widget as phase_ui
 
     root = paths.default_tab_save_location("Phase Scan")
-    widget = SimpleNamespace(save_root_provider=lambda: root, dual_detector=False, plan=object())
+    widget = SimpleNamespace(save_root_provider=lambda: root, dual_detector=False,
+                             plan=SimpleNamespace(to_dict=lambda: {}))
     warnings = []
     def denied(*args, **kwargs):
         raise PermissionError("Injected Phase Save Plan permission failure")
     monkeypatch.setattr(Path, "mkdir", denied)
     monkeypatch.setattr(phase_ui.QMessageBox, "warning", lambda parent, title, message: warnings.append(message))
-    monkeypatch.setattr(phase_ui.QFileDialog, "getSaveFileName", lambda *args: pytest.fail("Failed root must not open dialog"))
+    monkeypatch.setattr(phase_ui.QFileDialog, "getSaveFileName", lambda *args: (str(root/"saved.json"), ""))
     phase_ui.PhaseScanWidget._save_plan(widget)
     assert len(warnings) == 1 and "permission failure" in warnings[0]
     assert not root.exists()

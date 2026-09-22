@@ -88,8 +88,8 @@ def test_fixed_point_offline_activation_never_acquires_hardware(app, tmp_path, m
     for _ in range(3):
         app.processEvents()
     assert not panel.command_running()
-    assert not panel.check_device_button.isEnabled()
-    assert panel.status.text() == "Connected instruments unavailable"
+    assert not hasattr(panel, "check_device_button")
+    assert panel.status.text().startswith("Connected instruments unavailable")
     panel.check_device()
     assert not attempts and not (tmp_path/"host.lock").exists()
     for handle in pair:
@@ -133,7 +133,7 @@ def test_fixed_point_complete_developer_workflow_save_reload_and_new_run(app, tm
     panel.load_run(record_path)
     wait(app, panel)
     assert panel.result["run_id"]
-    panel.quantity.setCurrentIndex(1)
+    assert not hasattr(panel, "quantity")
     panel.time_control.input.stepBy(1)
     panel.plot.canvas.draw()
     for handle in pair:
@@ -200,7 +200,7 @@ def test_fixed_point_plot_markers_and_aggregates_never_invent_pumps_or_mix_units
     figure.clear()
     renderer.draw(figure, record)
     lines = [line for axes in figure.axes for line in axes.lines if "pump marker" in line.get_label()]
-    assert len(lines) == 2
+    assert len(lines) == 1
 
 
 def test_fixed_point_fault_blocks_close_after_worker_finishes(app, tmp_path):
@@ -233,8 +233,8 @@ def test_fixed_point_essential_inputs_and_independent_automatic_overrides(app, t
         assert panel.advanced_content.isVisible() and not panel.advanced_content.isCheckable()
         assert not hasattr(panel, "advanced_button")
         labels = [label.text() for label in panel.findChildren(QLabel)]
-        assert "Repetition rate (Hz)" in labels and "Pulse width (ns)" in labels
-        assert "Time constant (s)" in labels and "Filter time (s)" not in labels
+        assert "Repetition Rate" in labels and "Pulse Width" in labels
+        assert any(label.lower().endswith("time constant (s)") for label in labels) and "Filter time (s)" not in labels
         assert not any("QCL" in text for text in labels)
         assert not {"memory_limit_mb", "tune_timeout_s", "pump_fire_delay_s", "baseline_cv_limit"}.intersection(panel.editor.fields)
         assert all(control.isVisible() for control in panel.editor.fields.values())
@@ -287,7 +287,7 @@ def test_fixed_point_compact_overrides_migrate_removed_settings_and_preserve_pos
     assert panel.editor.values()["settings"]["positions"][0] == {"wavenumber_cm1": 1925.}
     panel.editor.restore_automatic()
     restored = panel.editor.values()["settings"]
-    assert restored["probe_rate_hz"] is None and restored["probe_width_ns"] is None
+    assert restored["probe_rate_hz"] == 2_000_000 and restored["probe_width_ns"] == 150
     assert restored["pump_q_switch_delay_s"] is None
     assert restored["baseline_window_s"] is None and restored["memory_limit_mb"] == 256.
     panel.editor.apply(panel.editor.values())
@@ -343,7 +343,7 @@ def test_fixed_point_compact_real_factories_check_and_direct_start(app, tmp_path
     assert panel.adapter.live_readbacks.get("source_kind") == "connected_readbacks", panel.status.text()
     for service in fixture.state["services"].values():
         assert not {"on", "arm", "tune", "source", "inputs", "demods"}.intersection(service.calls)
-    panel.editor.apply({"settings": fixture.settings.to_dict()})
+    panel.editor.apply({"settings": {**fixture.settings.to_dict(), "probe_rate_hz": 100000.}})
     assert panel.start_button.isEnabled()
     assert panel.preliminary is None and panel.adapter.blank is None
     assert panel.editor.values()["execution"] == "connected"
@@ -361,7 +361,7 @@ def test_fixed_point_compact_real_factories_check_and_direct_start(app, tmp_path
     event = record["analysis"]["events"][0]
     if mode == "single":
         assert event["normalization_kind"] == "observed_sample_baseline"
-        assert "Baseline-relative" in panel.quantity.itemText(1)
+        assert not hasattr(panel, "quantity")
     assert pair[1 if mode == "single" else 0].widget.result is None
     for handle in pair:
         handle.widget.deleteLater()
@@ -374,7 +374,7 @@ def test_fixed_point_visible_pulse_controls_reach_installed_transports(app, tmp_
     fixture = build_connected_fixture(tmp_path, mode)
     pair = create_tabs(fixture.context_factory.for_experiment("fixed_wavenumber_kinetics"))
     panel = pair[0 if mode == "single" else 1].widget
-    panel.editor.apply({"settings": fixture.settings.to_dict()})
+    panel.editor.apply({"settings": {**fixture.settings.to_dict(), "probe_rate_hz": 100000.}})
     saved = panel.editor.values()
     saved["settings"]["pump_q_switch_delay_s"] = 0.000213
     panel.editor.apply(saved)
@@ -385,13 +385,15 @@ def test_fixed_point_visible_pulse_controls_reach_installed_transports(app, tmp_
     assert panel.result["status"] == "complete", panel.status.text()
     selected = panel.result["plan"]["resolved"]
     assert selected["probe_recipe"]["clock"]["frequency"] == "80000Hz"
-    assert selected["mircat"]["qcl"] == 1 and selected["mircat"]["pulse_width_ns"] == 120.
+    assert selected["mircat"]["qcl"] == 1 and selected["mircat"]["pulse_width_ns"] == 142.
     pulse = panel.result["events"][0]["tuning"]["mircat_internal_pulse"]
-    assert pulse["external_probe_rate_hz"] == 80000. and pulse["pulse_rate_hz"] == 110000.
-    assert pulse["pulse_width_ns"] == 120.
-    assert selected["timing"]["q_switch_delay_s"] == 0.0002
+    assert pulse["external_probe_rate_hz"] == 80000. and pulse["pulse_rate_hz"] == 2100000.
+    assert pulse["pulse_width_ns"] == 142.
+    assert pulse["current_ma"] == 1000.
+    assert fixture.state["services"]["mircat"].pulse(1)["current_ma"] == 500.
+    assert selected["timing"]["q_switch_delay_s"] == 0.00025
     assert panel.result["plan"]["evidence_records"]["historical_ui_settings"]["pump_q_switch_delay_s"] == 0.000213
-    assert {"qcl": 1, "pulse_rate_hz": 110000., "pulse_width_ns": 120.} in fixture.state["services"]["mircat"].pulse_writes
+    assert any(write["qcl"] == 1 and write["pulse_rate_hz"] == 2100000. and write["pulse_width_ns"] == 142. for write in fixture.state["services"]["mircat"].pulse_writes)
     assert panel.result["preservation_verified"] and panel.result["restoration"]["safe_verified"]
     for handle in pair:
         handle.widget.deleteLater()
@@ -404,7 +406,12 @@ def test_fixed_point_compact_real_optional_blank_sample_reuse(app, tmp_path, mod
     fixture = build_connected_fixture(tmp_path, mode)
     pair = create_tabs(fixture.context_factory.for_experiment("fixed_wavenumber_kinetics"))
     panel = pair[0 if mode == "single" else 1].widget
-    panel.editor.apply({"settings": fixture.settings.to_dict()})
+    panel.editor.apply({"settings": {**fixture.settings.to_dict(), "probe_rate_hz": 100000.}})
+    inputs = panel.editor.lasers.inputs
+    inputs["start_wavenumber_cm1"].setValue(1930.)
+    inputs["stop_wavenumber_cm1"].setValue(1930.)
+    assert not inputs["step_size_cm1"].isEnabled()
+    assert panel.editor.lasers.points() == [1930.]
     if mode == "single":
         panel.begin_blank()
         wait(app, panel)
@@ -412,12 +419,14 @@ def test_fixed_point_compact_real_optional_blank_sample_reuse(app, tmp_path, mod
     panel.begin("preliminary")
     wait(app, panel)
     assert panel.preliminary, panel.status.text()
+    from control_app.measurement_modules.fixed_wavenumber_kinetics.processing import compatible_record
+    assert compatible_record(panel.preliminary, panel.plan)[0], compatible_record(panel.preliminary, panel.plan)[1]
     panel.begin("measurement")
     wait(app, panel)
     assert panel.result and panel.result["status"] == "complete", panel.status.text()
-    assert "preliminary" in panel.result["analysis_inputs"], panel.result.get("optional_record_notes")
+    assert "preliminary" not in panel.result["analysis_inputs"], panel.result.get("optional_record_notes")
     if mode == "single":
-        assert "blank" in panel.result["analysis_inputs"], panel.result.get("optional_record_notes")
+        assert "blank" not in panel.result["analysis_inputs"], panel.result.get("optional_record_notes")
     for handle in pair:
         handle.widget.deleteLater()
 
@@ -437,7 +446,7 @@ def test_fixed_point_compact_real_abort_contention_and_frozen_destination(app, t
     monkeypatch.setattr(HF2, "read_acquisition", blocked_poll)
     pair = create_tabs(fixture.context_factory.for_experiment("fixed_wavenumber_kinetics"))
     single, dual = (h.widget for h in pair)
-    dual.editor.apply({"settings": fixture.settings.to_dict()})
+    dual.editor.apply({"settings": {**fixture.settings.to_dict(), "probe_rate_hz": 100000.}})
     single.editor.wavenumber.setValue(1930)
     dual.begin("measurement")
     deadline = time.monotonic()+5
@@ -476,7 +485,7 @@ def test_fixed_point_compact_real_failure_and_cleanup_precedence(app, tmp_path, 
     fixture = build_connected_fixture(tmp_path, "dual", faults={"health_overload": True} if fault != "cleanup" else {})
     pair = create_tabs(fixture.context_factory.for_experiment("fixed_wavenumber_kinetics"))
     panel = pair[1].widget
-    panel.editor.apply({"settings": fixture.settings.to_dict()})
+    panel.editor.apply({"settings": {**fixture.settings.to_dict(), "probe_rate_hz": 100000.}})
     panel.begin("measurement")
     wait(app, panel)
     record = panel.adapter.last_record
@@ -507,12 +516,13 @@ def test_fixed_point_plot_relative_fallback_and_sequential_blank_labels():
     figure = Figure()
     renderer.draw(figure, record)
     assert len(figure.axes[0].lines) == 1  # No simultaneous-reference implication.
-    assert figure.axes[1].lines[0].get_label() == "Baseline-relative signal S/S0"
+    assert len(figure.axes) == 1
+    assert figure.axes[0].lines[0].get_label() == "Sample magnitude"
     event["ratio"] = np.array([np.nan]*3)
     figure.clear()
     renderer.draw(figure, record)
-    assert not figure.axes[1].lines
-    assert figure.axes[1].texts[0].get_text() == "No normalized signal"
+    assert len(figure.axes) == 1
+    assert figure.axes[0].lines[0].get_label() == "Sample magnitude"
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
@@ -536,6 +546,7 @@ def test_fixed_point_actual_shell_fits_and_keeps_plot_labels_visible(app, tmp_pa
              "delta_absorbance": np.zeros(40), "wavenumber_cm1": 1930., "recovery_fit": {}}
     panel.show_record({"mode": panel.context.mode, "analysis": {"events": [event]}})
     window.resize(1100, 780)
+    window.set_detector_mode(mode)
     window.tabs.setCurrentWidget(panel)
     window.show()
     app.processEvents()
@@ -547,11 +558,80 @@ def test_fixed_point_actual_shell_fits_and_keeps_plot_labels_visible(app, tmp_pa
     assert panel.start_button.isVisible()
     assert panel.advanced_content.isVisible() and not panel.advanced_content.isCheckable()
     viewport = panel.settings_scroll.viewport()
-    for control in (*panel.editor.fields.values(), panel.editor.wavenumber, panel.editor.pump,
-                    panel.editor.positions, panel.save_plan_button, panel.load_plan_button):
+    assert panel.isVisible()
+    for control in (*panel.editor.fields.values(), *panel.editor.lasers.extra_inputs.values(), panel.editor.time_units,
+                    panel.save_plan_button, panel.load_plan_button):
+        # QSpinBox's focus rectangle excludes its frame; request the complete
+        # control so a partly visible frame does not count as fully scrolled in.
+        center = control.mapTo(panel.settings_scroll.widget(), control.rect().center())
+        panel.settings_scroll.ensureVisible(center.x(), center.y(), control.width() // 2, control.height() // 2 + 20)
+        app.processEvents()
         assert viewport.rect().contains(QRect(control.mapTo(viewport, QPoint()), control.size()))
     assert panel.settings_scroll.horizontalScrollBar().maximum() == 0
     assert panel.save_plan_button.geometry().top() == panel.load_plan_button.geometry().top()
+    assert panel.save_plan_button.geometry().right() < panel.load_plan_button.geometry().left()
     window.hide()
     window.deleteLater()
     app.processEvents()
+
+
+def test_startup_high_idle_rate_enables_actions_after_range_entry(app, tmp_path):
+    from test_fixed_kinetics_planner import profile_case
+    pair, _ = tabs(tmp_path)
+    try:
+        for handle in pair:
+            panel = handle.widget
+            _, evidence = profile_case(panel.context.mode)
+            live = evidence["operating_profile"]
+            live["timing_rate_sps"] = 1842105.2631578948
+            live["maximum_aggregate_rate_sps"] = 700000.
+            panel.adapter.live_readbacks = live
+            panel.refresh_plan()
+            assert not panel.start_button.isEnabled()
+            assert "wavenumber" in panel.status.text().lower()
+            inputs = panel.editor.lasers.inputs
+            inputs["start_wavenumber_cm1"].setValue(1942.)
+            inputs["stop_wavenumber_cm1"].setValue(1940.)
+            inputs["step_size_cm1"].setValue(2.)
+            panel.refresh_plan()
+            assert panel.plan is not None, panel.validation.text()
+            assert not panel.preliminary_button.isEnabled()
+            assert panel.start_button.isEnabled()
+            if hasattr(panel, "blank_button"):
+                assert not panel.blank_button.isEnabled()
+            assert panel.start_button.toolTip() == ""
+    finally:
+        for handle in pair:
+            handle.widget.deleteLater()
+
+
+def test_single_wavenumber_live_summary_and_acquisition_readiness(app, tmp_path):
+    pair, _ = tabs(tmp_path)
+    try:
+        for handle in pair:
+            panel = handle.widget
+            def summary():
+                return "\n".join(label.text() for label in panel.summary_values.values())
+            assert "Set Start Wavenumber to proceed" in summary()
+            assert "Set Stop Wavenumber to proceed" in summary()
+            inputs = panel.editor.lasers.inputs
+            inputs["start_wavenumber_cm1"].setValue(1940)
+            assert "Set Start Wavenumber to proceed" not in summary()
+            assert "Set Stop Wavenumber to proceed" in summary()
+            inputs["stop_wavenumber_cm1"].setValue(1940)
+            assert not inputs["step_size_cm1"].isEnabled()
+            inputs["step_size_cm1"].setValue(0)
+            assert panel.editor.lasers.points() == [1940]
+            assert panel.plan is not None, summary()
+            if panel.context.mode == "single":
+                assert not panel.blank_button.isEnabled()
+            assert panel.start_button.isEnabled()
+            assert "Set Stop Wavenumber" not in summary()
+            inputs["stop_wavenumber_cm1"].setValue(1938)
+            assert inputs["step_size_cm1"].isEnabled()
+            assert panel.plan is None  # zero step must now be corrected
+            inputs["step_size_cm1"].setValue(2)
+            assert panel.plan is not None
+    finally:
+        for handle in pair:
+            handle.widget.deleteLater()

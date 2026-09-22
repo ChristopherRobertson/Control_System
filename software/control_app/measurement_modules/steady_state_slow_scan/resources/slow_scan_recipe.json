@@ -14,7 +14,7 @@
     "frame_clock": "t660_1.C to t660_2.TRIG_IN",
     "process": "t660_2.C active-low to mircat.DB9.4; finite frame schedule",
     "upload": "T660Service.preload_frame_table with acknowledged pending fields and cancellation",
-    "blocks": "one contiguous descending QCL1 Start-to-End trajectory, repeated Number of Scans times; no opposite-direction acquisition or implicit splitting"
+    "blocks": "one contiguous descending QCL1 Start-to-Stop trajectory, repeated Number of Scans times; no opposite-direction acquisition or implicit splitting"
   },
   "controls": {
     "single": ["automatic emission-OFF detector dark", "optional compatible sequential blank for relative spectra"],

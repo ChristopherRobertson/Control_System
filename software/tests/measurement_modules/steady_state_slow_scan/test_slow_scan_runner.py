@@ -26,6 +26,19 @@ class Worker:
             raise InterruptedError("operator Stop")
 
 
+def test_control_readbacks_allow_external_center_drift_but_detect_filter_changes():
+    center = "/devTEST/plls/0/freqcenter"
+    order = "/devTEST/demods/0/order"
+    previous = {center: {"type": "double", "value": 1978042.238},
+                order: {"type": "int", "value": 4}}
+    current = {**previous, center: {"type": "double", "value": 1953415.641}}
+    controls = {"blank": {"readbacks": {"hf2li": {"nodes": previous}}}}
+    SlowScanRunner._validate_instrument_controls(controls, {"hf2li": {"nodes": current}})
+    current[order] = {"type": "int", "value": 2}
+    with pytest.raises(ValueError, match="blank HF2LI settings changed"):
+        SlowScanRunner._validate_instrument_controls(controls, {"hf2li": {"nodes": current}})
+
+
 def setup(tmp_path, mode="single"):
     coordinator = HardwareCoordinator(tmp_path / "instrument.lock")
     factory = ContextFactory(ownership=coordinator, save_root_provider=lambda: tmp_path)

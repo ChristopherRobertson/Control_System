@@ -104,6 +104,10 @@ class RepeatedRapidScanAdapter:
         return ()  # build_plan validates structure; readiness is separate and visible.
 
     def summarize_plan(self, plan):
+        from control_app.measurement_host.experiment_summary import summary_rows
+        return summary_rows(plan, self._procedure_summary(plan), slow_scan=False)
+
+    def _procedure_summary(self, plan):
         s, e = plan.settings, plan.estimates
         actual = plan.actual
         sample_source = ("readback" if actual.get("sample_rate_hz") == s.sample_rate_hz and

@@ -28,8 +28,8 @@ from threading import Event, Lock
 from control_app.workflows.air_scan import run_air_scan, settings_from_mircat_controls
 
 
-MIRCAT_WAVENUMBER_MIN_CM1 = 1638.8
-MIRCAT_WAVENUMBER_MAX_CM1 = 2077.3
+MIRCAT_WAVENUMBER_MIN_CM1 = 1639.
+MIRCAT_WAVENUMBER_MAX_CM1 = 2077.
 DEFAULT_SCAN_START_CM1 = 2050.0
 DEFAULT_SCAN_STOP_CM1 = 1650.0
 DEFAULT_SCAN_RATE_CM1_S = 40.0
@@ -69,6 +69,12 @@ class MircatWidgetCommandHandler:
                 f"{command.command} operator={self.operator}\n"
             )
             try:
+                from control_app.measurement_host.application_session import current_session
+                session = current_session()
+                if session is not None and "mircat" in session.connected:
+                    self.service = session.device("mircat")
+                    self.service.command_log = command_log
+                    self.initialized = True
                 return self._handle(command, command_log)
             except Exception as exc:  # noqa: BLE001 - UI command boundary reports all failures
                 return WorkflowResult(
@@ -249,7 +255,10 @@ class MircatWidgetCommandHandler:
                                          ("emission_on", "armed", "scan_in_progress")):
                 return WorkflowResult(status="failed", message="MIRcat deinitialized, but final readbacks did not verify emission off, disarmed and scan stopped.",
                                       data={"state_before_deinitialize": state, "safe_state_verified": False})
-            return WorkflowResult(status="complete", message="MIRcat deinitialized",
+            from control_app.measurement_host.application_session import current_session
+            message = ("MIRcat stopped and disarmed; application connection retained" if current_session() is not None
+                       else "MIRcat deinitialized")
+            return WorkflowResult(status="complete", message=message,
                                   data={"state_before_deinitialize": state, "safe_state_verified": state is not None})
         if name == "mircat.emission_on":
             self._require_initialized()
@@ -475,7 +484,8 @@ class MircatWidgetCommandHandler:
             device_config = self.inventory.devices.get("mircat")
             if not isinstance(device_config, dict):
                 raise MircatError("mircat missing from hardware configuration")
-            self.service = MircatService(device_config, command_log=command_log)
+            from control_app.measurement_host.application_session import shared_device
+            self.service = shared_device("mircat", lambda: MircatService(device_config, command_log=command_log), command_log=command_log)
         else:
             self.service.command_log = command_log
         return self.service
@@ -546,6 +556,8 @@ class MircatWidgetCommandHandler:
             command.parameters.get("current_ma", DEFAULT_CURRENT_MA),
             "Current",
         )
+        from control_app.measurement_host.laser_settings import validate_mircat_limits
+        validate_mircat_limits(current=current_ma, width=pulse_width_ns)
         return {
             "pulse_rate_hz": pulse_rate_hz,
             "pulse_width_ns": pulse_width_ns,

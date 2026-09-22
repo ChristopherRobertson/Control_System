@@ -52,15 +52,14 @@ def test_emergency_does_not_skip_fresh_cleanup(machine, monkeypatch):
 
 
 @pytest.mark.parametrize('fail', [False, True])
-def test_independent_branches_overlap_and_retain_ownership_context(machine, monkeypatch, fail):
-    rendezvous = Barrier(2)
+def test_mircat_discovery_finishes_before_timing_ports_open(machine, monkeypatch, fail):
     threads = []
     finished = []
     class Laser:
         def initialize(self):
             require_hardware_owner(self)
             threads.append(get_ident())
-            rendezvous.wait(timeout=3)
+            finished.append('discovery')
             if fail:
                 raise RuntimeError('synthetic optical failure')
         def stop_scan_if_needed(self): return 0
@@ -73,7 +72,8 @@ def test_independent_branches_overlap_and_retain_ownership_context(machine, monk
         def apply_safe_idle(self, *args, **kwargs):
             require_hardware_owner(self)
             threads.append(get_ident())
-            rendezvous.wait(timeout=3)
+            assert 'discovery' in finished
+            assert 'laser' in finished
             finished.append('timing')
             return {'matches_recipe': True}
     monkeypatch.setattr(module.MircatService, 'from_config', lambda **kwargs: Laser())
@@ -85,7 +85,7 @@ def test_independent_branches_overlap_and_retain_ownership_context(machine, monk
                 machine._send_safe_actions('test')
         else:
             assert machine._send_safe_actions('test')['mircat']['state']['emission_on'] is False
-    assert len(set(threads)) == 2
+    assert len(set(threads)) == 1
     assert 'timing' in finished
     assert machine.coordinator.snapshot()['state'] == 'owned'
     machine.coordinator.release(token, safe_verified=not fail)
@@ -131,7 +131,7 @@ def test_safe_idle_units_overlap_and_both_finish(machine, monkeypatch, tmp_path,
 
 
 def test_separate_optical_clients_overlap(machine, monkeypatch):
-    barrier = Barrier(4)
+    barrier = Barrier(3)
     class Detector:
         def stop(self): pass
         def close_unit(self): self.close()
@@ -141,7 +141,7 @@ def test_separate_optical_clients_overlap(machine, monkeypatch):
     machine._mircat_handler = SimpleNamespace(shutdown_for_ui_close=lambda **kwargs:
         barrier.wait(timeout=3) is not None and WorkflowResult('complete', 'closed', {'mircat_shutdown': {'safe_state': 'closed'}}))
     monkeypatch.setattr(module, 'TimingRecipeManager', lambda *args, **kwargs:
-        SimpleNamespace(apply_safe_idle=lambda **kwargs: barrier.wait(timeout=3)))
+        SimpleNamespace(apply_safe_idle=lambda **kwargs: {'matches_recipe': True}))
     token = machine.coordinator.acquire('manual:recovery', recovery=True)
     with machine.coordinator.scope(token):
         machine._send_safe_actions('test', ui_shutdown={'reason': 'close', 'emergency': False})

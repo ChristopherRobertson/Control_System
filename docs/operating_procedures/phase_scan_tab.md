@@ -40,6 +40,13 @@ displayed for reference and are not normal editable experiment controls.
    The blank has the same complete signed scan schedule, cadence, trajectory,
    probe and detector configuration as the upcoming sample sequence. Alternatively,
    use **Select saved buffer blank…** to select a compatible completed run.
+   A newly acquired blank keeps the instrument connections and exclusive ownership
+   for the preliminary and pumped stages. The T660-1 A reference remains running,
+   HF2LI acquisition settings stay applied, and MIRcat remains armed with emission
+   off. Probe and scan/pump triggers are inhibited while you exchange the sample.
+   Settings, blank selection and capability discovery are locked until you end
+   the experiment. Loading a saved blank starts a new session; it cannot preserve
+   continuity with the earlier blank's reference or settling history.
 4. Load the sample and select **2 · Acquire preliminary sample (pump OFF)**.
    Review the **Preliminary spectral review** view and select **I reviewed the
    preliminary unpumped spectrum**. This is one unpumped sample scan matched to
@@ -49,6 +56,9 @@ displayed for reference and are not normal editable experiment controls.
    pump. The continuous sample sequence first captures its own unpumped baseline,
    then all signed phase steps. Resolved HF2LI settings and effective instrument
    readbacks must still match the blank before acquisition starts.
+   Each subsequent stage verifies the retained configuration and reference without
+   reconnecting or reapplying the HF2LI preset. A changed configuration or lost
+   reference fails the operation and triggers cleanup rather than silently retuning.
 6. Inspect **Reconstructed phase-scan data**. Select absolute absorbance or its
    change from the unpumped sample baseline; rotate, zoom, use the toolbar Home icon, and
    inspect linked spectral/time slices and cursor values. Use **Export quantitative
@@ -67,6 +77,13 @@ and attempts every restoration and safe-idle action. Wait for the completion or
 failure message. An abort, partial acquisition, integrity failure or unverified
 restoration does not become a compatible blank or a completed quantitative run.
 There are no automatic optical retries.
+
+Between stages, **End experiment** restores the original settings and closes the
+connections in a background worker. **New run** first performs the same cleanup.
+Completion of the pumped sequence, an acquisition fault, or application shutdown
+also ends the session. Full restoration is deferred until one of these boundaries;
+completion of the blank or preliminary scan alone does not restore settings or
+disconnect the instruments.
 
 **Sequence duration** covers the hardware scan sequence. Before it starts, the
 app programs every timing-table entry and prepares the instruments; large tables
@@ -205,6 +222,15 @@ cadence, complete signed frame schedule, probe/HF2LI readbacks and safe shutdown
 are reconstructable from their saved records. Incomplete or unmatched records
 are rejected with the missing or conflicting evidence identified. No hash
 matching is required to load data or accept a compatible blank.
+
+Retained sessions also record `experiment_session.json` after each intermediate
+stage and `experiment_session_resume.json` when continuing. These retain the
+session ID and interstage readbacks. Intermediate results explicitly report that
+full shutdown/restoration has not yet occurred. On final cleanup,
+`experiment_session_close.json` links each stage to the final restoration record.
+A saved blank from such a session can be selected in a later experiment only
+after successful final cleanup is recorded; the current session uses its own
+verified blank directly. Existing stage result records are not rewritten at close.
 
 Time is labeled relative to **electrical pump sync**. Optical arrival at the
 sample has not been calibrated. Marker wavelengths are controller readbacks,

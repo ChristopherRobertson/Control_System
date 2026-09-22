@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
+from functools import partial
 from typing import Any
 from pathlib import Path
 from control_app.paths import default_save_location, default_tab_save_location, get_save_location, set_save_location
@@ -15,11 +17,26 @@ from control_app.ui.widgets.scan_plotter_widget import ScanPlotterWidget
 from control_app.ui.widgets.t660_widget import T660Widget
 from control_app.measurement_host.context import ContextFactory
 from control_app.measurement_host.device_factories import installed_device_factories
-from control_app.measurement_host.legacy_phase_scan import create_phase_scan_tabs
+from control_app.measurement_modules.phase_scan.registration import DESCRIPTOR as PHASE_SCAN_DESCRIPTOR
 from control_app.measurement_host.lifecycle import MeasurementLifecycle
 from control_app.measurement_host.ownership import default_coordinator
-from control_app.measurement_host.registry import create_registered_tabs, discover_modules
+from control_app.measurement_host.registry import DiscoveryResult, create_registered_tabs, discover_modules
 from control_app.measurement_host.naming import tab_title
+
+
+def _connection_status_messages(device_errors, lifecycle_errors):
+    """Show one short message per failed device; retain unrelated tab errors."""
+    messages = []
+    for name, error in device_errors.items():
+        detail = str(error)
+        if "Windows denied access to " in detail:
+            port = detail.split("Windows denied access to ", 1)[1].split(".", 1)[0]
+            messages.append(f"{name}: {port} access denied. Resolve the connection and refresh connected settings.")
+        else:
+            messages.append(f"{name}: connection/settings unavailable. See details in the tooltip.")
+    messages.extend(message for message in lifecycle_errors[-3:]
+                    if not any(str(error) in message for error in device_errors.values()))
+    return messages
 
 
 try:
@@ -82,6 +99,7 @@ class ControlSystemMainWindow(QMainWindow):
         *,
         persist_settings: bool = False,
         module_discovery=None,
+        connect_devices_on_startup: bool = False,
     ) -> None:
         if not PYSIDE6_AVAILABLE:
             raise RuntimeError("PySide6 is required to instantiate ControlSystemMainWindow")
@@ -108,10 +126,19 @@ class ControlSystemMainWindow(QMainWindow):
         self.ownership = getattr(handler, "coordinator", None) or default_coordinator()
         self.measurement_lifecycle = MeasurementLifecycle(self.ownership)
         setattr(handler, "measurement_lifecycle", self.measurement_lifecycle)
-        self._instrument_bridge = _InstrumentNotificationBridge(self.measurement_lifecycle.deliver_instrument_state, self)
+        self._instrument_bridge = _InstrumentNotificationBridge(self._deliver_instrument_change, self)
         self.measurement_lifecycle.instrument_dispatcher = self._instrument_bridge.changed.emit
         setattr(handler, "instrument_state_change_callback", self._manual_instrument_changed)
         inventory = getattr(handler, "inventory", None)
+        self._device_startup_worker = None
+        self.device_session = None
+        if (connect_devices_on_startup and getattr(handler, "hardware_access", False) and inventory is not None
+                and hasattr(handler, "application_session")):
+            from control_app.measurement_host.application_session import ApplicationDeviceSession
+            self.device_session = ApplicationDeviceSession(self.ownership, inventory.to_dict())
+            handler.application_session = self.device_session
+            handler.phase_scan_runner.capability_provider = self.device_session.phase_capabilities
+            handler.dual_detector_phase_scan_runner.capability_provider = partial(self.device_session.phase_capabilities, True)
         self.measurement_context_factory = ContextFactory(
             configuration_provider=lambda: inventory.to_dict() if inventory is not None else {},
             real_device_factories=(installed_device_factories()
@@ -127,14 +154,25 @@ class ControlSystemMainWindow(QMainWindow):
         self.tabs = tabs = QTabWidget()
         tabs.setUsesScrollButtons(True)
         tabs.tabBar().setExpanding(False)
-        phase_handles = create_phase_scan_tabs(
-            self.measurement_context_factory.for_experiment("phase_scan"),
+        phase_descriptor = replace(PHASE_SCAN_DESCRIPTOR, create_tabs=partial(
+            PHASE_SCAN_DESCRIPTOR.create_tabs,
             single_runner=getattr(handler, "phase_scan_runner", None),
             dual_runner=getattr(handler, "dual_detector_phase_scan_runner", None),
             before_start=self._phase_start_blocker, legacy_preferences=None,
-        )
+        ))
+        phase_created = create_registered_tabs((phase_descriptor,), self.measurement_context_factory)
+        if phase_created.issues:
+            raise RuntimeError(f"Phase Scan registration failed: {phase_created.issues}")
+        phase_handles = phase_created.handles
         self.phase_scan_widget, self.dual_detector_phase_scan_widget = (h.widget for h in phase_handles)
         discovered = discover_modules() if module_discovery is None else module_discovery
+        # Phase Scan is registered with the existing application-owned runners
+        # above, preserving their cleanup and persistent-session identity.
+        if isinstance(discovered, DiscoveryResult):
+            discovered = replace(discovered, descriptors=tuple(
+                d for d in discovered.descriptors if d.experiment_id != "phase_scan"))
+        else:
+            discovered = tuple(d for d in discovered if d.experiment_id != "phase_scan")
         created = create_registered_tabs(
             discovered, self.measurement_context_factory,
             existing_titles=(tab_title("phase_scan", "single"), tab_title("phase_scan", "dual"),
@@ -148,6 +186,10 @@ class ControlSystemMainWindow(QMainWindow):
             (handle.widget, QSizePolicy(handle.widget.sizePolicy())) for handle in created.handles)
         self._measurement_state_bridges = []
         self._tab_handles = {handle.widget: handle for handle in (*phase_handles, *created.handles)}
+        from control_app.measurement_host.uniform_layout import standardize_experiment_page
+        for handle in (*phase_handles, *created.handles):
+            experiment, mode = handle.instance_id.split(":")
+            standardize_experiment_page(handle.widget, experiment, mode)
         for handle in (*phase_handles, *created.handles):
             self.measurement_lifecycle.register(handle)
             self._tab_titles_by_instance[handle.instance_id] = handle.title
@@ -222,6 +264,126 @@ class ControlSystemMainWindow(QMainWindow):
         self._update_host_status()
         # Detector mode always starts Single; per-mode pages remain instantiated.
         self._detector_mode_changed()
+
+        if self.device_session is not None:
+            # One startup read supplies every tab; showEvent must not discover.
+            self.iris_widget._initial_refresh_requested = True
+            instruments = self.menuBar().addMenu("Instruments")
+            refresh = instruments.addAction("Refresh connected settings")
+            refresh.triggered.connect(self._start_device_session)
+            recheck = instruments.addAction("Recheck supported device choices")
+            recheck.triggered.connect(lambda: self._start_device_session(recheck_capabilities=True))
+            for handle in self.measurement_lifecycle.handles:
+                if hasattr(handle.widget, "_capability_check_attempted"):
+                    handle.widget._capability_check_attempted = True
+            self._device_settings_bridge = _MeasurementStateBridge(lambda *_: self._publish_device_settings(), self)
+            self.device_session.changed = lambda: self._device_settings_bridge.changed.emit(())
+            QTimer.singleShot(0, lambda: self._start_device_session(recheck_capabilities=True))
+
+    def _start_device_session(self, _checked=False, *, recheck_capabilities=False):
+        if self._device_startup_worker is not None or self._shutdown_worker is not None:
+            return
+        if self.ownership.snapshot()["state"] != "free":
+            self.statusBar().showMessage("Device refresh waits until the current experiment or recovery finishes.")
+            return
+        from control_app.measurement_host.presentation import OperationWorker
+        worker = OperationWorker(lambda w: self.device_session.start(w.message.emit, recheck_capabilities=recheck_capabilities), self)
+        self._device_startup_worker = worker
+        worker.message.connect(self.statusBar().showMessage)
+        worker.finished.connect(self._device_session_started)
+        self.statusBar().showMessage("Connecting devices for this application session…")
+        worker.start()
+
+    def _deliver_instrument_change(self, change):
+        self.measurement_lifecycle.deliver_instrument_state(change)
+        self._publish_device_settings()
+
+    def _device_session_started(self):
+        worker = self._device_startup_worker
+        self._device_startup_worker = None
+        outcome = worker.outcome
+        worker.deleteLater()
+        self._publish_device_settings()
+        if outcome is not None and outcome.state != "completed":
+            self.statusBar().showMessage(f"Device startup failed: {outcome.error}")
+        elif self.device_session.errors:
+            self.statusBar().showMessage("; ".join(
+                _connection_status_messages(self.device_session.errors, [])))
+            self.statusBar().setToolTip("\n".join(
+                f"{name}: {error}" for name, error in self.device_session.errors.items()))
+        else:
+            self.statusBar().setToolTip("")
+            self.statusBar().showMessage(f"Devices connected in {self.device_session.startup_seconds:.1f} s. Tabs use shared settings.")
+
+    def _publish_device_settings(self):
+        session = self.device_session
+        if session is None or not session.ready or session.closed:
+            return
+        from control_app.measurement_host.application_session import CachedDevice
+        try:
+            iris = CachedDevice(session, "opo_iris").identity_snapshot()
+            self.iris_widget.update_state({**iris, "current_diameter_mm": iris.get("aperture_readback_mm")})
+        except RuntimeError:
+            pass
+        try:
+            state = CachedDevice(session, "mircat").read_state()
+            self.mircat_widget.update_state(state.to_dict() if hasattr(state, "to_dict") else state)
+        except RuntimeError:
+            pass
+        try:
+            from control_app.workflows.t660_widget_commands import T660WidgetCommandHandler
+            from control_app.workflows.ndyag_widget_commands import NdYagWidgetCommandHandler
+            timers = {name: CachedDevice(session, name).read_active_settings() for name in ("t660_1", "t660_2")}
+            self.t660_widget.update_state(T660WidgetCommandHandler._state_from_readback(None, {"devices": timers}))
+            self.ndyag_widget.update_state(NdYagWidgetCommandHandler._state_from_readback(None, {"devices": timers}))
+        except RuntimeError:
+            pass
+        self._device_publication_errors = {}
+        for handle in self.measurement_lifecycle.handles:
+            widget = handle.widget
+            if widget.command_running():
+                continue
+            experiment, mode = handle.instance_id.split(":")
+            # HF2LI choices must reach every editor even if a different device
+            # (laser or timer) is offline and its experiment snapshot fails.
+            if mode in session.capabilities:
+                if experiment == "phase_scan" and not getattr(widget.runner, "experiment_session_active", False):
+                    widget.runner.set_capabilities(widget.capabilities_type.from_dict(session.capabilities[mode]))
+                    widget._populate_override_choices()
+                elif experiment != "phase_scan":
+                    from control_app.measurement_host.settings_sections import populate_hf2li_choices
+                    populate_hf2li_choices(widget, experiment, session.capabilities[mode])
+            try:
+                if experiment == "phase_scan":
+                    if getattr(widget.runner, "experiment_session_active", False):
+                        continue
+                    widget.runner.set_capabilities(session.phase_capabilities(mode == "dual"))
+                    widget._populate_override_choices()
+                    widget._refresh_plan()
+                elif experiment == "microsecond_stroboscopy":
+                    widget.adapter.capabilities = session.phase_capabilities(mode == "dual").to_dict()
+                    widget.adapter.acknowledge_instrument_check()
+                    widget.refresh_plan()
+                elif experiment == "fixed_wavenumber_kinetics":
+                    widget.adapter.live_readbacks = session.fixed_profile(mode, widget.editor.values())
+                    widget.refresh_plan()
+                elif experiment == "steady_state_slow_scan":
+                    widget.adapter.readbacks = session.slow_scan_readbacks(mode)
+                    widget.refresh_plan()
+                elif experiment == "nanosecond_stroboscopy":
+                    widget.adapter.capabilities = session.nanosecond_capabilities()
+                    widget.refresh_plan()
+                elif experiment == "repeated_rapid_scan":
+                    widget.adapter.apply_capabilities({"capabilities": session.rapid_scan_capabilities(mode)})
+                    widget.refresh_plan()
+            except Exception as exc:
+                if experiment == "phase_scan" and not getattr(widget.runner, "experiment_session_active", False):
+                    caps = getattr(widget.runner, "capabilities", None)
+                    if caps is not None:
+                        widget.runner.set_capabilities(replace(caps, verified=False))
+                        widget._refresh_plan()
+                self._device_publication_errors[handle.instance_id] = f"{handle.instance_id}: {exc}"
+        self._update_host_status()
 
     def set_detector_mode(self, mode):
         index = self.detector_mode.findData(mode)
@@ -369,20 +531,26 @@ class ControlSystemMainWindow(QMainWindow):
             widget.updateGeometry()
         self.tabs.updateGeometry()
 
-    def _phase_start_blocker(self, hardware=True):
+    def _phase_start_blocker(self, hardware=True, instance_id=None):
         if not hardware:
             # Simulations use the already selected destination and their own
             # frozen root; a live instrument owner does not block their work.
             return None
         blockers = []
         state = self.ownership.snapshot()
-        if state["state"] != "free":
+        resuming = instance_id is not None and self.ownership.has_parked_session(instance_id=instance_id)
+        if state["state"] != "free" and not resuming:
             blockers.append(f"Instrument {state['state']}: {state.get('owner')}. {state.get('detail', '')}")
         handler_blockers = getattr(self.command_handler, "ui_close_blockers", None)
         if callable(handler_blockers):
             blockers.extend(handler_blockers())
         if blockers:
             return "Stop other instrument activity first: " + "; ".join(blockers)
+        if resuming:
+            # The destination editor is locked while this experiment owns the
+            # instrument. Continue with its already committed tab destination;
+            # reapplying it would reject our own retained hardware session.
+            return None
         try:
             # Commit the current text, including a path typed just before Start.
             self._apply_save_location()
@@ -405,13 +573,23 @@ class ControlSystemMainWindow(QMainWindow):
     def _update_host_status(self):
         messages = [f"{issue.module}: {issue.stage}: {issue.message}" for issue in self.registration_issues]
         state = self.ownership.snapshot()
-        if state["state"] != "free":
+        parked = self.ownership.has_parked_session()
+        if parked:
+            messages.append("Experiment session retained; ready for the next stage. Emission off.")
+        elif state["state"] != "free":
             owner = state.get("owner") or {}
             messages.append("Instrument reset required after an interrupted session." if state["state"] == "fault" else f"Instrument in use: {owner.get('instance_id', 'another session')}")
-        messages.extend(self.measurement_lifecycle.errors[-3:])
+        session = getattr(self, "device_session", None)
+        device_errors = session.errors if session is not None else {}
+        messages.extend(_connection_status_messages(device_errors, [
+            *self.measurement_lifecycle.errors,
+            *getattr(self, "_device_publication_errors", {}).values(),
+        ]))
         self.host_status.setText("\n".join(messages))
+        self.host_status.setToolTip("\n".join(
+            f"{name}: {error}" for name, error in device_errors.items()))
         self.host_status.setVisible(bool(messages))
-        self.recovery_button.setVisible(state["state"] != "free" and callable(
+        self.recovery_button.setVisible(state["state"] != "free" and not parked and callable(
             getattr(self.command_handler, "ui_reset_instrument", None)))
         self.recovery_button.setEnabled(self._recovery_worker is None)
 
@@ -436,6 +614,9 @@ class ControlSystemMainWindow(QMainWindow):
         elif outcome is not None and getattr(outcome.result, "status", None) != "complete":
             self._show_close_error("Instrument reset incomplete", str(getattr(outcome.result, "message", outcome.result)))
         self._update_save_enabled()
+        if (self.device_session is not None and outcome is not None
+                and getattr(outcome.result, "status", None) == "complete"):
+            QTimer.singleShot(0, self._start_device_session)
 
     def request_emergency_stop(self, reason):
         """Cancel all registered live hardware operations, preserving offline work."""
@@ -453,6 +634,8 @@ class ControlSystemMainWindow(QMainWindow):
     def live_worker_blockers(self):
         """Include analysis workers when deciding whether Qt can be destroyed."""
         blockers = []
+        if getattr(self, "_device_startup_worker", None) is not None:
+            blockers.append("Application device startup is still running.")
         if getattr(self, "_shutdown_worker", None) is not None:
             blockers.append("Application shutdown is still running.")
         for handle in self.measurement_lifecycle.handles:
@@ -547,7 +730,7 @@ class ControlSystemMainWindow(QMainWindow):
             if (text == str(self._last_applied_save_location)
                     and key not in self._tab_save_overrides):
                 text = str(automatic)
-            selected = set_save_location(text)
+            selected = set_save_location(text, create=False)
             if selected == automatic.resolve():
                 self._tab_save_overrides.pop(key, None)
             else:
@@ -639,6 +822,8 @@ class ControlSystemMainWindow(QMainWindow):
 
     def _close_blockers(self) -> list[str]:
         blockers: list[str] = self.measurement_lifecycle.close_blockers()
+        if getattr(self, "_device_startup_worker", None) is not None:
+            blockers.append("Application device startup is still running.")
         if getattr(self, "_shutdown_worker", None) is not None:
             blockers.append("Application shutdown is still running.")
         if self._recovery_worker is not None:

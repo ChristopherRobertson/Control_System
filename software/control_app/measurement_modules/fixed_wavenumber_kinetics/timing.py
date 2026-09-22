@@ -1,6 +1,6 @@
 """Deterministic finite T660-2 programs for stationary, continuous records.
 
-The probe carrier is separate. Each program authorizes at most one pump; the
+The probe carrier is separate. Each program authorizes a finite user-selected shot count; the
 runner executes the requested finite sequence and cadence. No host clock defines
 a pump edge. Manufacturer bounds: T660 Manual F5 pp. 6, 8, 10, 24–28 (10 ps,
 3600 s delay+width, 32-bit predivider, 8192 frames). The service uses an extra
@@ -86,12 +86,12 @@ def compile_timing(*, pre_observation_s: float, post_observation_s: float,
                    fire_width_s: float, q_switch_width_s: float, pump_enabled: bool = True,
                    fire_polarity: str = "positive", q_switch_polarity: str = "positive",
                    termination: str = "50OHM", frame_capacity: int = MAX_PHYSICAL_FRAMES,
-                   edge_quantum_s: float = EDGE_QUANTUM_S) -> TimingProgram:
-    """Compile one event with explicit probe-only baseline/recovery/terminal.
+                   edge_quantum_s: float = EDGE_QUANTUM_S, pump_shots: int = 1,
+                   shot_delay_s: float = .1) -> TimingProgram:
+    """Compile a continuous trial with pre-first-shot and post-last-shot capture.
 
-    The frame divider may extend the requested baseline to fit a long record in
-    finite frame memory. The extension is reported; capture stays continuous.
-    No extra train pulses or implicit table loops can generate another pump.
+    FIRE precedes each Q-switch by the selected delay. No hidden repetitions
+    or host timers define the shot edges; the final hardware frame is inert.
     """
     for name, value in (("pre_observation_s", pre_observation_s), ("post_observation_s", post_observation_s),
                         ("input_frequency_hz", input_frequency_hz)):
@@ -116,39 +116,47 @@ def compile_timing(*, pre_observation_s: float, post_observation_s: float,
         raise TimingError("Unknown pump polarity")
     if termination not in {"50OHM", "LOWZ"}:
         raise TimingError("Unsupported output termination")
-    # Baseline has no pump outputs. Frame 1 generates the authorized event.
-    # Reserve terminal frame and at least one event frame in finite memory.
-    minimum_period = max(pre_observation_s, max(fd + fw, qd + qw) + FRAME_END_MARGIN_S,
-                         (post_observation_s + qd) / (frame_capacity - 2))
-    divider = max(1, _cycles_up(minimum_period, input_frequency_hz))
+    if type(pump_shots) is not int or not 1 <= pump_shots <= frame_capacity - 1:
+        raise TimingError("Pump Shots must be an integer within the finite timing capacity")
+    if pump_shots > 1 and (not math.isfinite(shot_delay_s) or shot_delay_s < .1-1e-12):
+        raise TimingError("Shot Delay must be at least 0.1 s (Nd:YAG maximum 10 Hz)")
+    shot_delay_s = max(.1, shot_delay_s)
+    gap = qd - fd
+    # The user's pre-pump value describes the analysis window. Hardware may
+    # need to start earlier to deliver FIRE before Q-switch; retain that lead-in
+    # natively and crop it only when forming the pump-relative trace.
+    first = quantize_seconds(max(pre_observation_s, gap), edge_quantum_s, upward=True)
+    # FIRE and Q-switch can occupy different frames. This preserves the
+    # requested pre-pump duration even when Q-switch lands on a frame boundary.
+    divider = max(1, _cycles_up(shot_delay_s if pump_shots > 1 else
+        max(first, (first + post_observation_s) / (frame_capacity - 1), gap + fw + FRAME_END_MARGIN_S), input_frequency_hz))
     if divider > MAX_PREDIVIDER:
-        raise TimingError("Requested continuous capture cannot fit the T660 32-bit frame predivider at this input rate")
+        raise TimingError("Requested timing exceeds the T660 32-bit frame divider")
     period = divider / input_frequency_hz
-    event_offset = period + qd
-    # Include full post-pump support before the all-OFF terminal begins.
-    recovery_frames = max(0, _cycles_up(post_observation_s + qd, 1.0 / period) - 1)
-    nframes = 3 + recovery_frames
+    offsets = tuple(float(Decimal(str(first)) + i * Decimal(str(period))) for i in range(pump_shots)) if pump_enabled else ()
+    last = offsets[-1] if offsets else first
+    capture_end = last + post_observation_s
+    nframes = _cycles_up(capture_end, 1 / period) + 1
     if nframes > frame_capacity:
-        # Decimal calculations avoid normal off-by-one rounding, and the bound
-        # remains authoritative in case a supplied rate is itself imprecise.
-        raise TimingError("Continuous record exceeds finite table capacity; increase the selected pre-pump interval")
-    off_width = quantize_seconds(max(edge_quantum_s, min(fw, qw)), edge_quantum_s)
-    off = {ch: {"enabled": False, "delay": "0.00000000000s", "width": _command(off_width),
-                "polarity": "negative" if ch == "C" else "positive", "termination": termination} for ch in "ABCD"}
-    table = []
-    for i in range(nframes):
-        channels = deepcopy(off)
-        kind = "probe_only_baseline" if i == 0 else "terminal_all_off" if i == nframes - 1 else "recovery"
-        if i == 1:
-            kind = "pump_event" if pump_enabled else "no_pump_control"
-            channels["A"] = {"enabled": pump_enabled, "delay": _command(fd), "width": _command(fw),
-                             "polarity": fire_polarity, "termination": termination}
-            channels["B"] = {"enabled": pump_enabled, "delay": _command(qd), "width": _command(qw),
-                             "polarity": q_switch_polarity, "termination": termination}
-        table.append({"index": i, "kind": kind, "offset_s": i * period, "duration_s": period,
-                      "channels": channels, "train_count": 0, "train_spacing_s": 0.0,
-                      "frame_repetitions": 1, "inert_terminator": i == nframes - 1})
-    duration = nframes * period
-    return TimingProgram(tuple(table), divider, input_frequency_hz, period, int(pump_enabled),
-                         (event_offset,) if pump_enabled else (), duration, event_offset,
-                         duration - event_offset, pre_observation_s, post_observation_s)
+        raise TimingError("Trial exceeds finite timing-table capacity; reduce shots or acquisition duration")
+    # OFF frames must preserve the electrical idle level. In particular, loading
+    # a positive-polarity OFF Q-switch frame before a negative pulse can itself
+    # create a trigger transition, even while the frame engine is inhibited.
+    polarities = {"A": fire_polarity, "B": q_switch_polarity, "C": "negative", "D": "positive"}
+    off = {ch: {"enabled": False, "delay": _command(0), "width": _command(edge_quantum_s),
+                "polarity": polarities[ch], "termination": termination} for ch in "ABCD"}
+    table = [{"index": i, "kind": "terminal_all_off" if i == nframes-1 else "acquisition",
+              "offset_s": i*period, "duration_s": period, "channels": deepcopy(off),
+              "train_count": 0, "train_spacing_s": 0., "frame_repetitions": 1,
+              "inert_terminator": i == nframes-1} for i in range(nframes)]
+    for shot in offsets:
+        for channel, edge, width, polarity in (("A", float(Decimal(str(shot))-Decimal(str(gap))), fw, fire_polarity), ("B", shot, qw, q_switch_polarity)):
+            index = int(Decimal(str(edge)) // Decimal(str(period)))
+            delay = quantize_seconds(max(0., edge-index*period), edge_quantum_s)
+            if delay + width + FRAME_END_MARGIN_S > period or delay + width > MAX_CHANNEL_END_S:
+                raise TimingError("Pump pulse crosses a timing-frame boundary; adjust Shot Delay or acquisition timing")
+            table[index]["channels"][channel] = {"enabled": True, "delay": _command(delay),
+                "width": _command(width), "polarity": polarity, "termination": termination}
+            table[index]["kind"] = "pump_shot"
+    return TimingProgram(tuple(table), divider, input_frequency_hz, period, len(offsets), offsets,
+        capture_end, first, post_observation_s, pre_observation_s, post_observation_s)

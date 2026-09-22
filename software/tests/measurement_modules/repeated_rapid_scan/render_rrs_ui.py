@@ -48,7 +48,7 @@ def render(folder):
             viewport = panel.settings_scroll.viewport()
             controls = [panel.settings_widget.sample, *panel.settings_widget.inputs.values(),
                         *panel.settings_widget.override_inputs.values(),
-                        panel.settings_widget.restore_auto_button, panel.capability_button,
+                        panel.settings_widget.restore_auto_button,
                         panel.save_plan_button, panel.load_plan_button]
             for control in controls:
                 bounds = QRect(control.mapTo(viewport, QPoint()), control.size())

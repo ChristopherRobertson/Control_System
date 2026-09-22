@@ -193,6 +193,16 @@ class ScopedOwnership:
             token, safe_verified=safe_verified, preservation_verified=preservation_verified, detail=detail
         )
 
+    def park(self, token, *, cleanup, detail="Prepared measurement session; awaiting sample"):
+        self.assert_owner(token)
+        return self.__coordinator.park(token, cleanup=cleanup, detail=detail)
+
+    def close_parked_session(self):
+        return self.__coordinator.close_parked_session(instance_id=self.instance_id)
+
+    def has_parked_session(self):
+        return self.__coordinator.has_parked_session(instance_id=self.instance_id)
+
     def snapshot(self):
         return deepcopy(self.__coordinator.snapshot())
 
@@ -349,7 +359,9 @@ class MeasurementContext:
         No directories or instruments are touched. The native saver creates the
         frozen output_path when needed, including after cancellation or failure.
         Hardware callers must retain ownership until cleanup AND preservation are
-        verified, then call ownership.release with the actual outcomes.
+        verified, then call ownership.release with the actual outcomes. A saved
+        blank may instead park a prepared, emission-off session; the same tab's
+        next operation resumes its existing SDK ownership token.
         """
         self._require_mode()
         if hardware:

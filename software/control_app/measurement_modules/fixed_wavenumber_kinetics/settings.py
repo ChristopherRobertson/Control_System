@@ -6,7 +6,7 @@ or denies ordinary raw/relative acquisition.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Mapping
 
 EXPERIMENT_ID = "fixed_wavenumber_kinetics"
@@ -53,6 +53,9 @@ class Settings:
     positions: tuple[Position, ...] = ()
     pre_observation_s: float = 1.0
     post_observation_s: float = 10.0
+    pump_shots: int = 1
+    shot_delay_s: float = 0.1
+    time_unit: str = "s"
     event_budget: int = 1
     technical_repetitions: int = 1
     events_per_position: int = 1
@@ -88,6 +91,8 @@ class Settings:
     background_balance_record_id: str = ""
     notes: str = ""
 
+    laser_settings: dict[str, Any] = field(default_factory=dict)
+
     @property
     def instance_id(self) -> str:
         return f"{EXPERIMENT_ID}:{self.mode}"
@@ -97,6 +102,7 @@ class Settings:
         if isinstance(value, cls):
             return value
         data = dict(value)
+        data["laser_settings"] = dict(data.get("laser_settings", {}))
         unknown = set(data) - {f.name for f in fields(cls)}
         if unknown:
             raise ValueError(f"Unknown fixed-wavenumber settings: {', '.join(sorted(unknown))}")

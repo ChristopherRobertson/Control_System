@@ -3,9 +3,8 @@
 This document freezes the Python integration boundary for independent measurement
 packages. Repository architecture and launch instructions remain in the existing
 [repository README](../../../README.md). No scientific engine is implemented by
-the host. The established Phase Scan is adapted in `legacy_phase_scan.py`; its
-scientific meaning, native formats and single/dual state remain in its existing
-workflows and widgets.
+the host. The established Phase Scan lives in `measurement_modules/phase_scan/`;
+its former import paths remain compatibility aliases.
 
 ## Package ownership and registration
 
@@ -13,7 +12,9 @@ A feature owns `software/control_app/measurement_modules/<experiment_id>/`, its
 tests, and its operating procedure. It does not edit the main window, state
 machine, package `__init__.py`, registry or sibling features. Its package may
 share pure helpers between modes, but never mutable settings, runners, review,
-baselines, cancellation, SDK sessions, subscriptions or timing tables.
+baselines, cancellation, subscriptions or timing tables. The desktop host owns
+application-lifetime SDK connections and lends operation-scoped device leases;
+modules must not share leases or bypass exclusive instrument ownership.
 
 Each package exports exactly one frozen `ModuleDescriptor` named `DESCRIPTOR`
 from `registration.py`:
@@ -121,7 +122,7 @@ context cannot select another detector mode. It offers:
 | `.new_plan(settings: Mapping) -> PlanSnapshot` | New UUID and recursively immutable settings |
 | `.begin_operation(...) -> OperationSnapshot` | Freeze inputs and optionally acquire hardware before dispatch |
 | `.devices.available(hardware=False) -> tuple[str, ...]` | Factory names, no discovery or SDK imports |
-| `.devices.create(name, operation, **kwargs)` | Fresh service from frozen configuration; owned scope for real constructors |
+| `.devices.create(name, operation, **kwargs)` | Operation-scoped service lease in the desktop, fresh service otherwise; frozen configuration and owned scope |
 | `.hardware_scope(operation)` | Bind the operation's token around backend access |
 | `.ownership` | Instance-bound acquire/assert/scope/release/snapshot subset |
 | `.lifecycle` | Instance-bound before-start, state, error and instrument-event hooks |
@@ -184,13 +185,29 @@ namespaces and native record schemas are independent of these display names
 and destination defaults.
 
 Device factories implement
-`factory(*, configuration: Mapping[str, Any], **kwargs) -> fresh_service`.
+`factory(*, configuration: Mapping[str, Any], **kwargs) -> service`.
 `devices.create` supplies a new mutable copy of **the operation's frozen
 configuration**, never re-reads a configuration file, and prevents a caller from
 overriding it. Real and simulated factory maps are separate; missing simulations
 raise an error rather than falling back to hardware. A factory constructor may
 prepare service state; actual discovery, connection and commands require the
 owning hardware scope:
+
+The desktop starts `ApplicationDeviceSession` once in a background worker. Independent
+connections are initialized and read concurrently (at most six workers), with one
+ordered task per device. Every worker explicitly binds the same exclusive startup
+ownership token; all workers finish before readiness or owner release. HF2LI
+supported-choice enumeration still runs once at each application startup. Per-device
+and total elapsed seconds are returned for diagnostics and shown in startup status.
+Its
+cached views are read-only and never perform I/O on tab activation. Acquisitions
+and explicit device commands keep live readbacks. An operation's `close` releases
+its use of a transport; it must still stop acquisition, inhibit outputs and
+perform its existing cleanup. The application runs the safe-state procedure and
+physically disconnects the pooled services on shutdown. It retains the process
+lock between operations, so another process cannot open the same instruments.
+Standalone factories and injected simulation services retain their previous
+lifecycle. The application cache never replaces safety or acquisition readbacks.
 
 ```python
 cancel_event = threading.Event()

@@ -24,7 +24,7 @@ class Bench:
         self.units = {}; self.starts = 0; self.pending = False; self.clock = 1.; self.kind = "blank"
         self.optical_pulse_width_ns=100.;self.optical_current_ma=300.;self.optical_pulse_rate_hz=10000.
         self.qcl_calls=[];self.tuned_pulse_width_ns=None
-        self.pulse_limits={"max_pulse_rate_hz":100000.,"max_pulse_width_ns":500.,"max_duty_cycle":5.}
+        self.pulse_limits={"max_pulse_rate_hz":3000000.,"max_pulse_width_ns":500.,"max_duty_cycle":30.}
         self.nodes = {}; self.calls = []; self.broken_clock = False; self.refuse_dc = False
         self.missing_first_probe=False;self.shot_delta = 0; self.broken_restore = False; self.alternate_refs = False; self.refuse_oscselect = False; self.refuse_refs = False
     def start(self):
@@ -201,6 +201,8 @@ class MemoryMircat(MircatService):
         self._qcl(qcl,"pulse_rate");return self.bench.optical_pulse_rate_hz
     def get_qcl_pulse_width(self,qcl):
         self._qcl(qcl,"pulse_width");return self.bench.optical_pulse_width_ns
+    def get_qcl_current_limits(self,qcl):
+        self._qcl(qcl,"current_limits");return (0., 1000.)
     def get_qcl_current(self,qcl):
         self._qcl(qcl,"current");return self.bench.optical_current_ma
     def get_qcl_tuning_range(self,qcl):
@@ -284,6 +286,21 @@ def test_ns_real_installed_adapter_connected_blank_sample_and_raw_run(tmp_path, 
         assert np.all(run_record["result"]["coverage"]>0)
 
 
+def test_ns_phase_laser_requests_reach_installed_adapter_and_restore(tmp_path, monkeypatch):
+    monkeypatch.setattr(MemoryMircat, "get_qcl_current_limits", lambda self, qcl: (0., 500.))
+    bench = Bench()
+    ctx, owner = live_context(tmp_path, bench)
+    settings = replace(Settings(mode="dual"), wavenumbers_cm1=(1942.,), delays_ns=(0.,),
+        repetitions=1, cycle_interval_s=.1, laser_settings={"qcl_current_ma": 400., "probe_pulse_width_ns": 120.})
+    result = Runner(ctx).run(ctx.begin_operation(settings.to_dict(), hardware=True), build_plan(settings), kind="preliminary")
+    assert result["status"] == "completed", result["error"]
+    assert result["readbacks"]["requested_mircat_pulse"]["pulse_width_ns"] == 142.
+    assert result["readbacks"]["requested_mircat_pulse"]["current_ma"] == 400.
+    assert bench.optical_pulse_width_ns == 100.
+    assert bench.optical_current_ma == 300.
+    assert owner.snapshot()["state"] == "free"
+
+
 def test_ns_real_installed_dc_rejection_retains_failure_and_restores(tmp_path):
     bench=Bench();bench.refuse_dc=True;ctx,owner=live_context(tmp_path,bench)
     settings=replace(Settings(mode="dual"),wavenumbers_cm1=(1942.,),delays_ns=(0.,),repetitions=1,cycle_interval_s=.1)
@@ -292,6 +309,23 @@ def test_ns_real_installed_dc_rejection_retains_failure_and_restores(tmp_path):
     assert "rejected internal DC" in result["error"]
     assert not bench.starts
     assert owner.snapshot()["state"]=="free"
+
+
+def test_ns_external_pll_center_drift_does_not_fail_restoration(tmp_path, monkeypatch):
+    original = MemoryServer.getDouble
+    def read(self, path):
+        if path.endswith("/plls/0/freqcenter"):
+            return 1900000. + self.bench.clock
+        return original(self, path)
+    monkeypatch.setattr(MemoryServer, "getDouble", read)
+    bench = Bench()
+    context, owner = live_context(tmp_path, bench, "single")
+    settings = replace(Settings(mode="single"), wavenumbers_cm1=(1942.,),
+        delays_ns=(0.,), repetitions=1, cycle_interval_s=.1, reset_interval_s=0.)
+    result = Runner(context).run(context.begin_operation(settings.to_dict(), hardware=True),
+        build_plan(settings), kind="blank")
+    assert result["status"] == "completed", result.get("error")
+    assert owner.snapshot()["state"] == "free"
     assert ("mircat","close") in bench.calls
 
 
@@ -439,7 +473,7 @@ def test_ns_live_changed_actual_instrument_settings_keep_raw_but_exclude_normali
 ])
 def test_ns_live_actual_optical_duty_is_inclusive_and_keeps_vendor_limits(tmp_path, rate, width, vendor_duty, completed):
     bench=Bench();bench.optical_pulse_rate_hz=rate;bench.optical_pulse_width_ns=width
-    bench.pulse_limits={"max_pulse_rate_hz":1000000.,"max_pulse_width_ns":2000.,"max_duty_cycle":vendor_duty}
+    bench.pulse_limits={"max_pulse_rate_hz":3000000. if completed else 1000000.,"max_pulse_width_ns":2000.,"max_duty_cycle":vendor_duty}
     ctx,owner=live_context(tmp_path,bench)
     settings=replace(Settings(mode="dual"),wavenumbers_cm1=(1942.,),delays_ns=(0.,),repetitions=1,cycle_interval_s=.1)
     result=Runner(ctx).run(ctx.begin_operation(settings.to_dict(),hardware=True),build_plan(settings),kind="preliminary")
@@ -448,7 +482,7 @@ def test_ns_live_actual_optical_duty_is_inclusive_and_keeps_vendor_limits(tmp_pa
     assert all(index==1 for _,index in bench.qcl_calls)
     if completed:
         pulse=result["readbacks"]["mircat_pulse"]
-        assert pulse["configured_duty_cycle_fraction"]==pytest.approx(.30)
+        assert pulse["configured_duty_cycle_fraction"]==pytest.approx(.2982)
         assert pulse["external_probe_rate_hz"]!=pulse["internal_rate_hz"]
         assert pulse["external_probe_duty_cycle_fraction"]<pulse["configured_duty_cycle_fraction"]
     else:
@@ -456,15 +490,22 @@ def test_ns_live_actual_optical_duty_is_inclusive_and_keeps_vendor_limits(tmp_pa
         assert not any(action=="set_params" for action,_ in bench.qcl_calls)
 
 
-def test_ns_live_optical_duty_uses_fresh_post_tune_readback_then_restores_qcl1(tmp_path):
+def test_ns_live_optical_duty_uses_fresh_post_tune_readback_then_restores_qcl1(tmp_path, monkeypatch):
     bench=Bench();bench.optical_pulse_rate_hz=600000.;bench.optical_pulse_width_ns=500.
     bench.tuned_pulse_width_ns=501.
-    bench.pulse_limits={"max_pulse_rate_hz":1000000.,"max_pulse_width_ns":2000.,"max_duty_cycle":50.}
+    bench.pulse_limits={"max_pulse_rate_hz":3000000.,"max_pulse_width_ns":2000.,"max_duty_cycle":50.}
+    original = MemoryMircat.set_qcl_pulse_params
+    def corrupt_readback(self, **kwargs):
+        result = original(self, **kwargs)
+        if kwargs["pulse_width_ns"] == 142.:
+            self.bench.optical_pulse_width_ns = 501.
+        return result
+    monkeypatch.setattr(MemoryMircat, "set_qcl_pulse_params", corrupt_readback)
     ctx,owner=live_context(tmp_path,bench)
     settings=replace(Settings(mode="dual"),wavenumbers_cm1=(1942.,),delays_ns=(0.,),repetitions=1,cycle_interval_s=.1)
     result=Runner(ctx).run(ctx.begin_operation(settings.to_dict(),hardware=True),build_plan(settings),kind="preliminary")
-    assert result["status"]=="failed" and "30%" in result["error"]
-    assert result["readbacks"]["mircat_pulse"]["optical_pulse_width_ns"]==501.
+    assert result["status"]=="failed" and "readback differs" in result["error"]
+    assert result["readbacks"]["requested_mircat_pulse"]["pulse_width_ns"]==142.
     assert not bench.starts
     assert ("set_params",1) in bench.qcl_calls
     assert bench.optical_pulse_width_ns==500.

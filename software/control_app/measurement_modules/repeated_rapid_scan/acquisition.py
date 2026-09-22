@@ -459,6 +459,8 @@ class InstalledDevicesAcquirer:
         if pulse["pulse_rate_hz"] <= actual_external_rate:
             raise ValueError("Readback MIRcat internal repetition rate does not exceed the separate external T660 probe trigger rate")
         for field, setting in (("pulse_rate_hz", "mircat_pulse_rate_hz"), ("pulse_width_ns", "mircat_pulse_width_ns"), ("current_ma", "mircat_current_ma")):
+            if not math.isclose(pulse[field], self.readbacks["requested_mircat_pulse"][field], rel_tol=1e-7, abs_tol=1e-9):
+                raise ValueError(f"MIRcat {field} readback differs from requested internal settings")
             self.readbacks["capabilities"]["live_settings"][setting] = pulse[field]
         span = self.settings.scan_stop_cm1-self.settings.scan_start_cm1
         self.config.setdefault("marker_interval_cm1", span/max(1, math.ceil(span/5.)))

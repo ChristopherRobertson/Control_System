@@ -69,23 +69,25 @@ show the matching dual-detector pages. Each mode shows these six methods in orde
 | [Fixed Wavenumber](docs/operating_procedures/fixed_wavenumber_kinetics.md) | DD Fixed Wavenumber |
 | [Nanosecond Stroboscopy](docs/operating_procedures/nanosecond_stroboscopy.md) | DD Nanosecond Stroboscopy |
 | [Microsecond Stroboscopy](docs/operating_procedures/microsecond_stroboscopy.md) | DD Microsecond Stroboscopy |
-| [Single Scan Phase Delay](docs/operating_procedures/single_pump_scan_burst.md) | DD Single Scan Phase Delay |
 | [Rapid Scan Phase Delay](docs/operating_procedures/repeated_rapid_scan.md) | DD Rapid Scan Phase Delay |
+| [Phase Scan](docs/operating_procedures/phase_scan_tab.md) | [DD Phase Scan](docs/operating_procedures/dual_detector_phase_scan_tab.md) |
 
-The matching [Phase Scan](docs/operating_procedures/phase_scan_tab.md) or
-[DD Phase Scan](docs/operating_procedures/dual_detector_phase_scan_tab.md) follows
-these six methods, then MIRcat, T660-1, Nd:YAG, OPO Iris and Plotter. Both Phase
+These six methods are followed by MIRcat, T660-1, Nd:YAG, OPO Iris and Plotter. Both Phase
 Scan pages retain their scientific workflows, native files, timing and review
 controls. Additional measurements register their own pair through
 `software/control_app/measurement_modules/<experiment_id>/registration.py`.
+The established Phase Scan implementation lives in `measurement_modules/phase_scan/`;
+its former workflow and widget imports remain compatibility aliases. The redundant
+Single Scan Phase Delay pair is no longer registered; its saved-data processing
+code remains available for existing records.
 Discovery sorts descriptors by display order and stable ID, isolates optional
 import/construction failures, and retains the device-tab order. The horizontal
 tab bar's native scroll arrows keep every visible tab reachable. Offline analysis,
 simulation and plan editing can continue while another tab owns the instrument.
 
 This checkout includes all six measurement packages, each with single- and
-dual-detector tabs. All **19 tabs remain instantiated**, with **12 visible in
-each mode**: six methods, the matching Phase Scan and five device pages. Switching
+dual-detector tabs. All **17 tabs remain instantiated**, with **11 visible in
+each mode**: six methods including Phase Scan, and five device pages. Switching
 modes preserves each page's settings and active work; hidden pages still participate
 in ownership, emergency stop and close checks. Restart an already-running UI
 after updating the checkout so it discovers the installed packages. Hidden

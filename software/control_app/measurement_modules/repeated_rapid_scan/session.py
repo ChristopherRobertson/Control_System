@@ -8,7 +8,7 @@ from decimal import Decimal
 import math
 
 UI_OVERRIDE_FIELDS = ("scan_speed_cm1_s", "sample_rate_hz", "sample_filter_order",
-                      "sample_filter_timeconstant_s", "probe_frequency_hz", "mircat_pulse_width_ns")
+                      "sample_filter_timeconstant_s", "probe_frequency_hz", "probe_pulse_width_s")
 UI_REFERENCE_OVERRIDE_FIELDS = ("reference_rate_hz", "reference_filter_order", "reference_filter_timeconstant_s")
 ANALYSIS_WINDOW_FIELDS = ("band_windows_cm1", "offband_windows_cm1")
 
@@ -37,7 +37,7 @@ def normalize_ui_settings(value, mode=None):
     visible = UI_OVERRIDE_FIELDS + (UI_REFERENCE_OVERRIDE_FIELDS if source_mode == "dual" else ())
     allowed = visible + ANALYSIS_WINDOW_FIELDS
     metadata = ("condition","execution","schema_version","experiment_id","value_source",
-                "calibration_ids","instrument_state_id")
+                "calibration_ids","instrument_state_id","laser_settings")
     data = deepcopy(defaults)
     for key in metadata + allowed:
         if key in source:
@@ -49,7 +49,11 @@ def normalize_ui_settings(value, mode=None):
     previous_migration = history.get("ui_controls_version") == 2
     removed = deepcopy(history.get("removed_settings",{}))
     excluded = set(metadata + allowed + ("mode","acquisition_intent","manual_overrides","historical_ui_settings"))
-    derived = {"measured_scan_period_s","phase_offsets_s","post_scans","scan_start_cm1","scan_stop_cm1","repeats"}
+    derived = {"mircat_pulse_rate_hz", "mircat_pulse_width_ns", "measured_scan_period_s","phase_offsets_s","post_scans","scan_start_cm1","scan_stop_cm1","repeats"}
+    if "fire_to_qswitch_us" in source.get("laser_settings", {}):
+        derived.add("fire_to_qswitch_s")
+    if "qcl_current_ma" in source.get("laser_settings", {}):
+        derived.add("mircat_current_ma")
     for key, item in source.items():
         if key in excluded or (previous_migration and key in derived):
             continue

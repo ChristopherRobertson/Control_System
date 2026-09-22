@@ -5,10 +5,12 @@ from contextlib import nullcontext
 from collections import deque
 from pathlib import Path
 import time
+import math
 
 import numpy as np
 
 from .adapters import AcquisitionStopped, InstalledDevices, check_cancel, mapping
+from .pump_sync import falling_sync_ticks
 
 
 class Moments:
@@ -258,18 +260,33 @@ class Runner:
                     block = mapping(raw_block)
                     check()
                     pumped = kind == "measurement" and settings.get("pump_enabled", True) and int(block.get("event_count", 1)) > 0
-                    if pumped and delivered >= int(settings["event_budget"]):
+                    if pumped and delivered + int(block.get("event_count", 1)) > int(settings["event_budget"]):
                         raise RuntimeError("Finite pump budget exhausted; no automatic retry")
                     if pumped and operation.hardware:
                         health = device.read_health()
                         record.setdefault("health_readbacks", []).append(health)
-                        if health.get("read_errors") or health.get("reference_locked") is not True or health.get("clock_locked") is not True or health.get("external_clock_selected") is not True or health.get("overload") is not False or health.get("data_loss"):
-                            raise RuntimeError("HF2LI live lock/overload readiness did not pass")
+                        failures = []
+                        for key, expected, description in (
+                            ("reference_locked", True, "demodulation reference is not locked"),
+                            ("clock_locked", True, "internal clock generation is not locked"),
+                            ("external_clock_selected", True, "external reference clock is not selected"),
+                            ("overload", False, "signal-input overload is present or unknown"),
+                        ):
+                            if health.get(key) is not expected:
+                                failures.append(description)
+                        if health.get("read_errors"):
+                            failures.append(f"health readback errors: {health['read_errors']}")
+                        if health.get("data_loss"):
+                            failures.append("data loss reported")
+                        if failures:
+                            raise RuntimeError("HF2LI readiness failed: " + "; ".join(failures))
                     event = {"position_index": block["position_index"], "event_index": block_index,
+                        "trial_index": block.get("event_index", 0),
                         "repetition_index": block.get("repetition_index", 0),
                         "position_cm1": block.get("position_cm1", block.get("wavenumber_cm1")),
-                        "expected_pump_count": int(pumped), "pump_timestamps": [],
+                        "expected_pump_count": int(block.get("event_count", 1)) if pumped else 0, "pump_timestamps": [],
                         "original_pump_timestamp": None, "clockbase_hz": device.clockbase_hz,
+                        "pump_marker_edge": "falling", "pump_marker_active_level": "low",
                         "optical_time_zero": "unresolved unless independently qualified timing data supplied",
                         "position_label": settings["positions"][block["position_index"]].get("label", "band"),
                         "dose": resolved.get("pump_dose"), "dose_units": resolved.get("pump_dose_units"),
@@ -278,17 +295,25 @@ class Runner:
                     record["events"].append(event)
                     program = mapping(block["timing"]) if block.get("timing") else None
                     if pumped:
-                        if not program or program.get("expected_pump_count") != 1:
-                            raise RuntimeError("Each acquisition block must compile exactly one finite event")
+                        if not program or program.get("expected_pump_count") != event["expected_pump_count"]:
+                            raise RuntimeError("Each trial must compile exactly the requested finite pump-shot count")
                         event["timing_upload"] = device.upload(program, check, emit)
                     emit({"stage": "tuning/settling", "message": f"Tuning {event['position_cm1']:g} cm^-1", "completed": block_index, "total": len(blocks)})
                     event["tuning"] = device.tune(event["position_cm1"], settings, check, emit)
+                    if pumped and last_pump is not None:
+                        # Conservatively wait with recording stopped. Tune/upload
+                        # time only lengthens this interval; it never shortens it.
+                        idle_s = max(0., float(resolved["minimum_event_interval_s"])
+                            - float(settings["post_observation_s"]) - float(settings["pre_observation_s"]))
+                        if idle_s:
+                            emit({"stage": "shot spacing", "message": f"Waiting {idle_s:g} s before next trial"})
+                            device.idle(idle_s, check)
                     device.start_stream()
                     baseline = Moments()
                     native_baselines = {role: Moments() for role in (("sample", "reference") if self.context.mode == "dual" else ("sample",))}
                     reset_window_s = float(settings.get("reset_observation_s") or settings["pre_observation_s"])
                     tail_chunks = deque()
-                    last_ticks, previous_dio = {}, 0
+                    last_ticks, previous_dio = {}, None
                     chunk_s = min(float(settings["chunk_duration_s"]), 1.)
                     def acquire(duration, phase, stats=None):
                         nonlocal previous_dio, retained_bytes
@@ -297,9 +322,12 @@ class Runner:
                         phase_starts = dict(last_ticks)
                         polls = 0
                         final_summary = None
-                        while elapsed < duration-1e-12:
+                        pump_capture = pumped and phase == "continuous_trial"
+                        deadline = time.monotonic() + duration + 2.
+                        complete = False
+                        while not complete:
                             check()
-                            span = min(chunk_s, duration-elapsed)
+                            span = min(chunk_s, max(.005 if pump_capture else 1e-9, duration-elapsed))
                             emit({"stage": "retrieval", "message": "Retrieving native device-clock observations",
                                 "completed": elapsed, "total": duration})
                             chunk = device.read(span)
@@ -357,14 +385,11 @@ class Runner:
                             dio = np.asarray(timing.get("dio", []), dtype=np.uint64)
                             if len(t) != len(dio):
                                 raise RuntimeError("Missing or malformed native electrical timing stream")
-                            bit = np.uint64(1 << int(resolved["pump_marker_bit"]))
-                            for tick, word in zip(t, dio):
-                                current = int(bool(word & bit))
-                                if current and not previous_dio:
-                                    event["pump_timestamps"].append(int(tick))
-                                    if event["original_pump_timestamp"] is None:
-                                        event["original_pump_timestamp"] = int(tick)
-                                previous_dio = current
+                            edges, previous_dio = falling_sync_ticks(t, dio,
+                                int(resolved["pump_marker_bit"]), previous_dio)
+                            event["pump_timestamps"].extend(edges)
+                            if edges and event["original_pump_timestamp"] is None:
+                                event["original_pump_timestamp"] = edges[0]
                             if phase == "baseline" and event["pump_timestamps"]:
                                 raise RuntimeError("Unexpected measured pump sync during unpumped baseline")
                             if len(event["pump_timestamps"]) > event["expected_pump_count"]:
@@ -380,11 +405,13 @@ class Runner:
                                     rx = np.asarray(stream.get("x", []), dtype=float)
                                     ry = np.asarray(stream.get("y", np.zeros(len(rx))), dtype=float)
                                     if len(rt) == len(rx) == len(ry):
-                                        moments.add(rt, np.hypot(rx, ry), device.clockbase_hz)
+                                        keep = rt < event["original_pump_timestamp"] if event["original_pump_timestamp"] is not None else np.ones(len(rt), dtype=bool)
+                                        moments.add(rt[keep], np.hypot(rx, ry)[keep], device.clockbase_hz)
                             if len(values):
                                 empty = 0
                                 if stats is not None:
-                                    stats.add(ts, values, device.clockbase_hz)
+                                    keep = ts < event["original_pump_timestamp"] if event["original_pump_timestamp"] is not None else np.ones(len(ts), dtype=bool)
+                                    stats.add(ts[keep], values[keep], device.clockbase_hz)
                                 tail_chunks.append((ts.copy(), values.copy()))
                                 cutoff = int(ts[-1])-int(round(reset_window_s*device.clockbase_hz))
                                 while tail_chunks and int(tail_chunks[0][0][-1]) < cutoff:
@@ -401,15 +428,38 @@ class Runner:
                                 final_summary = tail.summary(device.clockbase_hz, settings["baseline_drift_fraction"], settings["baseline_cv_limit"])
                             else:
                                 empty += 1
-                                if empty >= 3:
+                                if empty >= 3 and (not pump_capture or len(chunk.get("sample", {}).get("timestamp", []))):
                                     raise RuntimeError("No valid matched detector/reference support in three native polls")
                             required_roles = ("sample", "reference", "timing") if self.context.mode == "dual" else ("sample", "timing")
                             elapsed = min(((last_ticks[r]-phase_starts[r])/device.clockbase_hz
                                 if r in last_ticks and r in phase_starts else 0.) for r in required_roles)
-                            if polls > max(20, int(duration/chunk_s)*5+20):
+                            complete = elapsed >= duration-1e-12
+                            if pump_capture:
+                                # A buffered poll may contain only observations
+                                # before dispatch. Its length cannot establish
+                                # completion of a pump-relative capture.
+                                complete = len(event["pump_timestamps"]) == event["expected_pump_count"]
+                                if complete:
+                                    target = event["pump_timestamps"][-1] + int(math.ceil(
+                                        float(settings["post_observation_s"])*device.clockbase_hz))
+                                    complete = all(last_ticks.get(role, -1) >= target for role in required_roles)
+                                if not complete and (time.monotonic() >= deadline or elapsed > duration+2. or polls > max(400, int(duration/chunk_s)*5+400)):
+                                    count = len(event["pump_timestamps"])
+                                    detail = (f"Observed pump shots {count} != requested {event['expected_pump_count']}" if count != event["expected_pump_count"] else "Requested post-pump detector/timing support was not received")
+                                    raise RuntimeError(detail + " within bounded retrieval timeout; native data retained; no retry")
+                            elif polls > max(20, int(duration/chunk_s)*5+20):
                                 raise RuntimeError("Device-clock capture boundary not reached within bounded retrieval polls")
                             stride = max(1, len(values)//1000)
-                            preview_ticks = ts[::stride]
+                            preview_indices = np.arange(0, len(ts), stride)
+                            if pump_capture and event["original_pump_timestamp"] is not None:
+                                relative = time_from_ticks(ts[preview_indices], event["original_pump_timestamp"], device.clockbase_hz)
+                                stop = (event["pump_timestamps"][-1]-event["original_pump_timestamp"])/device.clockbase_hz + settings["post_observation_s"]
+                                preview_indices = preview_indices[(relative >= -settings["pre_observation_s"]) & (relative <= stop)]
+                            preview_ticks = ts[preview_indices]
+                            if not len(preview_ticks):
+                                # Empty startup polls contain no device ticks;
+                                # keep the empty preview in the native tick type.
+                                preview_ticks = np.empty(0, dtype=np.uint64)
                             def native_preview(role):
                                 stream = chunk.get(role, {})
                                 stamps = np.asarray(stream.get("timestamp", []))
@@ -422,48 +472,70 @@ class Runner:
                             emit({"stage": "acquisition" if phase != "reset_wait" else "recovery waits",
                                 "message": f"{phase}: {elapsed:.3g}/{duration:.3g} s",
                                 "completed": elapsed, "total": duration,
-                                "preview": {"analysis": {"events": [{"time_s": time_from_ticks(ts[::stride], event['original_pump_timestamp'] or baseline.origin or 0, device.clockbase_hz).tolist(),
+                                "preview": {"settings": settings, "analysis": {"events": [{"position_cm1": event["position_cm1"], "wavenumber_cm1": event["position_cm1"], "expected_pump_count": event["expected_pump_count"], "time_s": time_from_ticks(preview_ticks, event['original_pump_timestamp'] or baseline.origin or 0, device.clockbase_hz).tolist(),
                                     "sample": native_preview("sample"),
                                     "reference": native_preview("reference") if self.context.mode == "dual" else None,
-                                    "ratio": values[::stride].tolist() if self.context.mode == "dual" else None,
+                                    "ratio": values[preview_indices].tolist() if self.context.mode == "dual" else None,
                                     "original_pump_timestamp": event["original_pump_timestamp"],
-                                    "measured_pump_time_s": [0.0] if event["original_pump_timestamp"] is not None else [],
-                                    "pump_marker_qualification": "measured electrical sync; optical arrival unresolved"}]},
+                                    "measured_pump_time_s": [(tick-event["original_pump_timestamp"])/device.clockbase_hz for tick in event["pump_timestamps"]],
+                                    "pump_marker_edge": "falling",
+                                    "pump_marker_qualification": "measured HIGH-to-LOW electrical sync; optical arrival unresolved"}]},
                                     "mode": self.context.mode, "kind": kind}})
                         return final_summary
-                    acquire(float(settings["pre_observation_s"]), "baseline", baseline)
-                    event["baseline"] = baseline.summary(device.clockbase_hz, settings["baseline_drift_fraction"], settings["baseline_cv_limit"])
-                    event["native_baselines"] = {role: value.summary(device.clockbase_hz, settings["baseline_drift_fraction"], settings["baseline_cv_limit"]) for role, value in native_baselines.items()}
-                    if record["quality_flags"]:
-                        raise RuntimeError("Missing native support in baseline; later pump events inhibited")
-                    if not event["baseline"]["stationary"] or not all(value["stationary"] for value in event["native_baselines"].values()):
-                        raise RuntimeError("Stationary pre-pump baseline failed; pump remains inhibited")
                     if pumped:
                         check()
-                        # Budget is consumed at dispatch even if observed sync later goes missing.
-                        delivered += 1
+                        # A subscription acknowledgement is not proof that the
+                        # device stream has arrived. Retain an observed lead-in
+                        # before dispatching a finite shot that cannot be retried.
+                        # Processing still crops to the user's pump-relative window.
+                        acquire(.01, "baseline", baseline)
+                        event["stream_ready_last_timestamps"] = dict(last_ticks)
+                        event["stream_ready_before_dispatch"] = True
+                        check()
+                        # Recording is established before the timer is dispatched.
+                        # The timer schedules pre-pump time, every shot, and the
+                        # complete post-last-shot interval. Recording never waits
+                        # for a marker to start; markers define its completion.
+                        delivered += event["expected_pump_count"]
                         event["commanded_event_number"] = delivered
                         device.start_event(program)
-                        tail = acquire(float(program["duration_s"]), "observation")
+                        try:
+                            tail = acquire(float(program["duration_s"]), "continuous_trial", baseline)
+                        except Exception:
+                            # Cleanup overwrites the finite engine's status. Read
+                            # it now without waiting or issuing another trigger.
+                            status_reader = getattr(device, "timing_status", None)
+                            if callable(status_reader):
+                                try:
+                                    event["timing_completion"] = status_reader()
+                                except Exception as status_error:
+                                    event["timing_status_error"] = str(status_error)
+                            raise
+                        device.stop_stream()
                         event["timing_completion"] = device.finish_event()
                         if event["timing_completion"]["frames_status"] != "DONE":
                             raise RuntimeError("Finite timing table did not complete")
                         if event["timing_completion"]["frame_shot_count"] != len(program["frames"]):
                             raise RuntimeError("Finite frame shot-count readback differs from acknowledged complete table")
                         count = len(event["pump_timestamps"])
-                        if count != 1:
-                            raise RuntimeError(f"Observed electrical pump count {count} != authorized 1; no retry")
+                        if count != event["expected_pump_count"]:
+                            raise RuntimeError(f"Observed pump shots {count} != requested {event['expected_pump_count']}; no retry")
                         event["original_pump_timestamp"] = event["pump_timestamps"][0]
+                        earliest = event["original_pump_timestamp"] - int(math.ceil(float(settings["pre_observation_s"])*device.clockbase_hz))
+                        if event.get("first_native_timestamp", float("inf")) > earliest + device.clockbase_hz/resolved["sample"]["rate_sps"]:
+                            raise RuntimeError("Recorded detector data does not cover the requested pre-pump window; native data retained; no retry")
                         if last_pump is not None:
                             event["actual_event_interval_s"] = (event["original_pump_timestamp"]-last_pump)/device.clockbase_hz
-                        last_pump = event["original_pump_timestamp"]
-                        wait = max(0., float(resolved.get("minimum_event_interval_s") or 0.) - (last_ticks["sample"]-last_pump)/device.clockbase_hz)
-                        if block_index < len(blocks)-1 and wait > 0:
-                            tail = acquire(wait, "reset_wait")
+                        last_pump = event["pump_timestamps"][-1]
                     else:
+                        acquire(float(settings["pre_observation_s"]), "baseline", baseline)
                         tail = acquire(float(settings["post_observation_s"]), "observation")
                         if event["pump_timestamps"]:
                             raise RuntimeError("Unexpected pump sync in unpumped control")
+                    event["baseline"] = baseline.summary(device.clockbase_hz, settings["baseline_drift_fraction"], settings["baseline_cv_limit"])
+                    event["native_baselines"] = {role: value.summary(device.clockbase_hz, settings["baseline_drift_fraction"], settings["baseline_cv_limit"]) for role, value in native_baselines.items()}
+                    if not event["baseline"]["stationary"]:
+                        event.setdefault("quality_flags", []).append("nonstationary_pre_pump_baseline" if pumped else "nonstationary_unpumped_baseline")
                     event["tail_statistics"] = tail
                     delta = abs(tail["mean"]/event["baseline"]["mean"]-1) if tail and "mean" in tail else float("inf")
                     event["reset"] = {"observed_fraction_from_baseline": delta,
@@ -506,11 +578,11 @@ class Runner:
                                 event["last_native_timestamp"] = int(sample_ticks[-1])
                             timing = chunk.get("timing", {})
                             for tick, word in zip(timing.get("timestamp", []), timing.get("dio", [])):
-                                if int(word) & (1 << int(resolved["pump_marker_bit"])) and event.get("original_pump_timestamp") is None:
+                                if not (int(word) & (1 << int(resolved["pump_marker_bit"]))) and event.get("original_pump_timestamp") is None:
                                     event.setdefault("unqualified_pump_marker_candidates", []).append({
                                         "timestamp": int(tick), "source": "cleanup_tail",
-                                        "reason": "High level without a qualified observed rising edge"})
-                                    event["epoch_quality"] = "missing observed onset; cleanup-tail high level is an unqualified candidate only"
+                                        "reason": "Low level without a qualified observed falling edge"})
+                                    event["epoch_quality"] = "missing observed onset; cleanup-tail low level is an unqualified candidate only"
                                     if "missing_observed_pump_epoch" not in record["quality_flags"]:
                                         record["quality_flags"].append("missing_observed_pump_epoch")
                                     break

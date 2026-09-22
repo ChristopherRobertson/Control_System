@@ -57,12 +57,23 @@ class SlowScanScientificAdapter:
         return plan.errors
 
     def validate_preliminary(self, preliminary, plan):
-        return ()  # Previous sample data is optional; no approval state exists.
+        # Single-detector absorbance needs a blank. Dual-detector scans use
+        # their simultaneously recorded reference instead.
+        if self.context.mode == "single":
+            blank = self.controls.get("blank")
+            if not blank or blank.get("status") not in ("complete", "completed"):
+                return ("Acquire or load a blank to proceed",)
+        return ()
 
     def validate_operation(self, kind, plan, preliminary):
-        return tuple(plan.errors) if plan is not None and kind in ("measurement", "preliminary", "blank") else ()
+        errors = tuple(plan.errors) if plan is not None and kind in ("measurement", "preliminary", "blank") else ()
+        return errors + (self.validate_preliminary(preliminary, plan) if kind == "measurement" else ())
 
     def summarize_plan(self, plan):
+        from control_app.measurement_host.experiment_summary import summary_rows
+        return summary_rows(plan, self._procedure_summary(plan), slow_scan=True)
+
+    def _procedure_summary(self, plan):
         selected, settings = plan.selected, plan.settings
         duration = plan.estimates.get("wall_clock_s")
         current = selected.get("current_ma", settings.current_ma)

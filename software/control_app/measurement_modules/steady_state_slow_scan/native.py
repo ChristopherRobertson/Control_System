@@ -91,8 +91,16 @@ def observed_sweeps(records, *, sample_demodulator, reference_demodulator,
     marker = (dio & (1 << 22)) != 0
     edges = np.flatnonzero(np.diff(marker.astype(int)) == 1)+1
     flags = []
-    if np.any((dio & (1 << 17)) != 0):
+    # Surelite sync may idle HIGH. Preserve setup-time excursions separately:
+    # only an edge overlapping Sweep Active contaminates a slow-scan spectrum.
+    # The full timing stream remains retained for diagnosis.
+    pump_sync = ((dio >> 17) & 1).astype(int)
+    pump_edges = np.flatnonzero(np.diff(pump_sync) != 0) + 1
+    pump_edges_in_sweep = pump_edges[active[pump_edges] | active[pump_edges-1]]
+    if len(pump_edges_in_sweep):
         flags.append("unexpected_electrical_pump_sync")
+    if len(pump_edges) > len(pump_edges_in_sweep):
+        flags.append("electrical_pump_sync_outside_sweep")
     if len(starts) != expected_sweeps or len(stops) != expected_sweeps:
         flags.append("sweep_trigger_count_mismatch")
     st = seconds_from_ticks(streams["sample"]["timestamp"], origin, clockbase_hz)-sample_group_delay_s

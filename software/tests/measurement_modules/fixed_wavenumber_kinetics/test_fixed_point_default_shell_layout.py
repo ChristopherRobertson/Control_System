@@ -82,7 +82,7 @@ def test_fixed_point_default_all_tab_shell_keeps_overrides_and_plan_files_visibl
         # patch can conceal the other tabs' contribution to shell geometry.
         window = main_window.ControlSystemMainWindow(handler, persist_settings=False)
         assert not window.registration_issues, window.registration_issues
-        assert window.tabs.count() == 19
+        assert window.tabs.count() == 17
         assert window.preferences is None
         handles = tuple(window.measurement_lifecycle.handles)
         handle = next(h for h in handles if h.instance_id == f"fixed_wavenumber_kinetics:{mode}")
@@ -104,35 +104,41 @@ def test_fixed_point_default_all_tab_shell_keeps_overrides_and_plan_files_visibl
         # These are the real default-state rows, not substituted fixture text.
         assert panel.validation.text().strip()
         assert "wavenumber" in panel.validation.text().casefold()
-        assert panel.status.text() == "Connected instruments unavailable"
+        assert panel.status.text().startswith("Connected instruments unavailable")
         assert not panel.command_running()
-        assert not panel.check_device_button.isEnabled()
+        assert not hasattr(panel, "check_device_button")
         assert not panel.start_button.isEnabled()
         viewport = panel.settings_scroll.viewport()
-        _assert_complete_visibility(panel.validation, viewport, label="default validation")
-        _assert_complete_visibility(panel.status, panel.left_panel, label="unavailable status")
+        # Instructions belong to the right-hand summary, never the controls.
+        assert panel.instructions_group.isAncestorOf(panel.validation)
+        assert panel.instructions_group.isAncestorOf(panel.status)
+        assert not panel.left_panel.isAncestorOf(panel.validation)
 
         assert panel.advanced_content.isVisible()
         assert not panel.advanced_content.isCheckable()
-        override_names = ["probe_rate_hz", "probe_width_ns", "minimum_event_interval_s"]
+        override_names = ["probe_rate_hz", "probe_width_ns"]
         roles = ("sample", "reference") if mode == "dual" else ("sample",)
         override_names.extend(f"{role}_{suffix}" for role in roles
                               for suffix in ("rate_sps", "timeconstant_s", "filter_order"))
         for name in override_names:
             editor = panel.editor.fields[name]
             assert editor.placeholderText() == "Automatic"
-            assert editor.text() == ""
+            expected = panel.editor.MIRCAT_DEFAULTS.get(name)
+            assert float(editor.text()) == expected if expected is not None else editor.text() == ""
+            panel.settings_scroll.ensureWidgetVisible(editor)
+            app.processEvents()
             _assert_complete_visibility(editor, viewport, label=name)
         restore = [button for button in panel.advanced_content.findChildren(QPushButton)
-                   if "restore" in button.text().casefold() and "auto" in button.text().casefold()]
+                   if button.isVisibleTo(panel.advanced_content) and "restore" in button.text().casefold() and "auto" in button.text().casefold()]
         assert len(restore) == 1
         for label, control in (("Restore automatic settings", restore[0]),
                                ("Save plan", panel.save_plan_button), ("Load plan", panel.load_plan_button)):
+            panel.settings_scroll.ensureWidgetVisible(control)
+            app.processEvents()
             _assert_complete_visibility(control, viewport, label=label)
 
-        # Nothing is scrolled into view by this test. Horizontal or outer
-        # workspace scrolling must not be needed at the specified window size.
-        assert panel.settings_scroll.verticalScrollBar().value() == 0
+        # Device sections scroll inside the settings pane, as on Phase Scan.
+        # The outer workspace and horizontal settings axis never scroll.
         assert panel.settings_scroll.horizontalScrollBar().value() == 0
         assert panel.settings_scroll.horizontalScrollBar().maximum() == 0
         for scrollbar in (window.workspace_scroll.horizontalScrollBar(), window.workspace_scroll.verticalScrollBar()):

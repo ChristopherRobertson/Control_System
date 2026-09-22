@@ -56,6 +56,8 @@ class HardwareCoordinator:
         self._cancel = None
         self._fault = False
         self._verified_idle_token = None
+        self._parked_cleanup = None
+        self.retain_application_connections = False
 
     def _read(self):
         try:
@@ -125,12 +127,19 @@ class HardwareCoordinator:
             raise ValueError("Ownership requires a stable instance_id")
         with self._mutex:
             self._verified_idle_token = None
+            if self._parked_cleanup is not None and self._token is not None and self._token.instance_id == instance_id and not recovery and not self._fault:
+                token = self._token
+                self._write("owned", purpose, parked=False, resumed_operation_id=operation_id)
+                self._parked_cleanup = None
+                self._cancel = cancel
+                return token
             if self._token is not None and not (recovery and self._fault):
                 raise OwnershipError(f"Coupled spectrometer is owned by {self._token.instance_id}: {self._token.operation_id}")
             if self._file is None:
                 self._lock_os()
             previous = self._read()
-            if previous["state"] != "free" and not recovery:
+            if (previous["state"] != "free" or
+                    previous.get("application_connections") and not self.retain_application_connections) and not recovery:
                 self._unlock_os()
                 raise OwnershipError("Instrument recovery required after an interrupted session. Select Reset instrument.")
             token = OwnershipToken(uuid4().hex, instance_id, operation_id or uuid4().hex, os.getpid(), _utc())
@@ -158,8 +167,12 @@ class HardwareCoordinator:
             _bound_owner.reset(bound)
 
     def release(self, token, *, safe_verified, preservation_verified=True, detail=""):
+        session = getattr(self, "application_session", None)
+        if session is not None and safe_verified and preservation_verified:
+            session.update_readbacks(token)
         with self._mutex:
             self.assert_owner(token)
+            self._parked_cleanup = None
             if not (safe_verified and preservation_verified):
                 self._fault = True
                 # This operation has reached its reported cleanup/preservation
@@ -171,14 +184,62 @@ class HardwareCoordinator:
                 return
             try:
                 self._write("free", detail or "Safe shutdown/restoration and required preservation verified",
-                            safe_verified=True, preservation_verified=True)
+                            safe_verified=True, preservation_verified=True,
+                            application_connections=self.retain_application_connections)
             except BaseException:
                 self._fault = True
                 raise
             self._token, self._cancel, self._fault = None, None, False
             if not token.instance_id.startswith("manual:") or token.instance_id == "manual:recovery":
                 self._verified_idle_token = token
-            self._unlock_os()
+            if not self.retain_application_connections:
+                self._unlock_os()
+
+    def park(self, token, *, cleanup, detail="Prepared measurement session; awaiting sample"):
+        """Retain exclusive hardware between saved blank and sample operations.
+
+        The caller must save all blank data and inhibit emission/triggers first.
+        Cleanup is invoked under ownership by a background operation on Stop or
+        app close. A parked session is not a verified idle or released device.
+        """
+        if not callable(cleanup):
+            raise TypeError("Parked session requires a cleanup callback")
+        with self._mutex:
+            self.assert_owner(token)
+            if self._fault:
+                raise OwnershipError("Cannot retain a faulted measurement session")
+            self._write("owned", detail, parked=True, preservation_verified=True)
+            self._parked_cleanup = cleanup
+            self._cancel = None
+
+    def has_parked_session(self, *, instance_id=None):
+        with self._mutex:
+            return (self._parked_cleanup is not None and self._token is not None and
+                    not self._fault and (instance_id is None or self._token.instance_id == instance_id))
+
+    def close_parked_session(self, *, instance_id=None):
+        """Finish a parked session synchronously; call from a cleanup worker."""
+        with self._mutex:
+            if self._parked_cleanup is None:
+                return False
+            token = self._token
+            if instance_id is not None and token.instance_id != instance_id:
+                raise OwnershipError("Prepared session belongs to another tab")
+            cleanup, self._parked_cleanup = self._parked_cleanup, None
+        try:
+            with self.scope(token):
+                result = cleanup()
+            verified = isinstance(result, dict) and result.get("safe_verified") is True and not result.get("errors")
+            self.release(token, safe_verified=verified, preservation_verified=True,
+                         detail="Prepared session closed" if verified else f"Prepared session cleanup failed: {result}")
+            if not verified:
+                raise OwnershipError(f"Prepared session cleanup failed: {result}")
+            return True
+        except BaseException as exc:
+            with self._mutex:
+                if self._token == token and not self._fault:
+                    self.release(token, safe_verified=False, preservation_verified=True, detail=str(exc))
+            raise
 
     def complete_reset(self, token, *, previous, checks):
         """Release current hardware after reset, without certifying an old run.
@@ -195,10 +256,12 @@ class HardwareCoordinator:
             self._write("free", "Instrument reset completed; prior run disposition retained",
                         safe_verified=True, previous=previous, reset_checks=checks,
                         prior_run_restoration_verified=False,
-                        prior_run_preservation_verified=False)
+                        prior_run_preservation_verified=False,
+                        application_connections=self.retain_application_connections)
             self._token, self._cancel, self._fault = None, None, False
             self._verified_idle_token = token
-            self._unlock_os()
+            if not self.retain_application_connections:
+                self._unlock_os()
 
     def current_session_idle_verified(self):
         """Reuse only this coordinator's completed cleanup, with no device I/O.
@@ -207,6 +270,8 @@ class HardwareCoordinator:
         A free record alone never supplies a current-session idle receipt.
         """
         with self._mutex:
+            if self.retain_application_connections:
+                return False  # Open SDKs still need application shutdown.
             token = self._verified_idle_token
             if token is None or token.pid != os.getpid() or self._token is not None:
                 return False
@@ -226,6 +291,8 @@ class HardwareCoordinator:
     def snapshot(self):
         with self._mutex:
             record = self._read()
+            if record.get("application_connections") and not self.retain_application_connections:
+                record.update(state="owned", detail="Application connections belong to another or interrupted session; close that application or use Reset instrument after recovery.")
             if self._token is not None:
                 record.update(state="fault" if self._fault else "owned", owner=asdict(self._token))
             # A surviving owned record is deliberately never inferred free by PID.

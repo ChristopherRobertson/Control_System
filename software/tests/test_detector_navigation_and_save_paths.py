@@ -56,6 +56,27 @@ def visible_titles(window):
     return [window.tabs.tabText(i) for i in range(window.tabs.count()) if window.tabs.isTabVisible(i)]
 
 
+def test_uniform_experiment_sections_and_bottom_actions(shell):
+    from PySide6.QtWidgets import QGroupBox, QCheckBox
+    window = shell[0]
+    expected = ["Acquire Blank", "Load Blank", "Acquire Sample (Pump Off)",
+                "Load Sample (Unpumped)", "Start Acquisition", "Abort Acquisition", "New Run"]
+    geometry = {}
+    for handle in window.measurement_lifecycle.handles:
+        panel = handle.widget
+        assert [button.text() for button in panel.standard_actions] == expected
+        assert len({button.parentWidget() for button in panel.standard_actions}) == 1
+        assert panel.instructions_group.title() == "Instructions and Experiment Summary"
+        if handle.instance_id.endswith(":dual"):
+            assert not panel.standard_actions[0].isEnabled()
+            assert not panel.standard_actions[1].isEnabled()
+        for group in panel.findChildren(QGroupBox):
+            if group.title() in ("MIRcat Settings", "Nd:YAG + OPO Settings", "HF2LI Settings"):
+                size = (group.minimumWidth(), group.maximumWidth(), group.minimumHeight(), group.maximumHeight())
+                assert geometry.setdefault(group.title(), size) == size
+        assert all(check.isHidden() for check in panel.findChildren(QCheckBox) if "review" in check.text().lower())
+
+
 def handle(window, instance_id):
     return next(item for item in window.measurement_lifecycle.handles if item.instance_id == instance_id)
 
@@ -74,7 +95,7 @@ def test_exact_order_and_modes_retain_page_state_and_device_access(shell):
     tail = ["MIRcat", "T660-1", "Nd:YAG", "OPO Iris", "Plotter"]
     for mode in ("single", "dual"):
         window.set_detector_mode(mode)
-        assert visible_titles(window) == [tab_title(key, mode) for key in EXPERIMENT_ORDER] + [tab_title("phase_scan", mode)] + tail
+        assert visible_titles(window) == [tab_title(key, mode) for key in EXPERIMENT_ORDER] + tail
     single = select(window, "steady_state_slow_scan:single").widget
     single.settings_widget.plan_label.setText("single sample")
     window.set_detector_mode("dual")
@@ -89,12 +110,13 @@ def test_exact_order_and_modes_retain_page_state_and_device_access(shell):
     window.tabs.setCurrentWidget(window.mircat_widget)
     window.set_detector_mode("single")
     assert window.tabs.currentWidget() is window.mircat_widget
-    assert len(window.measurement_lifecycle.handles) == 14
-    assert window.tabs.count() == 19
+    assert len(window.measurement_lifecycle.handles) == 12
+    assert window.tabs.count() == 17
     assert not coordinator.lock_path.exists()
 
 
 def test_restart_resets_experiment_inputs_and_ignores_old_disk_preferences(shell):
+    from PySide6.QtWidgets import QLineEdit
     window, _, preferences, _ = shell
     defaults = {}
     for mode in ("single", "dual"):
@@ -108,8 +130,10 @@ def test_restart_resets_experiment_inputs_and_ignores_old_disk_preferences(shell
         preferences.setValue(f"measurements/steady_state_slow_scan/{mode}/v1/settings", json.dumps(saved))
     phase_defaults = []
     for mode, widget in (("single", window.phase_scan_widget), ("dual", window.dual_detector_phase_scan_widget)):
-        phase_defaults.append({key: control.value() for key, control in widget.inputs.items()})
-        old = json.dumps({"inputs": {key: control.maximum() for key, control in widget.inputs.items()}})
+        phase_defaults.append({key: control.text() if isinstance(control, QLineEdit) else control.value()
+                               for key, control in widget.inputs.items()})
+        old = json.dumps({"inputs": {key: "Previous launch label" if isinstance(control, QLineEdit) else control.maximum()
+                                     for key, control in widget.inputs.items()}})
         preferences.setValue(widget.preference_key, old)
         preferences.setValue(f"measurements/phase_scan/{mode}/v1/settings", old)
     preferences.sync()
@@ -121,7 +145,8 @@ def test_restart_resets_experiment_inputs_and_ignores_old_disk_preferences(shell
             editor = handle(restarted, f"steady_state_slow_scan:{mode}").widget.settings_widget
             assert editor.read_settings() == defaults[mode]
         for widget, expected in zip((restarted.phase_scan_widget, restarted.dual_detector_phase_scan_widget), phase_defaults):
-            assert {key: control.value() for key, control in widget.inputs.items()} == expected
+            assert {key: control.text() if isinstance(control, QLineEdit) else control.value()
+                               for key, control in widget.inputs.items()} == expected
             assert widget._overrides == {}
         # Every experiment gets a launch-local preference namespace, including
         # modules that persist edits only when planning or starting a run.
@@ -143,6 +168,8 @@ def test_each_tab_uses_its_exact_title_and_unique_frozen_run_folder(shell):
         window.tabs.setCurrentWidget(item.widget)
         expected = paths.RUN_ROOT / "2026-09-14" / item.title
         assert Path(window.save_location.text()) == expected
+        window._apply_save_location()
+        assert not expected.exists()
         experiment, mode = item.instance_id.rsplit(":", 1)
         context = window.measurement_context_factory.for_experiment(experiment).for_mode(mode)
         operation = context.begin_operation({"sample": "test"}, hardware=False)
@@ -154,6 +181,19 @@ def test_each_tab_uses_its_exact_title_and_unique_frozen_run_folder(shell):
                           (window.scan_plotter_widget, "Plotter")):
         window.tabs.setCurrentWidget(widget)
         assert Path(window.save_location.text()) == paths.RUN_ROOT / "2026-09-14" / title
+    assert not paths.RUN_ROOT.exists()
+
+
+def test_applying_custom_destination_and_new_day_stays_lazy(shell, tmp_path, monkeypatch):
+    window, _, _, _ = shell
+    target = tmp_path / "custom" / "new experiment"
+    window.save_location.setText(str(target))
+    window.save_location.setModified(True)
+    window._apply_save_location()
+    assert not target.exists()
+    monkeypatch.setattr(LocalDate, "current", date(2026, 9, 15))
+    window.set_detector_mode("dual")
+    window._apply_save_location()
     assert not paths.RUN_ROOT.exists()
 
 
@@ -189,7 +229,7 @@ def test_custom_destinations_are_per_tab_and_survive_restart(shell, tmp_path):
     target = tmp_path / "custom single"
     window.save_location.setText(str(target))
     window._apply_save_location()
-    assert target.is_dir()
+    assert not target.exists()
     assert window.save_location_status.text() == ""
     assert Path(window.save_location.text()) == target
     assert published[-1] == target
@@ -241,8 +281,8 @@ def test_failed_edit_remains_reviewable_after_mode_switch(shell, tmp_path, monke
     target = tmp_path / "unwritable"
     real_set_location = main_window.set_save_location
 
-    def reject_explicit(value, *, create=True):
-        if create:
+    def reject_explicit(value, *, create=False):
+        if Path(value) == target:
             raise PermissionError("Injected unwritable folder")
         return real_set_location(value, create=create)
 

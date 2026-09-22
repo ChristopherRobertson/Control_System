@@ -37,6 +37,25 @@ def supported_choices(combo):
             if combo.itemData(index) is not None and combo.model().item(index).isEnabled()}
 
 
+def test_phase_summary_prompts_update_while_start_is_edited(qt_app):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from control_app.ui.widgets.phase_scan_widget import PhaseScanWidget
+    widget = PhaseScanWidget(runner=RegularPhaseScanRunner(lambda: None, capabilities=capabilities()))
+    try:
+        control = widget.inputs["start_wavenumber_cm1"]
+        original = str(control.value())
+        control.lineEdit().selectAll()
+        QTest.keyClick(control.lineEdit(), Qt.Key.Key_Backspace)
+        assert "Set Start Wavenumber to proceed" in widget.required_settings.text()
+        assert widget.plan is None
+        QTest.keyClicks(control.lineEdit(), original)
+        assert not widget.required_settings.text()
+        assert widget.plan is not None
+    finally:
+        widget.deleteLater()
+
+
 def test_window_controls_persist_and_invalid_window_has_brief_solution(qt_app, tmp_path):
     from PySide6.QtCore import QSettings
     from control_app.ui.widgets.phase_scan_widget import PhaseScanWidget
@@ -412,7 +431,7 @@ def test_capability_refresh_and_abort_restore_ui(qt_app, monkeypatch, tmp_path, 
             qt_app.processEvents()
         assert condition()
     assert not widget.background_button.isEnabled()
-    widget.refresh_capabilities_button.click()
+    widget._begin("capabilities")
     wait_for(lambda: not widget.command_running())
     assert widget.background_button.isEnabled()
     widget.background_button.click()
@@ -454,7 +473,7 @@ def test_offline_retained_choices_are_immediately_editable_without_device_access
     assert widget.plan is not None and not widget.plan.hf2_selection["capability_verified"]
     assert runner.capabilities is None
     assert not widget.background_button.isEnabled()
-    assert not widget.refresh_capabilities_button.isEnabled()
+    assert not hasattr(widget, "refresh_capabilities_button")
     widget.deleteLater()
 
 
@@ -510,7 +529,7 @@ def test_successful_device_choices_are_cached_and_reopened_without_verification(
     first_runner = RegularPhaseScanRunner(lambda: None, capability_provider=lambda: caps)
     first = PhaseScanWidget(runner=first_runner, preferences=prefs)
     try:
-        first.refresh_capabilities_button.click()
+        first._begin("capabilities")
         wait_for(qt_app, lambda: not first.command_running())
         first.advanced_group.setChecked(True)
         first.override_inputs["order"].setCurrentIndex(first.override_inputs["order"].findData(4))
@@ -591,17 +610,17 @@ def test_failed_device_check_retains_editable_choices_and_retry_recovers(qt_app,
     try:
         widget.advanced_group.setChecked(True)
         expected = {key: supported_choices(combo) for key, combo in widget.override_inputs.items()}
-        widget.refresh_capabilities_button.click()
+        widget._begin("capabilities")
         wait_for(qt_app, lambda: not widget.command_running())
         assert "simulated connected-device read failed" in widget.scan_status.text()
         assert {key: supported_choices(combo) for key, combo in widget.override_inputs.items()} == expected
         assert all(combo.isEnabled() for combo in widget.override_inputs.values())
         assert not widget.background_button.isEnabled()
         assert not widget.plan.hf2_selection["capability_verified"]
-        assert widget.refresh_capabilities_button.isEnabled()
+        assert not hasattr(widget, "refresh_capabilities_button")
         widget.override_inputs["timeconstant_s"].setCurrentIndex(widget.override_inputs["timeconstant_s"].findData(49.99e-6))
         assert widget._overrides["timeconstant_s"] == 49.99e-6
-        widget.refresh_capabilities_button.click()
+        widget._begin("capabilities")
         wait_for(qt_app, lambda: not widget.command_running())
         assert calls == ["check", "check"]
         assert widget.plan.hf2_selection["capability_verified"]

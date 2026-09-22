@@ -115,12 +115,12 @@ def test_signed_grid_rounds_outward_without_float_rounding(increment, expected_c
     assert plan.last_phase_delay_us >= 5_000
 
 
-def test_increasing_and_decreasing_scans_have_same_count_but_keep_direction():
+@pytest.mark.parametrize("stop", [2000, 2001])
+def test_start_must_exceed_stop(stop):
     descending = build_phase_scan_plan(PhaseScanSettings())
-    ascending = build_phase_scan_plan(PhaseScanSettings(start_wavenumber_cm1=1900, stop_wavenumber_cm1=2000))
-    assert descending.phases_per_repetition == ascending.phases_per_repetition
-    assert ascending.to_dict()["derived"]["scan_direction"] == "increasing_wavenumber"
     assert descending.to_dict()["derived"]["scan_direction"] == "decreasing_wavenumber"
+    with pytest.raises(PhaseScanPlanError, match="Start wavenumber must be greater than Stop wavenumber"):
+        build_phase_scan_plan(PhaseScanSettings(start_wavenumber_cm1=2000, stop_wavenumber_cm1=stop))
 
 
 @pytest.mark.parametrize("changes,match", [
@@ -128,7 +128,7 @@ def test_increasing_and_decreasing_scans_have_same_count_but_keep_direction():
     ({"scan_speed_cm1_s": float("nan")}, "finite positive"),
     ({"rest_period_s": float("inf")}, "finite positive"),
     ({"probe_repetition_rate_hz": True}, "finite positive"),
-    ({"stop_wavenumber_cm1": 2000}, "must differ"),
+    ({"stop_wavenumber_cm1": 2000}, "must be greater than Stop"),
     ({"probe_pulse_width_ns": 151}, "30% ceiling"),
     ({"mircat_internal_repetition_rate_hz": 2_000_000}, "higher than the T660-1"),
     ({"mircat_internal_repetition_rate_hz": 1_999_000}, "higher than the T660-1"),
@@ -249,7 +249,10 @@ def qt_app():
 def test_widget_updates_plan_and_clears_stale_preview_on_invalid_input(qt_app):
     from control_app.ui.widgets.phase_scan_widget import PhaseScanWidget
     widget = PhaseScanWidget()
-    assert set(widget.inputs) == {"pump_repetition_rate_hz", "start_wavenumber_cm1", "stop_wavenumber_cm1", "scan_speed_cm1_s", "phase_delay_us", "pre_pump_ms", "post_pump_ms"}
+    assert set(widget.inputs) == {"run_label", "pump_repetition_rate_hz", "fire_to_qswitch_us",
+        "pump_wavelength_nm", "start_wavenumber_cm1", "stop_wavenumber_cm1", "scan_speed_cm1_s",
+        "probe_repetition_rate_hz", "probe_pulse_width_ns", "qcl_current_ma", "phase_delay_us",
+        "pre_pump_ms", "post_pump_ms"}
     assert widget.plan.total_scans == 322
     assert "322" in widget.summary_values["total"].text()
     assert widget.phase_table.item(0, 1).text() == "Unpumped baseline"
@@ -304,7 +307,8 @@ def test_widget_exposes_internal_headroom_separately_from_t660_opportunities(qt_
     assert "estimated" in widget.summary_values["resolution"].text()
     assert widget.plan.hf2_selection["temporal_resolution_s"] > widget.settings().phase_delay_us*1e-6
     assert not widget.hf2_status.text()
-    assert "probe_pulse_width_ns" not in widget.inputs
+    assert widget.inputs["probe_repetition_rate_hz"].value() == 2_000_000
+    assert widget.inputs["probe_pulse_width_ns"].value() == 150
     assert widget.plan.nominal_probe_pulses_per_scan == 20000
     widget.deleteLater()
 

@@ -89,7 +89,11 @@ def test_discovery_exact_tabs_compact_essentials_no_operator_gates(qt_app, tmp_p
     def forbidden(**kwargs):
         raise AssertionError("Construction must not instantiate a device")
     factory = ContextFactory(save_root_provider=lambda: tmp_path, ownership=object(), real_device_factories={"hf2li": forbidden})
-    descriptors = [item for item in discover_modules().descriptors if item.experiment_id == "single_pump_scan_burst"]
+    # Retired from the installed app; retain historical widget coverage through
+    # its explicit descriptor without registering redundant tabs at startup.
+    assert not any(item.experiment_id == "single_pump_scan_burst" for item in discover_modules().descriptors)
+    from control_app.measurement_modules.single_pump_scan_burst.retired_registration import DESCRIPTOR
+    descriptors = [DESCRIPTOR]
     result = create_registered_tabs(descriptors, factory)
     assert not result.issues
     assert [(item.instance_id, item.title) for item in result.handles] == [

@@ -269,11 +269,12 @@ def test_rrs_compact_layout_keeps_plot_and_independent_auto_overrides(app, tabs)
     assert panel.size().height() == 780
     assert panel.plots.height() >= 350
     settings = panel.settings_widget
-    settings.override_inputs["sample_filter_order"].setEditText("2")
+    settings.override_inputs["sample_filter_order"].set_choices([2, 4, 6])
+    settings.override_inputs["sample_filter_order"].setCurrentText("2")
     settings.set_capabilities(HardwareCapabilities(live_settings={"sample_rate_hz": 8000., "sample_filter_order": 6}))
     selected = settings.read()
     assert selected["sample_filter_order"] == 2 and selected["sample_rate_hz"] == 8000.
-    assert selected["manual_overrides"] == {"sample_filter_order": 2}
+    assert selected["manual_overrides"] == {"sample_filter_order": 2, **settings.MIRCAT_DEFAULTS, "probe_pulse_width_s": 150e-9}
     settings.restore_automatic()
     assert settings.read()["sample_filter_order"] == 6
     panel.hide()
@@ -288,7 +289,7 @@ def test_rrs_visible_overrides_control_emitted_cadence_and_optical_width(app, ta
     app.processEvents()
     widget = panel.settings_widget
     expected = {"scan_speed_cm1_s", "sample_rate_hz", "sample_filter_order",
-                "sample_filter_timeconstant_s", "probe_frequency_hz", "mircat_pulse_width_ns"}
+                "sample_filter_timeconstant_s", "probe_frequency_hz", "probe_pulse_width_s"}
     if index == 1:
         expected |= {"reference_rate_hz", "reference_filter_order", "reference_filter_timeconstant_s"}
     assert set(widget.override_inputs) == expected
@@ -296,28 +297,28 @@ def test_rrs_visible_overrides_control_emitted_cadence_and_optical_width(app, ta
     assert panel.advanced_content.isVisible() and not panel.advanced_content.isCheckable()
     assert all(control.isVisible() for control in widget.override_inputs.values())
     assert all("qcl" not in control.objectName().lower() for control in panel.findChildren(QComboBox))
-    form = widget.advanced.layout()
+    form = widget.override_inputs["probe_frequency_hz"].parentWidget().layout()
     assert isinstance(form, QFormLayout)
     rate = widget.override_inputs["probe_frequency_hz"]
-    width = widget.override_inputs["mircat_pulse_width_ns"]
-    assert form.labelForField(rate).text() == "Repetition rate (Hz)"
-    assert form.labelForField(width).text() == "Pulse width (ns)"
+    width = widget.override_inputs["probe_pulse_width_s"]
+    assert form.labelForField(rate).text() == "Repetition Rate"
+    assert form.labelForField(width).text() == "Pulse Width"
     rate.setEditText("2000000")
     width.setEditText("150")
     width.lineEdit().editingFinished.emit()
     assert panel.plan is not None, panel.validation.text()
     selected = panel.plan.settings
-    assert selected.mircat_pulse_rate_hz is None
-    assert selected.mircat_pulse_width_ns == 150.
+    assert selected.mircat_pulse_rate_hz == 2_100_000.
+    assert selected.mircat_pulse_width_ns == 142.
     assert selected.probe_frequency_hz == 2_000_000.
     assert selected.probe_pulse_width_s == 150e-9
     width.setEditText("150.01")
     width.lineEdit().editingFinished.emit()
-    assert panel.plan is None and "30%" in panel.validation.text()
-    assert not panel.start_button.isEnabled()
+    assert panel.plan is not None
+    assert panel.plan.settings.mircat_pulse_width_ns == 142.
     width.setCurrentIndex(0)
     width.lineEdit().editingFinished.emit()
-    assert widget.read()["manual_overrides"] == {"probe_frequency_hz": 2_000_000.}
+    assert widget.read()["manual_overrides"] == {"probe_frequency_hz": 2_000_000., "scan_speed_cm1_s": 10000.}
     panel.hide()
 
 
@@ -326,19 +327,22 @@ def test_rrs_user_edits_refresh_plan_and_precise_overrides_roundtrip(app, tabs):
     panel = tabs[1].widget
     widget = panel.settings_widget
     widget.inputs["observation_duration_s"].setValue(2.)
-    assert panel.plan.settings.post_scans == 20
+    import math
+    assert panel.plan.settings.post_scans == math.ceil(2. / panel.plan.settings.measured_scan_period_s)
+    widget.override_inputs["sample_filter_order"].set_choices([4])
     widget.override_inputs["sample_filter_order"].setCurrentIndex(1)
     assert panel.plan.settings.manual_overrides["sample_filter_order"] == 4
     settings = widget.read()
-    settings["manual_overrides"]["mircat_pulse_width_ns"] = 142.12345678901
+    settings["manual_overrides"]["probe_pulse_width_s"] = 142.12345678901e-9
     widget.apply(settings)
-    assert widget.read()["mircat_pulse_width_ns"] == 142.12345678901
+    assert widget.read()["probe_pulse_width_s"] == pytest.approx(142.12345678901e-9, rel=1e-13)
     widget.set_capabilities(HardwareCapabilities(live_settings={
-        "mircat_pulse_rate_hz": 2_000_000., "mircat_pulse_width_ns": 150.}))
-    width = widget.override_inputs["mircat_pulse_width_ns"]
+        "mircat_pulse_rate_hz": 2_000_000., "probe_pulse_width_s": 150e-9}))
+    width = widget.override_inputs["probe_pulse_width_s"]
     width.setCurrentIndex(width.findText("150"))
-    assert widget.read()["mircat_pulse_width_ns"] == 150.
-    assert widget.read()["mircat_pulse_rate_hz"] == 2_000_000.
+    assert widget.read()["mircat_pulse_width_ns"] == 142.
+    assert widget.read()["probe_pulse_width_s"] == 150e-9
+    assert widget.read()["mircat_pulse_rate_hz"] == 2_100_000.
     precise = widget.read()
     precise["acquisition_intent"]["observation_duration_s"] = .1004
     precise["acquisition_intent"]["spectral_min_cm1"] = 1898.0004
@@ -377,7 +381,7 @@ def test_rrs_check_device_with_invalid_spectral_inputs_is_owned_read_only(app, t
     panel.adapter.acquirer_factory = QueryAcquirer
     panel.settings_widget.inputs["spectral_min_cm1"].setValue(2000.)
     assert panel.plan is None
-    assert panel.capability_button.isEnabled()
+    assert not hasattr(panel, "capability_button")
     panel.begin_auxiliary("capabilities")
     wait(app, panel)
     assert calls == ["owned"], panel.status.text()
@@ -423,6 +427,7 @@ def test_rrs_full_shell_keeps_every_settings_control_in_view(app, tmp_path):
     window.show()
     try:
         for mode in ("single", "dual"):
+            window.set_detector_mode(mode)
             panel = next(window.tabs.widget(i) for i in range(window.tabs.count())
                          if window.tabs.widget(i).objectName() == f"repeated_rapid_scan:{mode}")
             window.tabs.setCurrentWidget(panel)
@@ -431,16 +436,19 @@ def test_rrs_full_shell_keeps_every_settings_control_in_view(app, tmp_path):
             window.grab().save(str(tmp_path / f"layout-{mode}.png"))
             viewport = panel.settings_scroll.viewport()
             controls = [panel.settings_widget.sample, *panel.settings_widget.inputs.values(),
+                        *panel.settings_widget.lasers.extra_inputs.values(),
                         *panel.settings_widget.override_inputs.values(),
-                        panel.settings_widget.restore_auto_button, panel.capability_button,
+                        panel.settings_widget.restore_auto_button,
                         panel.save_plan_button, panel.load_plan_button]
             for control in controls:
                 assert control.isVisible()
+                panel.settings_scroll.ensureWidgetVisible(control)
+                app.processEvents()
                 bounds = QRect(control.mapTo(viewport, QPoint()), control.size())
                 assert viewport.rect().contains(bounds), (mode, control.objectName(), bounds)
             for control in (panel.start_button, panel.abort_button, panel.preliminary_button):
                 assert panel.rect().contains(QRect(control.mapTo(panel, QPoint()), control.size()))
-            assert panel.settings_scroll.verticalScrollBar().maximum() == 0
+            assert panel.settings_scroll.verticalScrollBar().maximum() > 0
             assert panel.settings_scroll.horizontalScrollBar().maximum() == 0
             assert window.workspace_scroll.verticalScrollBar().maximum() == 0
     finally:

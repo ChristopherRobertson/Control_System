@@ -119,10 +119,13 @@ class InstalledSlowScanBackend:
         if not self.before:
             self._snapshot()
         self.inhibit()
-        # Generic stable HF service capability implementation uses the maintained
-        # detector roles, irrespective of the historical method in its name.
-        callback = self.hf.discover_phase_scan_capabilities if self.context.mode == "single" else self.hf.discover_dual_phase_scan_capabilities
-        capabilities = callback()
+        requested = self.operation.settings
+        from .planner import automatic_filter_request
+        filters = {0: automatic_filter_request(requested)}
+        if self.context.mode == "dual":
+            filters[3] = automatic_filter_request(requested, reference=True)
+        capabilities = self.hf.discover_slow_scan_capabilities(
+            dual=self.context.mode == "dual", filter_requests=filters)
         check()
         pulse_params = {str(i): {"pulse_rate_hz": self.qcl.get_qcl_pulse_rate(i), "pulse_width_ns": self.qcl.get_qcl_pulse_width(i),
                                 "current_ma": self.qcl.get_qcl_current(i)} for i in (1,)}
@@ -293,8 +296,11 @@ class InstalledSlowScanBackend:
                     continue
                 if not math.isclose(actual, item[key], rel_tol=1e-6, abs_tol=1e-12):
                     raise ValueError(f"HF2LI {label} {key}: selected {item[key]}, actual {actual}")
+        # The installed external-reference PLL reports its acquired frequency;
+        # freqcenter writes do not set it, even while disabled. Verify lock
+        # against the running reference later, not a stale center here.
         pll = hf_profile["pll"]
-        for key, node in (("enable", "enable"), ("adcselect", "adcselect"), ("freqcenter_hz", "freqcenter"),
+        for key, node in (("enable", "enable"), ("adcselect", "adcselect"),
                           ("harmonic", "harmonic"), ("order", "order"), ("adcthreshold", "adcthreshold")):
             actual = self.readbacks["hf2li"]["nodes"][f"/{self.hf.device_id}/plls/{pll['index']}/{node}"]["value"]
             if not math.isclose(actual, pll[key], rel_tol=1e-6, abs_tol=1e-12):
@@ -380,81 +386,93 @@ class InstalledSlowScanBackend:
             self.inhibit()
         return records
 
+    def _wait_tecs_ready(self, profile, check, report):
+        timeout_s = float(profile.get("tec_timeout_s", 300.))
+        stability_s = float(profile.get("tec_ready_stability_s", 0.))
+        deadline = monotonic() + timeout_s
+        ready_since = None
+        report("tuning/settling", "Waiting for MIRcat TEC temperature readiness")
+        while True:
+            check()
+            now = monotonic()
+            if self.qcl.are_tecs_ready():
+                ready_since = now if ready_since is None else ready_since
+                if now - ready_since >= stability_s:
+                    report("tuning/settling", "MIRcat TEC temperature ready")
+                    return
+            else:
+                ready_since = None
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"MIRcat TECs did not reach temperature readiness within {timeout_s:g} s")
+            self._wait(min(.25, remaining), check)
+
     def acquire_block(self, block, plan, check, report):
         scan = block.block
-        self.inhibit()
+        if getattr(self, "_prepared_start", None) == (scan.qcl, scan.start_cm1):
+            self._verify_prepared_outputs()
+        else:
+            self.inhibit()
         check()
         if scan.qcl != 1:
             raise ValueError("Slow scan can route only installed QCL 1")
         if scan.direction != "reverse" or not scan.start_cm1 > scan.stop_cm1:
-            raise ValueError("Slow scan requires a descending Start-to-End trajectory")
+            raise ValueError("Slow scan requires a descending Start-to-Stop trajectory")
         profile = plan.inputs.scientific_profile
         coverage = self.qcl.get_qcl_tuning_range(scan.qcl)
         if not coverage["min_cm1"] <= min(scan.start_cm1, scan.stop_cm1) < max(scan.start_cm1, scan.stop_cm1) <= coverage["max_cm1"]:
             raise ValueError("Declared QCL segment is outside the connected module's tuning range")
-        self.qcl.cancel_manual_tune()
-        self.qcl.arm()
-        deadline = monotonic()+profile.get("tune_timeout_s", 60.)
-        while not self.qcl.are_tecs_ready():
-            check()
-            if monotonic() > deadline:
-                raise TimeoutError("MIRcat TEC readiness timeout")
-            self._wait(.025, check)
-        self.qcl.tune_to_wavenumber(scan.start_cm1, qcl=scan.qcl)
-        while not self.qcl.is_tuned():
-            check()
-            if monotonic() > deadline:
-                raise TimeoutError("MIRcat tune timeout")
-            self._wait(.025, check)
-        report("tuning/settling", f"{scan.segment_id} {scan.direction}: settle {scan.settle_s:g} s")
-        self._wait(scan.settle_s, check)
+        reuse_start = getattr(self, "_prepared_start", None) == (scan.qcl, scan.start_cm1)
+        if reuse_start:
+            if self.qcl.is_laser_armed() is not True or not self.qcl.is_tuned():
+                raise RuntimeError("Prepared laser arming/tuning changed before Sample")
+            self._wait_tecs_ready(profile, check, report)
+            self._prepared_start = None
+        else:
+            self.qcl.cancel_manual_tune()
+            if not getattr(self, "_session_armed", False):
+                self.qcl.arm()
+            elif self.qcl.is_laser_armed() is not True:
+                raise RuntimeError("Prepared laser is no longer armed")
+            self._wait_tecs_ready(profile, check, report)
+            deadline = monotonic()+profile.get("tune_timeout_s", 60.)
+            self.qcl.tune_to_wavenumber(scan.start_cm1, qcl=scan.qcl)
+            while not self.qcl.is_tuned():
+                check()
+                if monotonic() > deadline:
+                    raise TimeoutError("MIRcat tune timeout")
+                self._wait(.025, check)
+            report("tuning/settling", f"{scan.segment_id} {scan.direction}: settle {scan.settle_s:g} s")
+            self._wait(scan.settle_s, check)
         pulse_observation = self._validate_live_pulses(plan, "after_tune", block_id=scan.block_id)
         actual_pulse = pulse_observation["pulse"]
         pulse_limits, current_limits = pulse_observation["pulse_limits"], pulse_observation["current_limits"]
         interval = plan.selected["marker_interval_cm1"]
-        self.qcl.set_wavelength_trigger_params(pulse_mode=1, process_trigger_mode=2,
-            start=scan.start_cm1, stop=scan.stop_cm1, interval=interval, units=2, dwell_us=0, after_off_us=0)
+        if not reuse_start:
+            self.qcl.set_wavelength_trigger_params(pulse_mode=1, process_trigger_mode=2,
+                start=scan.start_cm1, stop=scan.marker_stop_cm1 if scan.marker_stop_cm1 is not None else scan.stop_cm1,
+                interval=interval, units=2, dwell_us=0, after_off_us=0)
         trigger = self.qcl.get_wavelength_trigger_params()
         if trigger["pulse_mode"] != 1 or trigger["process_trigger_mode"] != 2 or trigger["units"] != 2:
             raise ValueError("MIRcat requires internal pulse timing, external process triggers and cm^-1 units")
         width = round(plan.selected["marker_width_s"]*1e6)
-        if self.qcl.set_wavelength_trigger_pulse_width_us(width) != width:
+        observed_width = (self.qcl.get_wavelength_trigger_pulse_width_us() if reuse_start
+                          else self.qcl.set_wavelength_trigger_pulse_width_us(width))
+        if observed_width != width:
             raise ValueError("MIRcat marker width readback differs")
-        self.qcl.cancel_manual_tune()
-        self.qcl.start_sweep_scan(start_cm1=scan.start_cm1, stop_cm1=scan.stop_cm1,
-                                  scan_rate_cm1_s=scan.scan_speed_cm1_s, qcl=1, repetitions=scan.replicates)
-        actual = self.qcl.get_sweep_parameters()
-        for name, expected in (("start_cm1", scan.start_cm1), ("stop_cm1", scan.stop_cm1),
-                               ("scan_rate_cm1_s", scan.scan_speed_cm1_s), ("repetitions", scan.replicates)):
-            if not math.isclose(actual[name], expected, rel_tol=1e-6, abs_tol=1e-5):
-                raise ValueError(f"MIRcat {name}: selected {expected}, read back {actual[name]}")
-        if not self.qcl.get_scan_waiting_process_trigger():
-            raise RuntimeError("MIRcat is not waiting for the external Process Trigger")
-        marker_identity = profile["marker_channel_by_qcl"]
-        marker_params = self.qcl.get_wavelength_trigger_channel_params(int(marker_identity[str(scan.qcl)]))
-        if marker_params.get("units") != 2 or not math.isclose(abs(marker_params["interval"]), interval, rel_tol=1e-6):
-            raise ValueError("Controller marker units/spacing differ from the declared trajectory")
-        if int(marker_params["num_triggers"]) != scan.expected_marker_count:
-            raise ValueError("Controller marker count differs from the declared trajectory")
-        direction = 1 if scan.stop_cm1 > scan.start_cm1 else -1
-        targets = [float(marker_params["start"])+direction*i*abs(float(marker_params["interval"]))
-                   for i in range(int(marker_params["num_triggers"]))]
-        if not all(min(scan.start_cm1, scan.stop_cm1)-1e-5 <= v <= max(scan.start_cm1, scan.stop_cm1)+1e-5 for v in targets):
-            raise ValueError("Controller markers lie outside the declared QCL segment")
-        report("timing-table upload", f"{scan.block_id}: uploading acknowledged pending fields")
-        upload = self.units["t660_2"].preload_frame_table(**block.upload_kwargs(
-            progress=lambda done, total: report("timing-table upload", f"Acknowledged {done}/{total} frames"),
-            cancel_check=check))
+        if reuse_start:
+            upload = self._prepared_upload
+        else:
+            report("timing-table upload", f"{scan.block_id}: uploading acknowledged pending fields")
+            upload = self.units["t660_2"].preload_frame_table(**block.upload_kwargs(
+                progress=lambda done, total: report("timing-table upload", f"Acknowledged {done}/{total} frames"),
+                cancel_check=check))
         self.verify_pump_off()
-        self.readbacks.setdefault(scan.block_id, {}).update({"sweep": actual, "markers": marker_params, "pulse": actual_pulse, "upload": upload,
-                                         "installed_coverage": coverage, "installed_pulse_limits": pulse_limits,
-                                         "installed_current_limits": current_limits, "trigger": trigger})
         roles = plan.inputs.demodulator_roles
         demods = [roles["sample"], roles["timing"]]
         if plan.settings.mode == "dual":
             demods.append(roles["reference"])
         records = []
-        self.hf.start_acquisition(demodulators=demods)
         try:
             # Reference locks while probe and frame input are inhibited.
             unit = self.units["t660_1"]
@@ -462,10 +480,41 @@ class InstalledSlowScanBackend:
             unit.start_continuous_clock()
             self._wait_reference_lock(check)
             self._wait(scan.settle_s, check)
+            self._wait_tecs_ready(profile, check, report)
             self._health()
             check()
             self._validate_live_pulses(plan, "before_emission", block_id=scan.block_id)
             self.qcl.start_emission()
+            self.qcl.cancel_manual_tune()
+            self._wait_tecs_ready(profile, check, report)
+            self.qcl.start_sweep_scan(start_cm1=scan.start_cm1, stop_cm1=scan.stop_cm1,
+                scan_rate_cm1_s=scan.scan_speed_cm1_s, qcl=1, repetitions=scan.replicates)
+            actual = self.qcl.get_sweep_parameters()
+            for name, expected in (("start_cm1", scan.start_cm1), ("stop_cm1", scan.stop_cm1),
+                                   ("scan_rate_cm1_s", scan.scan_speed_cm1_s), ("repetitions", scan.replicates)):
+                if not math.isclose(actual[name], expected, rel_tol=1e-6, abs_tol=1e-5):
+                    raise ValueError(f"MIRcat {name}: selected {expected}, read back {actual[name]}")
+            if not self.qcl.get_scan_waiting_process_trigger():
+                raise RuntimeError("MIRcat is not waiting for the external Process Trigger")
+            marker_identity = profile["marker_channel_by_qcl"]
+            marker_params = self.qcl.get_wavelength_trigger_channel_params(int(marker_identity[str(scan.qcl)]))
+            if marker_params.get("units") != 2 or not math.isclose(abs(marker_params["interval"]), interval, rel_tol=1e-6):
+                raise ValueError("Controller marker units/spacing differ from the declared trajectory")
+            if int(marker_params["num_triggers"]) != scan.expected_marker_count:
+                raise ValueError("Controller marker count differs from the declared trajectory")
+            direction = 1 if scan.stop_cm1 > scan.start_cm1 else -1
+            targets = [float(marker_params["start"])+direction*i*abs(float(marker_params["interval"]))
+                       for i in range(int(marker_params["num_triggers"]))]
+            if not all(min(scan.start_cm1, scan.stop_cm1)-1e-5 <= v <= max(scan.start_cm1, scan.stop_cm1)+1e-5 for v in targets):
+                raise ValueError("Controller markers lie outside the declared QCL segment")
+            self._validate_live_pulses(plan, "after_sweep_start", block_id=scan.block_id)
+            self.readbacks.setdefault(scan.block_id, {}).update({"sweep": actual, "markers": marker_params, "pulse": actual_pulse, "upload": upload,
+                                             "installed_coverage": coverage, "installed_pulse_limits": pulse_limits,
+                                             "installed_current_limits": current_limits, "trigger": trigger})
+            # Subscribe only after mode transitions have finished. Retain a
+            # pretrigger poll so the first real Sweep Active edge has a baseline.
+            self.hf.start_acquisition(demodulators=demods)
+            self._poll(.05, check, records)
             self.units["t660_2"].start_frame_table()
             unit.enable_channel("C")
             report("acquisition", f"{scan.block_id}: {scan.replicates} sweeps; FIRE/Q-switch OFF")
@@ -640,6 +689,85 @@ class InstalledSlowScanBackend:
             raise RuntimeError(f"HF2LI lock/clipping health is not valid: {health}")
         return health
 
+    def park(self, check, report):
+        """Keep prepared clients and laser arming, with verified outputs OFF."""
+        self.inhibit()
+        self.hf.stop_acquisition()
+        start = self.plan.blocks[0]
+        profile = self.plan.inputs.scientific_profile
+        self._wait_tecs_ready(profile, check, report)
+        self.qcl.tune_to_wavenumber(start.start_cm1, qcl=start.qcl)
+        deadline = monotonic() + profile.get("tune_timeout_s", 60.)
+        while not self.qcl.is_tuned():
+            check()
+            if monotonic() >= deadline:
+                raise TimeoutError("MIRcat prepared Start tune timeout")
+            self._wait(.025, check)
+        from .timing import compile_timing
+        pending = compile_timing(self.plan).blocks[0]
+        self._prepared_upload = self.units["t660_2"].preload_frame_table(**pending.upload_kwargs(
+            progress=lambda done, total: report("timing-table upload", f"Preparing Sample: {done}/{total} frames"),
+            cancel_check=check))
+        self._prepared_start = (start.qcl, start.start_cm1)
+        self._verify_prepared_outputs()
+        self._session_armed = True
+        return {"safe_verified": False, "prepared_session": True, "outputs_off_verified": True,
+                "armed": True, "errors": [], "policy": "Retain exclusive prepared session until Sample or cleanup"}
+
+    def _verify_prepared_outputs(self):
+        observed = {"read_errors": {}, "timing": {}}
+        self.readbacks.setdefault("prepared_session_observations", []).append(observed)
+        for name, getter in (("scan_status", self.qcl.get_scan_status),
+                             ("emission_on", self.qcl.is_emission_on),
+                             ("armed", self.qcl.is_laser_armed),
+                             ("waiting_for_process_trigger", self.qcl.get_scan_waiting_process_trigger),
+                             ("tuned", self.qcl.is_tuned),
+                             ("status_mask", self.qcl.get_status_mask)):
+            try:
+                observed[name] = getter()
+            except Exception as exc:
+                observed[name] = None
+                observed["read_errors"][name] = str(exc)
+        for name, unit in self.units.items():
+            timing = observed["timing"][name] = {}
+            for field, command in (("trigger_source", "TRIG:SOUR?"), *((ch, f"CHAN:ON? {ch}") for ch in "ABCD")):
+                try:
+                    timing[field] = unit.command(command)
+                except Exception as exc:
+                    timing[field] = None
+                    observed["read_errors"][f"{name}.{field}"] = str(exc)
+        scan = observed.get("scan_status") or {}
+        rejected = [name for name in ("emission_on", "waiting_for_process_trigger") if observed.get(name) is not False]
+        rejected += [name for name in ("armed", "tuned") if observed.get(name) is not True]
+        from control_app.devices.mircat_service import STATUS_MASK_SCANNING, STATUS_MASK_MANUAL_TUNING
+        mask = observed.get("status_mask")
+        scanning = bool(mask & STATUS_MASK_SCANNING) if isinstance(mask, int) else None
+        manual_tuning = bool(mask & STATUS_MASK_MANUAL_TUNING) if isinstance(mask, int) else None
+        observed.update(scanning=scanning, manual_tuning=manual_tuning)
+        if scanning is not False:
+            rejected.append("scanning")
+        # SDK GetScanStatus covers both scan and single-tune mode. The distinct
+        # status-mask SCANNING bit separates a sweep from the retained manual tune.
+        if manual_tuning is not True:
+            rejected += [name for name in ("scan_in_progress", "scan_active", "scan_paused") if scan.get(name) is not False]
+        rejected += [f"{name}.{field}" for name, timing in observed["timing"].items()
+                     for field, value in timing.items() if not _off(value)]
+        observed["rejected_fields"] = rejected
+        observed["verified"] = not rejected and not observed["read_errors"]
+        if not observed["verified"]:
+            raise RuntimeError("Prepared session verification failed: " + ", ".join(rejected or observed["read_errors"]))
+
+    def resume(self, operation):
+        self.operation = operation
+        self.raw_records = []
+        self.chunk_index = 0
+        self.time_origin_ticks = None
+        self.direction_bits = {}
+        self.readbacks = deepcopy(self.readbacks)
+        self.readbacks.pop("pulse_observations", None)
+        for block in self.plan.blocks:
+            self.readbacks.pop(block.block_id, None)
+
     def restore(self):
         records, errors = {}, []
         def attempt(name, call):
@@ -685,9 +813,10 @@ class InstalledSlowScanBackend:
                 enabled = {path: item for path, item in snapshot["nodes"].items() if "/demods/" in path and path.endswith("/enable")}
                 pll_enabled = {path: item for path, item in snapshot["nodes"].items() if "/plls/" in path and path.endswith("/enable")}
                 hf.configure_demodulators([{"index": index, "enable": False} for index in range(6)])
-                hf.configure_pll({"index": 1, "enable": False})
+                for path in pll_enabled:
+                    hf.configure_pll({"index": int(path.split("/")[-2]), "enable": False})
                 snapshot["nodes"] = {path: item for path, item in snapshot["nodes"].items()
-                                     if path not in enabled and path not in pll_enabled and "/oscs/0/" not in path}
+                                     if path not in enabled and path not in pll_enabled and "/oscs/0/" not in path and not ("/plls/" in path and path.endswith("/freqcenter"))}
                 # Restore filters/rates with every spectral stream disabled; the
                 # original aggregate becomes active only after all rates return.
                 detail = hf.reload_settings_snapshot(snapshot)
@@ -698,13 +827,14 @@ class InstalledSlowScanBackend:
             def check_hf():
                 actual = hf.export_settings_snapshot(preset=self.snapshot_preset)
                 expected = deepcopy(self.before["hf2li"])
-                expected["nodes"] = {path: item for path, item in expected["nodes"].items() if "/oscs/0/" not in path}
+                expected["nodes"] = {path: item for path, item in expected["nodes"].items() if "/oscs/0/" not in path and not ("/plls/" in path and path.endswith("/freqcenter"))}
                 if expected["nodes"].get(f"/{hf.device_id}/plls/1/enable", {}).get("value"):
                     expected["nodes"].pop(f"/{hf.device_id}/oscs/1/freq", None)
                 comparison = hf.compare_settings_snapshots(expected, actual)
                 if not comparison["match"] or actual.get("read_errors"):
                     raise RuntimeError(str(comparison))
                 comparison["observed_oscillator_nodes"] = {path: item for path, item in actual["nodes"].items() if "/oscs/" in path}
+                comparison["observed_pll_centers"] = {path: item for path, item in actual["nodes"].items() if "/plls/" in path and path.endswith("/freqcenter")}
                 comparison["oscillator_note"] = "Manual detector oscillator restored and compared; externally controlled oscillator frequencies retained as observations"
                 return comparison
             attempt("verify HF2LI restoration", check_hf)

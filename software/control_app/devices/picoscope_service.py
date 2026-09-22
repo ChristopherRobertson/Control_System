@@ -121,7 +121,9 @@ class PicoScopeService:
                 "PicoScope capture settings are missing; recipe-driven workflows "
                 "must pass capture settings from the selected recipe"
             )
-        return cls(device_config, capture_settings, command_log=command_log)
+        from control_app.measurement_host.application_session import shared_device
+        return shared_device("picoscope", lambda: cls(device_config, capture_settings, command_log=command_log),
+                             capture_settings=capture_settings, command_log=command_log)
 
     def open_unit(self) -> None:
         """Open the configured PicoScope unit."""

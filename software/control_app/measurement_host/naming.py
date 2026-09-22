@@ -5,8 +5,8 @@ EXPERIMENT_ORDER = (
     "fixed_wavenumber_kinetics",
     "nanosecond_stroboscopy",
     "microsecond_stroboscopy",
-    "single_pump_scan_burst",
     "repeated_rapid_scan",
+    "phase_scan",
 )
 
 EXPERIMENT_TITLES = {

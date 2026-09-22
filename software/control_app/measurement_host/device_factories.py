@@ -1,7 +1,8 @@
-"""Lazy, fresh installed-device constructors for the application context.
+"""Lazy installed-device constructors for the application context.
 
-Factories do not connect, discover, subscribe or share service instances. Real
-SDK access still requires an operation's ownership scope at the backend edge.
+Factories do not connect, discover or subscribe. Desktop operations lease the
+application's retained transports; standalone callers receive fresh services.
+Real SDK access still requires an operation's ownership scope at the backend edge.
 Simulator factories are injected separately by each test/application session;
 they never fall back to these real factories.
 """
@@ -14,8 +15,8 @@ from copy import deepcopy
 from .context import freeze_data, thaw_data
 
 
-def installed_device_factories():
-    """Return fresh constructors; PicoScope accepts explicit capture_settings.
+def installed_device_factories(*, shared=True):
+    """Return scoped constructors; PicoScope accepts explicit capture_settings.
 
     Pass a module's frozen operation settings for a per-operation PicoScope
     recipe. The explicit mapping is detached, including nested frozen values;
@@ -45,7 +46,7 @@ def installed_device_factories():
             return service(device, **kwargs)
         return create
 
-    return {
+    factories = {
         "mircat": factory("mircat", "mircat_service", "MircatService"),
         "hf2li": factory("hf2li", "hf2li_service", "HF2LIService"),
         "picoscope": factory("picoscope", "picoscope_service", "PicoScopeService"),
@@ -53,3 +54,22 @@ def installed_device_factories():
         "t660_2": factory("t660_2", "t660_service", "T660Service"),
         "opo_iris": factory("opo_iris", "ell15_iris_service", "ELL15IrisService"),
     }
+    if not shared:
+        return factories
+    from .application_session import shared_device
+    def persistent(name, constructor):
+        def create(*, configuration, **kwargs):
+            if not isinstance(configuration.get("devices", {}).get(name), Mapping):
+                raise ValueError(f"{name} is missing from the operation's frozen configuration")
+            attributes = {key: value for key, value in kwargs.items()
+                          if key in {"command_log", "capture_settings", "allow_motion"}}
+            if name == "opo_iris":
+                attributes["allow_motion"] = bool(kwargs.get("allow_motion", False))
+            if "capture_settings" in attributes:
+                capture = attributes["capture_settings"]
+                if not isinstance(capture, Mapping):
+                    raise ValueError("PicoScope capture_settings override must be a mapping")
+                attributes["capture_settings"] = thaw_data(freeze_data(capture))
+            return shared_device(name, lambda: constructor(configuration=configuration, **kwargs), **attributes)
+        return create
+    return {name: persistent(name, constructor) for name, constructor in factories.items()}

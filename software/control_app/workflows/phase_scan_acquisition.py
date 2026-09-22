@@ -302,7 +302,7 @@ class LivePhaseScanAcquirer:
                   "pulse_rate_hz": self.qcl.get_qcl_pulse_rate(qcl),
                   "pulse_width_ns": self.qcl.get_qcl_pulse_width(qcl)}
         for key, target in (
-            ("current_ma", QCL_CURRENT_MA),
+            ("current_ma", self.settings.qcl_current_ma),
             ("pulse_rate_hz", self.settings.mircat_internal_repetition_rate_hz),
             ("pulse_width_ns", self.settings.mircat_internal_pulse_width_ns),
         ):
@@ -376,6 +376,10 @@ class LivePhaseScanAcquirer:
     def _on_sequence_complete(self):
         """Hook for safe-idle before a deferred transfer of complete histories."""
 
+    def _sequence_idle(self):
+        """End one sequence; persistent experiments may retain their reference."""
+        self._safe_idle()
+
     def _acquisition_metadata(self):
         return acquisition_settings(self.settings)
 
@@ -439,10 +443,11 @@ class LivePhaseScanAcquirer:
         duty = settings.mircat_internal_repetition_rate_hz * settings.mircat_internal_pulse_width_ns * 1e-9
         if (settings.mircat_internal_repetition_rate_hz > limits["max_pulse_rate_hz"] or
                 settings.mircat_internal_pulse_width_ns > limits["max_pulse_width_ns"] or
-                duty * 100 > limits["max_duty_cycle"] + 1e-6 or not minimum <= QCL_CURRENT_MA <= maximum):
+                duty * 100 > limits["max_duty_cycle"] + 1e-6 or not minimum <= settings.qcl_current_ma <= maximum):
             raise RuntimeError("MIRcat internal parameters exceed QCL readback limits")
         self.qcl.set_qcl_pulse_params(qcl=number, pulse_rate_hz=settings.mircat_internal_repetition_rate_hz,
-                                     pulse_width_ns=settings.mircat_internal_pulse_width_ns, current_ma=QCL_CURRENT_MA)
+                                     pulse_width_ns=settings.mircat_internal_pulse_width_ns,
+                                     current_ma=settings.qcl_current_ma)
         self.configured_qcls = [self._verify_qcl_pulse_settings(number, external_rate_hz=self.probe_rate_hz_readback)]
         span = abs(segment["stop_cm1"]-segment["start_cm1"])
         self.marker_interval = span / max(1, math.ceil(span / 5))
@@ -697,7 +702,7 @@ class LivePhaseScanAcquirer:
             if block is self.blocks[-1]:
                 # Normal timing completion is the safe-idle boundary. Conversion
                 # of thousands of records must not extend laser emission.
-                self._safe_idle()
+                self._sequence_idle()
             else:
                 probe.disable_channel("B")
                 probe.disable_channel("C")

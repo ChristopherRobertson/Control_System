@@ -97,6 +97,10 @@ class MicrosecondScientificAdapter:
         return tuple(errors)
 
     def summarize_plan(self, plan):
+        from control_app.measurement_host.experiment_summary import summary_rows
+        return summary_rows(plan, self._procedure_summary(plan), slow_scan=False)
+
+    def _procedure_summary(self, plan):
         data = plain(plan)
         budget = plain(getattr(plan, "budget", data.get("budget", {})))
         settings = plain(plan.settings)
@@ -104,15 +108,20 @@ class MicrosecondScientificAdapter:
         delays = settings.get("delays_us", ())
         averages = settings.get("averages", 1)
         response = settings["response"]
+        selected_delays = [event.selected_delay_us for block in plan.blocks
+                           if block.timing_program for event in block.timing_program.events]
+        quantized = f"; programmed {min(selected_delays):g}…{max(selected_delays):g} µs" if selected_delays else ""
+        width = plan.settings.response.effective_sigma_s * 1e6
         return (
             ("Acquisition", f"{count} wavenumbers × {len(delays)} delays × {averages}"),
-            ("Delay range", f"{min(delays):g} – {max(delays):g} µs" if delays else "—"),
-            ("HF2 response", f"Order {response['hf2_order']} · {response['hf2_time_constant_s'] * 1e6:g} µs"),
+            ("Delay range", f"{min(delays):g} – {max(delays):g} µs{quantized}" if delays else "—"),
+            ("HF2 response", f"Order {response['hf2_order']} · {response['hf2_time_constant_s'] * 1e6:g} µs · estimated RMS width {width:g} µs"),
             ("Sample rate", f"{response['sample_rate_sps'] / 1000:g} kSa/s"),
             ("Estimated time", f"{budget.get('wall_clock_s', 0):,.1f} s"),
             ("Estimated memory", f"{budget.get('memory_bytes', 0)/1024**3:,.2f} / {settings['budget']['maximum_memory_bytes']/1024**3:g} GiB limit"),
             ("Native storage", f"{budget.get('storage_bytes', 0)/1024**2:,.1f} MiB"),
-            ("Delay reference", "Electrical Variable Sync"),
+            ("Recovery", f"{settings['reset']['recovery_wait_s']:g} s wait · {settings['reset']['tolerance_fraction']:g} fractional tolerance"),
+            ("Interpretation", "Electrical Variable Sync; response-convolved recovery. Optical timing and absolute absorbance require applicable calibration / blank evidence."),
         )
 
     def selected_records(self):

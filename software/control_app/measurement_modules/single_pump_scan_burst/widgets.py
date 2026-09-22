@@ -476,8 +476,6 @@ class SinglePumpScanBurstWidget(CompactMeasurementPanel):
         if context.mode == "single":
             self.blank_button = self.add_blank_action("Acquire blank", self.begin_blank)
             self.load_blank_button = self.add_blank_action("Load blank…", self._choose_blank)
-        self.capabilities_button = self.add_settings_action("Check device", self.begin_capabilities)
-        self.capabilities_button.setToolTip("Read connected settings without acquiring a spectrum.")
         self.plot_adapter = BurstPlotAdapter()
         self.plot = PlotPanel(self.plot_adapter)
         self.plot.canvas.setMinimumHeight(220)

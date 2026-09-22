@@ -26,6 +26,29 @@ def wait_for(app, predicate):
     app.processEvents()
 
 
+def test_shared_plot_limits_are_editable_and_preserve_inverted_axes(app):
+    from control_app.measurement_host.presentation import PlotPanel
+
+    class Plot:
+        def draw(self, figure, _result):
+            axis = figure.add_subplot(111)
+            axis.plot([1., 2., 3.], [10., 20., 30.])
+            axis.invert_xaxis()
+
+    panel = PlotPanel(Plot())
+    panel.set_result({"ready": True})
+    controls = panel.axis_limits.inputs
+    controls["xmin"].setText("1.5")
+    controls["xmax"].setText("2.5")
+    controls["ymin"].setText("12")
+    controls["ymax"].setText("28")
+    panel.axis_limits.apply()
+    axis = panel.figure.axes[0]
+    assert axis.get_xlim() == pytest.approx((2.5, 1.5))
+    assert axis.get_ylim() == pytest.approx((12., 28.))
+    panel.deleteLater()
+
+
 class Adapter:
     def __init__(self):
         self.settings = {"wavenumber_cm1": 1900., "real": False}

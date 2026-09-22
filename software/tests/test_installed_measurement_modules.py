@@ -15,7 +15,6 @@ TITLES = {
     "fixed_wavenumber_kinetics": ("Fixed Wavenumber", "DD Fixed Wavenumber"),
     "nanosecond_stroboscopy": ("Nanosecond Stroboscopy", "DD Nanosecond Stroboscopy"),
     "microsecond_stroboscopy": ("Microsecond Stroboscopy", "DD Microsecond Stroboscopy"),
-    "single_pump_scan_burst": ("Single Scan Phase Delay", "DD Single Scan Phase Delay"),
     "repeated_rapid_scan": ("Rapid Scan Phase Delay", "DD Rapid Scan Phase Delay"),
 }
 
@@ -55,7 +54,7 @@ def test_all_six_delivered_modules_install_together_without_hardware(monkeypatch
 
     discovery = discover_modules()
     assert discovery.issues == (), discovery.issues
-    assert {descriptor.experiment_id for descriptor in discovery.descriptors} == set(TITLES)
+    assert {descriptor.experiment_id for descriptor in discovery.descriptors} == set(TITLES) | {"phase_scan"}
     assert len(discovery.descriptors) == 6
     app = QApplication.instance() or QApplication([])
     # Use the actual app's default discovery path, not synthetic registration.
@@ -68,18 +67,18 @@ def test_all_six_delivered_modules_install_together_without_hardware(monkeypatch
         expected = {f"{experiment}:{mode}": titles[index]
                     for experiment, titles in TITLES.items() for index, mode in enumerate(("single", "dual"))}
         assert set(features) == set(expected)
-        assert len(handles) == 14 and len(features) == 12
-        assert window.tabs.count() == 19
+        assert len(handles) == 12 and len(features) == 10
+        assert window.tabs.count() == 17
         assert not hasattr(window, "tab_selector")
         assert window.detector_mode.currentData() == "single"
-        assert [window.tabs.tabText(index) for index in range(12, 14)] == ["Phase Scan", "DD Phase Scan"]
-        assert [window.tabs.tabText(index) for index in range(12) if window.tabs.isTabVisible(index)] == [titles[0] for titles in TITLES.values()]
-        assert [window.tabs.tabText(index) for index in range(14, 19)] == ["MIRcat", "T660-1", "Nd:YAG", "OPO Iris", "Plotter"]
+        assert [window.tabs.tabText(index) for index in range(10, 12)] == ["Phase Scan", "DD Phase Scan"]
+        assert [window.tabs.tabText(index) for index in range(10) if window.tabs.isTabVisible(index)] == [titles[0] for titles in TITLES.values()]
+        assert [window.tabs.tabText(index) for index in range(12, 17)] == ["MIRcat", "T660-1", "Nd:YAG", "OPO Iris", "Plotter"]
         for identity, title in expected.items():
             handle = features[identity]
             assert handle.title == title
             index = window.tabs.indexOf(handle.widget)
-            assert 0 <= index < 12 and window.tabs.tabText(index) == title
+            assert 0 <= index < 10 and window.tabs.tabText(index) == title
             window.tabs.setCurrentIndex(index)
             assert window.tabs.currentWidget() is handle.widget
             assert window.detector_mode.currentData() == identity.rsplit(":", 1)[1]
@@ -89,10 +88,10 @@ def test_all_six_delivered_modules_install_together_without_hardware(monkeypatch
         widgets = [handle.widget for handle in features.values()]
         adapters = [widget.adapter for widget in widgets]
         contexts = [widget.context for widget in widgets]
-        assert len({id(widget) for widget in widgets}) == 12
-        assert len({id(adapter) for adapter in adapters}) == 12
-        assert len({id(context) for context in contexts}) == 12
-        assert len({id(context.preferences) for context in contexts}) == 12
+        assert len({id(widget) for widget in widgets}) == 10
+        assert len({id(adapter) for adapter in adapters}) == 10
+        assert len({id(context) for context in contexts}) == 10
+        assert len({id(context.preferences) for context in contexts}) == 10
         for widget, adapter in zip(widgets, adapters):
             assert isinstance(widget, CompactMeasurementPanel)
             assert not hasattr(widget, "review")

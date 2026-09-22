@@ -5,8 +5,8 @@
   "status": "COMPILER_CONTRACT_NOT_AN_OPERATING_RECIPE",
   "mircat": {
     "qcl": 1,
-    "pulse_controls": "Repetition rate (Hz) is emitted T660 external cadence probe_frequency_hz in MIRcat mode 2; Pulse width (ns) is the MIRcat SDK parameter mircat_pulse_width_ns, distinct from T660 TTL width",
-    "internal_rate": "MIRcat internal rate remains automatic and must exceed external cadence",
+    "pulse_controls": "Visible repetition rate and pulse width specify the external T660 clock and electrical TTL pulse. MIRcat optical parameters are separate backend settings.",
+    "internal_rate": "Provisional MIRcat internal pair: 2100000 Hz and 142 ns; internal rate must exceed external cadence.",
     "maximum_duty_fraction": 0.3,
     "duty_equation": "Both external cadence and internal MIRcat rate times actual MIRcat pulse_width_ns * 1e-9 <= min(0.30, connected_vendor_duty_fraction)",
     "limits": "Retain connected vendor minimum/maximum pulse and current limits; resolve missing pulse values from QCL1 readbacks before applying a pair"
@@ -31,7 +31,7 @@
     "D": "disabled and unwired",
     "clock_reference": "10 MHz master",
     "frame_capacity": 8192,
-    "edge_quantum_s": 1E-11,
+    "edge_quantum_s": 1e-11,
     "loop_count": 0,
     "train_additional_pulses": 0,
     "terminal_frame": "One additional finite frame with A/B/C/D all disabled; no scan index or spectral trigger. Count against upload capacity and elapsed duration.",

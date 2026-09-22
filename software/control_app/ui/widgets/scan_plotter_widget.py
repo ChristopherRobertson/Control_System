@@ -18,7 +18,7 @@ DIAGNOSTIC_COLUMNS = (
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QColor, QPainter, QPen
-    from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
     PYSIDE6_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -34,6 +34,7 @@ if PYSIDE6_AVAILABLE:
             self.rows: list[tuple[float, float, float]] = []
             self.labels = ('Sample', 'Reference')
             self.warning = ''
+            self.display_limits = None
             self.setMinimumHeight(360)
 
         def paintEvent(self, _event) -> None:  # noqa: N802
@@ -49,6 +50,8 @@ if PYSIDE6_AVAILABLE:
                 return
             xmin, xmax = min(xs), max(xs)
             ymin, ymax = min(ys), max(ys)
+            if self.display_limits is not None:
+                xmin, xmax, ymin, ymax = self.display_limits
             if xmax == xmin: xmax += 1.0
             if ymax == ymin: ymax += 1.0
             painter.setPen(QPen(self.palette().text().color()))
@@ -93,6 +96,14 @@ if PYSIDE6_AVAILABLE:
             export.clicked.connect(self._export)
             self.destination = QLineEdit(str(output_run_root()))
             self.filename = QLineEdit("scan_kaleidagraph.csv")
+            self.axis_inputs = {name: QLineEdit() for name in ("xmin", "xmax", "ymin", "ymax")}
+            for name, editor in self.axis_inputs.items():
+                editor.setObjectName("plot_" + name)
+                editor.setMaximumWidth(105)
+                editor.setPlaceholderText("Auto")
+                editor.editingFinished.connect(self._apply_axis_limits)
+            auto_limits = QPushButton("Auto limits")
+            auto_limits.clicked.connect(self._restore_axis_limits)
             layout = QVBoxLayout(self)
             controls = QHBoxLayout()
             controls.addWidget(load)
@@ -104,7 +115,37 @@ if PYSIDE6_AVAILABLE:
             controls.addWidget(export)
             layout.addLayout(controls)
             layout.addWidget(self.status)
-            layout.addWidget(self.canvas)
+            auto_row = QHBoxLayout()
+            auto_row.addWidget(auto_limits)
+            auto_row.addStretch(1)
+            layout.addLayout(auto_row)
+            plot_frame = QWidget()
+            plot_layout = QGridLayout(plot_frame)
+            plot_layout.setContentsMargins(0, 0, 0, 0)
+            plot_layout.setHorizontalSpacing(4)
+            plot_layout.setVerticalSpacing(2)
+            plot_layout.addWidget(self.canvas, 0, 0)
+            y_rail = QWidget()
+            y_layout = QVBoxLayout(y_rail)
+            y_layout.setContentsMargins(0, 0, 0, 0)
+            y_layout.addWidget(QLabel("Y max"))
+            y_layout.addWidget(self.axis_inputs["ymax"])
+            y_layout.addStretch(1)
+            y_layout.addWidget(QLabel("Y min"))
+            y_layout.addWidget(self.axis_inputs["ymin"])
+            plot_layout.addWidget(y_rail, 0, 1)
+            x_rail = QWidget()
+            x_layout = QHBoxLayout(x_rail)
+            x_layout.setContentsMargins(0, 0, 0, 0)
+            x_layout.addWidget(QLabel("X min"))
+            x_layout.addWidget(self.axis_inputs["xmin"])
+            x_layout.addStretch(1)
+            x_layout.addWidget(QLabel("X max"))
+            x_layout.addWidget(self.axis_inputs["xmax"])
+            plot_layout.addWidget(x_rail, 1, 0)
+            plot_layout.setRowStretch(0, 1)
+            plot_layout.setColumnStretch(0, 1)
+            layout.addWidget(plot_frame, 1)
 
         def set_rows(self, rows) -> None:
             """Replace the in-memory scan; nothing is written until Export."""
@@ -113,6 +154,36 @@ if PYSIDE6_AVAILABLE:
             self.canvas.labels = ('Sample', 'Reference')
             self.canvas.warning = ''
             self.status.setText(f"Scan complete: {len(self.canvas.rows)} points held in memory. Export when ready.")
+            self._restore_axis_limits()
+            self.canvas.update()
+
+        def _data_limits(self):
+            xs = [row[0] for row in self.canvas.rows if math.isfinite(row[0])]
+            ys = [value for row in self.canvas.rows for value in row[1:] if math.isfinite(value)]
+            if not xs or not ys:
+                return None
+            xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
+            return (xmin, xmax if xmax > xmin else xmin + 1., ymin, ymax if ymax > ymin else ymin + 1.)
+
+        def _sync_axis_inputs(self):
+            values = self.canvas.display_limits or self._data_limits()
+            for editor, value in zip(self.axis_inputs.values(), values or (None,)*4):
+                editor.setText("" if value is None else f"{value:.12g}")
+
+        def _apply_axis_limits(self):
+            try:
+                values = tuple(float(self.axis_inputs[name].text()) for name in ("xmin", "xmax", "ymin", "ymax"))
+                if not all(math.isfinite(value) for value in values) or values[0] >= values[1] or values[2] >= values[3]:
+                    raise ValueError
+            except ValueError:
+                self._sync_axis_inputs()
+                return
+            self.canvas.display_limits = values
+            self.canvas.update()
+
+        def _restore_axis_limits(self):
+            self.canvas.display_limits = None
+            self._sync_axis_inputs()
             self.canvas.update()
 
         def set_diagnostic_metadata(self, metadata):

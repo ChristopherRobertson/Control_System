@@ -202,10 +202,12 @@ class QCLService(InjectedService):
     def disarm(self): self.touch("disarm"); self.armed = False
     def is_laser_armed(self): self.touch("is_laser_armed"); return self.armed
     def get_scan_status(self): self.touch("get_scan_status"); return deepcopy(self.scan_status)
-    def cancel_manual_tune(self): self.touch("cancel_manual_tune")
+    def cancel_manual_tune(self): self.touch("cancel_manual_tune"); self.tuned = False
+    def get_status_mask(self): self.touch("get_status_mask"); return 0
+
     def are_tecs_ready(self): self.touch("are_tecs_ready"); return True
-    def is_tuned(self): self.touch("is_tuned"); return True
-    def tune_to_wavenumber(self, *args, **kwargs): self.touch("tune_to_wavenumber"); self.tune_history.append((args,kwargs))
+    def is_tuned(self): self.touch("is_tuned"); return getattr(self, "tuned", False)
+    def tune_to_wavenumber(self, *args, **kwargs): self.touch("tune_to_wavenumber"); self.tune_history.append((args,kwargs)); self.tuned = True
     def get_num_installed_qcls(self): self.touch("get_num_installed_qcls"); return 1
     def get_qcl_tuning_range(self, qcl): self.touch("get_qcl_tuning_range"); return {"qcl": qcl, "min_cm1": 1800., "max_cm1": 2000.}
     def get_qcl_pulse_limits(self, qcl): return {"max_pulse_rate_hz": 3_000_000., "max_pulse_width_ns": 2000., "max_duty_cycle": 30.}
@@ -276,7 +278,9 @@ class QCLService(InjectedService):
         self.touch("stop_scan_if_needed")
         self.scan_status.update(scan_in_progress=False, scan_active=False, scan_paused=False)
         self.waiting_for_process_trigger = False
-    def start_emission(self): self.touch("start_emission"); self.emission = True
+    def start_emission(self):
+        assert self.is_tuned(), "LASER_NOT_TUNED"
+        self.touch("start_emission"); self.emission = True
 
 
 class HFService(InjectedService):
@@ -361,6 +365,10 @@ class HFService(InjectedService):
         return {"match": all(after["nodes"].get(key) == value for key, value in before["nodes"].items())}
 
     def get_clockbase(self): return 1000000.
+    def discover_slow_scan_capabilities(self, *, dual=False, filter_requests=None):
+        self.filter_requests = filter_requests
+        return self.discover_dual_phase_scan_capabilities() if dual else self.discover_phase_scan_capabilities()
+
     def discover_phase_scan_capabilities(self):
         self.touch("discover_phase_scan_capabilities")
         return {"device_id": self.device_id, "verified": True, "source": "injected connected transport", "rates_sps": (100., 1000., 10000.),
@@ -484,6 +492,46 @@ def configured(tmp_path, monkeypatch, mode="dual", *, live=False, settings_overr
 def worker():
     return SimpleNamespace(check_cancelled=lambda: None, message=SimpleNamespace(emit=lambda *args: None),
                            progress=SimpleNamespace(emit=lambda *args: None))
+
+
+def test_tecs_rechecked_after_scan_setup_before_emission(tmp_path, monkeypatch):
+    context, _, operation, backend, plan, compiled, services = configured(tmp_path, monkeypatch)
+    plan.inputs.scientific_profile["tec_ready_stability_s"] = 0
+    readiness = iter([False, False, True, False, False, True, False, True, True, True])
+    observations = []
+    def ready(self):
+        value = next(readiness)
+        observations.append(value)
+        return value
+    monkeypatch.setattr(QCLService, "are_tecs_ready", ready)
+    updates = []
+    with context.hardware_scope(operation):
+        backend.prepare(plan, compiled, lambda: None, lambda *args: None)
+        backend.acquire_block(compiled.blocks[0], plan, lambda: None, lambda *args: updates.append(args))
+        restored = backend.restore()
+    assert observations == [False, False, True, False, False, True, False, True]
+    assert "start_emission" in services["mircat"].calls
+    assert sum("Waiting for MIRcat TEC" in text for _, text in updates) == 3
+    assert restored["safe_verified"]
+    context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True, detail="TEC wait tested")
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_tec_wait_timeout_and_stop_do_not_proceed(tmp_path, monkeypatch, cancel):
+    context, _, operation, backend, plan, compiled, services = configured(tmp_path, monkeypatch)
+    monkeypatch.setattr(QCLService, "are_tecs_ready", lambda self: False)
+    plan.inputs.scientific_profile["tec_timeout_s"] = 0
+    def check():
+        if cancel:
+            raise RuntimeError("Stop requested")
+    with context.hardware_scope(operation):
+        backend.prepare(plan, compiled, lambda: None, lambda *args: None)
+        with pytest.raises(RuntimeError if cancel else TimeoutError, match="Stop requested" if cancel else "temperature readiness"):
+            backend._wait_tecs_ready(plan.inputs.scientific_profile, check, lambda *args: None)
+        restored = backend.restore()
+    assert "start_emission" not in services["mircat"].calls
+    assert restored["safe_verified"]
+    context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True, detail="TEC stop tested")
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
@@ -697,7 +745,7 @@ def test_owned_installed_adapter_dark_and_descending_repetitions_retain_native(t
     assert any("Acknowledged" in message[1] for message in updates)
     preset = services["hf2li"].presets[0]
     demods = {item["index"]: item for item in preset["demodulators"]}
-    assert demods[0]["order"] == 2
+    assert demods[0]["order"] == 4
     if mode == "dual":
         assert demods[3]["order"] == 3 and demods[3]["timeconstant_s"] == .002
         assert preset["signal_inputs"]["ch2"]["range_v"] == 2.
@@ -1034,8 +1082,11 @@ def test_fresh_readonly_pulse_checks_catch_changes_after_configuration_before_em
             assert observed["external_rate_hz"] == 110000.
             assert observed["external_duty_fraction"] is None
         elif fault == "current_after_tune": assert observed["stage"] == "after_tune"
+        elif fault.endswith("sweep"): assert observed["stage"] == "after_sweep_start"
         else: assert observed["stage"] == "before_emission"
-        assert "start_emission" not in services["mircat"].calls
+        if not fault.endswith("sweep"):
+            assert "start_emission" not in services["mircat"].calls
+        assert "start_frame_table" not in services["t660_2"].calls
         restored = backend.restore()
     assert restored["safe_verified"],restored["errors"]
     assert not services["mircat"].emission
@@ -1101,7 +1152,7 @@ def test_installed_sampling_overrides_configure_independent_native_rates_and_per
     context, coordinator, operation, _, draft, _, services = configured(tmp_path,monkeypatch,mode,live=True,settings_override=settings)
     result = SlowScanRunner(context).run(StartSnapshot(operation,"measurement",draft,{}),worker())
     assert result["status"] == "completed" and result["restoration"]["safe_verified"]
-    expected = {"sample":sample_request or 1000.}
+    expected = {"sample":sample_request or 10000.}
     if mode == "dual": expected["reference"] = reference_request or 1000.
     demods = {item["index"]:item for item in services["hf2li"].presets[0]["demodulators"]}
     first_record = services["hf2li"].native_delivered[0]["data"]
@@ -1134,7 +1185,7 @@ def test_installed_default_descending_scan_uses_total_repetitions_without_ascend
     context, coordinator, operation, _, draft, _, services = configured(tmp_path,monkeypatch,mode,live=True,settings_override=settings)
     result = SlowScanRunner(context).run(StartSnapshot(operation,"measurement",draft,{}),worker())
     assert result["status"] == "completed" and result["restoration"]["safe_verified"]
-    assert services["mircat"].sweep_history == [{"start_cm1":2050.,"stop_cm1":1650.,"scan_rate_cm1_s":40.,"qcl":1,"repetitions":3}]
+    assert services["mircat"].sweep_history == [{"start_cm1":2050.,"stop_cm1":1648.,"scan_rate_cm1_s":40.,"qcl":1,"repetitions":3}]
     assert len([x for x in services["mircat"].trigger_history if x["process_trigger_mode"] == 2]) == 1
     assert all(row["start"] == 2050. and row["stop"] == 1650. for row in services["mircat"].trigger_history if row["process_trigger_mode"] == 2)
     assert services["mircat"].tune_history == [((2050.,),{"qcl":1})]
@@ -1152,3 +1203,220 @@ def test_installed_default_descending_scan_uses_total_repetitions_without_ascend
     loaded = load_run(result["path"],expected_mode=mode)
     assert len(loaded["sweeps"]) == 3 and all(sweep.direction == "reverse" for sweep in loaded["sweeps"])
     assert coordinator.snapshot()["state"] == "free"
+
+
+def test_installed_external_pll_center_is_observed_not_restored(tmp_path, monkeypatch):
+    context, _, operation, backend, plan, compiled, services = configured(tmp_path, monkeypatch)
+    original_apply = HFService.apply_preset
+    def apply(self, preset):
+        original_apply(self, preset)
+        self.nodes[f"/{self.device_id}/plls/0/freqcenter"]["value"] = 1983610.148729582
+    monkeypatch.setattr(HFService, "apply_preset", apply)
+    with context.hardware_scope(operation):
+        backend.prepare(plan, compiled, lambda: None, lambda *args: None)
+        restored = backend.restore()
+    assert restored["safe_verified"], restored["errors"]
+    hf = services["hf2li"]
+    assert all(not path.endswith("/freqcenter") for batch in hf.reload_calls for path in batch)
+    observed = restored["records"]["verify HF2LI restoration"]["observed_pll_centers"]
+    assert observed[f"/{hf.device_id}/plls/0/freqcenter"]["value"] == 1983610.148729582
+    context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True, detail="External PLL observations preserved")
+
+
+def test_tec_readiness_must_remain_positive_for_stability_window(monkeypatch):
+    from control_app.measurement_modules.steady_state_slow_scan import acquisition
+    clock = VirtualClock()
+    monkeypatch.setattr(acquisition, "monotonic", clock.now)
+    backend = InstalledSlowScanBackend(None, None)
+    backend.qcl = SimpleNamespace(are_tecs_ready=lambda: clock.time < 1. or clock.time >= 2.)
+    backend._wait = lambda seconds, check: clock.advance(seconds)
+    backend._wait_tecs_ready({"tec_ready_stability_s": 5.}, lambda: None, lambda *args: None)
+    assert clock.time == 7.
+
+
+def test_default_tec_readiness_has_no_artificial_hold(monkeypatch):
+    from control_app.measurement_modules.steady_state_slow_scan import acquisition
+    clock = VirtualClock()
+    monkeypatch.setattr(acquisition, "monotonic", clock.now)
+    backend = InstalledSlowScanBackend(None, None)
+    backend.qcl = SimpleNamespace(are_tecs_ready=lambda: True)
+    backend._wait = lambda seconds, check: pytest.fail("Already-ready TECs must not wait")
+    backend._wait_tecs_ready({}, lambda: None, lambda *args: None)
+    assert clock.time == 0.
+
+
+@pytest.mark.parametrize("finish", ["sample", "stop", "failure"])
+def test_blank_retains_prepared_devices_until_sample_or_cleanup(tmp_path, monkeypatch, finish):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path, monkeypatch, "single", live=True)
+    runner = SlowScanRunner(context)
+    blank = runner.run(StartSnapshot(operation, "blank", draft, {}), worker())
+    assert blank["restoration"]["prepared_session"]
+    assert not blank["restoration"]["safe_verified"]
+    assert context.ownership.has_parked_session()
+    assert services["mircat"].armed and not services["mircat"].emission
+    assert not any(device.closed for device in services.values())
+    preserved = (operation.output_path / "native.npz").read_bytes()
+    if finish == "stop":
+        assert context.ownership.close_parked_session()
+        assert runner._prepared is None
+    else:
+        def forbidden(*args, **kwargs):
+            raise AssertionError("Prepared Sample must not rediscover, reconnect, arm or reconfigure")
+        backend = runner._prepared["backend"]
+        for name in ("connect", "resolve_plan", "prepare"):
+            monkeypatch.setattr(backend, name, forbidden)
+        monkeypatch.setattr(services["mircat"], "arm", forbidden)
+        monkeypatch.setattr(services["mircat"], "tune_to_wavenumber", forbidden)
+        monkeypatch.setattr(services["t660_2"], "preload_frame_table", forbidden)
+        from dataclasses import replace
+        draft = replace(draft, settings=replace(draft.settings, plan_label="Sample after Blank"))
+        timing_call_count = len(services["t660_2"].calls)
+        next_operation = context.begin_operation(draft.settings.to_dict(), hardware=True, purpose="sample")
+        assert next_operation.ownership == operation.ownership
+        if finish == "failure":
+            monkeypatch.setattr(backend, "acquire_block", lambda *args: (_ for _ in ()).throw(RuntimeError("sample failed")))
+            with pytest.raises(RuntimeError, match="sample failed"):
+                runner.run(StartSnapshot(next_operation, "measurement", draft, {"blank": blank, "dark": blank["automatic_dark"]}), worker())
+        else:
+            result = runner.run(StartSnapshot(next_operation, "measurement", draft, {"blank": blank, "dark": blank["automatic_dark"]}), worker())
+            assert result["prepared_session_reused"] and result["status"] == "completed"
+            sample_calls = services["t660_2"].calls[timing_call_count:]
+            before_start = sample_calls[:sample_calls.index("start_frame_table")]
+            assert "STOP" not in before_start and "TFRame:STOp" not in before_start
+            assert result["restoration"]["safe_verified"]
+            assert result["controls"]["blank"]["run_id"] == blank["run_id"]
+            assert next_operation.output_path != operation.output_path
+            assert (next_operation.output_path / "native_chunks").is_dir()
+    assert (operation.output_path / "native.npz").read_bytes() == preserved
+    assert coordinator.snapshot()["state"] == "free"
+    assert not context.ownership.has_parked_session()
+    assert all(device.closed for device in services.values())
+
+
+@pytest.mark.parametrize("failure", ["cancel", "invalid_plan", "changed_settings"])
+def test_prepared_session_restored_on_early_failure_or_changed_settings(tmp_path, monkeypatch, failure):
+    from dataclasses import replace
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path, monkeypatch, "single", live=True)
+    runner = SlowScanRunner(context)
+    runner.run(StartSnapshot(operation, "blank", draft, {}), worker())
+    old_backend = runner._prepared["backend"]
+    next_operation = context.begin_operation(draft.settings.to_dict(), hardware=True, purpose="sample")
+    next_worker = worker()
+    if failure == "cancel":
+        next_worker.check_cancelled = lambda: (_ for _ in ()).throw(InterruptedError("early stop"))
+        error = InterruptedError
+    elif failure == "invalid_plan":
+        draft = replace(draft, errors=("invalid settings",))
+        error = ValueError
+    else:
+        draft = replace(draft, settings=replace(draft.settings, current_ma=900.))
+        def factory(*args):
+            assert all(device.closed for device in old_backend.devices.values())
+            raise RuntimeError("reconfiguration requested")
+        runner.backend_factory = factory
+        error = RuntimeError
+    with pytest.raises(error):
+        runner.run(StartSnapshot(next_operation, "measurement", draft, {}), next_worker)
+    assert runner._prepared is None
+    assert all(device.closed for device in old_backend.devices.values())
+    assert coordinator.snapshot()["state"] == "free"
+    assert (operation.output_path / "prepared_session_cleanup.json").is_file()
+
+
+def test_blank_save_failure_closes_prepared_devices_and_retains_fault(tmp_path, monkeypatch):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    from control_app.measurement_modules.steady_state_slow_scan import persistence
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path, monkeypatch, "single", live=True)
+    runner = SlowScanRunner(context)
+    monkeypatch.setattr(persistence, "save_run", lambda *args: (_ for _ in ()).throw(OSError("disk failed")))
+    with pytest.raises(RuntimeError, match="disk failed"):
+        runner.run(StartSnapshot(operation, "blank", draft, {}), worker())
+    assert runner._prepared is None
+    assert not context.ownership.has_parked_session()
+    assert all(device.closed for device in services.values())
+    assert coordinator.snapshot()["state"] == "fault"
+
+
+def test_blank_remains_usable_when_optional_prepared_session_fails(tmp_path, monkeypatch):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path, monkeypatch, "single", live=True)
+    runner = SlowScanRunner(context)
+    original_verify = InstalledSlowScanBackend._verify_prepared_outputs
+    def fail_verify(self):
+        original = self.qcl.get_scan_status
+        self.qcl.get_scan_status = lambda: {**original(), "scan_in_progress": True}
+        try:
+            original_verify(self)
+        finally:
+            self.qcl.get_scan_status = original
+    monkeypatch.setattr(InstalledSlowScanBackend, "_verify_prepared_outputs", fail_verify)
+    blank = runner.run(StartSnapshot(operation, "blank", draft, {}), worker())
+    assert blank["status"] == "completed"
+    assert blank["restoration"]["safe_verified"]
+    assert blank["prepared_session"]["retained"] is False
+    observation = blank["readbacks"]["prepared_session_observations"][-1]
+    assert observation["rejected_fields"] == ["scan_in_progress"]
+    assert observation["emission_on"] is False and observation["armed"] is True
+    assert observation["timing"] and not observation["read_errors"]
+    assert load_run(operation.output_path)["status"] == "completed"
+    assert coordinator.snapshot()["state"] == "free"
+    assert runner._prepared is None
+    context, _, next_operation, _, draft, _, _ = configured(tmp_path / "sample", monkeypatch, "single", live=True)
+    runner = SlowScanRunner(context)
+    result = runner.run(StartSnapshot(next_operation, "measurement", draft,
+        {"blank": blank, "dark": blank["automatic_dark"]}), worker())
+    assert result["status"] == "completed"
+    assert result["controls"]["blank"]["run_id"] == blank["run_id"]
+    assert all(item.quantity == "sequential_blank_absorbance" for item in result["spectra"])
+
+
+@pytest.mark.parametrize("failure", ["cancel", "unsafe"])
+def test_optional_park_failure_does_not_mask_cancel_or_unsafe_cleanup(tmp_path, monkeypatch, failure):
+    from control_app.measurement_host.presentation import StartSnapshot
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SlowScanRunner
+    context, coordinator, operation, _, draft, _, services = configured(tmp_path, monkeypatch, "single", live=True)
+    runner = SlowScanRunner(context)
+    error = InterruptedError if failure == "cancel" else RuntimeError
+    def park(*args):
+        raise error("park failed")
+    monkeypatch.setattr(InstalledSlowScanBackend, "park", park)
+    if failure == "unsafe":
+        original = InstalledSlowScanBackend.restore
+        def unsafe(self):
+            original(self)
+            return {"safe_verified": False, "errors": ["unverified cleanup"]}
+        monkeypatch.setattr(InstalledSlowScanBackend, "restore", unsafe)
+    with pytest.raises(error):
+        runner.run(StartSnapshot(operation, "blank", draft, {}), worker())
+    assert runner.last_result["status"] == ("cancelled" if failure == "cancel" else "failed")
+    assert coordinator.snapshot()["state"] == ("free" if failure == "cancel" else "fault")
+
+
+@pytest.mark.parametrize("scanning", [False, True])
+def test_prepared_manual_tune_uses_distinct_scanning_status_bit(tmp_path, monkeypatch, scanning):
+    context, _, operation, backend, plan, compiled, services = configured(tmp_path, monkeypatch, "single")
+    with context.hardware_scope(operation):
+        backend.prepare(plan, compiled, lambda: None, lambda *args: None)
+        backend.inhibit()
+        backend.qcl.arm()
+        backend.qcl.tune_to_wavenumber(plan.blocks[0].start_cm1, qcl=1)
+        monkeypatch.setattr(backend.qcl, "get_status_mask", lambda: 0x40 | (0x20 if scanning else 0))
+        original = backend.qcl.get_scan_status
+        monkeypatch.setattr(backend.qcl, "get_scan_status", lambda: {**original(), "scan_in_progress": True, "scan_active": True})
+        if scanning:
+            with pytest.raises(RuntimeError, match="scanning"):
+                backend._verify_prepared_outputs()
+        else:
+            backend._verify_prepared_outputs()
+        record = backend.readbacks["prepared_session_observations"][-1]
+        assert record["manual_tuning"] is True and record["scanning"] is scanning
+        monkeypatch.setattr(backend.qcl, "get_scan_status", original)
+        assert backend.restore()["safe_verified"]
+    context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True)

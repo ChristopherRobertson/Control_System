@@ -124,9 +124,6 @@ class Plan:
         resolved, historical = _qcl1_profile(value["resolved"])
         _remove_unresolved_pulses(resolved)
         resolved.setdefault("mircat", {})["qcl"] = 1
-        if historical and settings.probe_width_ns is not None:
-            resolved["mircat"]["pulse_width_ns"] = settings.probe_width_ns
-            resolved.setdefault("value_sources", {})["mircat.pulse_width_ns"] = "user_override"
         evidence = deepcopy(value.get("evidence_records", {}))
         pending = list(value["readiness_items"])
         if historical:
@@ -136,7 +133,7 @@ class Plan:
                     pending.append(f"Read the current MIRcat QCL1 {key} when connecting")
         errors = list(value["validation_errors"])
         errors.extend(_resolved_pulse_errors(resolved))
-        errors.extend(_external_duty_errors(settings.probe_rate_hz, settings.probe_width_ns))
+        errors.extend(_trigger_errors(settings.probe_rate_hz, settings.probe_width_ns))
         return cls(settings, resolved, tuple(blocks), tuple(dict.fromkeys(errors)),
                    tuple(dict.fromkeys(pending)), tuple(value["warnings"]), deepcopy(value["estimates"]),
                    deepcopy(value["requested"]), deepcopy(value["selected"]), deepcopy(value["actual"]),
@@ -192,6 +189,12 @@ def mircat_pulse_errors(params: Mapping[str, Any], external_rate_hz: float,
             if rate * width > duty_limit * 1e7:
                 errors.append(f"MIRcat internal duty cycle {duty_percent:g}% exceeds SDK max_duty_cycle limit {duty_limit:g}%")
     return tuple(errors)
+
+
+def _trigger_errors(rate, width_ns):
+    if _positive(rate) and _positive(width_ns) and rate * (width_ns * 1e-9 + 62.5e-9) >= 1:
+        return ("External trigger width and recovery must fit within one T660 period",)
+    return ()
 
 
 def _external_duty_errors(rate: Any, width_ns: Any) -> tuple[str, ...]:
@@ -260,6 +263,16 @@ def _merge(left: Mapping, right: Mapping) -> dict:
 
 def _validate(s: Settings) -> list[str]:
     errors = []
+    from control_app.measurement_host.laser_settings import validate_mircat_limits
+    try:
+        validate_mircat_limits(width=s.probe_width_ns, wavenumbers=[p.wavenumber_cm1 for p in s.positions])
+    except ValueError as exc:
+        errors.append(str(exc))
+    if not _positive(s.shot_delay_s) or (s.pump_shots > 1 and s.shot_delay_s < .1-1e-12):
+        errors.append("Shot Delay must be at least 0.1 s for multiple Pump Shots (10 Hz maximum)")
+    if s.time_unit not in ("s", "ms", "µs", "ns"):
+        errors.append("Time units must be s, ms, µs or ns")
+
     if s.mode not in {"single", "dual"}:
         errors.append("Detector mode must be single or dual")
     if not isinstance(s.pump_enabled, bool):
@@ -267,7 +280,7 @@ def _validate(s: Settings) -> list[str]:
     for name in ("pre_observation_s", "post_observation_s", "chunk_duration_s", "memory_limit_mb", "storage_limit_mb", "tune_timeout_s"):
         if not _positive(getattr(s, name)):
             errors.append(f"{name} must be finite and positive")
-    for name in ("technical_repetitions", "events_per_position"):
+    for name in ("technical_repetitions", "events_per_position", "pump_shots"):
         if not _integer(getattr(s, name)):
             errors.append(f"{name} must be a positive finite integer")
     if not _integer(s.event_budget, 0):
@@ -280,7 +293,7 @@ def _validate(s: Settings) -> list[str]:
     for name in ("pump_fire_delay_s", "pump_q_switch_delay_s"):
         if getattr(s, name) is not None and not _positive(getattr(s, name), zero=True):
             errors.append(f"{name} must be nonnegative or Automatic")
-    errors.extend(_external_duty_errors(s.probe_rate_hz, s.probe_width_ns))
+    errors.extend(_trigger_errors(s.probe_rate_hz, s.probe_width_ns))
     for name in ("baseline_drift_fraction", "baseline_cv_limit", "reset_tolerance_fraction"):
         if not _positive(getattr(s, name)) or getattr(s, name) >= 1:
             errors.append(f"{name} must lie strictly between zero and one")
@@ -306,7 +319,7 @@ def _validate(s: Settings) -> list[str]:
     if not s.positions:
         errors.append("Enter at least one wavenumber in cm^-1")
     if not errors:
-        total = len(s.positions) * s.technical_repetitions * s.events_per_position * int(s.pump_enabled)
+        total = len(s.positions) * s.technical_repetitions * s.events_per_position * s.pump_shots * int(s.pump_enabled)
         if total > s.event_budget:
             errors.append(f"Requested {total} pump events exceed the explicitly authorized finite budget {s.event_budget}")
         if len(s.positions) * s.technical_repetitions * s.events_per_position > 10000:
@@ -326,6 +339,8 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
     Material, temperature and historical selection fields are metadata only.
     """
     s = Settings.from_dict(settings)
+    from control_app.measurement_host.laser_settings import validate_laser_settings
+    lasers = validate_laser_settings(s.laser_settings)
     if purpose not in {"measurement", "preliminary", "blank"}:
         raise ValueError("Unknown acquisition purpose")
     preparation = purpose != "measurement"
@@ -357,6 +372,8 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
 
     errors, pending, warnings = _validate(acquisition_settings), [], []
     pumped = acquisition_settings.pump_enabled
+    if pumped and s.pump_shots > 1 and s.shot_delay_s < 1/lasers.get("pump_repetition_rate_hz", 10.)-1e-12:
+        errors.append("Shot Delay exceeds the selected Nd:YAG repetition rate; increase Shot Delay or the permitted rate (maximum 10 Hz)")
     roles = ("sample", "reference") if s.mode == "dual" else ("sample",)
     resolved["acquisition_purpose"] = purpose
     resolved["acquisition_class"] = "raw_relative"
@@ -368,13 +385,38 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
 
     for role in roles:
         selected = deepcopy(dict(resolved.get(role, {})))
+        from control_app.measurement_host.hf2_selection import select_supported
+        caps = resolved.get("hf2_choices", {})
+        profile = caps.get(role, caps if role == "sample" else {})
+        requested = {key: getattr(s, f"{role}_{field}") for field, key in
+                     (("filter_order", "order"), ("timeconstant_s", "timeconstant_s"), ("rate_sps", "rate_sps"))
+                     if getattr(s, f"{role}_{field}") is not None}
+        intervals = [v for v in (s.pre_observation_s, s.post_observation_s, s.shot_delay_s if s.pump_shots > 1 else None) if _positive(v)]
+        automatic = select_supported(profile, time_scale_s=min(intervals) if intervals else 1., overrides=requested)
+        selected.update(automatic)
         for setting_name, key in ((f"{role}_rate_sps", "rate_sps"), (f"{role}_timeconstant_s", "timeconstant_s"),
                                   (f"{role}_filter_order", "order")):
             override = getattr(s, setting_name)
             if override is not None:
                 selected[key] = override
             sources[f"{role}.{key}"] = "user_override" if override is not None else source_for(f"{role}.{key}")
+            if override is None and key in automatic:
+                sources[f"{role}.{key}"] = "automatic from observation interval and supported HF2LI values"
+        # An idle HF2 demodulator can report its single-stream maximum, which
+        # is not usable with the retained timing stream. Auto lowers that
+        # request by the device's binary rate divisors; preparation reads back
+        # the actual accepted rate before estimating or acquiring any data.
+        if getattr(s, f"{role}_rate_sps") is None and _positive(selected.get("rate_sps")):
+            original_rate = selected["rate_sps"]
+            choices = resolved.get("supported", {}).get(role, {}).get("rate_sps")
+            if original_rate > 231000.:
+                candidates = [v for v in (choices or ()) if _positive(v) and v <= 231000.]
+                rate = max(candidates) if candidates else original_rate / 2**math.ceil(math.log2(original_rate / 231000.))
+                selected["rate_sps"] = rate
+                sources[f"{role}.rate_sps"] = "automatic_active_stream_limit; verify installed readback"
         resolved[role] = selected
+        if _positive(selected.get("rate_sps")) and min(s.pre_observation_s, s.post_observation_s)*selected["rate_sps"] < 3:
+            warnings.append(f"{role.title()} HF2LI sampling provides fewer than three points in the shortest acquisition interval; that timescale cannot yield a resolved kinetics trace")
         for key in ("rate_sps", "timeconstant_s"):
             if not _positive(selected.get(key)):
                 pending.append(f"Read current {role} HF2LI {key} when connecting")
@@ -397,12 +439,31 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
 
     # Timing and input limits are device/runtime constraints, not qualifications.
     resolved.setdefault("pump_marker_bit", 16)  # Maintained Surelite Fixed Sync wiring.
+    resolved["pump_marker_edge"] = "falling"
     resolved.setdefault("maximum_aggregate_rate_sps", 700000.)  # HF2 aggregate manufacturer bound.
     sources["pump_marker_bit"] = source_for("pump_marker_bit") if source_for("pump_marker_bit") != "unresolved" else "maintained_wiring_DIO16"
     for name in ("timing_rate_sps", "tune_tolerance_cm1"):
         if not _positive(resolved.get(name)):
             pending.append(f"Resolve installed {name} when connecting")
         sources[name] = source_for(name)
+    # Idle demodulator rates are not a valid multi-stream acquisition request.
+    # The timing channel has no user override: select an accepted rate that fits
+    # alongside the explicitly selected sample/reference streams.
+    timing_rate = resolved.get("timing_rate_sps")
+    detector_rates = [resolved.get(role, {}).get("rate_sps") for role in roles]
+    if _positive(timing_rate) and all(_positive(rate) for rate in detector_rates):
+        available = min(231000., resolved["maximum_aggregate_rate_sps"]
+            - sum(detector_rates) - float(resolved.get("other_enabled_rate_sps", 0)))
+        if 0 < available < timing_rate:
+            caps = resolved.get("hf2_choices", {})
+            choices = caps.get("sample", caps).get("rates_sps", ())
+            choices = choices or resolved.get("supported", {}).get("sample", {}).get("rate_sps", ())
+            accepted = [rate for rate in choices if _positive(rate) and rate <= available]
+            if choices and not accepted:
+                errors.append("Selected HF2LI detector rates leave no supported rate for the timing stream")
+            else:
+                resolved["timing_rate_sps"] = max(accepted) if accepted else timing_rate / 2**math.ceil(math.log2(timing_rate/available))
+                sources["timing_rate_sps"] = "automatic_active_stream_limit; verify installed readback"
     if s.wavenumber_tolerance_cm1 is not None:
         resolved["tune_tolerance_cm1"] = s.wavenumber_tolerance_cm1
         sources["tune_tolerance_cm1"] = "user_override"
@@ -455,18 +516,37 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
     else:
         sources["probe_rate_hz"] = source_for("probe_recipe.clock.frequency")
     sources["mircat.qcl"] = "installed_topology_QCL1"
-    sources["mircat.pulse_rate_hz"] = source_for("mircat.pulse_rate_hz") if "pulse_rate_hz" in mircat else "unresolved"
+    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
+    mircat.update(pulse_rate_hz=MIRCAT_INTERNAL_RATE_HZ, pulse_width_ns=MIRCAT_INTERNAL_WIDTH_NS)
+    sources["mircat.pulse_rate_hz"] = sources["mircat.pulse_width_ns"] = "provisional_internal_policy"
     if s.probe_width_ns is not None:
-        mircat["pulse_width_ns"] = s.probe_width_ns
-        sources["mircat.pulse_width_ns"] = "user_override"
-    else:
-        sources["mircat.pulse_width_ns"] = source_for("mircat.pulse_width_ns") if "pulse_width_ns" in mircat else "unresolved"
+        for channel in probe.get("channels", {}).values():
+            channel["width"] = f"{s.probe_width_ns:.12g}ns"
+        sources["probe_width_ns"] = "user_external_trigger_override"
     for setting_name, key in (("pump_fire_delay_s", "fire_delay_s"), ("pump_q_switch_delay_s", "q_switch_delay_s"),
                               ("pump_fire_width_s", "fire_width_s"), ("pump_q_switch_width_s", "q_switch_width_s")):
         value = getattr(s, setting_name)
         if value is not None:
             timing_values[key] = value
         sources[f"timing.{key}"] = "user_override" if value is not None else source_for(f"timing.{key}")
+    # Surelite DAT Mode 2 requires 10 us negative-going FIRE and Q-switch
+    # commands (Surelite manual, printed pp. 45-46). Idle T660 readbacks may
+    # contain MIRcat-sized pulses; they are not the pump procedure settings.
+    for setting_name, key in (("pump_fire_width_s", "fire_width_s"),
+                              ("pump_q_switch_width_s", "q_switch_width_s")):
+        if getattr(s, setting_name) is None:
+            timing_values[key] = 10e-6
+            sources[f"timing.{key}"] = "Surelite_DAT_Mode_2_10us_command"
+        elif pumped and timing_values[key] < 10e-6:
+            errors.append("Nd:YAG FIRE and Q-switch command widths must be at least 10 us")
+    if "qcl_current_ma" in lasers:
+        mircat["current_ma"] = lasers["qcl_current_ma"]
+        sources["mircat.current_ma"] = "user_override"
+    if "fire_to_qswitch_us" in lasers:
+        gap = lasers["fire_to_qswitch_us"] * 1e-6
+        qtime = max(float(timing_values.get("q_switch_delay_s") or gap), gap)
+        timing_values.update(fire_delay_s=qtime-gap, q_switch_delay_s=qtime)
+        sources["timing.fire_delay_s"] = sources["timing.q_switch_delay_s"] = "user_laser_delay"
     resolved.update(probe_recipe=probe, mircat=mircat, timing=timing_values)
     if not probe:
         pending.append("Read the installed T660-1 probe timing settings when connecting")
@@ -507,10 +587,10 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
                 options = {key: timing_values[key] for key in fields}
                 options.update({key: timing_values[key] for key in ("frame_capacity", "edge_quantum_s") if key in timing_values})
                 timing = compile_timing(pre_observation_s=s.pre_observation_s, post_observation_s=s.post_observation_s,
-                                        pump_enabled=True, **options)
+                                        pump_enabled=True, pump_shots=s.pump_shots, shot_delay_s=s.shot_delay_s, **options)
             except (TimingError, TypeError, ValueError) as exc:
                 errors.append(f"Timing compilation: {exc}")
-    interval = s.minimum_event_interval_s
+    interval = s.minimum_event_interval_s if s.minimum_event_interval_s is not None else .1
     if interval is None:
         interval = resolved.get("minimum_event_interval_s")
         sources["minimum_event_interval_s"] = source_for("minimum_event_interval_s")
@@ -522,9 +602,13 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
     total_events = len(s.positions) * s.technical_repetitions * s.events_per_position if pumped and not errors else 0
     if total_events > 1 and interval < .1:
         errors.append("Requested event interval exceeds the pump manufacturer's 10 Hz maximum")
+    if "pump_repetition_rate_hz" in lasers:
+        interval = max(interval, 1 / lasers["pump_repetition_rate_hz"])
     resolved["minimum_event_interval_s"] = interval
     resolved["baseline_window_s"] = list(s.baseline_window_s) if s.baseline_window_s else [-s.pre_observation_s, 0.0]
-    resolved["integration_window_s"] = list(s.integration_window_s) if s.integration_window_s else [0.0, s.post_observation_s]
+    train_duration = (timing.pump_command_offsets_s[-1]-timing.pump_command_offsets_s[0]
+        if timing and timing.pump_command_offsets_s else (s.pump_shots-1)*s.shot_delay_s)
+    resolved["integration_window_s"] = list(s.integration_window_s) if s.integration_window_s else [0.0, train_duration+s.post_observation_s]
     for key in ("baseline_drift_fraction", "baseline_cv_limit", "reset_tolerance_fraction"):
         resolved[key] = getattr(s, key)
         sources[key] = "user_diagnostic_setting"
@@ -541,11 +625,11 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
             for position_index, position in enumerate(s.positions):
                 for event in range(acquisition_settings.events_per_position):
                     idx = len(blocks)
-                    duration = s.pre_observation_s + (timing.duration_s if timing and pumped else s.post_observation_s)
-                    selected_pre = s.pre_observation_s + timing.selected_pre_observation_s if timing and pumped else s.pre_observation_s
+                    duration = timing.duration_s if timing and pumped else s.pre_observation_s + s.post_observation_s + ((s.pump_shots-1)*s.shot_delay_s if pumped else 0.)
+                    selected_pre = timing.selected_pre_observation_s if timing and pumped else s.pre_observation_s
                     selected_post = timing.selected_post_observation_s if timing and pumped else s.post_observation_s
                     blocks.append(CaptureBlock(idx, position_index, position.wavenumber_cm1, position.label, rep, event,
-                        int(pumped), duration, selected_pre, selected_post, False, timing, float(interval), ""))
+                        s.pump_shots if pumped else 0, duration, selected_pre, selected_post, False, timing, float(interval), ""))
     estimates = _estimates(s, resolved, blocks, pending, errors) if not _validate(acquisition_settings) else {
         "basis": "Correct invalid requested settings before resource estimation", "wall_clock_s": None,
         "capture_s": None, "storage_bytes": None, "peak_memory_bytes": None}
@@ -578,7 +662,7 @@ def _estimates(s: Settings, r: dict, blocks: list[CaptureBlock], ready: list[str
             "capture_s": capture, "continuous_per_block": True, "retention_strategy": s.retention_strategy,
             "gap_policy": "Retain timestamp gaps and inter-block dead time; never silently interpolate, overwrite or reset the original pump epoch",
             "manual_actions": ["Place the sample and reference as appropriate for the selected detector mode"],
-            "wall_clock_s": None, "storage_bytes": None, "peak_memory_bytes": None}
+            "wall_clock_s": capture, "wall_clock_is_lower_bound": True, "storage_bytes": None, "peak_memory_bytes": None}
     if not all(_positive(v) for v in rates):
         return estimate
     aggregate = sum(rates)
@@ -617,13 +701,16 @@ def _estimates(s: Settings, r: dict, blocks: list[CaptureBlock], ready: list[str
         errors.append("Planned native retrieval/analysis exceeds the declared memory budget; select bounded chunks or increase the explicit budget")
     estimate["streaming_loss_policy"] = "Monitor native timestamps and receiver loss indicators; preserve and flag gaps without interpolation"
     interval = r.get("minimum_event_interval_s") or 0
-    reset = sum(max(0.0, interval - b.post_observation_s) for b in blocks[:-1] if b.event_count)
+    reset = sum(max(0.0, interval - b.post_observation_s - b.pre_observation_s) for b in blocks[:-1] if b.event_count)
+    terminal = sum(max(0., b.timing.physical_frame_count*b.timing.frame_period_s-b.duration_s) for b in blocks if b.timing)
+    estimate.update(wall_clock_s=capture+reset+terminal, terminal_wait_s=terminal, wall_clock_is_lower_bound=True)
     allowances = r.get("overhead_estimates_s", {})
     required = ("configuration", "upload_per_frame", "tune_per_position", "restoration", "saving", "analysis")
     if all(_positive(allowances.get(key), zero=True) for key in required) and _positive(r.get("settling_s"), zero=True):
         upload = sum((b.timing.physical_frame_count if b.timing else 0) * allowances["upload_per_frame"] for b in blocks)
         prepare = len(blocks) * (allowances["tune_per_position"] + r["settling_s"])
-        estimate["wall_clock_s"] = capture + preliminary + controls + reset + upload + prepare + sum(allowances[k] for k in ("configuration", "restoration", "saving", "analysis"))
+        estimate["wall_clock_s"] = capture + reset + terminal + upload + prepare + sum(allowances[k] for k in ("configuration", "restoration", "saving", "analysis"))
+        estimate["wall_clock_is_lower_bound"] = False
         estimate["reset_wait_s"] = reset
         estimate["preparation_s"] = prepare + allowances["configuration"] + upload
     else:

@@ -76,8 +76,8 @@ def get_save_location() -> Path:
     return _selected_save_location or default_save_location()
 
 
-def set_save_location(value: str | Path, *, create: bool = True) -> Path:
-    """Select an output folder; explicit choices create and check write access.
+def set_save_location(value: str | Path, *, create: bool = False) -> Path:
+    """Select an output folder without creating it by default.
 
     The shell can select an idle tab's default with create=False without making
     directories or probing the destination. A native saver validates it on use.

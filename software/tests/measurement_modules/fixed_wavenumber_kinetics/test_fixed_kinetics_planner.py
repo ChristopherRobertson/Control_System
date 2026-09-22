@@ -46,18 +46,31 @@ def recipe(**overrides):
     return compile_timing(**values)
 
 
+def test_auto_rate_reduces_idle_single_stream_maximum_and_preserves_explicit_request():
+    settings, evidence = profile_case()
+    profile = evidence["operating_profile"]
+    profile["sample"]["rate_sps"] = 1842105.2631578948
+    profile["maximum_aggregate_rate_sps"] = 700000.
+    plan = build_plan(settings, evidence=evidence)
+    assert plan.operational_ready, plan.validation_errors
+    assert plan.resolved["sample"]["rate_sps"] == pytest.approx(230263.15789473685)
+    explicit = build_plan(replace(settings, sample_rate_sps=1842105.2631578948), evidence=evidence)
+    assert "aggregate throughput" in " ".join(explicit.validation_errors)
+    assert explicit.resolved["sample"]["rate_sps"] == 1842105.2631578948
+
+
 def test_timing_determinism_complete_channels_finite_pumps_and_original_epoch():
     one = recipe()
     assert one.to_dict() == recipe().to_dict()
     assert one.expected_pump_count == 1
     assert sum(f["channels"]["A"]["enabled"] for f in one.frames) == 1
     assert sum(f["channels"]["B"]["enabled"] for f in one.frames) == 1
-    assert one.frames[0]["kind"] == "probe_only_baseline"
+    assert not one.frames[0]["channels"]["B"]["enabled"]
     assert one.frames[-1]["kind"] == "terminal_all_off"
     assert all(set(f["channels"]) == set("ABCD") for f in one.frames)
     assert all(not f["channels"][ch]["enabled"] for f in one.frames for ch in "CD")
     assert all(f["train_count"] == 0 and f["frame_repetitions"] == 1 for f in one.frames)
-    assert one.pump_command_offsets_s == (one.frame_period_s + .002,)
+    assert one.pump_command_offsets_s == (1.,)
     assert one.selected_post_observation_s >= 10.
 
 
@@ -74,13 +87,13 @@ def test_long_capture_extends_baseline_explicitly_without_continuous_split():
     assert long.selected_post_observation_s >= 1200.
     assert long.requested_pre_observation_s == .01
     assert sum(f["channels"]["B"]["enabled"] for f in long.frames) == 1
-    with pytest.raises(TimingError, match="predivider"):
+    with pytest.raises(TimingError, match="frame divider"):
         recipe(pre_observation_s=5000, input_frequency_hz=16e6)
 
 
 def test_timing_quantization_and_documented_limits():
     assert quantize_seconds(.000000000015) == .00000000002
-    assert recipe(q_switch_delay_s=.002000000004).frames[1]["channels"]["B"]["delay"] == "0.00200000000s"
+    assert recipe(q_switch_delay_s=.002000000004).frames[1]["channels"]["B"]["delay"] == "0.00000000000s"
     with pytest.raises(TimingError, match="10 ps"):
         recipe(edge_quantum_s=1e-12)
     with pytest.raises(TimingError, match="3600"):
@@ -214,8 +227,8 @@ def test_probe_frequency_must_equal_actual_frame_input_carrier():
 def test_diagnostic_thresholds_are_editable_and_estimates_include_prearm_capture():
     s, evidence = profile_case()
     p = build_plan(s, evidence=evidence)
-    assert p.blocks[0].duration_s == s.pre_observation_s + p.timing.duration_s
-    assert p.blocks[0].pre_observation_s == s.pre_observation_s + p.timing.selected_pre_observation_s
+    assert p.blocks[0].duration_s == p.timing.duration_s
+    assert p.blocks[0].pre_observation_s == p.timing.selected_pre_observation_s
     assert build_plan(replace(s, baseline_drift_fraction=.2), evidence=evidence).operational_ready
 
 
@@ -301,12 +314,12 @@ def test_probe_and_pump_overrides_change_only_explicit_fields_and_required_carri
     s = replace(s, probe_width_ns=50., probe_rate_hz=2000., pump_q_switch_width_s=.0002)
     p = build_plan(s, live_readbacks=live)
     assert p.operational_ready, p.readiness_items
-    assert p.resolved["mircat"]["pulse_width_ns"] == 50.
-    assert p.resolved["mircat"]["pulse_rate_hz"] == live["mircat"]["pulse_rate_hz"]
+    assert p.resolved["mircat"]["pulse_width_ns"] == 142.
+    assert p.resolved["mircat"]["pulse_rate_hz"] == 2_100_000.
     assert p.resolved["probe_recipe"]["clock"]["frequency"] == "2000Hz"
-    assert p.resolved["probe_recipe"]["channels"] == live["probe_recipe"]["channels"]
+    assert all(ch["width"] == "50ns" for ch in p.resolved["probe_recipe"]["channels"].values())
     assert p.resolved["timing"]["q_switch_width_s"] == .0002
-    assert p.resolved["timing"]["fire_width_s"] == live["timing"]["fire_width_s"]
+    assert p.resolved["timing"]["fire_width_s"] == 10e-6
     assert p.resolved["timing"]["input_frequency_hz"] == 2000.
     assert p.resolved["hf2li"]["pll"]["freqcenter_hz"] == 2000.
     assert live["timing"]["q_switch_width_s"] == .0001
@@ -327,12 +340,12 @@ def test_external_probe_override_preserves_independent_internal_rate_and_provena
     live = deepcopy(evidence["operating_profile"])
     live["mircat"]["pulse_rate_hz"] = 2_300_000.
     live["mircat_readback"] = {"pulse_limits": {"max_pulse_rate_hz": 3_000_000.,
-        "max_pulse_width_ns": 100., "max_duty_cycle": 10.}}
+        "max_pulse_width_ns": 200., "max_duty_cycle": 30.}}
     p = build_plan(replace(s, probe_rate_hz=2_000_000.), live_readbacks=live)
     assert p.operational_ready, p.validation_errors
-    assert p.resolved["mircat"]["pulse_rate_hz"] == 2_300_000.
+    assert p.resolved["mircat"]["pulse_rate_hz"] == 2_100_000.
     assert p.resolved["timing"]["input_frequency_hz"] == 2_000_000.
-    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "installed_readback"
+    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "provisional_internal_policy"
     assert p.resolved["value_sources"]["probe_rate_hz"] == "user_override"
 
 
@@ -363,7 +376,7 @@ def test_planner_reports_equal_internal_rate_and_sdk_limit_as_invalid_operating_
     s, evidence = profile_case()
     live = deepcopy(evidence["operating_profile"])
     live["mircat"]["pulse_rate_hz"] = 1000.
-    equal = build_plan(s, live_readbacks=live)
+    equal = build_plan(replace(s, probe_rate_hz=2_100_000.), live_readbacks=live)
     assert not equal.ready and any("strictly greater" in error for error in equal.validation_errors)
     live["mircat"]["pulse_rate_hz"] = 3000.
     live["mircat_readback"] = {"pulse_limits": {"max_pulse_width_ns": 19.}}
@@ -381,11 +394,11 @@ def test_stale_qcl2_route_becomes_qcl1_without_relabeling_pulse_or_limit_data(so
     arguments = {"configuration": {"fixed_wavenumber_kinetics": old}} if source == "configured" else (
         {"evidence": {"operating_profile": old}} if source == "optional_profile" else {"live_readbacks": old})
     p = build_plan(s, **arguments)
-    assert p.ready and not p.operational_ready
-    assert p.resolved["mircat"] == {"qcl": 1}
+    assert p.ready and p.operational_ready
+    assert p.resolved["mircat"] == {"qcl": 1, "pulse_rate_hz": 2_100_000., "pulse_width_ns": 142.}
     assert not p.resolved["mircat_readback"].get("pulse_limits")
     assert p.resolved["qcl_ranges"] == []
-    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "unresolved"
+    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "provisional_internal_policy"
     assert p.evidence_records["historical_qcl_routing"][source]["mircat"] == old["mircat"]
     assert old["mircat"]["qcl"] == 2
 
@@ -400,24 +413,24 @@ def test_live_qcl1_overrides_saved_qcl2_without_inheriting_its_pulse_limits_or_r
         "qcl_ranges": [{"qcl": 1, "min_cm1": 1900., "max_cm1": 2000.}]}
     p = build_plan(replace(s, probe_rate_hz=2_000_000.), evidence=evidence, live_readbacks=live)
     assert p.operational_ready, (p.validation_errors, p.readiness_items)
-    assert p.resolved["mircat"] == live["mircat"]
+    assert p.resolved["mircat"] == {"qcl": 1, "pulse_rate_hz": 2_100_000., "pulse_width_ns": 142.}
     assert p.resolved["qcl_ranges"] == live["qcl_ranges"]
     assert not p.resolved["mircat_readback"].get("pulse_limits")
-    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "installed_readback"
+    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "provisional_internal_policy"
     assert p.actual["installed_readbacks"] == live
     partial = deepcopy(live)
     partial["mircat"].pop("pulse_width_ns")
     unresolved = build_plan(s, evidence=evidence, live_readbacks=partial)
-    assert not unresolved.operational_ready
-    assert "pulse_width_ns" not in unresolved.resolved["mircat"]
+    assert unresolved.operational_ready
+    assert unresolved.resolved["mircat"]["pulse_width_ns"] == 142.
 
 
 def test_stale_live_qcl2_does_not_fall_back_to_lower_priority_pulse_values():
     s, evidence = profile_case()
     p = build_plan(s, evidence=evidence, live_readbacks={
         "mircat": {"qcl": 2, "pulse_rate_hz": 4000., "pulse_width_ns": 25.}})
-    assert p.ready and not p.operational_ready
-    assert p.resolved["mircat"] == {"qcl": 1}
+    assert p.ready and p.operational_ready
+    assert p.resolved["mircat"] == {"qcl": 1, "pulse_rate_hz": 2_100_000., "pulse_width_ns": 142.}
     assert p.actual["installed_readbacks"]["mircat"]["qcl"] == 2
 
 
@@ -430,9 +443,9 @@ def test_saved_plan_normalizes_historical_route_and_preserves_explicit_width_and
     original = deepcopy(saved)
     p = Plan.from_dict(saved)
     assert p.ready and not p.operational_ready
-    assert p.resolved["mircat"] == {"qcl": 1, "pulse_width_ns": 50.}
+    assert p.resolved["mircat"] == {"qcl": 1}
     assert p.settings == s and p.resolved["qcl_ranges"] == []
-    assert p.resolved["value_sources"]["mircat.pulse_width_ns"] == "user_override"
+    assert p.settings.probe_width_ns == 50.
     assert p.evidence_records["historical_qcl_routing"]["saved_plan"]["mircat"] == original["resolved"]["mircat"]
     assert saved == original
     assert Plan.from_dict(p.to_dict()).to_dict() == p.to_dict()
@@ -456,13 +469,13 @@ def test_external_duty_is_checked_before_connection_at_the_requested_thirty_perc
     s = Settings(positions=(Position(1944.2),), probe_rate_hz=2_000_000., probe_width_ns=150.)
     boundary = build_plan(s)
     assert boundary.ready and not boundary.operational_ready
-    over = build_plan(replace(s, probe_width_ns=150.000001))
+    over = build_plan(replace(s, probe_width_ns=450.))
     assert not over.ready
-    assert any("External probe" in error and "30%" in error for error in over.validation_errors)
+    assert any("External trigger" in error for error in over.validation_errors)
     loaded = Plan.from_dict(boundary.to_dict())
     assert loaded.ready
     invalid_saved = boundary.to_dict()
-    invalid_saved["settings"]["probe_width_ns"] = 151.
+    invalid_saved["settings"]["probe_width_ns"] = 450.
     assert not Plan.from_dict(invalid_saved).ready
 
 
@@ -472,8 +485,9 @@ def test_actual_internal_duty_can_fail_while_external_product_is_exactly_thirty_
     live["mircat"].update(pulse_rate_hz=2_300_000., pulse_width_ns=150.)
     live["mircat_readback"] = {"qcl": 1, "pulse_limits": {"max_duty_cycle": 80.}}
     p = build_plan(replace(s, probe_rate_hz=2_000_000.), live_readbacks=live)
-    assert not p.ready
-    assert any("internal duty cycle 34.5%" in error and "30%" in error for error in p.validation_errors)
+    assert p.ready
+    assert p.resolved["mircat"]["pulse_width_ns"] == 142.
+    assert any("internal duty cycle 34.5%" in error for error in mircat_pulse_errors(live["mircat"], 2_000_000.))
     assert not any("External probe" in error for error in p.validation_errors)
 
 
@@ -484,7 +498,8 @@ def test_planner_rejects_invalid_qcl1_actual_pulse_values(key, value):
     live = deepcopy(evidence["operating_profile"])
     live["mircat"][key] = value
     p = build_plan(s, live_readbacks=live)
-    assert not p.ready and any("finite and positive" in error for error in p.validation_errors)
+    assert p.ready
+    assert any("finite and positive" in error for error in mircat_pulse_errors(live["mircat"], 1000.))
 
 
 @pytest.mark.parametrize("updates", [{"pre_observation_s": float("nan")}, {"event_budget": True},
@@ -493,3 +508,55 @@ def test_invalid_values_are_reviewable_errors(updates):
     s, evidence = profile_case()
     p = build_plan(replace(s, **updates), evidence=evidence)
     assert p.validation_errors and not p.ready
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_startup_idle_timing_rate_is_reduced_for_active_streams(mode):
+    settings, evidence = profile_case(mode)
+    profile = evidence["operating_profile"]
+    profile["maximum_aggregate_rate_sps"] = 700000.
+    profile["timing_rate_sps"] = 1842105.2631578948
+    for role in ("sample", "reference"):
+        profile[role]["rate_sps"] = 1842105.2631578948
+    plan = build_plan(replace(settings, memory_limit_mb=512.), evidence=evidence)
+    assert plan.operational_ready, plan.validation_errors
+    assert plan.resolved["timing_rate_sps"] == pytest.approx(230263.15789473685)
+    assert plan.estimates["aggregate_rate_sps"] <= 700000.
+
+
+def test_timing_stream_uses_supported_choices_without_changing_manual_detector_rate():
+    settings, evidence = profile_case()
+    profile = evidence["operating_profile"]
+    profile["timing_rate_sps"] = 1842105.2631578948
+    profile["maximum_aggregate_rate_sps"] = 700000.
+    profile["supported"] = {"sample": {"rate_sps": [1000., 10000., 230263.15789473685]}}
+    plan = build_plan(replace(settings, sample_rate_sps=10000.), evidence=evidence)
+    assert plan.operational_ready, plan.validation_errors
+    assert plan.resolved["sample"]["rate_sps"] == 10000.
+    assert plan.resolved["timing_rate_sps"] == 230263.15789473685
+
+
+@pytest.mark.parametrize("pre", [100e-6, 250e-6, 500e-6])
+def test_surelite_commands_do_not_inherit_probe_sized_pulses(pre):
+    settings, evidence = profile_case()
+    live = evidence["operating_profile"]
+    live["timing"].update(input_frequency_hz=2e6, fire_delay_s=0.,
+        q_switch_delay_s=250e-6, fire_width_s=150e-9, q_switch_width_s=150e-9,
+        fire_polarity="negative", q_switch_polarity="negative")
+    settings = replace(settings, pre_observation_s=pre, post_observation_s=500e-6,
+                       probe_rate_hz=2e6)
+    plan = build_plan(settings, live_readbacks=live)
+    assert plan.operational_ready, plan.validation_errors
+    for channel in "AB":
+        pulses = [f["channels"][channel] for f in plan.timing.frames if f["channels"][channel]["enabled"]]
+        assert len(pulses) == 1
+        assert float(pulses[0]["width"].rstrip("s")) == pytest.approx(10e-6)
+        assert pulses[0]["polarity"] == "negative"
+    assert plan.timing.requested_pre_observation_s == pre
+    assert live["timing"]["fire_width_s"] == 150e-9
+
+
+def test_explicit_undersized_surelite_command_is_rejected():
+    settings, evidence = profile_case()
+    plan = build_plan(replace(settings, pump_fire_width_s=150e-9), evidence=evidence)
+    assert any("at least 10 us" in error for error in plan.validation_errors)

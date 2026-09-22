@@ -414,23 +414,24 @@ class InstalledAcquirer:
             raise AcquisitionIntegrityError("Installed QCL 1 does not cover requested wavenumber")
         timing = self.settings["timing"]
         rate = float(str(self.probe_recipe["clock"]["frequency"]).lower().removesuffix("hz"))
-        width = timing["mircat_pulse_width_ns"]
+        from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
+        width = MIRCAT_INTERNAL_WIDTH_NS
         trigger_width=timing["probe_width_ns"]
         limits = laser.get_qcl_pulse_limits(selected)
         self._verify_probe_limits(rate,width,limits)
         # Internal pulse parameters are a separate device constraint. The T660
         # carrier controls external timing and must retain internal rate headroom.
-        internal_rate=self.profile.get("mircat_internal_rate_hz",laser.get_qcl_pulse_rate(1))
+        internal_rate=MIRCAT_INTERNAL_RATE_HZ
         internal_width=width
         self._verify_probe_limits(internal_rate,internal_width,limits,"MIRcat internal pulse")
         if internal_rate<=rate:
             raise AcquisitionIntegrityError("MIRcat internal pulse rate must be strictly greater than the external trigger rate")
-        current = self.profile.get("qcl_current_ma",laser.get_qcl_current(selected))
+        current = self.settings.get("laser_settings", {}).get("qcl_current_ma", self.profile.get("qcl_current_ma",laser.get_qcl_current(selected)))
         low,high = laser.get_qcl_current_limits(selected)
         if not low<=current<=high:
             raise AcquisitionIntegrityError("Selected MIRcat current exceeds installed QCL limits")
         laser.set_qcl_pulse_params(qcl=1, pulse_rate_hz=internal_rate, pulse_width_ns=internal_width,
-            current_ma=self.profile.get("qcl_current_ma"))
+            current_ma=current if "qcl_current_ma" in self.settings.get("laser_settings", {}) else self.profile.get("qcl_current_ma"))
         def verify_internal():
             current_limits=laser.get_qcl_current_limits(1)
             pulse_limits=laser.get_qcl_pulse_limits(1)
@@ -467,7 +468,13 @@ class InstalledAcquirer:
         probe.enable_channel("B")
         self.wait(self.profile.get("settle_s", 0), "Settling: requested optical and detector interval")
         actual = laser.get_actual_wavelength()
-        if actual.get("units") != "cm^-1" or not actual.get("light_valid") or abs(actual["value"]-wavenumber) > self.profile["tune_tolerance_cm1"]:
+        value = float(actual["value"])
+        if actual.get("units") == "microns" and value > 0:
+            value = 10000. / value
+        elif actual.get("units") != "cm^-1":
+            raise AcquisitionIntegrityError(f"MIRcat unsupported wavelength units: {actual}")
+        actual = {**actual, "wavenumber_cm1": value}
+        if not math.isfinite(value) or not actual.get("light_valid") or abs(value-wavenumber) > self.profile["tune_tolerance_cm1"]:
             raise AcquisitionIntegrityError(f"MIRcat actual wavenumber/light-valid mismatch: {actual}")
         self.readbacks["wavenumber"] = actual
         return actual
@@ -682,13 +689,20 @@ class InstalledAcquirer:
         if hf:
             attempt("HF2LI stop", hf.stop_acquisition)
             if "hf2li" in self.original:
-                attempt("HF2LI restore", lambda: hf.reload_settings_snapshot(self.original["hf2li"]))
+                expected = deepcopy(self.original["hf2li"])
+                center_path = f"/{hf.device_id}/plls/0/freqcenter"
+                # External-reference center is a live observation on the HF2,
+                # not a writable configuration setpoint.
+                expected["nodes"].pop(center_path, None)
+                attempt("HF2LI restore", lambda: hf.reload_settings_snapshot(expected))
                 def verify_hf():
                     after = hf.export_settings_snapshot(preset=self.preset)
                     for path in self.original["hf2li"]["nodes"]:
                         if path.endswith("/phaseshift"):
                             after["nodes"][path]={"type":"double","value":hf._get_node("double",path)}
-                    difference = hf.compare_settings_snapshots(self.original["hf2li"], after)
+                    comparable = deepcopy(after)
+                    comparable["nodes"].pop(center_path, None)
+                    difference = hf.compare_settings_snapshots(expected, comparable)
                     if difference.get("match") is not True or after.get("read_errors"):
                         raise AcquisitionIntegrityError(str(difference))
                     return after

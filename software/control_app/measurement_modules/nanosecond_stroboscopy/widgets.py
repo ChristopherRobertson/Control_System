@@ -10,14 +10,16 @@ import time
 import numpy as np
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
-    QBoxLayout, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
+    QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
     QHBoxLayout, QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
+from control_app.measurement_host.settings_sections import HF2LIValueInput, hf2li_choices
 from control_app.measurement_host import TabHandle
 from control_app.measurement_host.presentation import (
     CompactMeasurementPanel, LinkedSliceControl, PlotPanel,
 )
+from control_app.measurement_host.settings_sections import compact_settings_page, settings_section, run_label_section, PhaseLaserSections
 from .scientific_adapter import NanosecondScientificAdapter
 from .settings import Settings, ADVANCED_FIELDS, INTEGER_ADVANCED_FIELDS
 
@@ -52,23 +54,25 @@ class NanosecondSettingsWidget(QWidget):
         self._values["execution_mode"] = execution_mode
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        self.measurement_group = QGroupBox("Measurement")
-        layout = QFormLayout(self.measurement_group)
-        layout.setContentsMargins(8, 2, 8, 2)
-        layout.setVerticalSpacing(2)
-        root.addWidget(self.measurement_group)
+        self.run_label = run_label_section(root)
+        self.run_label.textChanged.connect(self._changed)
+        self.lasers = PhaseLaserSections(root, self._changed)
+        self.measurement_group, layout = settings_section(root, "Nanosecond Stroboscopy Settings")
         for key, label in (("wavenumbers_cm1", "Wavenumbers (cm⁻¹)"), ("delays_ns", "Delays (ns)")):
-            control = QLineEdit()
+            control = QLineEdit(self)
             control.setObjectName(key)
             control.setToolTip("Comma-separated values")
             control.editingFinished.connect(self._changed)
             self.controls[key] = control
-            layout.addRow(label, control)
+            if key == "wavenumbers_cm1":
+                control.hide()
+            else:
+                layout.addRow(label, control)
         repetitions = QSpinBox()
         repetitions.setRange(1, 100000)
         repetitions.valueChanged.connect(self._changed)
         self.controls["repetitions"] = repetitions
-        layout.addRow("Averages", repetitions)
+        layout.addRow("Technical repetitions", repetitions)
         for key, label in (("cycle_interval_s", "Cycle interval"),):
             control = QDoubleSpinBox()
             control.setDecimals(6)
@@ -84,32 +88,23 @@ class NanosecondSettingsWidget(QWidget):
         advanced.setSpacing(2)
         self.detector_groups = {}
         forms = {}
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        advanced.addLayout(form)
         for role in (("sample", "reference") if mode == "dual" else ("sample",)):
-            if mode == "dual":
-                group = QGroupBox(role.title())
-                self.detector_groups[role] = group
-                form = QFormLayout(group)
-                form.setContentsMargins(8, 2, 8, 2)
-                advanced.addWidget(group)
-            else:
-                form = QFormLayout()
-                form.setContentsMargins(0, 0, 0, 0)
-                advanced.addLayout(form)
-            form.setVerticalSpacing(2)
             forms[role] = form
         for key, label, unit in self.OVERRIDES:
             role = "reference" if key.startswith("reference_") else "sample"
             if key not in ADVANCED_FIELDS or role not in forms:
                 continue
-            control = QComboBox()
+            control = HF2LIValueInput()
             control.setObjectName("override_" + key)
-            control.setEditable(True)
-            control.addItem("Auto", None)
             control.setToolTip(f"Automatic selection; enter an explicit {unit or 'value'} override if needed.")
             control.currentTextChanged.connect(self._changed)
             self.override_inputs[key] = control
+            label = f"{role.title()} {label.lower()}" if mode == "dual" else "CH1 sample rate" if key == "hf2li_rate_hz" else label
             forms[role].addRow(label + (f" ({unit})" if unit else ""), control)
-        self.restore_auto_button = QPushButton("Restore Auto")
+        self.restore_auto_button = QPushButton("Restore automatic settings")
         self.restore_auto_button.clicked.connect(self.restore_auto)
         advanced.addWidget(self.restore_auto_button)
         self.apply_settings(self._values)
@@ -123,15 +118,19 @@ class NanosecondSettingsWidget(QWidget):
 
     def read_settings(self):
         values = deepcopy(self._values)
+        values["metadata"]["run_label"] = self.run_label.text().strip()
+        values["laser_settings"] = self.lasers.values()
         for key, control in self.controls.items():
             if isinstance(control, QLineEdit):
                 values[key] = tuple(float(item.strip()) for item in control.text().split(",") if item.strip())
             else:
                 values[key] = control.value()
+        if self.lasers.range_edited:
+            values["wavenumbers_cm1"] = tuple(self.lasers.points())
         overrides = {}
         for key, control in self.override_inputs.items():
-            text = control.currentText().strip()
-            if text.lower() == "auto" or not text:
+            text = control.text().strip()
+            if text.lower() in ("auto", "automatic") or not text:
                 continue
             value = float(text)
             if key in self.INTEGER_OVERRIDES:
@@ -148,6 +147,11 @@ class NanosecondSettingsWidget(QWidget):
             raise ValueError("Plan belongs to the other detector mode")
         values["execution_mode"] = self.execution_mode
         self._values = deepcopy(values)
+        self.lasers.apply(values.get("laser_settings", {}))
+        self.lasers.set_points(values["wavenumbers_cm1"])
+        self.run_label.blockSignals(True)
+        self.run_label.setText(values.get("metadata", {}).get("run_label", ""))
+        self.run_label.blockSignals(False)
         for key, control in self.controls.items():
             control.blockSignals(True)
             value = values.get(key, values.get("probe_period_s", 1.))
@@ -177,6 +181,7 @@ class NanosecondSettingsWidget(QWidget):
             control.setToolTip(f"Selected: {value if value is not None else 'pending device check'}; {sources.get(key, 'automatic')}")
 
     def restore_auto(self):
+        self.lasers.restore_automatic()
         for control in self.override_inputs.values():
             control.blockSignals(True)
             control.setCurrentText("Auto")
@@ -287,10 +292,10 @@ class NanosecondPanel(CompactMeasurementPanel):
         settings = NanosecondSettingsWidget(context.mode, context.preferences, execution_mode=execution_mode)
         adapter = NanosecondScientificAdapter(context, settings, runner_factory=runner_factory)
         super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
-        self.advanced_group.setTitle("HF2LI overrides")
+        compact_settings_page(self)
+        self.advanced_group.setTitle("HF2LI Settings")
         self.advanced_layout.setContentsMargins(8, 2, 8, 2)
         self.settings_layout.setSpacing(3)
-        self.file_layout.setDirection(QBoxLayout.Direction.LeftToRight)
         settings.changed.connect(self.refresh_plan)
         self.save_root_provider = lambda: self._next_root or self.context.save_root()
         self.preliminary_button.setText("Acquire unpumped sample")
@@ -312,7 +317,7 @@ class NanosecondPanel(CompactMeasurementPanel):
         self.settings_extras_layout.addWidget(self.record_status)
         self.plot_adapter = NanosecondPlotAdapter()
         self.plot = PlotPanel(self.plot_adapter)
-        self.plot.canvas.setMinimumHeight(260)
+        self.plot.canvas.setMinimumHeight(195)
         self.quantity = QComboBox()
         self.quantity.addItem("ΔA", "delta_a")
         self.quantity.addItem("Q = S/R" if context.mode == "dual" else "Sample signal", "ratio")
@@ -521,7 +526,8 @@ class NanosecondPanel(CompactMeasurementPanel):
             self.elapsed.setText(f"Elapsed {elapsed:.1f} s")
             return
         estimate = (self.plan.budget if self.plan else {}).get("total_s")
-        remaining = f" · remaining ≈ {max(0, estimate - elapsed):.1f} s" if isinstance(estimate, (int, float)) else ""
+        from control_app.measurement_host.experiment_summary import remaining_text
+        remaining = " · " + remaining_text(estimate, elapsed)
         self.elapsed.setText(f"Elapsed {elapsed:.1f} s{remaining}")
 
 

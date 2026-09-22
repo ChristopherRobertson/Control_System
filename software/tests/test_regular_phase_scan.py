@@ -113,7 +113,7 @@ def test_conflicts_are_specific_and_do_not_mutate_request():
     assert build_regular_phase_scan_plan(capabilities=replace(capabilities(), max_retained_bytes=1000)).capacity["warning"]
     with pytest.raises(ValueError, match="single installed"):
         build_regular_phase_scan_plan(capabilities=replace(capabilities(), tuning_ranges=((1, 1950, 2050),)))
-    with pytest.raises(ValueError, match="fixed-wavenumber"):
+    with pytest.raises(ValueError, match="Start wavenumber must be greater than Stop wavenumber"):
         build_regular_phase_scan_plan(replace(RegularPhaseScanSettings(), stop_wavenumber_cm1=2000))
 
 
@@ -332,3 +332,9 @@ def test_unsupported_order_message_lists_all_supported_orders():
     with pytest.raises(ValueError) as caught:
         select_hf2_settings(RegularPhaseScanSettings(), caps, {"order": 9})
     assert "Accepted orders: 1, 2, 3, 4, 5, 6, 7, 8" in str(caught.value)
+
+
+@pytest.mark.parametrize("stop", [2000., 2001.])
+def test_reversed_or_equal_wavenumber_range_has_clear_error(stop):
+    with pytest.raises(ValueError, match="Start wavenumber must be greater than Stop wavenumber"):
+        build_regular_phase_scan_plan(replace(RegularPhaseScanSettings(), start_wavenumber_cm1=2000., stop_wavenumber_cm1=stop))

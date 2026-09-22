@@ -26,12 +26,16 @@ class PhaseScanPlanError(ValueError):
 
 @dataclass(frozen=True)
 class PhaseScanSettings:
+    run_label: str = ""
+    pump_wavelength_nm: float = 540.0
+    fire_to_qswitch_us: float = 250.0
     # The T660-1 output is the optical-opportunity clock, not the MIRcat's
     # internal rate setting used to avoid rejecting incoming trigger edges.
     probe_repetition_rate_hz: float = 2_000_000.0
     probe_pulse_width_ns: float = 150.0
     mircat_internal_repetition_rate_hz: float = 2_100_000.0
     mircat_internal_pulse_width_ns: float = 142.0
+    qcl_current_ma: float = 1000.0
     start_wavenumber_cm1: float = 2000.0
     stop_wavenumber_cm1: float = 1900.0
     scan_speed_cm1_s: float = 10_000.0
@@ -229,6 +233,10 @@ def build_phase_scan_plan(settings: PhaseScanSettings, *,
     referenced calibrations must also supply the measured trigger-to-active delay.
     """
     for name, value in asdict(settings).items():
+        if name == "run_label":
+            if not isinstance(value, str):
+                raise PhaseScanPlanError("run label must be text")
+            continue
         if name == "pump_reference":
             if value != "electrical_sync":
                 raise PhaseScanPlanError("Phase-scan pump timing must use synchronized DIO17 electrical sync")
@@ -246,9 +254,12 @@ def build_phase_scan_plan(settings: PhaseScanSettings, *,
         ):
             raise PhaseScanPlanError(f"{name.replace('_', ' ')} must be a finite positive number")
 
+    from control_app.measurement_host.laser_settings import validate_mircat_limits
+    validate_mircat_limits(current=settings.qcl_current_ma, width=settings.probe_pulse_width_ns,
+                          wavenumbers=(settings.start_wavenumber_cm1, settings.stop_wavenumber_cm1))
     span = abs(_fraction(settings.stop_wavenumber_cm1) - _fraction(settings.start_wavenumber_cm1))
-    if span == 0:
-        raise PhaseScanPlanError("Start and Stop Wavenumber must differ")
+    if settings.start_wavenumber_cm1 <= settings.stop_wavenumber_cm1:
+        raise PhaseScanPlanError("Start wavenumber must be greater than Stop wavenumber")
     scan_s = span / _fraction(settings.scan_speed_cm1_s)
     earliest_s, latest_s, source = 0., float(scan_s), None
     if calibrated_trajectory is not None:

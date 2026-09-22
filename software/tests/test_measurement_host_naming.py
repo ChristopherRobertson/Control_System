@@ -14,8 +14,8 @@ EXPECTED = (
     ("fixed_wavenumber_kinetics", "Fixed Wavenumber"),
     ("nanosecond_stroboscopy", "Nanosecond Stroboscopy"),
     ("microsecond_stroboscopy", "Microsecond Stroboscopy"),
-    ("single_pump_scan_burst", "Single Scan Phase Delay"),
     ("repeated_rapid_scan", "Rapid Scan Phase Delay"),
+    ("phase_scan", "Phase Scan"),
 )
 
 
@@ -49,6 +49,9 @@ def test_six_registrations_use_requested_titles_and_order_without_changing_ids(m
         descriptor = registration.DESCRIPTOR
         assert descriptor.api_version == 1
         assert descriptor.experiment_id == experiment_id
+        if experiment_id == "phase_scan":
+            descriptors.append(descriptor)
+            continue  # Established widget factory is exercised separately below.
         monkeypatch.setitem(sys.modules, package + ".widgets", SimpleNamespace(
             make_handle=lambda context, title: SimpleNamespace(instance_id=context.instance_id, title=title)))
         single, dual = descriptor.create_tabs(_context(experiment_id))
@@ -72,7 +75,7 @@ def test_legacy_adapter_changes_only_visible_titles(monkeypatch):
         def output_location_changed(self, path): pass
         def instrument_state_changed(self, change): pass
 
-    monkeypatch.setitem(sys.modules, "control_app.ui.widgets.phase_scan_widget",
+    monkeypatch.setitem(sys.modules, "control_app.measurement_modules.phase_scan.widgets",
                         SimpleNamespace(PhaseScanWidget=FakePhaseWidget))
     single_runner, dual_runner = object(), object()
     single, dual = create_phase_scan_tabs(_context("phase_scan"), single_runner=single_runner,

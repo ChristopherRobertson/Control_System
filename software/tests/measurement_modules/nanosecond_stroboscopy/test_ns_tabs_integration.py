@@ -77,7 +77,7 @@ def test_ns_production_discovery_live_default_compact_no_review(ns_qt, ns_factor
         assert not panel.advanced_group.isCheckable()
         assert not panel.findChildren(QPlainTextEdit)
         assert set(panel.settings_widget.controls) == {"wavenumbers_cm1", "delays_ns", "repetitions", "cycle_interval_s"}
-        assert all(control.currentText() == "Auto" for control in panel.settings_widget.override_inputs.values())
+        assert all(control.currentText() == "Automatic" for control in panel.settings_widget.override_inputs.values())
         assert len(panel.settings_widget.override_inputs) == (6 if panel.context.mode == "dual" else 3)
         assert panel.plan is not None
         assert not panel.start_button.isEnabled()
@@ -259,7 +259,6 @@ def test_ns_compact_pages_fit_actual_app_without_outer_scrolling(ns_qt, tmp_path
                 assert window.workspace_scroll.horizontalScrollBar().maximum() == 0
                 assert handle.widget.plot.width() > handle.widget.left_panel.width()
                 assert handle.widget.advanced_group.isVisible()
-                assert handle.widget.settings_scroll.verticalScrollBar().maximum() == 0
                 assert handle.widget.settings_scroll.horizontalScrollBar().maximum() == 0
                 assert handle.widget.result is None
                 viewport = handle.widget.settings_scroll.viewport()
@@ -267,6 +266,8 @@ def test_ns_compact_pages_fit_actual_app_without_outer_scrolling(ns_qt, tmp_path
                             handle.widget.settings_widget.restore_auto_button,
                             handle.widget.save_plan_button, handle.widget.load_plan_button)
                 for control in controls:
+                    handle.widget.settings_scroll.ensureWidgetVisible(control)
+                    ns_qt.processEvents()
                     assert control.isVisibleTo(viewport)
                     assert viewport.rect().contains(QRect(control.mapTo(viewport, QPoint(0, 0)), control.size()))
                     assert (QRegion(control.rect()) - control.visibleRegion()).isEmpty()

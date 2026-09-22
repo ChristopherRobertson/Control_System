@@ -200,7 +200,8 @@ class MircatService:
         device_config = devices.get("mircat")
         if not isinstance(device_config, dict):
             raise MircatConfigurationError("mircat missing from hardware configuration")
-        return cls(device_config, sdk_path=sdk_path, command_log=command_log)
+        from control_app.measurement_host.application_session import shared_device
+        return shared_device("mircat", lambda: cls(device_config, sdk_path=sdk_path, command_log=command_log), command_log=command_log)
 
     def initialize(self) -> None:
         """Load the SDK and initialize the real MIRcat controller."""

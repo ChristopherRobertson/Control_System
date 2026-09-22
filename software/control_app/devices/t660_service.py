@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, TextIO
 import math
+import re
 import socket
 import time
 
@@ -72,13 +73,23 @@ class T660Service:
         device_config = devices.get(name)
         if not isinstance(device_config, dict):
             raise T660ConfigurationError(f"{name} not found in hardware configuration")
-        return cls(name, device_config, timeout_s=timeout_s, command_log=command_log)
+        from control_app.measurement_host.application_session import shared_device
+        return shared_device(name, lambda: cls(name, device_config, timeout_s=timeout_s, command_log=command_log), command_log=command_log)
 
     def connect(self) -> None:
         """Open the configured serial or TCP command session."""
 
         from control_app.measurement_host.ownership import require_hardware_owner
         require_hardware_owner(self)
+
+        # A repeated connect on a retained application transport must not try
+        # to acquire the same exclusive Windows COM handle a second time.
+        if self._serial is not None and self._serial.is_open:
+            return
+        if self._socket is not None:
+            return
+        if self._serial is not None:
+            self.close()
 
         interface = self.device_config.get("interface")
         if interface is None:
@@ -93,12 +104,22 @@ class T660Service:
                 import serial
             except ImportError as exc:
                 raise T660ConfigurationError("pyserial is required for T660 serial control") from exc
-            self._serial = serial.Serial(
-                port=str(port),
-                baudrate=int(baudrate),
-                timeout=self.timeout_s,
-                write_timeout=self.timeout_s,
-            )
+            try:
+                self._serial = serial.Serial(
+                    port=str(port),
+                    baudrate=int(baudrate),
+                    timeout=self.timeout_s,
+                    write_timeout=self.timeout_s,
+                )
+            except (serial.SerialException, PermissionError) as exc:
+                if isinstance(exc, PermissionError) or "Access is denied" in str(exc) or "PermissionError(13" in str(exc):
+                    raise T660Error(
+                        f"{self.name}: Windows denied access to {port}. Another connection may "
+                        "hold this port, or the USB serial driver may be unavailable. Close any "
+                        "other application using this instrument, then use Instruments → "
+                        f"Refresh connected settings. Original error: {exc}"
+                    ) from exc
+                raise
         elif interface == "tcp":
             host = self.device_config.get("host")
             port = self.device_config.get("tcp_port") or self.device_config.get("port")
@@ -109,7 +130,13 @@ class T660Service:
         else:
             raise T660ConfigurationError(f"{self.name} unsupported interface {interface!r}")
 
-        self._set_p500_session()
+        try:
+            self._set_p500_session()
+        except Exception:
+            # Serial open can succeed before protocol initialization fails.
+            # Release that handle so the next retry can open the port.
+            self.close()
+            raise
 
     def identify(self) -> str:
         """Return the T660 identity string."""
@@ -147,6 +174,14 @@ class T660Service:
         """
 
         if frequency is not None:
+            # Query replies are signed, zero-padded numbers without units.
+            # They cannot be replayed verbatim as P500 frequency arguments.
+            # Keep explicit unit-bearing recipe values as supplied.
+            text = str(frequency).strip()
+            if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", text):
+                from decimal import Decimal
+
+                frequency = f"{Decimal(text):f}Hz"
             self.command(f"TRIG:FREQ:SYN {frequency}", expect_response=False)
         if shots is not None:
             shot_counter_reset = _integer_value(shots, field="clock.shots")

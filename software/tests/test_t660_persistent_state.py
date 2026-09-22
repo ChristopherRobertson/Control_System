@@ -40,6 +40,19 @@ class _RecordingT660Service(T660Service):
 
 
 class T660PersistentStateTests(unittest.TestCase):
+    def test_clock_frequency_readbacks_are_replayable_with_explicit_units(self) -> None:
+        for value, expected in (
+            ("+002000000.000000", "2000000.000000Hz"),
+            (2000000, "2000000Hz"),
+            ("2e6", "2000000Hz"),
+            ("2MHz", "2MHz"),
+            ("999999.999999623Hz", "999999.999999623Hz"),
+        ):
+            with self.subTest(value=value):
+                service = _RecordingT660Service()
+                service.apply_recipe({"clock": {"frequency": value}})
+                self.assertIn((f"TRIG:FREQ:SYN {expected}", False), service.commands)
+
     def test_clock_connector_readbacks_are_informational_and_never_switch_modes(self) -> None:
         class ClockDevice(_RecordingT660Service):
             def command(self, command, **kwargs):

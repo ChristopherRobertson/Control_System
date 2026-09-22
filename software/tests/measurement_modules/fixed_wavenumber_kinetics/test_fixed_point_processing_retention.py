@@ -27,6 +27,25 @@ def record(mode="dual", **kwargs):
             **kwargs}
 
 
+@pytest.mark.parametrize("pumped", [False, True])
+def test_buffered_poll_padding_is_retained_but_excluded_from_analysis(tmp_path, pumped):
+    ticks = np.arange(33001, dtype=np.uint64)
+    chunk = {"sample": stream(ticks, np.ones(len(ticks))), "clockbase_hz": 1000000, "event_index": 0}
+    with NativeChunkWriter(tmp_path) as writer:
+        ref = writer.append(chunk, event_index=0, position_index=0)
+    data = record(mode="single", run_directory=str(tmp_path), native_chunks=[ref],
+        kind="measurement" if pumped else "preliminary", events=[{
+            "event_index": 0, "position_index": 0, "position_cm1": 1945,
+            "expected_pump_count": int(pumped), "original_pump_timestamp": 500 if pumped else None,
+            "pump_timestamps": [500] if pumped else [], "clockbase_hz": 1000000}])
+    data["settings"].update(pre_observation_s=.0005, post_observation_s=.0005, sample_rate_sps=1000000)
+    event = analyze_run(data, max_points=40000, max_points_per_event=40000)["events"][0]
+    assert event["native_poll_padding_excluded"]
+    assert event["time_s"][0] == pytest.approx(-.0005 if pumped else 0.)
+    assert event["time_s"][-1] == pytest.approx(.0005 if pumped else .001)
+    assert len(read_native_chunk(tmp_path, ref)["sample"]["timestamp"]) == 33001
+
+
 def test_fixed_native_dtype_precision_nan_and_interrupted_journal_recovery(tmp_path):
     ticks = np.asarray([2**63 + 19, 2**63 + 29, 2**63 + 39], np.uint64)
     x = np.asarray([np.nextafter(1., 2.), np.nan, -0.], np.float64)
@@ -157,7 +176,7 @@ def test_fixed_incomplete_recovery_is_censored_and_no_assumed_reset():
     assert evidence["observation_limit_s"] == 100
     event = {"event_index": 0, "time_s": t, "delta_absorbance": y, "recovery": evidence,
              "kind": "measurement", "equivalent_state": False}
-    assert not aggregate_events([event])["aggregates"]
+    assert not aggregate_events([event])["aggregates"][0]["equivalent_state_verified"]
 
 
 def test_fixed_bounded_chunk_analysis_preserves_pump_epoch_and_gap(tmp_path):
@@ -217,7 +236,7 @@ def test_fixed_aggregation_uses_explicit_equivalence_and_preserves_dose_order():
     assert summary["aggregates"][0]["valid_event_count"].tolist() == [2, 2, 2]
     assert summary["order_dose_trends"][1]["dose"]["value"] == 2
     events[1]["equivalent_state"] = False
-    assert len(aggregate_events(events)["excluded"]) == 1
+    assert not aggregate_events(events)["aggregates"][0]["equivalent_state_verified"]
 
 
 def test_fixed_interrupted_reference_recovery_uses_native_clock_order(tmp_path):
@@ -422,4 +441,4 @@ def test_fixed_saved_and_csv_labels_distinguish_raw_blank_and_sample_relative_si
     assert np.isnan(event["ratio"]).all()
     assert "no sample ratio" in event["ratio_label"]
     flags = aggregate_events([{**raw["analysis"]["events"][0], "equivalent_state": True, "quality_flags": ["gap"]}])
-    assert flags["excluded"][0]["reason"] == "Quality flags; shown individually"
+    assert "gap" in flags["aggregates"][0]["quality_notes"]

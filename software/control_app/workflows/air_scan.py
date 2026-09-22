@@ -146,9 +146,13 @@ def single_detector_scan_profile(parameters=None):
 def _scan_timing_limits(profile, *, timing_rehearsal):
     """Validate marker separation and any explicit rehearsal envelope before I/O."""
     start, stop, rate = (float(profile[key]) for key in ('start_cm1', 'stop_cm1', 'scan_rate_cm1_s'))
-    if not all(math.isfinite(value) for value in (start, stop, rate)) or rate <= 0 or start == stop:
+    if not all(math.isfinite(value) for value in (start, stop, rate)) or rate <= 0:
         raise ValueError('Scan endpoints and speed must define a positive finite duration')
-    nominal = abs(stop-start) / rate
+    if start <= stop:
+        raise ValueError('Start wavenumber must be greater than Stop wavenumber')
+    from control_app.measurement_host.laser_settings import validate_mircat_limits
+    validate_mircat_limits(current=profile.get('qcl_current_ma'), wavenumbers=(start, stop))
+    nominal = (start-stop) / rate
     interval = float(profile.get('marker_interval_cm1', 5.))
     width = profile.get('marker_width_us', 500)
     if (isinstance(width, bool) or not isinstance(width, (int, float)) or not math.isfinite(width)

@@ -72,6 +72,28 @@ def test_health_is_serializable_read_only_and_fresh(connected):
     assert len(server.reads) == 2 * len(server.values)
 
 
+@pytest.mark.parametrize("accept_write", [True, False])
+def test_reference_clock_selection_verifies_readback_and_is_preserved(connected, monkeypatch, accept_write):
+    from control_app.devices.hf2li_service import HF2LIError, HF2LIPreset
+    service, server = connected
+    path = "/dev123/system/extclk"
+    server.values[path] = 0
+    def write(method, node, value):
+        assert (method, node, value) == ("setInt", path, 1)
+        if accept_write:
+            server.values[node] = value
+    monkeypatch.setattr(service, "_set_node", write)
+    monkeypatch.setattr(service, "sync", lambda: None)
+    if accept_write:
+        service.configure_reference_clock(external=True)
+        assert server.values[path] == 1
+    else:
+        with pytest.raises(HF2LIError, match="clock source readback"):
+            service.configure_reference_clock(external=True)
+    preset = HF2LIPreset("restoration", {"include_reference_clock": True})
+    assert (path, "int") in list(service._snapshot_nodes(preset))
+
+
 @pytest.mark.parametrize("pll,dcm,expected", [
     (0, 0, True), (0, 1, False), (1, 0, False), (1, 1, False),
     (0, OSError("unreadable"), None), (OSError("unreadable"), 1, False),

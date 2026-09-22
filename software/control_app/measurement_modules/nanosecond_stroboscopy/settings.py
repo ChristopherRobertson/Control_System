@@ -108,6 +108,7 @@ class Settings:
     max_pump_events: int = 10000
     max_storage_bytes: int = 1000000000
     max_frame_capacity: int = 8192
+    laser_settings: dict[str, Any] = field(default_factory=dict)
 
     @property
     def instance_id(self) -> str:
@@ -130,7 +131,7 @@ class Settings:
         for name in ("wavenumbers_cm1", "delays_ns", "conditions", "selected_populations", "quantified_populations", "position_ids", "off_band_wavenumbers_cm1", "calibration_ids"):
             if name in values and isinstance(values[name], (tuple, list)):
                 values[name] = tuple(values[name])
-        for name in ("qualification", "control_records", "control_applicability", "overrides", "metadata"):
+        for name in ("qualification", "control_records", "control_applicability", "overrides", "metadata", "laser_settings"):
             if name in values and isinstance(values[name], Mapping):
                 values[name] = dict(values[name])
         metadata = dict(values.get("metadata") or {})
@@ -243,9 +244,25 @@ def resolve_settings(settings: Settings | Mapping[str, Any], capabilities: Mappi
     """
     import math
     s = Settings.from_dict(settings)
+    from control_app.measurement_host.laser_settings import validate_laser_settings
+    lasers = validate_laser_settings(s.laser_settings)
     caps = dict(capabilities or {})
+    from control_app.measurement_host.hf2_selection import select_supported
+    for role in (("sample", "reference") if s.mode == "dual" else ("sample",)):
+        prefix = "reference_" if role == "reference" else ""
+        keys = {"order": prefix+"filter_order", "timeconstant_s": prefix+"filter_time_constant_s", "rate_sps": prefix+"hf2li_rate_hz"}
+        table = caps.get("hf2_choices", {})
+        requested = {key: s.overrides[name] for key, name in keys.items() if isinstance(s.overrides.get(name), (int, float))}
+        chosen = select_supported(table.get(role, table if role == "sample" else {}), time_scale_s=s.cycle_interval_s, overrides=requested, area=True)
+        caps.update({keys[key]: value for key, value in chosen.items()})
     sources = {"reset_interval_s": "No additional software reset wait; selected hardware cycles provide event spacing"}
     values, errors = {"reset_interval_s": 0.0, "qcl": 1}, []
+    from control_app.measurement_host.laser_settings import validate_mircat_limits
+    try:
+        validate_mircat_limits(wavenumbers=s.wavenumbers_cm1)
+    except ValueError as exc:
+        errors.append(str(exc))
+
     sources["qcl"] = "Installed MIRcat QCL 1"
     examples = {"fire_to_q_ns": 200000.0, "pump_command_width_ns": 1000.0,
                 "probe_command_width_ns": 100.0, "filter_time_constant_s": .05,
@@ -284,16 +301,27 @@ def resolve_settings(settings: Settings | Mapping[str, Any], capabilities: Mappi
         return value
     for name in ("fire_to_q_ns", "pump_command_width_ns", "probe_command_width_ns", "filter_time_constant_s", "filter_order", "hf2li_rate_hz"):
         select(name, caps.get(name), "Live device readback" if capabilities and name in capabilities else "EXAMPLE ONLY simulator value")
+    if "probe_pulse_width_ns" in lasers:
+        values["probe_command_width_ns"] = lasers["probe_pulse_width_ns"]
+        sources["probe_command_width_ns"] = "Requested external T660 trigger width"
+    if "fire_to_qswitch_us" in lasers:
+        values["fire_to_q_ns"] = lasers["fire_to_qswitch_us"] * 1000
+        sources["fire_to_q_ns"] = "Requested Nd:YAG FIRE-to-Q delay"
     for name in ("mircat_pulse_rate_hz", "mircat_pulse_width_ns", "mircat_max_pulse_rate_hz", "mircat_max_pulse_width_ns", "mircat_max_duty_fraction"):
         select(name, caps.get(name), "Live MIRcat QCL 1 optical readback or vendor limit")
     for name, sample_name in (("reference_filter_time_constant_s", "filter_time_constant_s"), ("reference_filter_order", "filter_order"), ("reference_hf2li_rate_hz", "hf2li_rate_hz")):
         fallback = values[sample_name] if s.execution_mode == "simulation" else None
         select(name, caps.get(name, fallback), "Independent reference device readback" if capabilities else "EXAMPLE ONLY simulator value")
+    if caps.get("hf2_choices"):
+        for prefix in (("", "reference_") if s.mode == "dual" else ("",)):
+            for field in ("filter_time_constant_s", "filter_order", "hf2li_rate_hz"):
+                if s.overrides.get(prefix+field) in (None, "Auto"):
+                    sources[prefix+field] = "Automatic from cycle interval and accepted HF2LI settings"
     for tc_name, rate_name in (("filter_time_constant_s", "hf2li_rate_hz"), ("reference_filter_time_constant_s", "reference_hf2li_rate_hz")):
         tc, rate = values[tc_name], values[rate_name]
         if tc is not None and rate is not None and tc > 0 and rate > 0 and s.overrides.get(tc_name) in (None, "Auto"):
             values[tc_name] = max(tc, 4 / rate)
-            sources[tc_name] = "Auto: max(live time constant, 4 / selected export rate) for sampled pulse-area support"
+            sources[tc_name] = "Auto: selected time constant ≥ 4 / selected export rate for sampled pulse-area support"
     for name in ("fire_command_width_ns", "q_command_width_ns"):
         select(name, caps.get(name, values["pump_command_width_ns"]), "Live device pulse width")
     for name in ("reference_command_width_ns", "event_trigger_width_ns"):
@@ -310,7 +338,8 @@ def resolve_settings(settings: Settings | Mapping[str, Any], capabilities: Mappi
         rtau, rorder = values["reference_filter_time_constant_s"], values["reference_filter_order"]
         reference_support = 16 * rorder * rtau if isinstance(rtau, (int, float)) and isinstance(rorder, (int, float)) and rtau > 0 and rorder > 0 else None
         support = max(support, reference_support) if support is not None and reference_support is not None else None
-    period = max(s.cycle_interval_s, support) if support is not None and isinstance(s.cycle_interval_s, (int, float)) else None
+    requested_period = max(s.cycle_interval_s, *(1/lasers[key] for key in ("pump_repetition_rate_hz", "probe_repetition_rate_hz") if key in lasers)) if lasers.keys() & {"pump_repetition_rate_hz", "probe_repetition_rate_hz"} else s.cycle_interval_s
+    period = max(requested_period, support) if support is not None and isinstance(s.cycle_interval_s, (int, float)) else None
     select("probe_period_s", period, "Max(requested cycle, 16 × live filter order × time constant)")
     width_values = [values[n] for n in ("fire_command_width_ns", "q_command_width_ns", "probe_command_width_ns", "event_trigger_width_ns")]
     anchor = None
@@ -328,6 +357,9 @@ def resolve_settings(settings: Settings | Mapping[str, Any], capabilities: Mappi
             errors.append(f"Live/selected {name} is not a finite numeric value")
     if values["pump_command_width_ns"] is None:
         values["pump_command_width_ns"] = values["fire_command_width_ns"]
+    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
+    values.update(mircat_pulse_rate_hz=MIRCAT_INTERNAL_RATE_HZ, mircat_pulse_width_ns=MIRCAT_INTERNAL_WIDTH_NS)
+    sources["mircat_pulse_rate_hz"] = sources["mircat_pulse_width_ns"] = "Provisional internal MIRcat policy"
     if s.execution_mode == "simulation":
         values.update(irf_sigma_ns=s.irf_sigma_ns if s.irf_sigma_ns is not None else 12.0,
                       timing_jitter_ns=s.timing_jitter_ns if s.timing_jitter_ns is not None else 3.0,

@@ -92,21 +92,28 @@ class FixedPointAdapter:
         return tuple(getattr(plan, "validation_errors", ()))
 
     def summarize_plan(self, plan):
+        from control_app.measurement_host.experiment_summary import summary_rows
+        return summary_rows(plan, self._procedure_summary(plan), slow_scan=False)
+
+    def _procedure_summary(self, plan):
         s, resolved = plan.settings, plan.resolved
         def format_value(value, unit):
-            return f"{value:g} {unit}" if isinstance(value, (float, int)) else "Check device"
+            return f"{value:g} {unit}" if isinstance(value, (float, int)) else "Pending startup settings"
         detector = resolved.get("sample", {})
         detector_text = format_value(detector.get("rate_sps"), "Sa/s")
         if s.mode == "dual":
             detector_text += " / " + format_value(resolved.get("reference", {}).get("rate_sps"), "Sa/s")
-        rows = [("Observation", f"{s.pre_observation_s:g} s before + {s.post_observation_s:g} s recovery"),
-                ("Sequence", f"{len(s.positions)} position(s) · {plan.total_pump_events} pump event(s)"),
+        rows = [("Observation", f"{s.pre_observation_s:g} s pre-pump + {s.pump_shots} shots at {s.shot_delay_s:g} s spacing + {s.post_observation_s:g} s post-pump"),
+                ("Sequence", f"{len(s.positions)} wavenumbers × {s.events_per_position} trials; {plan.total_pump_events} total pump shots"),
                 ("Duration", format_value(plan.estimates.get("wall_clock_s"), "s")),
                 ("Detector rate", detector_text),
                 ("Filter", format_value(detector.get("timeconstant_s"), "s") +
                     (f" · order {detector['order']}" if detector.get("order") is not None else ""))]
         size = plan.estimates.get("storage_bytes")
-        rows.append(("Storage", f"{size/1024**2:.1f} MiB" if isinstance(size, (float, int)) else "Check device"))
+        rows.append(("Storage", f"{size/1024**2:.1f} MiB" if isinstance(size, (float, int)) else "Pending startup settings"))
+        if plan.blocks and plan.blocks[0].pre_observation_s > s.pre_observation_s:
+            rows.append(("Hardware lead-in", f"{plan.blocks[0].pre_observation_s:g} s before first pump; plots show only the requested {s.pre_observation_s:g} s pre-pump window"))
+        rows.append(("Interpretation", "Detector magnitude versus time from the first pump sync; blank and separate pump-off recordings are not required."))
         return rows
 
     def selected_records(self):
@@ -136,7 +143,8 @@ class FixedPointAdapter:
                     payload = {**payload, "remaining_s": max(0., estimate-payload["elapsed_s"]),
                                "basis": "whole guided-plan stage allowances; manual handling excluded"}
             if payload.get("remaining_s") is not None:
-                message += f" · ~{payload['remaining_s']:.1f} s remaining"
+                from control_app.measurement_host.experiment_summary import remaining_text
+                message += " · " + remaining_text(payload["remaining_s"], 0.)
             worker.notify(worker.message.emit, message)
             if "total" in payload:
                 completed, total = float(payload.get("completed", 0)), float(payload["total"])
@@ -150,8 +158,8 @@ class FixedPointAdapter:
         try:
             result = Runner(self.context).run(snapshot.operation, snapshot.plan, kind=kind,
                         cancel=worker.cancel_event, progress=progress,
-                        blank=self._compatible_parent(self.blank, snapshot.plan),
-                        preliminary=self._compatible_parent(snapshot.preliminary, snapshot.plan))
+                        blank=None if kind == "measurement" else self._compatible_parent(self.blank, snapshot.plan),
+                        preliminary=None if kind == "measurement" else self._compatible_parent(snapshot.preliminary, snapshot.plan))
             self.last_record = result
             if result.get("status") == "stopped":
                 raise InterruptedError("Acquisition stopped")
@@ -232,8 +240,8 @@ class FixedPointAdapter:
         return record
 
     def export_run(self, path, result):
-        from .persistence import export_analysis_csv
-        export_analysis_csv(result, path)
+        from .persistence import export_detector_csv
+        return export_detector_csv(result, path)
 
     def new_run(self):
         self.blank = self.last_record = None

@@ -64,6 +64,8 @@ class Timing(Owned):
             self.references[rising+1] = rising
     def apply_recipe(self, recipe):
         from control_app.measurement_modules.fixed_wavenumber_kinetics.adapters import _physical_number
+        if "frames_engine" in recipe:
+            assert recipe["frames_engine"] == "OFF"
         self.touch("apply_recipe")
         self.recipe = recipe
         self.__dict__.setdefault("recipes", []).append(deepcopy(recipe))
@@ -106,7 +108,7 @@ class Timing(Owned):
         return {"physical_frame_count": len(frames), "predivider": predivider}
     def start_frame_table(self):
         self.touch("start_frames")
-        assert self.state["core"].read_count >= 1, "pump started before actual stationary baseline"
+        assert self.state["core"].streaming, "timer dispatched before recording subscription"
         offsets = [f["offset_s"]+float(f["channels"]["B"]["delay"][:-1]) for f in self.frames if f["channels"]["B"]["enabled"]]
         self.state["core"].start_event({"frames": self.frames, "pump_command_offsets_s": offsets})
     def get_frames_status(self):
@@ -255,6 +257,8 @@ class Mircat(Owned):
         self.__dict__.setdefault("qcl_calls", []).append((method, qcl))
     def get_qcl_pulse_rate(self, qcl): self.qcl_call("rate", qcl); return self.pulse(qcl)["pulse_rate_hz"]
     def get_qcl_pulse_width(self, qcl): self.qcl_call("width", qcl); return self.pulse(qcl)["pulse_width_ns"]
+    def get_qcl_current(self, qcl): self.qcl_call("current", qcl); return self.pulse(qcl).get("current_ma", 500.)
+    def get_qcl_current_limits(self, qcl): self.qcl_call("current_limits", qcl); return (0., 1200.)
     def get_active_qcl(self): self.touch("active_qcl"); return 1
     def get_num_installed_qcls(self): self.touch("qcl_count"); return 1
     def get_qcl_tuning_range(self, qcl): self.qcl_call("qcl_range", qcl); return {"qcl": qcl, "min_cm1": 1800., "max_cm1": 2100.}
@@ -265,6 +269,8 @@ class Mircat(Owned):
         self.qcl_call("pulse", kwargs["qcl"])
         self.__dict__.setdefault("pulse_writes", []).append(deepcopy(kwargs))
         self.pulse(kwargs["qcl"]).update({k:kwargs[k] for k in ("pulse_rate_hz", "pulse_width_ns")})
+        if "current_ma" in kwargs:
+            self.pulse(kwargs["qcl"])["current_ma"] = kwargs["current_ma"]
         return kwargs
     def set_external_trigger_params(self, **kwargs): self.touch("external")
     def is_interlock_set(self): self.touch("interlock"); return True
@@ -285,6 +291,7 @@ class HF2(Owned):
     device_id="devINJECTED"
     def __init__(self, state):
         self.state=state; self.calls=[]; self.nodes={}
+        self.nodes[f"/{self.device_id}/system/extclk"] = {"value":0, "type":"int"}
         for i in range(6):
             for key in ("enable","adcselect","oscselect","harmonic","order","timeconstant","rate","trigger"):
                 initial = {"order":1,"timeconstant":.001,"rate":10000. if i == 2 else 1000.,"harmonic":1}.get(key,0)
@@ -299,6 +306,9 @@ class HF2(Owned):
     def sync(self): self.touch("sync")
     def export_settings_snapshot(self, *, preset=None): self.touch("snapshot"); return {"nodes":deepcopy(self.nodes),"read_errors":{}}
     def configure_signal_inputs(self, values): self.touch("inputs")
+    def configure_reference_clock(self, *, external):
+        self.touch("reference_clock")
+        self.nodes[f"/{self.device_id}/system/extclk"]["value"] = int(external)
     def configure_pll(self, values): self.touch("PLL"); self.configured_pll = deepcopy(values)
     def configure_demodulators(self, values):
         self.touch("demods")
@@ -319,7 +329,7 @@ class HF2(Owned):
         self.touch("health")
         faults = self.state["core"].faults
         return {"reference_locked":not faults.get("health_unlocked",False),"clock_locked":True,
-            "external_clock_selected":True,"overload":bool(faults.get("health_overload",False)),"read_errors":{}}
+            "external_clock_selected":bool(self.nodes[f"/{self.device_id}/system/extclk"]["value"]),"overload":bool(faults.get("health_overload",False)),"read_errors":{}}
     def start_acquisition(self, *, demodulators, fields): self.touch("subscribe"); self.state["core"].start_stream()
     def read_acquisition(self, duration_s):
         self.touch("poll")
@@ -370,11 +380,31 @@ def test_fixed_point_installed_services_complete_under_host_ownership(tmp_path, 
     assert core.dispatched==1
     assert "pending_upload" in services["t660_2"].calls
     assert "health" in services["hf2li"].calls and "verify_restore" in services["hf2li"].calls
+    assert services["hf2li"].calls.index("reference_clock") < services["hf2li"].calls.index("health")
+    assert result["health_readbacks"][0]["external_clock_selected"] is True
+    assert services["hf2li"].nodes[f"/{services['hf2li'].device_id}/system/extclk"]["value"] == 0
     assert result["live_readbacks"]["source_kind"] == "connected_readbacks"
     assert result["plan"]["resolved"]["sample"]["rate_sps"] == 1000.
     assert result["settings"]["sample_id"] == ""
     # Release occurred only after native_run and final analyzed run were written.
     with pytest.raises(Exception): services["hf2li"].sync()
+
+
+@pytest.mark.parametrize("offset,complete", [(.0072, True),(.2, False)])
+def test_installed_micron_readback_preserves_units_and_checks_tune_error(tmp_path, monkeypatch, offset, complete):
+    fixture = build_connected_fixture(tmp_path, "single")
+    monkeypatch.setattr(Mircat, "get_actual_wavelength", lambda self:
+        {"value": 10000. / (self.wavenumber-offset), "units": "microns", "light_valid": True})
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan, kind="blank")
+    assert (result["status"] == "complete") is complete
+    assert result["restoration"]["safe_verified"]
+    if complete:
+        actual = result["events"][0]["tuning"]["actual"]
+        assert actual["units"] == "microns"
+        assert actual["wavenumber_cm1"] == pytest.approx(1930.-offset)
+    else:
+        assert "readback tolerance" in result["error"]
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
@@ -460,7 +490,7 @@ def test_fixed_point_terminal_frame_does_not_replace_next_run_pump_readbacks(tmp
     assert float(pump.terminal_b_delay[:-1]) == 0.
     assert pump.channel_settings["B"]["delay"] == "0.0002s"
     assert pump.source == "OFF" and not any(pump.channels.values())
-    assert pump.recipe["frames_engine"] is False
+    assert pump.recipe["frames_engine"] == "OFF"
     restored = [r for r in result["restoration"]["actions"] if r["action"] == "t660_2 inactive timing restoration"]
     assert restored and restored[0]["ok"]
 
@@ -487,18 +517,18 @@ def test_fixed_point_distinct_mircat_internal_and_external_rates_persist_across_
         result = Runner(fixture.context).run(operation, fixture.plan)
         assert result["status"] == "complete", result.get("error", result.get("cleanup_error"))
         assert result["live_readbacks"]["mircat"]["pulse_rate_hz"] == 2300000.
-        assert result["plan"]["resolved"]["mircat"]["pulse_rate_hz"] == 2300000.
+        assert result["plan"]["resolved"]["mircat"]["pulse_rate_hz"] == 2100000.
         assert result["plan"]["resolved"]["probe_recipe"]["clock"]["frequency"] == "2000000Hz"
         pulse = result["events"][0]["tuning"]["mircat_internal_pulse"]
         assert result["plan"]["resolved"]["probe_recipe"]["predivider"] == divider
-        assert pulse["pulse_rate_hz"] == 2300000. and pulse["external_probe_rate_hz"] == 2000000./max(1, divider)
+        assert pulse["pulse_rate_hz"] == 2100000. and pulse["external_probe_rate_hz"] == 2000000./max(1, divider)
         assert persistent_pulses[1] == {"pulse_rate_hz": 2300000., "pulse_width_ns": 100.}
         assert result["restoration"]["safe_verified"] and result["preservation_verified"]
 
 
 @pytest.mark.parametrize("rate,width,expected_error", [
     (100000., 150., "greater"), (3100000., 50., "rate"), (2300000., 200., "duty")])
-def test_fixed_point_invalid_internal_pulse_configuration_fails_before_emission(tmp_path, monkeypatch, rate, width, expected_error):
+def test_fixed_point_previous_internal_pulse_configuration_is_replaced_by_backend_policy(tmp_path, monkeypatch, rate, width, expected_error):
     original_init = Mircat.__init__
     def configured_init(service):
         original_init(service)
@@ -507,10 +537,9 @@ def test_fixed_point_invalid_internal_pulse_configuration_fails_before_emission(
     fixture = build_connected_fixture(tmp_path, "dual")
     operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
     result = Runner(fixture.context).run(operation, fixture.plan)
-    assert result["status"] == "failed", result
-    assert expected_error in result["error"].lower()
-    assert "on" not in fixture.state["services"]["mircat"].calls
-    assert fixture.state["core"].dispatched == 0
+    assert result["status"] == "complete", result
+    pulse = result["events"][0]["tuning"]["mircat_internal_pulse"]
+    assert pulse["pulse_rate_hz"] == 2100000. and pulse["pulse_width_ns"] == 142.
     assert result["restoration"]["safe_verified"] and result["preservation_verified"]
 
 
@@ -606,11 +635,12 @@ def test_fixed_point_stale_qcl2_metadata_cannot_route_any_installed_operation(tm
     assert result["status"] == "complete", result.get("error", result.get("cleanup_error"))
     assert {qcl for _, qcl in mircat.qcl_calls} == {1}
     assert not {"active_qcl", "qcl_count"}.intersection(mircat.calls)
-    assert result["plan"]["resolved"]["mircat"] == {"qcl": 1, "pulse_rate_hz": 2300000., "pulse_width_ns": 100.}
+    assert result["plan"]["resolved"]["mircat"] == {"qcl": 1, "pulse_rate_hz": 2100000., "pulse_width_ns": 142.}
     assert result["events"][0]["tuning"]["qcl"] == 1
     assert mircat.pulses[2] == {"pulse_rate_hz": 700000., "pulse_width_ns": 300.}
-    assert all(row["qcl"] == 1 and row["pulse_rate_hz"] == 2300000. and row["pulse_width_ns"] == 100.
-        for row in mircat.pulse_writes)
+    assert all(row["qcl"] == 1 for row in mircat.pulse_writes)
+    assert mircat.pulse_writes[0]["pulse_width_ns"] == 142.
+    assert mircat.pulse_writes[-1]["pulse_width_ns"] == 100.
     assert result["restoration"]["safe_verified"]
 
 
@@ -622,12 +652,10 @@ def test_fixed_point_all_positions_must_fit_qcl1_before_any_emission(tmp_path, m
     settings = replace(fixture.settings, positions=(Position(1930.), Position(2200.)), event_budget=2)
     operation = fixture.context.begin_operation(settings=settings.to_dict(), hardware=True)
     result = Runner(fixture.context).run(operation, build_plan(settings))
-    mircat = fixture.state["services"]["mircat"]
-    assert result["status"] == "failed" and "QCL 1 range" in result["error"]
-    assert "on" not in mircat.calls and "tune" not in mircat.calls
-    assert {qcl for _, qcl in mircat.qcl_calls} == {1}
-    assert fixture.state["core"].dispatched == 0
+    assert result["status"] == "failed" and "1639 and 2077" in result["error"]
+    assert not fixture.state["services"]  # invalid requests fail before device construction
     assert result["restoration"]["safe_verified"] and result["preservation_verified"]
+
 
 
 def test_fixed_point_tune_rechecks_qcl1_range_before_emission(tmp_path, monkeypatch):
@@ -658,10 +686,76 @@ def test_fixed_point_changed_repetition_and_width_reach_qcl1_devices(tmp_path, m
     services = fixture.state["services"]
     assert result["status"] == "complete", result.get("error", result.get("cleanup_error"))
     pulse = result["events"][0]["tuning"]["mircat_internal_pulse"]
-    assert pulse == {"qcl": 1, "pulse_rate_hz": 2300000., "pulse_width_ns": 120., "external_probe_rate_hz": 80000.}
+    assert pulse == {"qcl": 1, "pulse_rate_hz": 2100000., "pulse_width_ns": 142., "external_probe_rate_hz": 80000.}
     assert services["t660_1"].recipes[0]["clock"]["frequency"] == "80000Hz"
     assert services["hf2li"].configured_pll["freqcenter_hz"] == 80000.
-    assert services["mircat"].pulse_writes[0] == {"qcl": 1, "pulse_rate_hz": 2300000., "pulse_width_ns": 120.}
+    assert services["mircat"].pulse_writes[0] == {"qcl": 1, "pulse_rate_hz": 2100000., "pulse_width_ns": 142.}
     assert services["mircat"].pulse_writes[-1] == {"qcl": 1, "pulse_rate_hz": 2300000., "pulse_width_ns": 100.}
     assert services["t660_1"].synth_frequency_hz == 100000.
     assert result["restoration"]["safe_verified"]
+
+
+@pytest.mark.parametrize("corrupt_filter", [False, True])
+def test_fixed_point_restore_observes_pll_center_but_checks_filter(tmp_path, monkeypatch, corrupt_filter):
+    fixture = build_connected_fixture(tmp_path, "single")
+    original_init, original_restore = HF2.__init__, HF2.reload_settings_snapshot
+    def initialize(self, state):
+        original_init(self, state)
+        self.nodes[f"/{self.device_id}/plls/0/freqcenter"] = {"type": "double", "value": 1959982.428}
+    def restore(self, before):
+        assert not any(p.endswith("/freqcenter") for p in before["nodes"])
+        original_restore(self, before)
+        self.nodes[f"/{self.device_id}/plls/0/freqcenter"] = {"type": "double", "value": 1993984.581}
+        if corrupt_filter:
+            self.nodes[f"/{self.device_id}/demods/0/order"]["value"] = 8
+    monkeypatch.setattr(HF2, "__init__", initialize)
+    monkeypatch.setattr(HF2, "reload_settings_snapshot", restore)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan, kind="blank")
+    assert result["restoration"]["safe_verified"] is not corrupt_filter
+    if corrupt_filter:
+        assert "HF2LI restoration mismatch" in result["cleanup_error"]
+    else:
+        record = next(a for a in result["restoration"]["actions"] if a["action"] == "HF2LI restoration readback")
+        assert record["readback"]["external_reference_observations"]
+
+
+def test_installed_native_headers_survive_save_reload(tmp_path, monkeypatch):
+    from control_app.measurement_modules.fixed_wavenumber_kinetics.persistence import iter_native_chunks
+    fixture = build_connected_fixture(tmp_path, "single")
+    original = HF2.read_acquisition
+    def read(self, duration_s):
+        result = original(self, duration_s)
+        for stream in result["data"].values():
+            stream["header"] = {"flags": 0, "createdtimestamp": 2**62+3}
+        return result
+    monkeypatch.setattr(HF2, "read_acquisition", read)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan, kind="blank")
+    assert result["status"] == "complete", result.get("error")
+    assert result["preservation_verified"]
+    chunks = list(iter_native_chunks(result))
+    assert chunks
+    assert chunks[0]["sample"]["header"] == {"flags": 0, "createdtimestamp": 2**62+3}
+
+
+@pytest.mark.parametrize("transition", [False, True])
+def test_initial_high_sync_is_not_an_event_but_observed_transition_is(tmp_path, monkeypatch, transition):
+    fixture = build_connected_fixture(tmp_path, "single")
+    original = HF2.read_acquisition
+    def read(self, duration_s):
+        result = original(self, duration_s)
+        dio = result["data"][f"/{self.device_id}/demods/2/sample"]["dio"]
+        dio[:] |= 1 << 16
+        if transition and len(dio) > 10:
+            dio[5:10] = 0
+        return result
+    monkeypatch.setattr(HF2, "read_acquisition", read)
+    operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
+    result = Runner(fixture.context).run(operation, fixture.plan, kind="blank")
+    assert result["restoration"]["safe_verified"] and result["preservation_verified"]
+    if transition:
+        assert "Unexpected measured pump sync" in result["error"]
+    else:
+        assert result["status"] == "complete", result.get("error")
+        assert result["events"][0]["pump_timestamps"] == []

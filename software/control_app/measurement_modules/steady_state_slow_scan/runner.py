@@ -151,6 +151,35 @@ class SlowScanRunner:
         self.cancel = Event()
         self.cancel_reason = "Acquisition stopped"
         self.last_result = None
+        self._prepared = None
+
+    def _close_prepared(self):
+        prepared, self._prepared = self._prepared, None
+        return self._restore_backend(prepared["backend"]) if prepared else {"safe_verified": True, "errors": []}
+
+    @staticmethod
+    def _restore_backend(backend):
+        try:
+            restored = backend.restore()
+        except BaseException as exc:
+            restored = {"safe_verified": False, "errors": [str(exc)]}
+        blank_path = getattr(backend, "_prepared_blank_path", None)
+        if blank_path is not None:
+            from .persistence import _write_json_exclusive
+            try:
+                _write_json_exclusive(Path(blank_path) / "prepared_session_cleanup.json", restored)
+                backend._prepared_blank_path = None
+            except Exception as exc:
+                restored = {**restored, "safe_verified": False,
+                            "errors": [*restored.get("errors", []), f"Cleanup record could not be saved: {exc}"]}
+        return restored
+
+    @staticmethod
+    def _session_settings(settings):
+        values = settings.to_dict()
+        for key in ("plan_label", "run_label", "condition"):
+            values.pop(key, None)
+        return values
 
     def request_abort(self, reason="Acquisition stopped"):
         self.cancel_reason = str(reason)
@@ -190,7 +219,10 @@ class SlowScanRunner:
         primary_error = None
         saved = False
         restored = {"safe_verified": True, "errors": []}
-        active_backend = None
+        active_backend = self._prepared["backend"] if self._prepared is not None else None
+        retained = False
+        resumed = False
+        retained_dark = None
 
         def check():
             if self.cancel.is_set():
@@ -224,10 +256,30 @@ class SlowScanRunner:
             # Construction never opens a device. Discovery, configuration and
             # retention all remain inside this operation's ownership scope.
             factory = self.backend_factory or (InstalledSlowScanBackend if operation.hardware else SyntheticSlowScanBackend)
-            active_backend = backend or factory(self.context, operation)
+            if self._prepared is not None:
+                prepared = self._prepared
+                active_backend = prepared["backend"]
+                if (operation.hardware and operation.ownership == prepared["token"]
+                        and kind == "measurement"
+                        and operation.configuration == active_backend.operation.configuration
+                        and self._session_settings(plan.settings) == prepared["settings"]):
+                    self._prepared = None
+                    plan = replace(prepared["plan"], settings=plan.settings)
+                    active_backend.resume(operation)
+                    resumed = True
+                    retained_dark = prepared.get("dark")
+                    result["prepared_session_reused"] = True
+                    result["plan"] = plan.to_dict()
+                    result["compatibility"] = compatibility(plan)
+                else:
+                    cleanup = self._close_prepared()
+                    if not cleanup.get("safe_verified"):
+                        raise RuntimeError("Prepared session cleanup failed: " + str(cleanup.get("errors")))
+                    active_backend = None
+            active_backend = active_backend or backend or factory(self.context, operation)
             active_backend.kind = kind
             if kind != "capability":
-                if operation.hardware and hasattr(active_backend, "resolve_plan"):
+                if operation.hardware and not resumed and hasattr(active_backend, "resolve_plan"):
                     report("configuration", "Reading device settings")
                     plan = active_backend.resolve_plan(plan.settings, check)
                     result["plan"] = plan.to_dict()
@@ -239,6 +291,8 @@ class SlowScanRunner:
                 if available_memory_bytes() < int(plan.estimates.get("peak_memory_bytes") or 0):
                     raise MemoryError("Declared complete acquisition exceeds available memory; revise the explicit plan")
                 controls = dict(snapshot.preliminary or {})
+                if resumed and not controls.get("dark") and retained_dark:
+                    controls["dark"] = retained_dark
                 self._validate_controls(controls, plan, kind)
             if kind == "capability":
                 report("configuration", "Checking connected capabilities under exclusive ownership")
@@ -247,7 +301,7 @@ class SlowScanRunner:
             else:
                 compiled = compile_timing(plan)
                 result["compiled_timing"] = compiled.to_dict()
-                prepared_plan = active_backend.prepare(plan, compiled, check, report)
+                prepared_plan = None if resumed else active_backend.prepare(plan, compiled, check, report)
                 if prepared_plan is not None:
                     # Observed input ranging is part of preparation. Compatibility
                     # uses the final selected ranges, never the prior idle ranges.
@@ -337,17 +391,36 @@ class SlowScanRunner:
             result["status"] = "cancelled" if isinstance(exc, InterruptedError) else "failed"
             result["error"] = str(exc)
         finally:
+            if self._prepared is not None and self._prepared["backend"] is active_backend:
+                self._prepared = None
             report("restoration", "Restoring settings and verifying outputs OFF")
             if active_backend is not None:
                 try:
-                    restored = active_backend.restore()
+                    if (kind == "blank" and operation.hardware and primary_error is None
+                            and hasattr(active_backend, "park")):
+                        restored = active_backend.park(check, report)
+                        retained = True
+                    else:
+                        restored = self._restore_backend(active_backend)
                 except BaseException as exc:
-                    restored = {"safe_verified": False, "errors": [str(exc)]}
+                    try:
+                        restored = self._restore_backend(active_backend)
+                    except BaseException as cleanup_exc:
+                        restored = {"safe_verified": False, "errors": [str(cleanup_exc)]}
+                    if (kind == "blank" and primary_error is None and isinstance(exc, Exception)
+                            and not isinstance(exc, InterruptedError) and restored.get("safe_verified")):
+                        result["prepared_session"] = {"retained": False, "warning": str(exc),
+                            "fallback_restoration_verified": True}
+                        report("prepared session", "Blank saved as usable data; prepared session unavailable: " + str(exc))
+                    else:
+                        primary_error = primary_error or exc
+                        result["status"] = "cancelled" if isinstance(primary_error, InterruptedError) else "failed"
+                        result["error"] = str(exc)
                 result["readbacks"] = deepcopy(active_backend.readbacks)
                 # Raw records remain available in memory even if storage failed.
                 result["partial_native_records"] = active_backend.raw_records
             result["restoration"] = restored
-            if not restored.get("safe_verified", False):
+            if not retained and not restored.get("safe_verified", False):
                 result["status"] = "failed"
                 result["cleanup_error"] = "; ".join(restored.get("errors", ["Restoration unverified"]))
             report("saving", "Saving data")
@@ -358,7 +431,23 @@ class SlowScanRunner:
             except BaseException as exc:
                 result["status"] = "failed"
                 result["storage_error"] = str(exc)
-            if operation.hardware:
+            if retained and saved:
+                active_backend._prepared_blank_path = operation.output_path
+                self._prepared = {"backend": active_backend, "plan": plan, "token": operation.ownership,
+                                  "settings": self._session_settings(plan.settings),
+                                  "dark": deepcopy(controls.get("dark"))}
+                try:
+                    self.context.ownership.park(operation.ownership, cleanup=self._close_prepared)
+                except BaseException:
+                    cleanup = self._close_prepared()
+                    self.context.ownership.release(operation.ownership,
+                        safe_verified=bool(cleanup.get("safe_verified")), preservation_verified=saved,
+                        detail="Prepared session registration failed; cleanup attempted")
+                    raise
+            elif retained:
+                restored = self._restore_backend(active_backend)
+                result["restoration"] = restored
+            if operation.hardware and not (retained and saved):
                 self.context.ownership.release(operation.ownership,
                     safe_verified=bool(restored.get("safe_verified")), preservation_verified=saved,
                     detail=result.get("cleanup_error") or result.get("storage_error") or result.get("error") or "Slow scan restored and preserved")
@@ -393,16 +482,19 @@ class SlowScanRunner:
         actual = current.get("hf2li", {}).get("nodes")
         if actual is None:
             return
-        # Oscillator frequency follows the external reference; while safely
-        # stopped it is an observation, not a restorable configuration value.
-        actual = {path: value for path, value in actual.items() if "/oscs/" not in path}
+        # External-reference oscillator and PLL center frequencies drift while
+        # stopped. Retain those observations without treating them as settings.
+        def settings_only(nodes):
+            return {path: value for path, value in nodes.items()
+                    if "/oscs/" not in path and not path.endswith("/plls/0/freqcenter")}
+        actual = settings_only(actual)
         for role in ("dark", "blank", "q0"):
             control = controls.get(role)
             if not isinstance(control, dict):
                 continue
             previous = control.get("readbacks", {}).get("hf2li", {}).get("nodes")
             if previous is not None:
-                previous = {path: value for path, value in previous.items() if "/oscs/" not in path}
+                previous = settings_only(previous)
             if previous != actual:
                 raise ValueError(f"{role} HF2LI settings changed")
 

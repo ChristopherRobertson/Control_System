@@ -300,6 +300,7 @@ class InstalledAdapter:
 
     def _capabilities(self):
         """Only documented values actually read from the installed services."""
+        from control_app.measurement_host.application_session import cached_hf2_choices
         def absolute(name):
             saved = self.before[name]
             relative = {edge: _seconds(_query(saved["readback"]["channels"][c], key))
@@ -318,7 +319,8 @@ class InstalledAdapter:
         t1, t2 = absolute("t660_1"), absolute("t660_2")
         optical = self.before["mircat"]["qcls"][0]
         limits = optical["limits"]
-        return {"mircat_pulse_rate_hz": optical["pulse_rate_hz"], "mircat_pulse_width_ns": optical["pulse_width_ns"],
+        return {"hf2_choices": cached_hf2_choices(self.devices["hf2li"], "dual"),
+            "mircat_pulse_rate_hz": optical["pulse_rate_hz"], "mircat_pulse_width_ns": optical["pulse_width_ns"],
             "mircat_max_pulse_rate_hz": limits["max_pulse_rate_hz"], "mircat_max_pulse_width_ns": limits["max_pulse_width_ns"],
             "mircat_max_duty_fraction": float(limits["max_duty_cycle"])/100.0, "qcl": 1,
             "fire_to_q_ns": (t2[3]-t2[1])*1e9,
@@ -382,12 +384,26 @@ class InstalledAdapter:
             if not math.isfinite(value): raise ReadinessError("MIRcat returned a nonfinite wavelength")
             self.readbacks["wavelength"] = {**actual, "wavenumber_cm1": value, "qcl": index}
             limits = qcl.get_qcl_pulse_limits(index)
+            requests = self.settings.get("laser_settings", {})
+            from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
+            pulse = {"pulse_rate_hz": MIRCAT_INTERNAL_RATE_HZ,
+                     "pulse_width_ns": MIRCAT_INTERNAL_WIDTH_NS,
+                     "current_ma": requests.get("qcl_current_ma", float(qcl.get_qcl_current(1)))}
+            low, high = qcl.get_qcl_current_limits(1)
+            if not low <= pulse["current_ma"] <= high:
+                raise ReadinessError("Requested MIRcat current exceeds installed QCL limits")
+            _validate_optical_pulses(pulse["pulse_rate_hz"], pulse["pulse_width_ns"], self.plan.timing["input_frequency_hz"], limits)
+            self.readbacks["requested_mircat_pulse"] = dict(pulse)
+            qcl.set_qcl_pulse_params(qcl=1, **pulse)
+            for key, method in (("pulse_rate_hz", qcl.get_qcl_pulse_rate), ("pulse_width_ns", qcl.get_qcl_pulse_width), ("current_ma", qcl.get_qcl_current)):
+                if not math.isclose(float(method(1)), pulse[key], rel_tol=1e-7, abs_tol=1e-9):
+                    raise ReadinessError(f"MIRcat {key} readback differs from request")
             width = float(qcl.get_qcl_pulse_width(index))
             rate = self.plan.timing["input_frequency_hz"]
             internal_rate = float(qcl.get_qcl_pulse_rate(1))
             self.readbacks["mircat_pulse"] = {"qcl": 1, "optical_pulse_width_ns": width,
                 "current_ma": qcl.get_qcl_current(1), "external_probe_rate_hz": rate,
-                "internal_rate_hz": internal_rate, "source": "installed QCL 1 readback; preserved optical pulse parameters"}
+                "internal_rate_hz": internal_rate, "source": "installed QCL 1 readback; verified provisional internal optical settings"}
             self.readbacks["mircat_pulse"].update(_validate_optical_pulses(internal_rate, width, rate, limits))
             qcl.start_emission()
             settling = max(x["timeconstant_s"]*x["order"]*8 for x in self.detector_settings.values())
@@ -710,11 +726,15 @@ class InstalledAdapter:
                         snapshot = deepcopy(self.before["hf2li"])
                         enables = {p: v for p, v in snapshot["nodes"].items() if "/demods/" in p and p.endswith("/enable")}
                         hf.configure_demodulators([{"index": i, "enable": False} for i in range(6)])
-                        snapshot["nodes"] = {p: v for p, v in snapshot["nodes"].items() if p not in enables}
+                        center_path = f"/{hf.device_id}/plls/0/freqcenter"
+                        snapshot["nodes"] = {p: v for p, v in snapshot["nodes"].items() if p not in enables and p != center_path}
                         hf.reload_settings_snapshot(snapshot)
                         hf.reload_settings_snapshot({"nodes": enables})
                         after = hf.export_settings_snapshot(preset=self.hf_snapshot_preset)
                         check = deepcopy(self.before["hf2li"])
+                        # Installed HF2 PLL center follows its external reference;
+                        # it is retained in before/after, not replayed as a setpoint.
+                        check["nodes"].pop(center_path, None)
                         if int(self.before["hf2li"]["nodes"][f"/{hf.device_id}/plls/0/enable"]["value"]) == 1:
                             # An enabled restored PLL owns the instantaneous
                             # oscillator frequency; the saved scalar is dynamic.

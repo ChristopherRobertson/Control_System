@@ -16,12 +16,12 @@ MAXIMUM_PROBE_DUTY_FRACTION = 0.30  # Fixed QCL1 ceiling; saved settings cannot 
 UI_MANUAL_OVERRIDE_PATHS = frozenset((
     "response.hf2_order", "response.hf2_time_constant_s", "response.sample_rate_sps",
     "response.reference_order", "response.reference_time_constant_s", "response.reference_rate_sps",
-    "response.integration_aperture_s", "timing.probe_rate_hz", "timing.mircat_pulse_width_ns",
+    "response.integration_aperture_s", "timing.probe_rate_hz", "timing.probe_width_ns",
 ))
 REMOVED_UI_OVERRIDE_PATHS = frozenset((
     "response.timing_rate_sps", "response.detector_latency_s", "response.jitter_s", "response.time_zero_s",
     "response.reference_latency_s", "response.reference_alignment_uncertainty_s",
-    "timing.probe_width_ns", "timing.fire_to_q_us",
+    "timing.mircat_pulse_width_ns", "timing.fire_to_q_us",
 ))
 
 
@@ -198,6 +198,9 @@ class StroboscopySettings:
     value_selections: tuple[SettingSelection, ...] = ()
     settings_version: int = SETTINGS_VERSION
     experiment_id: str = EXPERIMENT_ID
+    run_label: str = ""  # Optional run metadata; never an acquisition compatibility key.
+
+    laser_settings: dict[str, Any] = field(default_factory=dict)
 
     @property
     def instance_id(self) -> str:
@@ -219,6 +222,7 @@ class StroboscopySettings:
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "StroboscopySettings":
         data = dict(value)
+        data["laser_settings"] = dict(data.get("laser_settings", {}))
         permitted = {item.name for item in fields(cls)}
         unknown = set(data) - permitted
         if unknown:

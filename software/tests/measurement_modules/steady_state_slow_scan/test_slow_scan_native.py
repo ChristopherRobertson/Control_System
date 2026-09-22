@@ -74,6 +74,24 @@ def test_zero_reference_and_unexpected_pump_sync_are_detected():
     assert not np.all(sweeps[0]["valid"])
 
 
+def test_constant_high_pump_sync_is_idle_not_a_pulse():
+    record = native_record()
+    record["data"]["/test/demods/2/sample"]["dio"] |= 1 << 17
+    sweeps, _, flags = decode(record)
+    assert not flags
+    assert len(sweeps) == 1
+
+
+def test_pre_sweep_pump_sync_excursion_is_retained_without_contaminating_spectrum():
+    record = native_record()
+    dio = record["data"]["/test/demods/2/sample"]["dio"]
+    dio[1:3] |= 1 << 17
+    sweeps, _, flags = decode(record)
+    assert "electrical_pump_sync_outside_sweep" in flags
+    assert "unexpected_electrical_pump_sync" not in flags
+    assert "electrical_pump_sync_outside_sweep" in sweeps[0]["flags"]
+
+
 def test_partial_native_journal_exact_dtype_and_exclusive_preservation(tmp_path):
     record = native_record()
     path = retain_chunk(tmp_path, 0, record)

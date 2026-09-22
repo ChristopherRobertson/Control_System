@@ -45,6 +45,10 @@ class NanosecondScientificAdapter:
         return tuple(plan.errors)
 
     def summarize_plan(self, plan):
+        from control_app.measurement_host.experiment_summary import summary_rows
+        return summary_rows(plan, self._procedure_summary(plan), slow_scan=False)
+
+    def _procedure_summary(self, plan):
         settings = _settings(getattr(plan, "resolved_settings", None) or plan.settings)
         budget = plan.budget
         duration = budget.get("total_s")
@@ -57,8 +61,8 @@ class NanosecondScientificAdapter:
         detector = (f"{rate:g} Sa/s · {tau:g} s filter" if isinstance(rate, (int, float)) and isinstance(tau, (int, float))
                     else "automatic after device check")
         delays = settings["delays_ns"]
-        step = settings.get("timing_step_ns")
-        grid = f"{step:g} ns command grid" if isinstance(step, (int, float)) else "grid pending"
+        quantized = [event.quantized_delay_ns for event in plan.events if event.quantized_delay_ns is not None]
+        grid = f"programmed {min(quantized):g}…{max(quantized):g} ns" if quantized else "programmed range pending"
         period = settings.get("probe_period_s")
         cycle = f"{settings['cycle_interval_s']:g} s cycle"
         if isinstance(period, (int, float)):
@@ -70,6 +74,7 @@ class NanosecondScientificAdapter:
             ("Sequence", f"{budget.get('event_count', 0):,} events · {storage_text}"),
             ("Estimated duration", duration_text),
             ("HF2LI impulse area", detector),
+            ("Interpretation", "Sparse equivalent-time DC complex area; filter memory applies. Electrical command grid is not optical resolution. Optical delay requires calibration; ΔA is relative to preliminary Q₀."),
         )
 
     def selected_records(self):

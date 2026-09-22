@@ -10,14 +10,16 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QPushButton,
     QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox,
-    QFileDialog, QSizePolicy,
+    QFileDialog, QSizePolicy, QGroupBox,
 )
 
+from control_app.measurement_host.settings_sections import HF2LIValueInput, hf2li_choices
 from control_app.measurement_host import TabHandle
 from control_app.measurement_host.presentation import (
     CompactMeasurementPanel, LinkedSliceControl, PlotPanel,
     choose_time_display,
 )
+from control_app.measurement_host.settings_sections import PhaseLaserSections, compact_settings_page
 from .settings import RepeatedRapidScanSettings
 
 
@@ -36,6 +38,9 @@ def _override_text(value):
 class SettingsWidget(QWidget):
     """Essential intent plus independent, optional instrument overrides."""
     changed = Signal()
+    MIRCAT_DEFAULTS = {"probe_frequency_hz": PhaseLaserSections.MIRCAT_DEFAULTS["probe_repetition_rate_hz"],
+                       "probe_pulse_width_s": PhaseLaserSections.MIRCAT_DEFAULTS["probe_pulse_width_ns"],
+                       "scan_speed_cm1_s": PhaseLaserSections.MIRCAT_DEFAULTS["scan_speed_cm1_s"]}
 
     def __init__(self, mode, settings=None):
         super().__init__()
@@ -48,16 +53,28 @@ class SettingsWidget(QWidget):
             settings = resolve_intent_settings(AcquisitionIntent(), mode=mode)
         self._base = settings
         self.advanced = QWidget()
-        form = QFormLayout(self)
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setVerticalSpacing(3)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        run_group = QGroupBox("Run Label")
+        run_form = QFormLayout(run_group)
+        run_form.setContentsMargins(4, 0, 4, 0)
+        run_form.setVerticalSpacing(0)
+        run_group.setMaximumHeight(42)
+        root.addWidget(run_group)
         self.sample = QLineEdit()
+        self.sample.setMaximumHeight(20)
         self.sample.setObjectName("rrs_sample_name")
         self.sample.editingFinished.connect(lambda *_: self.changed.emit())
-        form.addRow("Sample", self.sample)
+        run_form.addRow("Run Label", self.sample)
+        settings_group = QGroupBox("Rapid-Scan Settings")
+        form = QFormLayout(settings_group)
+        form.setContentsMargins(4, 0, 4, 0)
+        form.setVerticalSpacing(0)
+        root.addWidget(settings_group)
         fields = (
-            ("spectral_min_cm1", "Start", " cm⁻¹", 1., 10000., 3, 1.),
-            ("spectral_max_cm1", "Stop", " cm⁻¹", 1., 10000., 3, 1.),
+            ("spectral_max_cm1", "Start", " cm⁻¹", 1., 10000., 3, 1.),
+            ("spectral_min_cm1", "Stop", " cm⁻¹", 1., 10000., 3, 1.),
             ("observation_duration_s", "Observe after pump", " s", .001, 1e6, 3, 1.),
             ("phase_count", "Phase positions", "", 1, 10000, 0, 1),
             ("repeats", "Repeats", "", 1, 10000, 0, 1),
@@ -70,6 +87,7 @@ class SettingsWidget(QWidget):
             control.setSingleStep(step)
             control.setSuffix(suffix)
             control.setKeyboardTracking(False)
+            control.setMaximumHeight(20)
             control.setObjectName("rrs_" + key)
             control.valueChanged.connect(lambda *_: self.changed.emit())
             self.inputs[key] = control
@@ -91,42 +109,43 @@ class SettingsWidget(QWidget):
             ]
         overrides += [
             ("probe_frequency_hz", "Repetition rate (Hz)"),
-            ("mircat_pulse_width_ns", "Pulse width (ns)"),
+            ("probe_pulse_width_s", "Pulse width (ns)"),
         ]
         for key, label in overrides:
-            combo = QComboBox()
-            combo.setEditable(True)
+            hf2 = key.startswith(("sample_", "reference_"))
+            combo = HF2LIValueInput() if hf2 else QComboBox()
+            combo.setEditable(not hf2)
+            combo.setMaximumHeight(20)
             combo.setMinimumContentsLength(6)
             combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
             combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-            combo.addItem("Automatic", None)
+            if not hf2:
+                combo.addItem("Automatic", None)
             initial = getattr(self._base, key)
-            if initial is not None:
+            if initial is not None and not hf2:
                 combo.addItem(_override_text(initial), initial)
             combo.setObjectName("rrs_override_" + key)
             combo.currentIndexChanged.connect(lambda *_: self.changed.emit())
-            combo.lineEdit().editingFinished.connect(lambda *_: self.changed.emit())
+            if combo.isEditable():
+                combo.lineEdit().editingFinished.connect(lambda *_: self.changed.emit())
             self.override_inputs[key] = combo
-            if mode != "dual" or key not in {
-                    "sample_rate_hz", "sample_filter_order", "sample_filter_timeconstant_s",
-                    "reference_rate_hz", "reference_filter_order", "reference_filter_timeconstant_s"}:
-                advanced.addRow(label, combo)
-        if mode == "dual":
-            detectors = QWidget()
-            grid = QGridLayout(detectors)
-            grid.setContentsMargins(0, 0, 0, 0)
-            grid.setVerticalSpacing(3)
-            for column, role in enumerate(("sample", "reference"), 1):
-                grid.addWidget(QLabel(role.title()), 0, column)
-                for row, (suffix, label) in enumerate((("rate_hz", "Rate (Sa/s)"),
-                        ("filter_order", "Filter order"), ("filter_timeconstant_s", "Time constant (s)")), 1):
-                    if column == 1:
-                        grid.addWidget(QLabel(label), row, 0)
-                    control = self.override_inputs[f"{role}_{suffix}"]
-                    control.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-                    control.setMinimumWidth(72)
-                    grid.addWidget(control, row, column)
-            advanced.insertRow(1, detectors)
+        for role in (("sample", "reference") if mode == "dual" else ("sample",)):
+            for suffix, label in (("filter_order", "Filter order"), ("filter_timeconstant_s", "Time constant (s)"), ("rate_hz", "CH1 sample rate (Sa/s)")):
+                name = f"{role.title()} {label.lower().replace('ch1 ', '')}" if mode == "dual" else label
+                advanced.addRow(name, self.override_inputs[f"{role}_{suffix}"])
+        # Move the already-bound range editors and laser overrides into the
+        # exact laser section list used by all four measurement pages.
+        form.takeRow(self.inputs["spectral_min_cm1"])
+        form.takeRow(self.inputs["spectral_max_cm1"])
+        root.removeWidget(settings_group)
+        self.lasers = PhaseLaserSections(root, lambda *_: self.changed.emit(), scanning=True, supplied={
+            "start_wavenumber_cm1": self.inputs["spectral_max_cm1"],
+            "stop_wavenumber_cm1": self.inputs["spectral_min_cm1"],
+            "scan_speed_cm1_s": self.override_inputs["scan_speed_cm1_s"],
+            "probe_repetition_rate_hz": self.override_inputs["probe_frequency_hz"],
+            "probe_pulse_width_ns": self.override_inputs["probe_pulse_width_s"],
+        })
+        root.addWidget(settings_group)
         self.restore_auto_button = QPushButton("Restore automatic settings")
         self.restore_auto_button.clicked.connect(self.restore_automatic)
         advanced.addRow(self.restore_auto_button)
@@ -137,13 +156,14 @@ class SettingsWidget(QWidget):
                 **{key: control.value() for key, control in self.inputs.items()}}
 
     def read(self):
+        from dataclasses import replace
         from .settings import AcquisitionIntent
         from .planner import resolve_intent_settings
         values = {key: control.value() for key, control in self.inputs.items()}
         values["sample_name"] = self.sample.text().strip() or "Sample"
         overrides = dict(getattr(self._base, "manual_overrides", {}) or {})
         for key, control in self.override_inputs.items():
-            text = control.currentText().strip()
+            text = (control.text() if isinstance(control, HF2LIValueInput) else control.currentText()).strip()
             if not text or text.lower() == "automatic":
                 overrides.pop(key, None)
                 continue
@@ -155,12 +175,12 @@ class SettingsWidget(QWidget):
                 if not value.is_integer():
                     raise ValueError(f"{key.replace('_', ' ')} must be an integer")
                 value = int(value)
-            overrides[key] = value
+            from decimal import Decimal
+            overrides[key] = float(Decimal(text) * Decimal("1e-9")) if key == "probe_pulse_width_s" else value
         settings = resolve_intent_settings(AcquisitionIntent(**values), mode=self.mode,
-            base_settings=self._base, capabilities=self.capabilities, overrides=overrides)
+            base_settings=replace(self._base, laser_settings=self.lasers.values()), capabilities=self.capabilities, overrides=overrides)
         # Simulation is available through injected developer transports only.
-        from dataclasses import replace
-        return replace(settings, execution="hardware").to_dict()
+        return replace(settings, execution="hardware", laser_settings=self.lasers.values()).to_dict()
 
     def apply(self, value):
         from .settings import AcquisitionIntent
@@ -169,6 +189,7 @@ class SettingsWidget(QWidget):
         if settings.mode != self.mode:
             raise ValueError("Plan detector mode does not match this tab")
         self._base = settings
+        self.lasers.apply(settings.laser_settings)
         intent = (AcquisitionIntent(**settings.acquisition_intent) if settings.acquisition_intent
                   else AcquisitionIntent.from_settings(settings))
         self.sample.setText(intent.sample_name)
@@ -183,16 +204,24 @@ class SettingsWidget(QWidget):
         for key, control in self.override_inputs.items():
             control.blockSignals(True)
             value = settings.manual_overrides.get(key)
+            if value is not None and key == "probe_pulse_width_s":
+                value *= 1e9
+            if value is None:
+                value = self.MIRCAT_DEFAULTS.get(key)
             control.setCurrentIndex(0)
             if value is not None:
-                control.setEditText(_override_text(value))
+                control.setCurrentText(_override_text(value))
             control.blockSignals(False)
 
     def set_capabilities(self, capabilities):
         self.capabilities = capabilities
         live = getattr(capabilities, "live_settings", {}) or {}
         for key, control in self.override_inputs.items():
+            if isinstance(control, HF2LIValueInput):
+                continue
             value = live.get(key)
+            if value is not None and key == "probe_pulse_width_s":
+                value *= 1e9
             if value is not None:
                 text = _override_text(value)
                 if control.findText(text) < 0:
@@ -201,9 +230,12 @@ class SettingsWidget(QWidget):
     def restore_automatic(self):
         from dataclasses import replace
         self._base = replace(self._base, manual_overrides={})
-        for control in self.override_inputs.values():
+        self.lasers.restore_automatic()
+        for key, control in self.override_inputs.items():
             control.blockSignals(True)
             control.setCurrentIndex(0)
+            if key in self.MIRCAT_DEFAULTS:
+                control.setEditText(_override_text(self.MIRCAT_DEFAULTS[key]))
             control.blockSignals(False)
         self.changed.emit()
 
@@ -254,7 +286,7 @@ class MoviePlots(QWidget):
         self.description.setWordWrap(False)
         self.description.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.plot = PlotPanel(self)
-        self.plot.canvas.setMinimumHeight(220)
+        self.plot.canvas.setMinimumHeight(195)
         layout = QVBoxLayout(self)
         row = QHBoxLayout()
         for control in (self.movie, self.quantity, self.view):
@@ -482,8 +514,8 @@ class RepeatedRapidScanPanel(CompactMeasurementPanel):
         adapter = RepeatedRapidScanAdapter(context, settings)
         self._initial_state_values = {}
         super().__init__(settings, adapter, context, advanced_widget=settings.advanced)
-        self.file_layout.setDirection(QHBoxLayout.Direction.LeftToRight)
-        self.blank_actions_layout.setDirection(QHBoxLayout.Direction.LeftToRight)
+        compact_settings_page(self)
+        self.advanced_group.setTitle("HF2LI Settings")
         self.settings_layout.setContentsMargins(6, 6, 6, 6)
         self.settings_layout.setSpacing(3)
         self.advanced_layout.setContentsMargins(6, 6, 6, 6)
@@ -492,8 +524,6 @@ class RepeatedRapidScanPanel(CompactMeasurementPanel):
         self.start_button.setText("Start recovery movies")
         self.abort_button.setText("Stop")
         self.settings_widget.changed.connect(self.refresh_plan)
-        self.capability_button = self.add_settings_action("Check device", lambda: self._user_action(
-            lambda: self.begin_auxiliary("capabilities")))
         self.blank_button = self.add_blank_action("Acquire blank", lambda: self._user_action(
             lambda: self.begin_auxiliary("blank")))
         self.load_blank_button = self.add_blank_action("Load blank…", lambda: self._load_record("blank"))

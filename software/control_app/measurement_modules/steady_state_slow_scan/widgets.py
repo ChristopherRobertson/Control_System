@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget, QFileDialog, QDoubleSpinBox, QSpinBox, QHeaderView, QToolButton,
 )
 
+from control_app.measurement_host.settings_sections import HF2LIValueInput, hf2li_choices
 from control_app.measurement_host import TabHandle
 from control_app.measurement_host.presentation import (
     CompactMeasurementPanel, LinkedSliceControl, PlotPanel,
@@ -45,9 +46,9 @@ class SlowScanSettingsWidget(QWidget):
     HF_OVERRIDE_ROWS = (("Time constant (s)", "time_constant_s", "reference_time_constant_s"),
                         ("Filter order", "filter_order", "reference_filter_order"),
                         ("Sampling rate (Sa/s)", "requested_sample_rate_hz", "requested_reference_sample_rate_hz"))
-    AUTO_FIELDS = (("current_ma", "Current (mA)", 1.),
-                   ("repetition_rate_hz", "Repetition rate (Hz)", 1.),
-                   ("pulse_width_s", "Pulse width (ns)", 1e-9))
+    AUTO_FIELDS = (("repetition_rate_hz", "Repetition rate (Hz)", 1.),
+                   ("pulse_width_s", "Pulse width (ns)", 1e-9),
+                   ("current_ma", "Current (mA)", 1.))
 
     def __init__(self, mode, parent=None):
         super().__init__(parent)
@@ -57,16 +58,22 @@ class SlowScanSettingsWidget(QWidget):
         self.fields = self.override_inputs = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(0)
+        run_group = QGroupBox("Run Label")
+        run_form = QFormLayout(run_group)
+        run_form.setContentsMargins(4, 0, 4, 0)
+        run_form.setVerticalSpacing(0)
+        run_group.setMaximumHeight(46)
+        self.plan_label = QLineEdit()
+        self.plan_label.setPlaceholderText("Optional")
+        self.plan_label.textChanged.connect(self._changed)
+        run_form.addRow("Run Label", self.plan_label)
+        layout.addWidget(run_group)
         group = QGroupBox("MIRcat Settings")
         form = QFormLayout(group)
         form.setContentsMargins(4, 4, 4, 4)
         form.setVerticalSpacing(0)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.plan_label = QLineEdit()
-        self.plan_label.setPlaceholderText("Optional")
-        self.plan_label.textChanged.connect(self._changed)
-        form.addRow("Run label", self.plan_label)
         self.laser_mode = QComboBox()
         self.laser_mode.setObjectName("laser_mode")
         self.laser_mode.addItem("Pulsed", "pulsed")
@@ -78,12 +85,12 @@ class SlowScanSettingsWidget(QWidget):
         for editor, name in ((self.lower, "lower_cm1"), (self.upper, "upper_cm1")):
             editor.setObjectName(name)
             editor.setDecimals(3)
-            editor.setRange(0., 100000.)
+            editor.setRange(1639., 2077.)
             editor.setSuffix(" cm⁻¹")
             editor.setKeyboardTracking(False)
             editor.valueChanged.connect(self._changed)
         form.addRow("Start", self.start)
-        form.addRow("End", self.end)
+        form.addRow("Stop", self.end)
         self.scan_speed = QDoubleSpinBox()
         self.scan_speed.setObjectName("requested_scan_speed_cm1_s")
         self.scan_speed.setDecimals(3)
@@ -98,12 +105,15 @@ class SlowScanSettingsWidget(QWidget):
             editor.setPlaceholderText("Auto")
             editor.textChanged.connect(self._changed)
             self.fields[key] = editor
+            if key in ("current_ma", "pulse_width_s"):
+                from control_app.measurement_host.laser_settings import constrain_mircat_control
+                constrain_mircat_control(editor, "current" if key == "current_ma" else "width")
             form.addRow(label, editor)
         self.repeats = QSpinBox()
         self.repeats.setObjectName("replicates")
         self.repeats.setRange(1, 8192)
         self.repeats.valueChanged.connect(self._changed)
-        self.repeats.setToolTip("Total number of descending scans from Start to End.")
+        self.repeats.setToolTip("Total number of descending scans from Start to Stop.")
         form.addRow("Number of Scans", self.repeats)
         self.advanced_widget = QWidget()
         filter_form = QGridLayout(self.advanced_widget)
@@ -122,15 +132,12 @@ class SlowScanSettingsWidget(QWidget):
             filter_form.addWidget(QLabel(label), row, 0)
             keys = (sample_key, reference_key) if mode == "dual" else (sample_key,)
             for column, key in enumerate(keys, start=1):
-                editor = QLineEdit()
+                editor = HF2LIValueInput()
                 editor.setObjectName(key)
-                editor.setPlaceholderText("Auto")
-                editor.textChanged.connect(self._changed)
+                editor.currentTextChanged.connect(self._changed)
                 self.fields[key] = editor
                 filter_form.addWidget(editor, row, column)
         layout.addWidget(group)
-        self.capability_button = QPushButton("Read connected settings")
-        layout.addWidget(self.capability_button)
         self.apply_settings(self._base)
 
     def _changed(self, *_):
@@ -220,7 +227,10 @@ class SpectrumPlotAdapter:
         axes = figure.add_subplot(211 if fit is not None and view == "normalized" else 111)
         axes.set(xlabel="Wavenumber (cm⁻¹)", ylabel=str(label))
         if y is None:
-            axes.text(.5, .5, "This quantity has no applicable calibration / reference support",
+            missing = ("No matched blank was used for this sample."
+                       if view in ("ratio", "absorbance") and _value(native, "mode") == "single"
+                       else "No matching reference data for this quantity.")
+            axes.text(.5, .5, missing,
                       ha="center", va="center", transform=axes.transAxes, wrap=True)
             return
         y = np.asarray(y, dtype=float)
@@ -298,19 +308,16 @@ class SlowScanPanel(CompactMeasurementPanel):
         if context.mode == "dual":
             self.blank_button.hide()
             self.load_blank_button.hide()
-        self.control_status = QLabel("Automatic dark; blank optional." if context.mode == "single"
+        self.control_status = QLabel("Automatic dark; acquire or load a blank to proceed." if context.mode == "single"
                                     else "Automatic dark; simultaneous reference.")
         self.control_status.setWordWrap(True)
-        self.settings_extras_layout.addWidget(self.control_status)
+        self.control_status.setToolTip(self.control_status.text())
         self.load_dark_button = QPushButton("Load dark…")
-        settings.layout().removeWidget(settings.capability_button)
         device_actions = QHBoxLayout()
         device_actions.setSpacing(4)
-        device_actions.addWidget(settings.capability_button)
         device_actions.addWidget(self.load_dark_button)
         self.settings_extras_layout.addLayout(device_actions)
         self.load_dark_button.clicked.connect(lambda: self._choose_control("dark"))
-        settings.capability_button.clicked.connect(lambda: self._user_action(lambda: self.begin_control("capability")))
 
         selectors = QHBoxLayout()
         self.sweep_choice = QComboBox()
@@ -419,10 +426,27 @@ class SlowScanPanel(CompactMeasurementPanel):
             controls = self.adapter.controls
             description = "Dark: retained" if controls["dark"] else "Dark: automatic"
             if self.context.mode == "single":
-                description += " · Blank: retained" if controls["blank"] else " · Blank: optional"
+                description += " · Blank: retained" if controls["blank"] else " · Acquire or load a blank to proceed"
             else:
                 description += " · Simultaneous reference"
             self.control_status.setText(description)
+
+    def _update_controls(self):
+        super()._update_controls()
+        if not self._busy and self.context.ownership.has_parked_session():
+            self.abort_button.setEnabled(True)
+
+    def request_abort(self, reason):
+        if not self._busy and self.context.ownership.has_parked_session():
+            self._launch(lambda worker: self.context.ownership.close_parked_session(), "close_prepared")
+            return
+        super().request_abort(reason)
+
+    def new_run(self):
+        if not self._busy and self.context.ownership.has_parked_session():
+            self._launch(lambda worker: self.context.ownership.close_parked_session(), "close_prepared_new_run")
+            return
+        super().new_run()
 
     def begin_control(self, kind):
         if kind == "blank" and self.context.mode != "single":
@@ -430,6 +454,8 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.begin_operation(kind, self.adapter.run_control, requires_valid_plan=kind != "capability")
 
     def _operation_finished(self, kind, outcome):
+        if kind == "close_prepared_new_run" and outcome.state == "completed":
+            super().new_run()
         if outcome.state == "completed":
             try:
                 if kind in ("dark", "blank", "capability", "load_dark", "load_blank"):
@@ -440,6 +466,9 @@ class SlowScanPanel(CompactMeasurementPanel):
                 elif kind in ("measurement", "preliminary", "load_run"):
                     self.adapter.accept_result(outcome.result)
                 self.refresh_plan()
+                if kind == "blank" and outcome.result.get("prepared_session", {}).get("warning"):
+                    self.status.setText("Blank saved. Sample will reconnect; prepared session unavailable.")
+                    self.status.setToolTip(str(outcome.result["prepared_session"]["warning"]))
             except Exception as exc:
                 self.status.setText(str(exc))
         self._update_local_controls()
@@ -481,7 +510,8 @@ class SlowScanPanel(CompactMeasurementPanel):
             self.elapsed.setText(f"Finished in {elapsed:.1f} s, including cleanup and saving.")
             self._clock_start = None
             return
-        remaining = f" · about {max(0., estimate - elapsed):.0f} s remaining" if estimate else ""
+        from control_app.measurement_host.experiment_summary import remaining_text
+        remaining = " · " + remaining_text(estimate, elapsed)
         self.elapsed.setText(f"Elapsed {elapsed:.1f} s{remaining}")
 
     def display_result(self, result):

@@ -14,7 +14,7 @@ import numpy as np
 
 from .persistence import EXPERIMENT_ID, SCHEMA_VERSION, iter_native_chunks, validate_record
 
-ANALYSIS_VERSION = "fixed-point-analysis-1.1"
+ANALYSIS_VERSION = "fixed-point-analysis-1.3"
 CLAIM_LIMITS = (
     "Sequential positions are individual fixed-point observations, not a simultaneous spectrum.",
     "A fixed-point amplitude is not full band area and does not establish a microscopic pathway.",
@@ -203,6 +203,7 @@ def baseline_statistics(time_s, values, *, window_s=None, maximum_relative_drift
     t, y = t[valid], y[valid]
     if len(t) < minimum_points or np.ptp(t) <= 0:
         return {"stationary": False, "count": len(t), "mean": float(np.mean(y)) if len(y) else None,
+                "standard_error": float(np.std(y, ddof=1)/math.sqrt(len(y))) if len(y) > 1 else float("nan"),
                 "reason": "Insufficient finite stationary-baseline support"}
     centered = t - np.mean(t)
     matrix = np.column_stack((np.ones(len(t)), centered))
@@ -241,7 +242,7 @@ def normalize_trace(sample, reference=None, *, mode="dual", time_s=None, baselin
                                        maximum_relative_drift=maximum_relative_drift) if time_s is not None else {}
         s0 = q0
         s0_variance = q0_variance
-        if s0 is None and baseline.get("stationary"):
+        if s0 is None and baseline.get("count", 0) >= 3:
             s0 = baseline["mean"]
             s0_variance = baseline["standard_error"] ** 2
         relative = np.full(len(signal), np.nan)
@@ -284,7 +285,7 @@ def normalize_trace(sample, reference=None, *, mode="dual", time_s=None, baselin
     np.divide(s, r, out=ratio, where=valid)
     baseline = baseline_statistics(time_s, ratio, window_s=baseline_window_s,
                                    maximum_relative_drift=maximum_relative_drift) if time_s is not None else {}
-    if q0 is None and baseline.get("stationary"):
+    if q0 is None and baseline.get("count", 0) >= 3:
         q0 = baseline["mean"]
         q0_variance = baseline["standard_error"] ** 2
     delta = np.full(len(s), np.nan)
@@ -467,46 +468,69 @@ def recovery_evidence(time_s, delta_absorbance, *, window_s=None, absolute_toler
 
 
 def aggregate_events(events) -> dict:
-    """Only pool equivalent events at the same position on identical support."""
-    eligible, excluded = [], []
+    """Equal-weight trial means on a shared time grid; no gap interpolation.
+
+    Grid bins are at least as wide as the coarsest retained trial sample spacing.
+    Each trial contributes once per bin, even when sampling rates differ.
+    """
+    groups, excluded, aggregates = {}, [], []
     for event in events:
-        if event.get("kind", "sample") in ("blank", "preliminary", "no_pump", "off_band"):
-            excluded.append({"event_index": event.get("event_index"), "reason": "Control retained individually"})
-        elif not event.get("equivalent_state", False):
-            excluded.append({"event_index": event.get("event_index"), "reason": "Equivalent-state reset not established"})
-        elif event.get("quality_flags"):
-            excluded.append({"event_index": event.get("event_index"), "reason": "Quality flags; shown individually"})
-        else:
-            eligible.append(event)
-    groups = {}
-    for event in eligible:
-        groups.setdefault(event.get("position_cm1"), []).append(event)
-    aggregates = []
-    for position, group in groups.items():
-        common = set(map(float, group[0]["time_s"]))
-        for event in group[1:]:
-            common &= set(map(float, event["time_s"]))
-        ticks = np.asarray(sorted(common))
-        if len(ticks) == 0:
-            excluded.extend({"event_index": event.get("event_index"), "reason": "No identical relative timestamp support for this position; events retained individually"} for event in group)
+        if event.get("kind") in ("blank", "preliminary", "no_pump", "off_band"):
+            excluded.append({"event_index": event.get("event_index"), "reason": "Unpumped or off-band control"})
             continue
-        stack = []
-        for event in group:
-            index = {float(t): i for i, t in enumerate(event["time_s"])}
-            stack.append([event["delta_absorbance"][index[t]] for t in ticks])
-        stack = np.asarray(stack)
-        count = np.sum(np.isfinite(stack), axis=0)
-        mean = np.divide(np.nansum(stack, axis=0), count, out=np.full(len(ticks), np.nan), where=count > 0)
-        variance = np.divide(np.nansum((stack - mean) ** 2, axis=0), count - 1, out=np.full(len(ticks), np.nan), where=count > 1)
-        aggregates.append({"position_cm1": position, "time_s": ticks, "mean_delta_absorbance": mean,
-                           "standard_error": np.sqrt(variance / np.maximum(count, 1)), "valid_event_count": count,
-                           "event_indices": [event.get("event_index") for event in group]})
-    trends = [{"event_index": e.get("event_index"), "acquisition_order": e.get("acquisition_order", i),
-               "position_cm1": e.get("position_cm1"), "dose": e.get("dose"),
-               "amplitude": e.get("recovery_fit", {}).get("amplitude"), "baseline_mean": e.get("baseline", {}).get("mean"),
-               "recovery": e.get("recovery")} for i, e in enumerate(events)]
-    return {"aggregates": aggregates, "excluded": excluded, "order_dose_trends": trends,
-            "independence_limit": "Technical events do not replace independent sample preparations"}
+        flags = event.get("quality_flags", ())
+        if any(any(term in str(flag) for term in ("missing_observed_pump", "observed_pump_count_mismatch", "clipped", "unlocked", "reversal")) for flag in flags):
+            excluded.append({"event_index": event.get("event_index"), "reason": "; ".join(flags)})
+            continue
+        groups.setdefault(event.get("position_cm1", event.get("wavenumber_cm1")), []).append(event)
+    for position, group in groups.items():
+        spacings = [np.median(np.diff(np.asarray(e["time_s"], float))) for e in group if len(e["time_s"]) > 1]
+        dt = max((v for v in spacings if np.isfinite(v) and v > 0), default=None)
+        if dt is None:
+            continue
+        start = max(float(np.min(e["time_s"])) for e in group)
+        stop = min(float(np.max(e["time_s"])) for e in group)
+        origin = math.ceil(start/dt)*dt
+        count_bins = max(0, int(math.floor((stop-origin)/dt))+1)
+        if not count_bins:
+            continue
+        ticks = origin + np.arange(count_bins)*dt
+        means, errors, counts_by_quantity = {}, {}, {}
+        for quantity in ("sample", "reference", "ratio", "delta_absorbance", "absolute_absorbance"):
+            stack = np.full((len(group), count_bins), np.nan)
+            for row, event in enumerate(group):
+                if event.get(quantity) is None:
+                    continue
+                t, y = np.asarray(event["time_s"], float), np.asarray(event[quantity], float)
+                valid = np.isfinite(t) & np.isfinite(y) & ~np.asarray(event.get("gap_mask", np.zeros(len(t), bool)), bool)
+                indices = np.rint((t[valid]-origin)/dt).astype(int)
+                values = y[valid]
+                keep = (indices >= 0) & (indices < count_bins)
+                totals = np.bincount(indices[keep], weights=values[keep], minlength=count_bins)
+                counts = np.bincount(indices[keep], minlength=count_bins)
+                np.divide(totals, counts, out=stack[row], where=counts > 0)
+            count = np.sum(np.isfinite(stack), axis=0)
+            mean = np.divide(np.nansum(stack, axis=0), count, out=np.full(count_bins, np.nan), where=count > 0)
+            variance = np.divide(np.nansum((stack-mean)**2, axis=0), count-1, out=np.full(count_bins, np.nan), where=count > 1)
+            means[quantity] = mean
+            errors[quantity] = np.sqrt(variance/np.maximum(count, 1))
+            counts_by_quantity[quantity] = count
+        markers = [e.get("measured_pump_time_s", [0.]) for e in group]
+        same_count = len({len(m) for m in markers}) == 1
+        aggregates.append({"position_cm1": position, "time_s": ticks, "mean_delta_absorbance": means["delta_absorbance"],
+            "means": means, "standard_errors": errors, "valid_counts": counts_by_quantity,
+            "standard_error": errors["delta_absorbance"], "valid_event_count": counts_by_quantity["delta_absorbance"],
+            "measured_pump_time_s": np.mean(markers, axis=0).tolist() if same_count else [],
+            "pump_marker_basis": "Mean observed electrical sync times across trials; optical arrival unresolved",
+            "analysis_window_s": group[0].get("analysis_window_s"),
+            "event_indices": [e.get("event_index") for e in group], "bin_width_s": dt,
+            "method": "Equal-weight trial means in observed time bins; no gap interpolation",
+            "quality_notes": sorted({str(flag) for e in group for flag in e.get("quality_flags", ())}),
+            "equivalent_state_verified": all(e.get("equivalent_state", False) for e in group)})
+    return {"aggregates": aggregates, "excluded": excluded,
+            "order_dose_trends": [{"event_index": e.get("event_index"), "position_cm1": e.get("position_cm1"),
+                "dose": e.get("dose"), "recovery_fit": e.get("recovery_fit"), "baseline_mean": e.get("baseline", {}).get("mean"), "recovery": e.get("recovery")} for e in events],
+            "independence_limit": "Trial averages do not establish sample reset or independent biological replication"}
 
 
 def _blank_at_position(blank, position_index):
@@ -523,6 +547,24 @@ def _blank_at_position(blank, position_index):
                 variance = baseline.get("standard_error", baseline.get("std", 0.0) / math.sqrt(max(1, baseline.get("count", 1)))) ** 2
                 return mean, variance
     return None, 0.0
+
+
+def _window_mask(timestamps, meta, settings, clock, first_tick):
+    """Select requested support before decimation; never guess a pump epoch."""
+    if not len(timestamps) or "pre_observation_s" not in settings or "post_observation_s" not in settings:
+        return np.ones(len(timestamps), dtype=bool)
+    epoch = meta.get("original_pump_timestamp")
+    if int(meta.get("expected_pump_count", 0)) > 0:
+        if epoch is None:
+            return np.ones(len(timestamps), dtype=bool)
+        shots = meta.get("pump_timestamps") or [epoch]
+        last = shots[min(len(shots), int(meta["expected_pump_count"]))-1]
+        begin, end = -float(settings["pre_observation_s"]), (int(last)-int(epoch))/clock+float(settings["post_observation_s"])
+    else:
+        epoch = first_tick
+        begin, end = 0., float(settings["pre_observation_s"])+float(settings["post_observation_s"])
+    t = time_from_ticks(timestamps, int(epoch), clock)
+    return (t >= begin) & (t <= end)
 
 
 def analyze_run(record, preliminary=None, blank=None, cancel=None, *, max_points=100_000,
@@ -561,15 +603,23 @@ def analyze_run(record, preliminary=None, blank=None, cancel=None, *, max_points
         metadata = {**chunk.get("metadata", {}), **{k: chunk[k] for k in ("event_index", "position_index", "kind") if k in chunk}}
         index = int(metadata.get("event_index", 0))
         ts = np.asarray(chunk.get("sample", {}).get("timestamp", ()))
-        group = groups.setdefault(index, {"count": 0, "metadata": metadata, "first_tick": None})
+        group = groups.setdefault(index, {"count": 0, "window_count": 0, "pre_count": 0, "metadata": metadata, "first_tick": None})
         group["count"] += len(ts)
         if len(ts) and group["first_tick"] is None:
             group["first_tick"] = int(ts[0])
+        meta = event_metadata.get(index, {})
+        clock = float(chunk.get("clockbase_hz", meta.get("clockbase_hz", 1)))
+        keep = _window_mask(ts, meta, settings, clock, group["first_tick"])
+        group["window_count"] += int(keep.sum())
+        if meta.get("original_pump_timestamp") is not None:
+            group["pre_count"] += int((keep & (ts < meta["original_pump_timestamp"])).sum())
     if not groups:
         return {"analysis_version": ANALYSIS_VERSION, "events": [], "quality_flags": [*flags, "no_retained_native_data"], "claim_limits": CLAIM_LIMITS}
     budget = min(max_points_per_event, max(16, max_points // len(groups)))
     for index, group in groups.items():
-        group["stride"] = max(1, math.ceil(group["count"] / max(1, budget - 2)))
+        pre_budget = min(group["pre_count"], max(1, budget//4))
+        group["pre_stride"] = max(1, math.ceil(group["pre_count"]/max(1, pre_budget)))
+        group["stride"] = max(1, math.ceil((group["window_count"]-group["pre_count"]) / max(1, budget-pre_budget-2)))
         group["seen"] = 0
         group["values"] = {k: [] for k in ("timestamp", "sample", "reference", "valid", "gap")}
         group["flags"] = []
@@ -602,8 +652,15 @@ def analyze_run(record, preliminary=None, blank=None, cancel=None, *, max_points
         group["last_tick"] = int(timestamps[-1])
         if np.any(gap):
             group["flags"].append("native_timestamp_gap")
+        keep = _window_mask(timestamps, event_metadata.get(int(metadata.get("event_index", 0)), {}), settings, clock, group["first_tick"])
+        timestamps = timestamps[keep]
+        matched = {**matched, **{name: matched[name][keep] for name in ("timestamp", "sample", "reference", "valid")}}
+        gap = gap[keep]
         index = np.arange(len(timestamps)) + group["seen"]
-        selected = (index % group["stride"] == 0) | (index == group["count"] - 1)
+        # Preserve the short baseline even when a long inter-shot interval
+        # requires substantial decimation of the rest of the trace.
+        selected = np.where(index < group["pre_count"], index % group["pre_stride"] == 0,
+                            (index-group["pre_count"]) % group["stride"] == 0) | (index == group["window_count"] - 1)
         indices = np.flatnonzero(selected)
         gap_prefix = np.cumsum(gap)
         previous_selected = -1
@@ -637,14 +694,37 @@ def analyze_run(record, preliminary=None, blank=None, cancel=None, *, max_points
             if pumped:
                 group["flags"].append("missing_observed_pump_epoch")
         time = time_from_ticks(arrays["timestamp"], int(epoch), group["clockbase_hz"])
+        # Polling returns whole buffered blocks, often longer than microsecond
+        # requests. Keep raw chunks intact, but analyze only the requested window.
+        cropped = group["count"] != group["window_count"]
+        if "pre_observation_s" in settings and "post_observation_s" in settings:
+            pre, post = float(settings["pre_observation_s"]), float(settings["post_observation_s"])
+            if pumped and meta.get("original_pump_timestamp") is not None:
+                shots = meta.get("pump_timestamps") or [epoch]
+                last = shots[min(len(shots), int(meta["expected_pump_count"]))-1]
+                end = (int(last)-int(epoch))/group["clockbase_hz"] + post
+                begin = -pre
+            elif not pumped:
+                begin, end = 0., pre + post
+            else:
+                begin = end = None  # Never invent a pump epoch.
+            if begin is not None:
+                keep = (time >= begin) & (time <= end)
+                cropped = cropped or not bool(np.all(keep))
+                arrays = {key: value[keep] for key, value in arrays.items()}
+                time = time[keep]
+                if not len(time):
+                    continue
+                meta["analysis_window_s"] = [begin, end]
+                meta["native_poll_padding_excluded"] = cropped
         window = settings.get("baseline_window_s") if pumped else (float(time[0]), float(time[-1]))
         if window is None:
             window = (-float(settings.get("pre_observation_s", 1.0)), 0.0)
         blank_mean, blank_variance = _blank_at_position(blank, int(meta.get("position_index", 0)))
-        native_baseline = meta.get("baseline", {})
+        native_baseline = {} if cropped else meta.get("baseline", {})
         q0 = None
         q0_variance = 0.0
-        if native_baseline.get("stationary"):
+        if native_baseline.get("count", 0) >= 3:
             q0 = native_baseline.get("mean")
             q0_variance = native_baseline.get("std", 0.0) ** 2 / max(1, native_baseline.get("count", 1))
             if mode == "single" and blank_mean:
@@ -697,8 +777,8 @@ def analyze_run(record, preliminary=None, blank=None, cancel=None, *, max_points
         result = {**meta, **normalized, "event_index": index, "kind": "no_pump" if not pumped and kind == "measurement" else kind,
                   "wavenumber_cm1": meta.get("position_cm1"), "time_s": time, "original_pump_timestamp": meta.get("original_pump_timestamp"),
                   "analysis_epoch_timestamp": int(epoch), "quality_flags": event_flags,
-                  "native_count": group["count"], "analysis_count": len(time), "analysis_stride": group["stride"],
-                  "analysis_sampling": "Every stride-th actual native observation plus endpoint; no interpolation",
+                  "native_count": group["count"], "analysis_count": len(time), "analysis_stride": group["stride"], "pre_pump_analysis_stride": group["pre_stride"],
+                  "analysis_sampling": "Actual observations with separate baseline/body strides plus endpoint; no interpolation",
                   "measured_pump_time_s": [time_from_ticks(np.asarray([v], dtype=np.uint64), int(epoch), group["clockbase_hz"])[0] for v in meta.get("pump_timestamps", ())]}
         result["gap_mask"] = arrays["gap"]
         # Keep magnitude at clipped points visible, but never draw through an
@@ -707,10 +787,20 @@ def analyze_run(record, preliminary=None, blank=None, cancel=None, *, max_points
         result["reference"] = np.where(arrays["gap"], np.nan, result["reference"])
         if "off" in str(meta.get("position_label", "")).lower():
             result["kind"] = "off_band"
-        result["recovery_fit"] = fit_recovery(time, normalized["delta_absorbance"], response, cancel=cancel) if pumped and meta.get("original_pump_timestamp") is not None else {"status": "unpumped_control" if not pumped else "unresolved_time_zero"}
+        # Do not fit a requested response model to an unverified pump sequence.
+        if not pumped:
+            result["recovery_fit"] = {"status": "unpumped_control"}
+        elif meta.get("original_pump_timestamp") is None:
+            result["recovery_fit"] = {"status": "unresolved_time_zero"}
+        elif "observed_pump_count_mismatch" in event_flags:
+            result["recovery_fit"] = {"status": "observed_pump_count_mismatch"}
+        elif int(meta.get("expected_pump_count", 1)) > 1:
+            result["recovery_fit"] = {"status": "multi_shot_model_required"}
+        else:
+            result["recovery_fit"] = fit_recovery(time, normalized["delta_absorbance"], response, cancel=cancel)
         fraction = float(settings.get("reset_tolerance_fraction", 0.02))
         recovery_tolerance = math.log10(1 + fraction) if 0 < fraction < 1 else 0.0
-        result["recovery"] = recovery_evidence(time, normalized["delta_absorbance"], absolute_tolerance=recovery_tolerance) if pumped else {"status": "unpumped_control", "recovered": False}
+        result["recovery"] = {"status": "observed_pump_count_mismatch", "recovered": False} if "observed_pump_count_mismatch" in event_flags else recovery_evidence(time, normalized["delta_absorbance"], absolute_tolerance=recovery_tolerance) if pumped else {"status": "unpumped_control", "recovered": False}
         integration = settings.get("integration_window_s")
         if integration:
             keep = (time >= integration[0]) & (time <= integration[1]) & np.isfinite(normalized["delta_absorbance"])

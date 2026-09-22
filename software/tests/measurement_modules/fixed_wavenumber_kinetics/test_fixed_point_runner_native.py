@@ -43,7 +43,8 @@ def test_fixed_point_native_finite_count_original_large_epoch_and_analysis(tmp_p
     first = read_native_chunk(op.output_path, loaded["native_chunks"][0])
     assert first["sample"]["timestamp"].dtype == np.uint64
     assert int(first["sample"]["timestamp"][0]) == devices[0].epoch
-    assert np.array_equal(first["sample"]["y"], np.zeros(200))
+    assert len(first["sample"]["timestamp"]) > 0
+    assert np.all(first["sample"]["y"] == 0)
     assert "analysis" in record
 
 
@@ -60,11 +61,10 @@ def test_fixed_point_streaming_baseline_moments_preserve_uint64_epoch():
 
 
 @pytest.mark.parametrize("fault, phrase", [
-    ({"baseline_drift_per_s": 1.}, "baseline"),
-    ({"missing_reference": True}, "baseline"),
-    ({"clipped": True}, "baseline"),
-    ({"unlocked": True}, "baseline"),
-    ({"missing_marker": True}, "pump count"),
+    ({"missing_reference": True}, "no valid matched"),
+    ({"clipped": True}, "clipped"),
+    ({"unlocked": True}, "unlocked"),
+    ({"missing_marker": True}, "pump shots"),
     ({"extra_marker": True}, "finite count"),
     ({"timing_error": True}, "timing table"),
 ])
@@ -85,6 +85,16 @@ def test_fixed_point_no_pump_controls(tmp_path, kind):
     assert result["status"] == "complete", result.get("error", result.get("analysis_error"))
     assert devices[0].dispatched == 0
     assert result["events"][0]["pump_timestamps"] == []
+
+
+def test_unpumped_blank_retains_nonstationary_baseline_without_authorizing_pump(tmp_path):
+    runner, op, plan, devices = scenario(tmp_path, mode="single", faults={"baseline_drift_per_s": 1.})
+    result = runner.run(op, plan, kind="blank")
+    assert result["status"] == "complete", result.get("error")
+    assert devices[0].dispatched == 0
+    assert not result["events"][0]["baseline"]["stationary"]
+    assert "nonstationary_unpumped_baseline" in result["events"][0]["quality_flags"]
+    assert result["preservation_verified"] and result["restoration"]["safe_verified"]
 
 
 def test_fixed_point_incomplete_recovery_is_retained_without_equivalence_claim(tmp_path):
@@ -168,7 +178,7 @@ def test_fixed_point_chunk_failure_does_not_claim_preservation(tmp_path, monkeyp
     assert not result["preservation_verified"]
     assert result["restoration"]["safe_verified"]
     assert "native disk full" in result["native_preservation_error"]
-    assert devices[0].dispatched == 0
+    assert devices[0].dispatched == 0  # Failed lead-in storage prevents the shot.
 
 
 def test_fixed_point_progress_callback_failure_cannot_bypass_cleanup(tmp_path):
@@ -199,16 +209,16 @@ def test_fixed_point_analysis_parents_record_absolute_native_paths(tmp_path):
     assert Path(sample["analysis_inputs"]["blank"]["native_path"]).exists()
 
 
-def test_fixed_point_cleanup_high_level_does_not_invent_pump_epoch(tmp_path):
+def test_fixed_point_cleanup_low_level_does_not_invent_pump_epoch(tmp_path):
     runner, op, plan, _ = scenario(tmp_path)
-    class HighTailDevices(SimulatedDevices):
+    class LowTailDevices(SimulatedDevices):
         def cleanup(self, retain_tail=None):
             if self.streaming and retain_tail is not None:
                 chunk = self.read(.001)
-                chunk["timing"]["dio"][:] = np.uint64(1 << self.resolved["pump_marker_bit"])
+                chunk["timing"]["dio"][:] = np.uint64(0)
                 retain_tail(chunk)
             return super().cleanup(retain_tail=None)
-    runner.device_factory = HighTailDevices
+    runner.device_factory = LowTailDevices
     cancel = threading.Event()
     result = runner.run(op, plan, cancel=cancel,
         progress=lambda event: cancel.set() if event["stage"] == "acquisition" else None)
@@ -236,3 +246,44 @@ def test_fixed_point_live_marker_lists_and_device_epoch_precision(tmp_path):
     assert pumped and pumped[0]["measured_pump_time_s"] == [0.]
     times = np.asarray(pumped[0]["time_s"])
     assert np.allclose(np.diff(times), .001, rtol=0, atol=1e-14)
+
+
+@pytest.mark.parametrize("mode", ["single", "dual"])
+def test_dispatch_waits_for_observed_stream_after_delayed_subscription(tmp_path, mode):
+    runner, op, plan, _ = scenario(tmp_path, mode=mode)
+    class DelayedSubscription(SimulatedDevices):
+        def start_stream(self):
+            super().start_stream()
+            self.warmup_polls = 2
+            self.received = False
+        def read(self, duration):
+            if self.warmup_polls:
+                self.warmup_polls -= 1
+                return {}
+            result = super().read(duration)
+            self.received = True
+            return result
+        def start_event(self, program):
+            assert self.received, "Finite shot dispatched before any HF2LI samples arrived"
+            super().start_event(program)
+    runner.device_factory = DelayedSubscription
+    result = runner.run(op, plan)
+    assert result["status"] == "complete", result.get("error")
+    event = result["events"][0]
+    assert event["stream_ready_before_dispatch"]
+    assert event["original_pump_timestamp"] > max(event["stream_ready_last_timestamps"].values())
+    assert len(event["pump_timestamps"]) == 1
+
+
+def test_missing_sync_retains_finite_engine_status_before_cleanup(tmp_path):
+    runner, op, plan, _ = scenario(tmp_path, faults={"missing_marker": True})
+    class DiagnosticDevices(SimulatedDevices):
+        def timing_status(self):
+            assert self.streaming
+            return {"frames_status": "DONE", "frame_shot_count": len(self.current_program["frames"])}
+    runner.device_factory = DiagnosticDevices
+    result = runner.run(op, plan)
+    assert result["status"] == "failed"
+    assert result["events"][0]["timing_completion"]["frames_status"] == "DONE"
+    assert result["events"][0]["pump_timestamps"] == []
+    assert result["restoration"]["safe_verified"]

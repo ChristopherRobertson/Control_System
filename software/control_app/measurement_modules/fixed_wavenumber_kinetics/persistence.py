@@ -331,3 +331,42 @@ def export_analysis_csv(record: Mapping[str, Any], path: str | Path) -> Path:
                 row.extend(event.get(name, "") for name in label_fields)
                 writer.writerow(row)
     return target
+
+
+def export_trial_mean_csv(record: Mapping[str, Any], path: str | Path) -> Path:
+    """One mean trace per wavenumber; original trials remain in the native run."""
+    import csv
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["position_cm1", "time_s", "mean_delta_absorbance", "standard_error",
+            "trial_count", "quality_notes", "method"])
+        for trace in record.get("analysis", {}).get("aggregates", ()):
+            for i, moment in enumerate(trace["time_s"]):
+                writer.writerow([trace["position_cm1"], moment, trace["mean_delta_absorbance"][i],
+                    trace["standard_error"][i], trace["valid_event_count"][i],
+                    "; ".join(trace.get("quality_notes", ())), trace.get("method", "")])
+    return target
+
+
+def export_detector_csv(record: Mapping[str, Any], path: str | Path) -> Path:
+    """Export the detector traces displayed by Fixed Wavenumber, without ratios."""
+    import csv
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    analysis = record.get("analysis", {})
+    traces = analysis.get("aggregates") or analysis.get("events", ())
+    with target.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["position_cm1", "time_s", "sample_magnitude_v", "reference_magnitude_v", "trial_count", "run_status"])
+        for trace in traces:
+            values = trace.get("means", trace)
+            sample, reference = values.get("sample"), values.get("reference")
+            for i, moment in enumerate(trace.get("time_s", ())):
+                counts = trace.get("valid_counts", {}).get("sample")
+                writer.writerow([trace.get("position_cm1", trace.get("wavenumber_cm1")), moment,
+                    sample[i] if sample is not None else "",
+                    reference[i] if reference is not None and record.get("mode") == "dual" else "",
+                    counts[i] if counts is not None else 1, record.get("status", "")])
+    return target

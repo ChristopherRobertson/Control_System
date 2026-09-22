@@ -154,7 +154,7 @@ class RegularLaser(BlockLaser):
                 if self.rig.fault != "unsupported_speed" else 2000.}
 
 
-def regular_fixture(tmp_path, *, role="sample", fault=None, host_capacity_bytes=None, settings=None):
+def regular_fixture(tmp_path, *, role="sample", fault=None, host_capacity_bytes=None, settings=None, prepared=True):
     caps = replace(HF2Capabilities(), device_id="dev1234", verified=True)
     plan = build_regular_phase_scan_plan(settings, capabilities=caps)
     rig = SimpleNamespace(units={}, running=False, trace=[], fail_stop=False, interlock=True,
@@ -166,7 +166,8 @@ def regular_fixture(tmp_path, *, role="sample", fault=None, host_capacity_bytes=
         hf_factory=lambda **kw: rig.hf, t660_factory=lambda name, **kw: RegularTimer(rig, name),
         tec_ready_stability_s=0., host_capacity_bytes=host_capacity_bytes)
     adapter.authorize(True)
-    adapter.prepare(plan.settings, SimpleNamespace(path=tmp_path), rig.cancel)
+    if prepared:
+        adapter.prepare(plan.settings, SimpleNamespace(path=tmp_path), rig.cancel)
     events = [plan.event_at(i) for i in range(plan.total_scans)]
     if role == "blank": events = [replace(event, pump_enabled=False) for event in events]
     if role == "preliminary": events = events[:1]
@@ -201,6 +202,42 @@ def test_t660_signed_frequency_readback_restores_with_explicit_hz(tmp_path, monk
     monkeypatch.undo()
     adapter.close()
     assert json.loads((tmp_path/"restoration.json").read_text())["settings_restored_and_outputs_inhibited"]
+
+
+@pytest.mark.parametrize("setting_fault", [False, True])
+def test_restore_retains_drifting_pll_center_but_checks_settings(tmp_path, monkeypatch, setting_fault):
+    rig, adapter, _ = regular_fixture(tmp_path, role="blank")
+    center = f"/{rig.hf.device_id}/plls/0/freqcenter"
+    order = f"/{rig.hf.device_id}/plls/0/order"
+    adapter._original_hf["nodes"][center] = {"type": "double", "value": 1957250.5983473577}
+    export = rig.hf.export_settings_snapshot
+    reload = rig.hf.reload_settings_snapshot
+
+    def reload_without_observation(snapshot):
+        assert center not in snapshot["nodes"]
+        reload(snapshot)
+
+    def drifting_readback(**kwargs):
+        result = export(**kwargs)
+        result["nodes"][center] = {"type": "double", "value": 1960521.700106419}
+        if setting_fault:
+            result["nodes"][order]["value"] += 1
+        return result
+
+    monkeypatch.setattr(rig.hf, "reload_settings_snapshot", reload_without_observation)
+    monkeypatch.setattr(rig.hf, "export_settings_snapshot", drifting_readback)
+    if setting_fault:
+        with pytest.raises(RuntimeError, match="plls/0/order"):
+            adapter.close()
+    else:
+        adapter.close()
+    restored = json.loads((tmp_path/"restoration.json").read_text())
+    assert restored["settings_restored_and_outputs_inhibited"] is not setting_fault
+    comparison = restored["instruments"]["hf2li"]["comparison"]
+    assert comparison["match"] is not setting_fault
+    observation = comparison["external_reference_observations"][center]
+    assert observation["before"]["value"] == 1957250.5983473577
+    assert observation["after"]["value"] == 1960521.700106419
 
 
 def test_regular_frames_reproduce_retained_successful_hardware_recipe():

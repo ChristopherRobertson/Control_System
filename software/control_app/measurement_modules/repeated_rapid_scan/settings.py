@@ -100,6 +100,8 @@ class RepeatedRapidScanSettings:
     schema_version: int = SCHEMA_VERSION
     experiment_id: str = EXPERIMENT_ID
 
+    laser_settings: dict[str, Any] = field(default_factory=dict)
+
     @property
     def condition_id(self) -> str:
         return self.condition.condition_id
@@ -114,6 +116,7 @@ class RepeatedRapidScanSettings:
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "RepeatedRapidScanSettings":
         data = dict(value)
+        data["laser_settings"] = dict(data.get("laser_settings", {}))
         unknown = set(data) - {f.name for f in fields(cls)}
         if unknown:
             raise ValueError("Unsupported settings fields: " + ", ".join(sorted(unknown)))
@@ -170,10 +173,13 @@ class RepeatedRapidScanSettings:
                                          pulse_override.get("mircat_pulse_width_ns", self.mircat_pulse_width_ns))
         for name in ("process_delay_s", "tuning_settling_s", "preparation_s", "restoration_s", "analysis_s", "upload_acknowledgment_s"):
             _finite(getattr(self, name), name, nonnegative=True)
+        from control_app.measurement_host.laser_settings import validate_mircat_limits
+        validate_mircat_limits(current=self.mircat_current_ma, width=self.probe_pulse_width_s*1e9,
+                              wavenumbers=(self.scan_start_cm1, self.scan_stop_cm1))
         _finite(self.scan_start_cm1, "scan_start_cm1")
         _finite(self.scan_stop_cm1, "scan_stop_cm1")
         if self.scan_start_cm1 >= self.scan_stop_cm1:
-            raise ValueError("scan_start_cm1 must be below scan_stop_cm1")
+            raise ValueError("Start wavenumber must be greater than Stop wavenumber")
         # Temperature and scientific evidence are annotations, never execution
         # or compatibility inputs. Only values used by hardware are validated.
         if not self.phase_offsets_s or len(set(self.phase_offsets_s)) != len(self.phase_offsets_s):
@@ -275,7 +281,7 @@ class AcquisitionIntent:
         _finite(self.spectral_min_cm1, "spectral_min_cm1")
         _finite(self.spectral_max_cm1, "spectral_max_cm1")
         if self.spectral_min_cm1 >= self.spectral_max_cm1:
-            raise ValueError("spectral_min_cm1 must be below spectral_max_cm1")
+            raise ValueError("Start wavenumber must be greater than Stop wavenumber")
         _finite(self.observation_duration_s, "observation_duration_s", positive=True)
         for name in ("phase_count", "repeats"):
             if type(getattr(self, name)) is not int or getattr(self, name) < 1:

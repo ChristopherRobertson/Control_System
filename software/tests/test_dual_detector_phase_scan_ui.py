@@ -71,7 +71,10 @@ def test_shared_controls_and_independent_preferences(qt_app, tmp_path):
         assert set(single.inputs) == set(dual.inputs)
         for key in single.inputs:
             a, b = single.inputs[key], dual.inputs[key]
-            assert (a.minimum(), a.maximum(), a.decimals()) == (b.minimum(), b.maximum(), b.decimals())
+            if key == "run_label":
+                assert type(a) is type(b)
+            else:
+                assert (a.minimum(), a.maximum(), a.decimals()) == (b.minimum(), b.maximum(), b.decimals())
         assert dual.background_button.isHidden() and dual.load_background_button.isHidden()
         assert not single.background_button.isHidden()
         assert dual.test_button.isEnabled() and not dual.start_button.isEnabled()
@@ -175,7 +178,7 @@ def test_baseline_approval_invalidation_and_compatible_plan_clears_error(qt_app,
         assert "incompatible" in dual.scan_status.text()
         dual.load_plan(saved)
         assert "match" in dual.scan_status.text() and "incompatible" not in dual.scan_status.text()
-        assert dual.review_checkbox.isEnabled() and not dual.start_button.isEnabled()
+        assert dual.review_checkbox.isHidden() and dual.start_button.isEnabled()
         dual.review_checkbox.setChecked(True)
         assert dual.start_button.isEnabled()
         # A second explicit review is recorded without overwriting the first.
@@ -255,7 +258,7 @@ def test_app_preliminary_review_pumped_acquisition_and_fresh_run(qt_app, tmp_pat
         dual.test_button.click()
         wait_for(qt_app, lambda: not dual.command_running())
         assert dual.runner.preliminary is not None
-        assert dual.review_checkbox.isEnabled() and not dual.start_button.isEnabled()
+        assert dual.review_checkbox.isHidden() and dual.start_button.isEnabled()
         assert dual.canvas.y_label == "Sample/reference ratio"
         dual.review_checkbox.click()
         assert dual.start_button.isEnabled()

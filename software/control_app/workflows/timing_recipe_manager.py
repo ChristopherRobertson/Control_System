@@ -87,11 +87,12 @@ class TimingRecipeManager:
         try:
             for unit in sorted(resolved):
                 # Use the already loaded inventory for this operation.
-                service = T660Service(
+                from control_app.measurement_host.application_session import shared_device
+                service = shared_device(unit, lambda: T660Service(
                     unit,
                     deepcopy(self.inventory.t660_devices[unit]),
                     command_log=self.command_log,
-                )
+                ), command_log=self.command_log)
                 services[unit] = service
                 service.connect()
                 service.identify()

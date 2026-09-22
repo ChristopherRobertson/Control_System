@@ -17,7 +17,7 @@ from control_app.measurement_host.ownership import HardwareCoordinator, Ownershi
 import yaml
 
 from control_app.config_loader import ConfigInventory, REPO_ROOT, load_config_inventory
-from control_app.paths import RECIPE_ROOT, output_run_root, resolve_compat_path
+from control_app.paths import RECIPE_ROOT, LOG_ROOT, output_run_root, resolve_compat_path
 from control_app.promoted_bundles import PromotedBundle, load_promoted_bundle
 from control_app.devices.hf2li_service import HF2LIPreset, HF2LIService
 from control_app.devices.mircat_service import RET_NOT_INITIALIZED, MircatService
@@ -114,6 +114,7 @@ class WorkflowStateMachine:
         self._pending_output_location = None
         self._command_mutex = Lock()
         self.instrument_state_change_callback = None
+        self.application_session = None
         self.operator = operator
         self.inventory = inventory or load_config_inventory(config_path, write_files=False)
         self.config_path = Path(self.inventory.config_path)
@@ -155,9 +156,9 @@ class WorkflowStateMachine:
         self.mircat_scan_active = False
         from threading import Event
         self.mircat_scan_cancel = Event()
-        from control_app.workflows.regular_phase_scan_runner import RegularPhaseScanRunner
-        from control_app.workflows.regular_phase_scan_acquisition import RegularPhaseScanAcquirer
-        from control_app.workflows.regular_phase_scan import discover_regular_capabilities
+        from control_app.measurement_modules.phase_scan.regular_phase_scan_runner import RegularPhaseScanRunner
+        from control_app.measurement_modules.phase_scan.regular_phase_scan_acquisition import RegularPhaseScanAcquirer
+        from control_app.measurement_modules.phase_scan.regular_phase_scan import discover_regular_capabilities
         self.phase_scan_runner = RegularPhaseScanRunner(
             (lambda: RegularPhaseScanAcquirer(config_path=self.config_path,
                                              promoted_bundle=self.promoted_bundle)) if hardware_access else None,
@@ -165,9 +166,9 @@ class WorkflowStateMachine:
             capability_provider=(lambda: discover_regular_capabilities(config_path=self.config_path))
             if hardware_access else None,
         )
-        from control_app.workflows.dual_detector_phase_scan_runner import DualDetectorPhaseScanRunner
-        from control_app.workflows.dual_detector_phase_scan_acquisition import DualDetectorPhaseScanAcquirer
-        from control_app.workflows.dual_detector_phase_scan import discover_dual_phase_scan_capabilities
+        from control_app.measurement_modules.phase_scan.dual_detector_phase_scan_runner import DualDetectorPhaseScanRunner
+        from control_app.measurement_modules.phase_scan.dual_detector_phase_scan_acquisition import DualDetectorPhaseScanAcquirer
+        from control_app.measurement_modules.phase_scan.dual_detector_phase_scan import discover_dual_phase_scan_capabilities
         self.dual_detector_phase_scan_runner = DualDetectorPhaseScanRunner(
             (lambda: DualDetectorPhaseScanAcquirer(config_path=self.config_path,
                                                  promoted_bundle=self.promoted_bundle)) if hardware_access else None,
@@ -210,6 +211,8 @@ class WorkflowStateMachine:
                 newly_acquired = True
             with self.coordinator.scope(token):
                 result = self._dispatch_command(command)
+                if self.application_session is not None and result.status == "complete":
+                    self.application_session.update_readbacks(token)
             # Outputs can remain live after a command worker exits. Retain this
             # session until its explicit cleanup; transport closure is not idle.
             transient = (command.device_key == "opo_iris" or
@@ -277,12 +280,8 @@ class WorkflowStateMachine:
         return result
 
     def output_location_changed(self, selected: Path) -> None:
-        """Start future UI artifacts in the selected folder; preserve previous runs."""
-        selected = Path(selected)
-        if self._command_mutex.locked() or self._manual_token is not None:
-            self._pending_output_location = selected
-            return
-        self.run_dir = self._resolve_run_dir(selected / f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_workflow_state_machine")
+        """Experiment destinations do not relocate application diagnostics."""
+        return
 
     def _apply_pending_output_location(self):
         if self._manual_token is None and self._pending_output_location is not None:
@@ -403,6 +402,7 @@ class WorkflowStateMachine:
             return WorkflowResult(status="blocked", message="Wait for the owning command to finish safety cleanup and saving.")
         token = None
         try:
+            self.coordinator.close_parked_session()
             if not emergency and self.coordinator.current_session_idle_verified():
                 return WorkflowResult(status="complete", message="Current session cleanup already completed.",
                                       data={"reused_verified_idle": True})
@@ -586,6 +586,14 @@ class WorkflowStateMachine:
         if safe_result.status != "complete":
             errors.append(safe_result.message)
 
+        session = self.application_session
+        if session is not None and not session.closed and safe_result.status == "complete" and reason != "instrument_reset":
+            try:
+                session.close()
+                actions["application_connections"] = "disconnected"
+            except Exception as exc:
+                errors.append(str(exc))
+
         status = "complete" if not errors else "failed"
         message = (
             "Application shutdown safe-state commands completed."
@@ -603,13 +611,13 @@ class WorkflowStateMachine:
         )
 
     def _resolve_run_dir(self, run_dir: str | Path | None) -> Path:
+        """Select a destination; writers create it only when saving an artifact."""
         if run_dir is None:
-            target = output_run_root() / f"{datetime.now().strftime('%Y%m%d')}_workflow_state_machine"
+            target = LOG_ROOT / "workflow_diagnostics" / datetime.now().strftime('%Y%m%d_%H%M%S_%f')
         else:
             target = Path(run_dir)
             if not target.is_absolute():
                 target = resolve_compat_path(target)
-        target.mkdir(parents=True, exist_ok=True)
         return target
 
     def _artifact_path(self, filename: str) -> Path:
@@ -1040,7 +1048,9 @@ class WorkflowStateMachine:
         device_config = self.inventory.devices.get("picoscope")
         if not isinstance(device_config, dict):
             raise WorkflowStateMachineError("picoscope missing from hardware_configuration.yaml")
-        service = PicoScopeService(device_config, settings, command_log=self.command_log)
+        from control_app.measurement_host.application_session import shared_device
+        service = shared_device("picoscope", lambda: PicoScopeService(device_config, settings, command_log=self.command_log),
+                                capture_settings=settings, command_log=self.command_log)
         self._picoscope_service = service
         try:
             service.open_unit()
@@ -1074,7 +1084,8 @@ class WorkflowStateMachine:
             device_config = self.inventory.devices.get("mircat")
             if not isinstance(device_config, dict):
                 raise WorkflowStateMachineError("mircat missing from hardware_configuration.yaml")
-            service = MircatService(device_config, command_log=self.command_log)
+            from control_app.measurement_host.application_session import shared_device
+            service = shared_device("mircat", lambda: MircatService(device_config, command_log=self.command_log), command_log=self.command_log)
             service.initialize()
             self._mircat_service = service
 
@@ -1388,7 +1399,15 @@ class WorkflowStateMachine:
             optical_shutdown()
             callbacks = [timing_shutdown]
         else:
-            callbacks = [optical_shutdown, timing_shutdown, pico_shutdown, hf_shutdown]
+            # MIRcat recovery may initialize its SDK with device discovery.
+            # Do not open serial timing sessions concurrently with discovery:
+            # Windows serial ports are exclusive even for transient probes.
+            def optical_then_timing_shutdown():
+                try:
+                    optical_shutdown()
+                finally:
+                    timing_shutdown()
+            callbacks = [optical_then_timing_shutdown, pico_shutdown, hf_shutdown]
         with ThreadPoolExecutor(max_workers=len(callbacks), thread_name_prefix="instrument-shutdown") as pool:
             jobs = [pool.submit(copy_context().run, callback)
                     for callback in callbacks]

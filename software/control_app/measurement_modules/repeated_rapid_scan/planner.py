@@ -31,6 +31,7 @@ class HardwareCapabilities:
     actual_scan_period_s: float | None = None
     supported_sample_rates_hz: tuple[float, ...] = ()
     live_settings: dict[str, Any] = field(default_factory=dict)
+    hf2_choices: dict[str, Any] = field(default_factory=dict)
     scan_transition_s: float | None = None
     unsupported_automatic_actions: tuple[str, ...] = ("sample exchange", "pump blocking", "temperature control", "position change")
 
@@ -187,6 +188,14 @@ def resolve_intent_settings(intent: AcquisitionIntent | Mapping[str, Any], *, mo
     data = base.to_dict()
     data.update(live)
     data.update(manual)
+    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
+    data.update(mircat_pulse_rate_hz=MIRCAT_INTERNAL_RATE_HZ, mircat_pulse_width_ns=MIRCAT_INTERNAL_WIDTH_NS)
+    from control_app.measurement_host.laser_settings import validate_laser_settings
+    lasers = validate_laser_settings(base.laser_settings)
+    if "fire_to_qswitch_us" in lasers:
+        data["fire_to_qswitch_s"] = lasers["fire_to_qswitch_us"] * 1e-6
+    if "qcl_current_ma" in lasers:
+        data["mircat_current_ma"] = lasers["qcl_current_ma"]
     data.update(mode=mode, execution="hardware", scan_start_cm1=intent.spectral_min_cm1,
                 scan_stop_cm1=intent.spectral_max_cm1, repeats=intent.repeats)
     if caps.available_memory_bytes is not None and "memory_limit_bytes" not in manual:
@@ -229,6 +238,13 @@ def resolve_intent_settings(intent: AcquisitionIntent | Mapping[str, Any], *, mo
         raise ValueError("phase count exceeds the timing grid available within this scan period")
     post = max(1, int((Decimal(str(intent.observation_duration_s)) / Decimal(str(period))).to_integral_value(rounding=ROUND_CEILING)))
     data.update(measured_scan_period_s=period, phase_offsets_s=phases, post_scans=post)
+    from control_app.measurement_host.hf2_selection import select_supported
+    for role in (("sample", "reference") if mode == "dual" else ("sample",)):
+        fields = {"order": f"{role}_filter_order", "timeconstant_s": f"{role}_filter_timeconstant_s", "rate_sps": f"{role}_rate_hz"}
+        requested = {key: manual[name] for key, name in fields.items() if name in manual}
+        profile = caps.hf2_choices.get(role, caps.hf2_choices if role == "sample" else {})
+        chosen = select_supported(profile, time_scale_s=period, overrides=requested)
+        data.update({fields[key]: value for key, value in chosen.items()})
     for field_name in ("sample_rate_hz", "reference_rate_hz"):
         if field_name == "reference_rate_hz" and mode != "dual":
             continue
@@ -264,6 +280,16 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
                calibration=None) -> RepeatedRapidScanPlan:
     if isinstance(settings, Mapping):
         settings = RepeatedRapidScanSettings.from_dict(settings)
+    from control_app.measurement_host.laser_settings import validate_laser_settings
+    from dataclasses import replace
+    lasers = validate_laser_settings(settings.laser_settings)
+    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
+    laser_overrides = {"mircat_pulse_rate_hz": MIRCAT_INTERNAL_RATE_HZ, "mircat_pulse_width_ns": MIRCAT_INTERNAL_WIDTH_NS}
+    if "fire_to_qswitch_us" in lasers:
+        laser_overrides["fire_to_qswitch_s"] = lasers["fire_to_qswitch_us"] * 1e-6
+    if "qcl_current_ma" in lasers:
+        laser_overrides["mircat_current_ma"] = lasers["qcl_current_ma"]
+    settings = replace(settings, **laser_overrides)
     settings.validate()
     caps = _typed(capabilities, HardwareCapabilities)
     evidence = _typed(calibration, CalibrationEvidence)
@@ -288,6 +314,8 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
                                             direction, control, repeat, int(control in ("sample", "pump_blocked")), compiled,
                                             0, action))
     first = movies[0].compiled
+    if "pump_repetition_rate_hz" in lasers and first.duration_s < 1/lasers["pump_repetition_rate_hz"]:
+        raise ValueError("Movie duration is shorter than the requested Nd:YAG repetition interval; increase the observation duration")
     if first.physical_frame_count > caps.frame_capacity:
         raise ValueError(f"uninterrupted movie exceeds connected frame capacity {caps.frame_capacity}; no splitting is performed")
     active_demods = (settings.sample_demodulator,) + ((settings.reference_demodulator,) if settings.mode == "dual" else ())

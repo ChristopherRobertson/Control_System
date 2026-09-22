@@ -85,11 +85,12 @@ def test_preliminary_without_blank_then_reviewed_pumped_run_and_saved_loading(tm
     assert native["native"]["blocks"][0]["reference_ticks"].dtype == np.uint64
 
 
-def test_pump_requires_explicit_current_review_and_reapproval_is_retained(tmp_path):
+def test_pump_accepts_compatible_sample_without_review_and_retains_optional_reviews(tmp_path):
     runner = DualDetectorPhaseScanRunner(SimulatedAcquirer)
     runner.execute("test", tmp_path, plan())
-    with pytest.raises(RuntimeError, match="explicitly review"):
-        runner.execute("run", tmp_path, plan())
+    result = runner.execute("run", tmp_path, plan())
+    native = load_native(result["path"]/"raw"/"acquisition.npz")
+    assert not native["native"]["unpumped_baseline"]["reviewed"]
     runner.mark_preliminary_reviewed()
     changed = build_dual_detector_phase_scan_plan(replace(plan().settings, pump_repetition_rate_hz=5))
     assert runner.baseline_conflicts(changed)

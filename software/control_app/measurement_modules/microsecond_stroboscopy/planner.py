@@ -213,6 +213,11 @@ def resolve_settings(settings: StroboscopySettings | Mapping[str, Any],
     """
     if not isinstance(settings, StroboscopySettings):
         settings = StroboscopySettings.from_dict(settings)
+    from control_app.measurement_host.laser_settings import validate_laser_settings
+    from dataclasses import replace
+    lasers = validate_laser_settings(settings.laser_settings)
+    if "pump_repetition_rate_hz" in lasers:
+        settings = replace(settings, event_spacing_s=max(settings.event_spacing_s, 1/lasers["pump_repetition_rate_hz"]))
     if not settings.delays_us or any(not _number(v) for v in settings.delays_us):
         return settings
     data, caps = settings.to_dict(), _payload(capabilities)
@@ -237,6 +242,10 @@ def resolve_settings(settings: StroboscopySettings | Mapping[str, Any],
         for name in names:
             value = actual.get(f"{section}.{name}", timing_readbacks.get(name) if section == "timing" else None)
             automatic(section, name, value if value is not None else getattr(defaults, name))
+    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_WIDTH_NS
+    data["timing"]["mircat_pulse_width_ns"] = MIRCAT_INTERNAL_WIDTH_NS
+    if "fire_to_qswitch_us" in lasers:
+        data["timing"]["fire_to_q_us"] = lasers["fire_to_qswitch_us"]
     gaps = [b-a for a,b in zip(sorted(set(settings.delays_us)), sorted(set(settings.delays_us))[1:]) if b>a]
     step_s = min(gaps) * 1e-6 if gaps else max(abs(settings.delays_us[0])*1e-6, 25e-6)
     target_tc = max(.8e-6, step_s/4)
@@ -322,6 +331,8 @@ def acquisition_signature(settings: StroboscopySettings | Mapping[str, Any], *, 
     signature = {"experiment_id": settings.experiment_id, "mode": settings.mode,
         "wavenumbers_cm1": sorted(point.wavenumber_cm1 for point in settings.spectral_points),
         "response": response, "timing": asdict(settings.timing)}
+    if "qcl_current_ma" in settings.laser_settings:
+        signature["qcl_current_ma"] = settings.laser_settings["qcl_current_ma"]
     if kind not in ("blank", "preliminary", "baseline", "control"):
         signature.update(delays_us=list(settings.delays_us), averages=settings.averages,
             event_spacing_s=settings.event_spacing_s, delay_order=settings.delay_order,
@@ -354,6 +365,12 @@ def build_plan(settings: StroboscopySettings | Mapping[str, Any],
     except (ValueError, TypeError, OverflowError) as exc:
         issue("dependent_settings", str(exc))
     s, r, t = settings, settings.response, settings.timing
+    from control_app.measurement_host.laser_settings import validate_mircat_limits
+    try:
+        validate_mircat_limits(width=t.probe_width_ns, wavenumbers=[p.wavenumber_cm1 for p in s.spectral_points])
+    except ValueError as exc:
+        issue("mircat_limits", str(exc))
+
     if kind not in ("run", "blank", "preliminary"):
         issue("operation_kind", "Operation kind must be run, blank or preliminary")
     if kind == "blank" and s.mode == "dual":

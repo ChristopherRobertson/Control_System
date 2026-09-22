@@ -90,9 +90,10 @@ def _run_main(monkeypatch, tmp_path, *, owner_id, external_quit=False, safe_resu
         request_emergency_stop = ControlSystemMainWindow.request_emergency_stop
         live_worker_blockers = ControlSystemMainWindow.live_worker_blockers
 
-        def __init__(self, *, command_handler, persist_settings):
+        def __init__(self, *, command_handler, persist_settings, connect_devices_on_startup):
             super().__init__()
             assert command_handler is handler and persist_settings
+            assert connect_devices_on_startup
             window_ref.append(self)
             self.command_handler = handler
             self.measurement_lifecycle = MeasurementLifecycle(coordinator)
@@ -221,3 +222,14 @@ def test_failed_signal_shutdown_does_not_quit_or_mark_safe(monkeypatch, tmp_path
     # app.main's atexit hook still tries safety cleanup: a failed worker-drained
     # check was not misrepresented as safe completion.
     assert result.after_exit_events == [("emergency", "python_atexit"), ("final_safety_check", "python_atexit")]
+
+
+def test_connection_banner_collapses_repeated_tab_failures():
+    from control_app.ui.main_window import _connection_status_messages
+    error = 'T660Error: t660_2: Windows denied access to COM7. Original error: access denied'
+    errors = [f'{tab}: Settings unavailable: {error}' for tab in ('nano:dual', 'rapid:single', 'rapid:dual')]
+    messages = _connection_status_messages({'t660_2': error}, errors)
+    assert len(messages) == 1
+    assert 'COM7 access denied' in messages[0]
+    assert len(messages[0]) < 120
+    assert _connection_status_messages({}, ['unrelated failure']) == ['unrelated failure']

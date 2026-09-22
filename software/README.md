@@ -5,10 +5,28 @@ dependencies, and packaging live beside it. From the repository root, install th
 package once with `.venv\Scripts\python.exe -m pip install -e software`, then launch
 with `.\run_gui.ps1` or `.venv\Scripts\python.exe -m control_app.ui.app`.
 
-The desktop includes Phase Scan, Dual-Detector Phase Scan, twelve independent
-experiment pages, and MIRcat, T660-1, Nd:YAG, OPO Iris and Plotter: nineteen tabs.
+The desktop includes six measurement modules with single/dual pages, including
+Phase Scan, plus MIRcat, T660-1, Nd:YAG, OPO Iris and Plotter: seventeen tabs.
+Phase Scan's established implementation lives in `measurement_modules/phase_scan/`.
+The old workflow/widget import paths remain aliases for existing callers. The
+redundant Single Scan Phase Delay pair is no longer registered.
 Device command routing, exclusive ownership and shutdown are shared; each
 experiment owns its acquisition plan, data and saved settings.
+The desktop opens one application device session in a background startup worker.
+Tabs use its shared settings snapshot and do not discover hardware on activation.
+Device writes and acquisition checks use live readbacks over the retained
+connections; experiment ownership still protects blank/sample sequences. Only
+application shutdown deinitializes and disconnects the pooled transports, after
+the existing safe-state procedure. CLI workflows retain their original lifecycle.
+Use **Instruments → Refresh connected settings** to refresh external changes or
+retry an unavailable startup device. Missing readbacks remain explicit failures.
+**Instruments → Recheck supported device choices** explicitly repeats capability
+enumeration when needed, without reconnecting healthy devices.
+HF2LI supported choices are enumerated once and retained in
+`%LOCALAPPDATA%/ControlSystem/device_capabilities_v1.json`; current operating
+settings are always read from hardware at startup. An absent or unusable optional
+capability record triggers discovery, and acquisition still verifies the selected
+settings. The first enumeration can take longer; it does not block Qt navigation.
 The default Save Location is `evidence/experiments/runs/YYYY-MM-DD`, using the
 local date. An explicitly chosen custom destination remains available on restart.
 

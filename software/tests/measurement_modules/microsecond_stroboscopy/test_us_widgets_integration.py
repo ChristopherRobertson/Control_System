@@ -116,17 +116,18 @@ def test_us_advanced_overrides_are_independent_and_roundtrip_microseconds(qt_app
     controls = panel.settings_widget
     path = "response.hf2_time_constant_s"
     assert not controls._controls[path][0].isEnabled()
-    controls.override_modes[path].setCurrentText("Override")
-    controls._controls[path][0].setValue(12.)
+    panel.adapter.capabilities = {"orders": [1], "rates_sps": [100000.], "timeconstants_by_order": {1: [12e-6]}}
+    panel.refresh_plan()
+    controls.override_modes[path].setCurrentText("0.000012")
     assert controls.read_settings()["response"]["hf2_time_constant_s"] == pytest.approx(12e-6)
-    assert controls.read_settings()["manual_overrides"] == [path]
-    assert controls.override_modes["response.sample_rate_sps"].currentText() == "Auto"
-    controls.override_modes["response.sample_rate_sps"].setCurrentText("Override")
+    assert set(controls.read_settings()["manual_overrides"]) == {path, *controls.MIRCAT_FIELDS}
+    assert controls.override_modes["response.sample_rate_sps"].currentIndex() == 0
+    controls.override_modes["response.sample_rate_sps"].setCurrentText("100000")
     controls.override_modes[path].setCurrentText("Auto")
-    assert controls.read_settings()["manual_overrides"] == ["response.sample_rate_sps"]
+    assert set(controls.read_settings()["manual_overrides"]) == {"response.sample_rate_sps", *controls.MIRCAT_FIELDS}
     assert controls._controls["response.sample_rate_sps"][0].isEnabled()
     controls.restore_automatic()
-    assert not controls.read_settings()["manual_overrides"]
+    assert set(controls.read_settings()["manual_overrides"]) == set(controls.MIRCAT_FIELDS)
     panel.deleteLater()
 
 
@@ -135,12 +136,12 @@ def test_us_only_pertinent_overrides_and_exact_mircat_labels(qt_app, context, mo
     from PySide6.QtWidgets import QLabel
     panel = simulated_panel(context, mode)
     expected = {"response.hf2_order", "response.hf2_time_constant_s", "response.sample_rate_sps",
-                "response.integration_aperture_s", "timing.probe_rate_hz", "timing.mircat_pulse_width_ns"}
+                "response.integration_aperture_s"}
     if mode == "dual":
         expected |= {"response.reference_order", "response.reference_time_constant_s", "response.reference_rate_sps"}
     assert set(panel.settings_widget.override_modes) == expected
-    labels = {label.text() for label in panel.settings_widget.advanced_widget.findChildren(QLabel)}
-    assert {"Repetition rate", "Pulse width"} <= labels
+    labels = {label.text() for label in panel.settings_widget.findChildren(QLabel)}
+    assert {"Repetition Rate", "Pulse Width"} <= labels
     assert not any("QCL" in label for label in labels)
     assert not hasattr(panel.settings_widget, "off_band") and not hasattr(panel.settings_widget, "delay_order")
     panel.deleteLater()
@@ -161,42 +162,42 @@ def test_us_removed_editors_reset_current_values_and_preserve_historical_provena
     panel.adapter.apply_settings(settings)
     panel.settings_widget.restore_automatic()
     saved = panel.adapter.read_settings()
-    assert saved["manual_overrides"] == []
+    assert set(saved["manual_overrides"]) == set(panel.settings_widget.MIRCAT_FIELDS)
     assert saved["response"]["detector_latency_s"] == default_settings("single").response.detector_latency_s
-    assert saved["timing"]["probe_width_ns"] == default_settings("single").timing.probe_width_ns
+    assert saved["timing"]["probe_width_ns"] == 150.
     assert saved["timing"]["mircat_pulse_width_ns"] == 100.
     assert saved["delay_order"] == "alternating"
     assert saved["historical_overrides"]["response.detector_latency_s"] == 4e-6
-    assert saved["historical_overrides"]["timing.probe_width_ns"] == 150.
+    assert "timing.probe_width_ns" not in saved["historical_overrides"]
     assert saved["historical_overrides"]["delay_order"] == "descending"
     assert saved["identity"]["sample_id"] == "retained-sample"
     assert saved["spectral_points"][0]["role"] == "off_band"
     panel.settings_widget.save_preferences()
     reloaded = simulated_panel(context, "single")
     assert reloaded.adapter.read_settings()["historical_overrides"] == saved["historical_overrides"]
-    assert reloaded.adapter.read_settings()["manual_overrides"] == []
+    assert set(reloaded.adapter.read_settings()["manual_overrides"]) == set(panel.settings_widget.MIRCAT_FIELDS)
     panel.deleteLater(); reloaded.deleteLater()
 
 
 def test_us_repetition_rate_and_pulse_width_plumb_to_duty_validation(qt_app, context):
     panel = simulated_panel(context, "single")
     fields = panel.settings_widget
-    for path in ("timing.probe_rate_hz", "timing.mircat_pulse_width_ns"):
-        fields.override_modes[path].setCurrentText("Override")
-    fields._controls["timing.probe_rate_hz"][0].setValue(1000.)
-    fields._controls["timing.mircat_pulse_width_ns"][0].setValue(400.)
+    assert not set(fields.MIRCAT_FIELDS).intersection(fields.override_modes)
+    fields._controls["timing.probe_rate_hz"][0].setValue(1000000.)
+    fields._controls["timing.probe_width_ns"][0].setValue(400.)
     values = fields.read_settings()
     assert values["timing"]["probe_rate_hz"] == 1e6
-    assert values["timing"]["mircat_pulse_width_ns"] == 400.
-    assert panel.plan is None and "30%" in panel.validation.text()
-    fields._controls["timing.mircat_pulse_width_ns"][0].setValue(100.)
+    assert values["timing"]["probe_width_ns"] == 400.
+    assert panel.plan is not None
+    assert panel.plan.settings.timing.mircat_pulse_width_ns == 142.
+    fields._controls["timing.probe_width_ns"][0].setValue(100.)
     assert panel.plan is not None, panel.validation.text()
     assert panel.plan.settings.timing.probe_rate_hz == 1e6
-    assert panel.plan.settings.timing.mircat_pulse_width_ns == 100.
+    assert panel.plan.settings.timing.probe_width_ns == 100.
     panel.deleteLater()
 
 
-def test_us_first_show_checks_capabilities_once_through_shared_owned_operation(qt_app, tmp_path, monkeypatch):
+def test_us_show_is_io_free_and_explicit_check_uses_shared_owned_operation(qt_app, tmp_path, monkeypatch):
     from control_app.measurement_host import ContextFactory
     from control_app.measurement_host.ownership import HardwareCoordinator
     from control_app.measurement_modules.microsecond_stroboscopy import runner
@@ -218,35 +219,36 @@ def test_us_first_show_checks_capabilities_once_through_shared_owned_operation(q
     assert panel.plan is None
     assert calls == []
     panel.show();qt_app.processEvents();wait_for(qt_app,panel)
-    assert len(calls)==1, panel.status.text()
+    assert calls == []
     panel.hide();panel.show();qt_app.processEvents()
-    assert len(calls)==1
+    assert calls == []
+    panel.check_capabilities()
+    wait_for(qt_app, panel)
+    assert len(calls) == 1
     panel.close();panel.deleteLater()
 
 
 def test_us_capability_resolution_keeps_independent_manual_override(qt_app, context):
     panel = simulated_panel(context, "dual")
     fields = panel.settings_widget
-    fields.override_modes["response.hf2_time_constant_s"].setCurrentText("Override")
-    fields._controls["response.hf2_time_constant_s"][0].setValue(20.)
     panel.adapter.capabilities = {"verified": True, "timing_rate_sps": 200000., "enabled_streams": [0,2,3],
         "sample": {"orders": [1], "rates_sps": [100000.], "timeconstants_by_order": {1: [10e-6, 20e-6]}},
         "reference": {"orders": [2], "rates_sps": [100000.], "timeconstants_by_order": {2: [20e-6]}}}
     panel.refresh_plan()
+    fields.override_modes["response.hf2_time_constant_s"].setCurrentText("0.000020")
     assert panel.plan is not None, panel.validation.text()
     response = panel.plan.settings.response
     assert response.hf2_time_constant_s == pytest.approx(20e-6)
     assert response.sample_rate_sps == response.reference_rate_sps == 100000.
     assert response.reference_order == 2
     assert fields._controls["response.reference_time_constant_s"][0].value() == pytest.approx(20.)
-    assert fields.manual_override_fields == {"response.hf2_time_constant_s"}
+    assert fields.manual_override_fields == {"response.hf2_time_constant_s", *fields.MIRCAT_FIELDS}
     panel.deleteLater()
 
 
 def test_us_plan_roundtrip_modes_and_scoped_new_run(qt_app, context, tmp_path):
     single, dual = [simulated_panel(context, mode) for mode in ("single", "dual")]
-    for field, value in (("timing.probe_rate_hz", 800.), ("timing.mircat_pulse_width_ns", 150.)):
-        single.settings_widget.override_modes[field].setCurrentText("Override")
+    for field, value in (("timing.probe_rate_hz", 800000.), ("timing.probe_width_ns", 150.)):
         single.settings_widget._controls[field][0].setValue(value)
     path = tmp_path / "single-plan.json"
     single.save_plan(path);wait_for(qt_app,single)
@@ -254,8 +256,8 @@ def test_us_plan_roundtrip_modes_and_scoped_new_run(qt_app, context, tmp_path):
     single.load_plan(path);wait_for(qt_app,single)
     assert single.plan.settings.averages == 2
     assert single.plan.settings.timing.probe_rate_hz == 800000.
-    assert single.plan.settings.timing.mircat_pulse_width_ns == 150.
-    assert single.settings_widget.override_modes["timing.mircat_pulse_width_ns"].currentText() == "Override"
+    assert single.plan.settings.timing.probe_width_ns == 150.
+    assert single.settings_widget._controls["timing.probe_width_ns"][0].isEnabled()
     dual.load_plan(path);wait_for(qt_app,dual)
     assert "mode" in dual.status.text().lower()
     dual.preliminary = record_for(dual)

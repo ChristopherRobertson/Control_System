@@ -232,7 +232,9 @@ def build_plan(settings: Settings | dict[str, Any], capabilities: Mapping[str, A
     restoration_s = operations * s.restoration_estimate_s
     processing_s = operations * s.processing_estimate_s
     total_s = acquisition_s + reset_s + preparation_s + tune_s + upload_s + restoration_s + processing_s
-    budget = {"event_count": n, "pump_event_count": pump_count, "control_event_count": n - pump_count,
+    measurement_s = (acquisition_s + s.preparation_estimate_s + len(waves)*s.tune_settle_estimate_s
+        + physical_frames*s.upload_frame_estimate_s + s.restoration_estimate_s + s.processing_estimate_s)
+    budget = {"measurement_s": measurement_s, "event_count": n, "pump_event_count": pump_count, "control_event_count": n - pump_count,
               "preliminary_event_count": preliminary_n, "blank_event_count": blank_n,
               "physical_frame_count": physical_frames, "frames_per_event_burst": frames_per,
               "probe_pulse_count": all_frames, "preparation_frame_count": prep_n * frames_per,
@@ -247,7 +249,7 @@ def build_plan(settings: Settings | dict[str, Any], capabilities: Mapping[str, A
               "aggregate_rate_hz": aggregate_rate,
               "acquisition_s": acquisition_s, "reset_s": reset_s, "preparation_s": preparation_s,
               "tune_settle_s": tune_s, "timing_upload_s": upload_s, "restoration_s": restoration_s,
-              "processing_s": processing_s, "total_s": total_s, "forward_simulation": None,
+              "processing_s": processing_s, "campaign_total_s": total_s, "total_s": measurement_s, "forward_simulation": None,
               "estimate_basis": "Each retained event includes min(0.2 s, period/4) pre-capture, all finite hardware frames, then one full period plus the slowest active detector's 8 × order × time constant filter tail. Includes blank/preliminary captures, tuning, upload, restoration and analysis. No software reset wait. Before live readback, duration is a lower bound excluding the unresolved filter tail; native capture/sample/storage quantities remain unresolved."}
     # Pending readback messages inform the preview; they are not Start gates.
     readiness = tuple(f"Read {name} automatically during connected preparation" for name in resolution.unresolved)

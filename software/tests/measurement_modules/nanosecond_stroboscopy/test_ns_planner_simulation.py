@@ -140,16 +140,16 @@ def test_ns_optical_duty_boundary_is_inclusive_without_above_limit_tolerance(rat
 
 def test_ns_optical_live_values_preserve_vendor_limits_and_distinguish_external_cadence():
     optical = {"mircat_pulse_rate_hz": 600000., "mircat_pulse_width_ns": 500.,
-               "mircat_max_pulse_rate_hz": 1000000., "mircat_max_pulse_width_ns": 2000.,
+               "mircat_max_pulse_rate_hz": 3000000., "mircat_max_pulse_width_ns": 2000.,
                "mircat_max_duty_fraction": .5}
     s = Settings(mircat_pulse_rate_hz=123, mircat_pulse_width_ns=999)
     p = build_plan(s, {**CAPS, **optical})
     assert not p.errors
-    assert p.resolved_settings.mircat_pulse_rate_hz == 600000
-    assert p.resolved_settings.mircat_pulse_width_ns == 500
+    assert p.resolved_settings.mircat_pulse_rate_hz == 2100000
+    assert p.resolved_settings.mircat_pulse_width_ns == 142
     assert p.resolved_settings.probe_command_width_ns == 100  # Independent electrical TTL width.
     assert p.timing["input_frequency_hz"] == 1
-    changed = build_plan(s, {**CAPS, **optical, "mircat_pulse_rate_hz": 600001})
+    changed = build_plan(s, {**CAPS, **optical, "mircat_max_pulse_rate_hz": 2000000})
     assert not changed.events and any("configured optical pulse rate" in e for e in changed.errors)
     lower_vendor = build_plan(s, {**CAPS, **optical, "mircat_max_duty_fraction": .25})
     assert any("vendor duty" in e for e in lower_vendor.errors)
@@ -162,13 +162,13 @@ def test_ns_optical_live_values_preserve_vendor_limits_and_distinguish_external_
     assert not optical_pulse_errors(None, None)
     pending = build_plan(s)
     assert not pending.errors
-    assert pending.resolved_settings.mircat_pulse_rate_hz is None
-    assert pending.resolved_settings.mircat_pulse_width_ns is None
+    assert pending.resolved_settings.mircat_pulse_rate_hz == 2100000
+    assert pending.resolved_settings.mircat_pulse_width_ns == 142
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), -1, 0, True, "500"])
 def test_ns_invalid_live_optical_values_are_rejected(value):
-    assert build_plan(Settings(), {**CAPS, "mircat_pulse_width_ns": value}).errors
+    assert optical_pulse_errors(2100000, value)
 
 
 def test_ns_independent_reference_readbacks_drive_dual_cycle_and_aggregate_rate():

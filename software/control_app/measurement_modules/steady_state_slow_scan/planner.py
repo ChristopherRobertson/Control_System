@@ -47,6 +47,7 @@ class ScanBlock:
     frame_period_s: float
     frame_predivider: int
     expected_marker_count: int
+    marker_stop_cm1: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -109,18 +110,42 @@ def _segments(settings, inputs):
     return (SpectralSegment("qcl-1", 1, settings.lower_cm1, settings.upper_cm1),)
 
 
+def automatic_filter_request(settings, *, reference=False):
+    """Provisional scan-domain policy; not a calibrated spectral resolution.
+
+    Limit nominal 10–90% filter travel to 0.1 cm-1 or 1% of a narrow
+    scan. Fourth order gives a consistent roll-off independent of prior runs.
+    The connected device quantizes the requested time constant.
+    """
+    values = settings.to_dict() if isinstance(settings, SlowScanSettings) else settings
+    prefix = "reference_" if reference else ""
+    order = values.get(prefix + "filter_order") or 4
+    width = min(.1, (values["upper_cm1"] - values["lower_cm1"]) / 100.)
+    tau = values.get(prefix + "time_constant_s")
+    if tau is None:
+        tau = max(.8e-6, width / (values["requested_scan_speed_cm1_s"] * _filter(order, 1.)["rise_s"]))
+    return {"order": order, "timeconstant_s": tau}
+
+
 def build_plan(settings, inputs=None):
     """Plan raw/relative spectra; missing scientific qualifications are warnings."""
     settings = SlowScanSettings.from_dict(settings.to_dict() if isinstance(settings, SlowScanSettings) else settings)
     inputs = PlannerInputs.from_dict(deepcopy(inputs.to_dict() if isinstance(inputs, PlannerInputs) else inputs or {}))
     profile, selected = inputs.scientific_profile, {}
     errors, readiness, warnings, blocks = [], [], [], []
+    from control_app.measurement_host.laser_settings import validate_mircat_limits
+    try:
+        validate_mircat_limits(current=settings.current_ma, width=settings.pulse_width_s*1e9 if settings.pulse_width_s is not None else None,
+                              wavenumbers=(settings.lower_cm1, settings.upper_cm1))
+    except ValueError as exc:
+        errors.append(str(exc))
+
     requested_speed = settings.requested_scan_speed_cm1_s
     if not _positive(requested_speed) or not .1 <= requested_speed <= 10000:
         errors.append("Scan speed must be in 0.1–10000 cm^-1/s")
     if type(settings.replicates) is not int or not 1 <= settings.replicates <= 8191: errors.append("Replicates must be an integer in 1..8191")
     if not _positive(settings.lower_cm1) or not _positive(settings.upper_cm1) or settings.lower_cm1 >= settings.upper_cm1:
-        errors.append("Start must be greater than End; both wavenumbers must be finite and positive")
+        errors.append("Start wavenumber must be greater than Stop wavenumber; both must be finite and positive")
     names = ("time_constant_s", "filter_order", "reference_time_constant_s", "reference_filter_order", "repetition_rate_hz", "pulse_width_s",
              "requested_sample_rate_hz", "requested_reference_sample_rate_hz")
     for name in names:
@@ -161,7 +186,8 @@ def build_plan(settings, inputs=None):
         order_request = getattr(settings, fields[2])
         if order_request is not None and (type(order_request) is not int or order_request not in orders): errors.append(f"{role} filter order unsupported"); continue
         if not orders: readiness.append(f"Connected {role} filter orders unavailable"); continue
-        order = order_request or min(orders, key=lambda value: abs(value-previous.get("order", value)))
+        automatic = automatic_filter_request(settings, reference=role == "reference")
+        order = order_request or min(orders, key=lambda value: abs(value-automatic["order"]))
         constant_map = caps.get("timeconstants_by_order", {})
         constants = tuple(value for value in constant_map.get(order, constant_map.get(str(order), (previous.get("timeconstant_s"),))) if _positive(value))
         if not constants: readiness.append(f"Connected {role} time constants unavailable"); continue
@@ -170,8 +196,7 @@ def build_plan(settings, inputs=None):
             tau = min(constants, key=lambda value: abs(value-tau_request))
             if not math.isclose(tau, tau_request, rel_tol=1e-6, abs_tol=1e-12): errors.append(f"{role} time constant unsupported; choose Auto or a connected value"); continue
         else:
-            live_tau = previous.get("timeconstant_s")
-            tau = min(constants, key=lambda value: abs(value-live_tau)) if _positive(live_tau) else min(constants)
+            tau = min(constants, key=lambda value: abs(value-automatic["timeconstant_s"]))
         response = _filter(order, tau)
         requested_rate = settings.requested_sample_rate_hz if role == "sample" else settings.requested_reference_sample_rate_hz
         supported = inputs.supported_sample_rates_hz if role == "sample" else inputs.supported_reference_sample_rates_hz
@@ -180,8 +205,11 @@ def build_plan(settings, inputs=None):
         supported = tuple(sorted(value for value in supported if _positive(value)))
         if not supported: readiness.append(f"Connected {role} sample rates unavailable"); continue
         if requested_rate is None:
-            minimum = max(32 / duration, 2 * response["bandwidth_hz"])
+            width = min(.1, (settings.upper_cm1 - settings.lower_cm1) / 100.)
+            minimum = max(32 / duration, 4 * response["bandwidth_hz"], 10 * seed / width)
             rate = next((value for value in supported if value >= minimum), supported[-1])
+            if rate < minimum:
+                warnings.append(f"{role} Auto sampling target exceeds installed rate; using maximum supported rate")
         else:
             rate = min(supported, key=lambda value: abs(value-requested_rate))
             if not math.isclose(rate, requested_rate, rel_tol=1e-9, abs_tol=1e-12):
@@ -210,7 +238,8 @@ def build_plan(settings, inputs=None):
                     intrinsic_resolution_known=_positive(profile.get("intrinsic_resolution_cm1")))
     target_step = seed / min(rates) if rates else None
     selected["target_native_spacing_cm1"] = target_step
-    selected["sampling_basis"] = "Manual rates use supported installed values; Auto chooses the smallest installed rate at least twice nominal filter bandwidth and 32 samples per sweep"
+    selected["sampling_basis"] = "Provisional Auto: smallest supported rate providing 10 points per target filter-travel width, four times nominal bandwidth, and 32 samples per sweep"
+    selected["auto_filter_policy"] = {"version": "scan-domain-estimate/1", "target_travel_cm1": min(.1, (settings.upper_cm1-settings.lower_cm1)/100.), "preferred_order": 4, "calibrated": False}
     selected["scan_speed_cm1_s"] = seed
     def choose(name, auto=None):
         value = getattr(settings, name, None)
@@ -319,7 +348,12 @@ def build_plan(settings, inputs=None):
         speed = struct.unpack("f", struct.pack("f", seed))[0]
         if window.maximum_speed_cm1_s and speed > window.maximum_speed_cm1_s: errors.append("Requested speed exceeds supplied installed limit")
         if window.minimum_speed_cm1_s and speed < window.minimum_speed_cm1_s: errors.append("Requested speed is below supplied installed limit")
-        duration = (segment.upper_cm1-segment.lower_cm1)/speed
+        # The controller stops before issuing a marker exactly at sweep end.
+        # Continue beyond the requested last marker, within connected coverage;
+        # only marker-bracketed samples form the requested spectrum.
+        guard = min(interval / 2, max(0., segment.lower_cm1-window.lower_cm1))
+        sweep_stop = segment.lower_cm1 - guard
+        duration = (segment.upper_cm1-sweep_stop)/speed
         settle_s = max(settle, window.tuning_settle_s or 0.)
         divider = math.ceil((settle_s+process+duration+filter_settle+2*(inputs.t660_tick_s or 0.))*probe_rate)
         if divider > 2**32-1: errors.append("Frame period exceeds T660 divider range"); continue
@@ -327,7 +361,8 @@ def build_plan(settings, inputs=None):
         if not 2 <= count <= 65535: errors.append("Marker schedule needs 2–65535 targets")
         if marker_width and marker_width >= interval/speed: errors.append("Wavelength marker pulses overlap")
         blocks.append(ScanBlock(f"{segment.segment_id}:reverse", segment.segment_id, window.qcl, "reverse",
-            segment.upper_cm1, segment.lower_cm1, speed, duration, settle_s, settings.replicates, divider/probe_rate, divider, count))
+            segment.upper_cm1, sweep_stop, speed, duration, settle_s, settings.replicates, divider/probe_rate, divider, count,
+            segment.lower_cm1))
     if not hf.get("pll") or not hf.get("timing"): readiness.append("Connected HF2LI reference/timing configuration unavailable")
     if hf.get("pll") and probe_rate: hf["pll"]["freqcenter_hz"] = probe_rate
     native_spacing = max((block.scan_speed_cm1_s/min(rates) for block in blocks), default=target_step)

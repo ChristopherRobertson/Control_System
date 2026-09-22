@@ -17,12 +17,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from control_app.measurement_host.settings_sections import HF2LIValueInput, hf2li_choices
 from control_app.measurement_host import TabHandle
 from control_app.measurement_host.presentation import (
     CompactMeasurementPanel, LinkedSliceControl, PlotPanel,
     choose_time_display,
 )
 from .scientific_adapter import MicrosecondScientificAdapter, plain
+from control_app.measurement_host.settings_sections import compact_settings_page, settings_section, run_label_section, PhaseLaserSections
 from .settings import default_settings
 
 
@@ -34,6 +36,8 @@ class _CompactDoubleSpinBox(QDoubleSpinBox):
 class MicrosecondSettingsWidget(QWidget):
     """Essential inputs and continuously visible independent parameter overrides."""
     changed = Signal()
+    MIRCAT_FIELDS = {"timing.probe_rate_hz": "probe_repetition_rate_hz",
+                     "timing.probe_width_ns": "probe_pulse_width_ns"}
 
     def __init__(self, context, parent=None):
         super().__init__(parent)
@@ -52,15 +56,24 @@ class MicrosecondSettingsWidget(QWidget):
                 pass
         self._base["execution_mode"] = "hardware"
         self.manual_override_fields = set(self._base.get("manual_overrides", ()))
-        layout = QFormLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setVerticalSpacing(4)
-        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        self.spectral = QLineEdit()
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        self.run_label = run_label_section(root)
+        self.run_label.textChanged.connect(self._emit_changed)
+        source = QFormLayout()
+        self._add_numeric(source, "timing.probe_rate_hz", "Repetition Rate", override=False, suffix=" Hz")
+        self._add_numeric(source, "timing.probe_width_ns", "Pulse Width", override=False, suffix=" ns")
+        rate = source.takeRow(0).fieldItem.widget()
+        width = source.takeRow(0).fieldItem.widget()
+        self.lasers = PhaseLaserSections(root, self._emit_changed, supplied={
+            "probe_repetition_rate_hz": rate, "probe_pulse_width_ns": width,
+        })
+        _, layout = settings_section(root, "Microsecond Stroboscopy Settings")
+        self.spectral = QLineEdit(self)
+        self.spectral.hide()
         self.spectral.setObjectName("spectral_points")
         self.spectral.setToolTip("Measured wavenumbers in cm⁻¹, separated by commas.")
         self.spectral.textChanged.connect(self._emit_changed)
-        layout.addRow("Wavenumbers (cm⁻¹)", self.spectral)
         self.delays = QLineEdit()
         self.delays.setObjectName("delays_us")
         self.delays.setToolTip("Pump–probe delays in µs, separated by commas.")
@@ -76,19 +89,20 @@ class MicrosecondSettingsWidget(QWidget):
         advanced.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         advanced.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
         fields = [
-            ("response.hf2_order", "Sample filter order", ""),
-            ("response.hf2_time_constant_s", "Sample time constant", " µs"),
-            ("response.sample_rate_sps", "Sample rate", " kSa/s"),
+            ("response.hf2_order", "Sample filter order" if context.mode == "dual" else "Filter order", ""),
+            ("response.hf2_time_constant_s", "Sample time constant" if context.mode == "dual" else "Time constant", " µs"),
+            ("response.sample_rate_sps", "Sample rate" if context.mode == "dual" else "CH1 sample rate", " kSa/s"),
         ]
         if context.mode == "dual":
             fields += [("response.reference_order", "Reference filter order", ""),
                        ("response.reference_time_constant_s", "Reference time constant", " µs"),
                        ("response.reference_rate_sps", "Reference rate", " kSa/s")]
-        fields += [("response.integration_aperture_s", "Integration aperture", " µs"),
-                   ("timing.probe_rate_hz", "Repetition rate", " kHz"),
-                   ("timing.mircat_pulse_width_ns", "Pulse width", " ns")]
+        self._add_numeric(layout, "response.integration_aperture_s", "Integration aperture", suffix=" µs")
         for path, label, suffix in fields:
             self._add_numeric(advanced, path, label, suffix=suffix)
+        self.restore_auto_button = QPushButton("Restore automatic settings")
+        self.restore_auto_button.clicked.connect(self.restore_automatic)
+        advanced.addRow(self.restore_auto_button)
         self.apply_settings(self._base)
 
     @staticmethod
@@ -109,7 +123,7 @@ class MicrosecondSettingsWidget(QWidget):
     def _add_numeric(self, layout, path, label, *, override=True, suffix=""):
         value = self._get(self._base, path)
         scale = 1e6 if path.startswith("response.") and path.endswith("_s") else 1.
-        if path.endswith("_sps") or path == "timing.probe_rate_hz":
+        if path.endswith("_sps"):
             scale = .001
         self._display_scales[path] = scale
         editor = QSpinBox() if isinstance(value, int) else _CompactDoubleSpinBox()
@@ -128,10 +142,13 @@ class MicrosecondSettingsWidget(QWidget):
         if not override:
             layout.addRow(label, editor)
             return
-        mode = QComboBox()
-        mode.addItems(("Auto", "Override"))
+        hf2 = path.startswith("response.") and not path.endswith("integration_aperture_s")
+        mode = HF2LIValueInput() if hf2 else QComboBox()
+        if not hf2:
+            mode.addItems(("Auto", "Override"))
         mode.setObjectName("override:" + path)
-        mode.setFixedWidth(75)
+        if not hf2:
+            mode.setFixedWidth(75)
         mode.currentIndexChanged.connect(lambda *_: self._override_changed(path))
         self.override_modes[path] = mode
         row = QWidget()
@@ -139,7 +156,11 @@ class MicrosecondSettingsWidget(QWidget):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(4)
         row_layout.addWidget(mode)
-        row_layout.addWidget(editor, 1)
+        if hf2:
+            editor.setParent(row)
+            editor.hide()
+        else:
+            row_layout.addWidget(editor, 1)
         layout.addRow(label, row)
 
     def _emit_changed(self, *_):
@@ -151,7 +172,15 @@ class MicrosecondSettingsWidget(QWidget):
             self.changed.emit()
 
     def _override_changed(self, path):
-        manual = self.override_modes[path].currentIndex() == 1
+        manual = self.override_modes[path].currentIndex() > 0
+        selected = self.override_modes[path].currentData()
+        if manual and isinstance(self.override_modes[path], HF2LIValueInput):
+            selected = float(self.override_modes[path].text())
+        if selected is not None:
+            editor = self._controls[path][0]
+            blocked = editor.blockSignals(True)
+            editor.setValue(selected * self._display_scales[path])
+            editor.blockSignals(blocked)
         self._controls[path][0].setEnabled(manual)
         if manual:
             self.manual_override_fields.add(path)
@@ -159,29 +188,56 @@ class MicrosecondSettingsWidget(QWidget):
             self.manual_override_fields.discard(path)
         self._emit_changed()
 
+    def set_capability_choices(self, capabilities):
+        """Use the detached application snapshot; never query a transport."""
+        caps = capabilities or {}
+        for path, combo in self.override_modes.items():
+            if not path.startswith("response.") or path.endswith("integration_aperture_s"):
+                continue
+            role = "reference" if "reference_" in path else "sample"
+            profile = caps.get(role, caps if role == "sample" else {})
+            key = "orders" if path.endswith("order") else "rates_sps" if path.endswith("sps") else "timeconstants_by_order"
+            values = profile.get(key, ())
+            if isinstance(values, dict):
+                order_path = "response.reference_order" if role == "reference" else "response.hf2_order"
+                order = self._controls[order_path][0].value() if order_path in self.manual_override_fields else None
+                values = hf2li_choices(caps, role, "timeconstant", order)
+            combo.set_choices(values)
+
     def restore_automatic(self):
         self._loading = True
+        self.lasers.restore_automatic()
         for path, mode in self.override_modes.items():
             mode.setCurrentIndex(0)
             self._controls[path][0].setEnabled(False)
         self.manual_override_fields.difference_update(self.override_modes)
+        for path, key in self.MIRCAT_FIELDS.items():
+            self._controls[path][0].setValue(PhaseLaserSections.MIRCAT_DEFAULTS[key] * self._display_scales[path])
+        self.manual_override_fields.update(self.MIRCAT_FIELDS)
         self._loading = False
         self.changed.emit()
 
     def read_settings(self):
         data = deepcopy(self._base)
+        data["run_label"] = self.run_label.text().strip()
+        data["laser_settings"] = self.lasers.values()
         for path, (editor, original) in self._controls.items():
             if path in self.override_modes and path not in self.manual_override_fields:
                 continue
             value = editor.value() / self._display_scales[path]
+            combo = self.override_modes.get(path)
+            if isinstance(combo, HF2LIValueInput) and path in self.manual_override_fields:
+                value = float(combo.text())
             self._set(data, path, int(value) if isinstance(original, int) else value)
         waves = [float(text.strip()) for text in self.spectral.text().split(",") if text.strip()]
+        if self.lasers.range_edited:
+            waves = self.lasers.points()
         previous = {point["wavenumber_cm1"]: point for point in self._base["spectral_points"]}
         data["spectral_points"] = [{"wavenumber_cm1": wave,
             "label": previous.get(wave, {}).get("label", "Local band"),
             "role": previous.get(wave, {}).get("role", "band")} for wave in waves]
         data["delays_us"] = [float(text.strip()) for text in self.delays.text().split(",") if text.strip()]
-        data["manual_overrides"] = sorted(self.manual_override_fields)
+        data["manual_overrides"] = sorted(self.manual_override_fields | self.MIRCAT_FIELDS.keys())
         data["mode"] = self.context.mode
         return data
 
@@ -193,13 +249,24 @@ class MicrosecondSettingsWidget(QWidget):
         self._loading = True
         try:
             self._base = deepcopy(settings)
+            self.run_label.setText(settings.get("run_label", ""))
+            self.lasers.apply(settings.get("laser_settings", {}))
             self.manual_override_fields = set(settings.get("manual_overrides", ()))
+            for path, key in self.MIRCAT_FIELDS.items():
+                if path not in self.manual_override_fields:
+                    self._set(settings, path, PhaseLaserSections.MIRCAT_DEFAULTS[key])
+            self.manual_override_fields.update(self.MIRCAT_FIELDS)
             for path, (editor, _) in self._controls.items():
                 editor.setValue(self._get(settings, path) * self._display_scales[path])
                 if path in self.override_modes:
                     manual = path in self.manual_override_fields
-                    self.override_modes[path].setCurrentIndex(1 if manual else 0)
+                    combo = self.override_modes[path]
+                    if isinstance(combo, HF2LIValueInput):
+                        combo.setText(f"{self._get(settings, path):.12g}" if manual else "")
+                    else:
+                        combo.setCurrentIndex(1 if manual else 0)
                     editor.setEnabled(manual)
+            self.lasers.set_points([point["wavenumber_cm1"] for point in settings["spectral_points"]])
             self.spectral.setText(", ".join(f"{point['wavenumber_cm1']:g}" for point in settings["spectral_points"]))
             self.delays.setText(", ".join(f"{delay:g}" for delay in settings["delays_us"]))
             self.delays.setCursorPosition(0)
@@ -339,6 +406,7 @@ class MicrosecondViews(QWidget):
         self.quantity = "delta_absorbance"
         self.time_display = choose_time_display([0.0, .005])
         layout = QVBoxLayout(self)
+        layout.setSpacing(2)
         layout.setContentsMargins(0, 0, 0, 0)
         controls = QHBoxLayout()
         self.quantity_control = QComboBox()
@@ -481,15 +549,8 @@ class MicrosecondPanel(CompactMeasurementPanel):
         self._capability_check_attempted = False
         self._clock_started = None
         super().__init__(settings, adapter, context, parent, advanced_widget=settings.advanced_widget)
-        self.summary_form.setVerticalSpacing(4)
-        self.right_layout.setSpacing(5)
-        self.settings_layout.setSpacing(3)
-        self.settings_layout.setContentsMargins(5, 5, 5, 5)
-        self.advanced_layout.setContentsMargins(8, 8, 8, 8)
-        self.file_layout.setSpacing(3)
-        self.action_layout.setSpacing(3)
-        self.blank_actions_layout.setSpacing(3)
-        self.left_layout.setSpacing(3)
+        compact_settings_page(self)
+        self.advanced_group.setTitle("HF2LI Settings")
         self.preliminary_button.setText("Preliminary sample/reference" if context.mode == "dual" else "Preliminary sample")
         self.start_button.setText("Start acquisition")
         self.abort_button.setText("Abort")
@@ -503,9 +564,6 @@ class MicrosecondPanel(CompactMeasurementPanel):
             self.load_blank_button.hide()
         self.blank_button.clicked.connect(lambda: self._user_action(lambda: self.begin("blank")))
         self.load_blank_button.clicked.connect(self._choose_blank)
-        self.check_button = QPushButton("Check connected device")
-        self.check_button.clicked.connect(lambda: self._user_action(self.check_capabilities))
-        self.settings_extras_layout.addWidget(self.check_button)
         self.retry_save_button = QPushButton("Retry native save…")
         self.retry_save_button.setVisible(False)
         self.retry_save_button.clicked.connect(self._choose_retry_native_save)
@@ -528,19 +586,8 @@ class MicrosecondPanel(CompactMeasurementPanel):
         self.refresh_plan()
         self.splitter.setSizes([380, 700])
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        QTimer.singleShot(0, self._check_on_activation)
-
-    def _check_on_activation(self):
-        if (not self.isVisible() or self._capability_check_attempted or self.command_running()
-                or not self.adapter.hardware_required("check_capabilities", self.adapter.read_operation_settings("check_capabilities"))
-                or "hf2li" not in self.context.devices.available(hardware=True)):
-            return
-        self._capability_check_attempted = True
-        self._user_action(self.check_capabilities)
-
     def refresh_plan(self, *_):
+        self.settings_widget.set_capability_choices(self.adapter.capabilities)
         super().refresh_plan()
         if self.plan is not None:
             self.settings_widget.show_selected_settings(self.plan.settings)
@@ -563,7 +610,6 @@ class MicrosecondPanel(CompactMeasurementPanel):
             if issues:
                 self.validation.setText(self._brief(issues[0]))
         self.load_blank_button.setEnabled(idle)
-        self.check_button.setEnabled(idle and (not self.adapter.hardware_required("check_capabilities", {}) or "hf2li" in self.context.devices.available(hardware=True)))
         unsaved = self._needs_native_preservation()
         self.retry_save_button.setVisible(unsaved)
         self.retry_save_button.setEnabled(idle and unsaved)
@@ -687,7 +733,8 @@ class MicrosecondPanel(CompactMeasurementPanel):
         elapsed = time.monotonic() - self._clock_started
         budget = plain(self.plan.budget) if self.plan is not None else {}
         estimate = budget.get("wall_clock_s")
-        remaining = f" · est. remaining {max(0, float(estimate)-elapsed):,.1f} s" if estimate is not None else ""
+        from control_app.measurement_host.experiment_summary import remaining_text
+        remaining = " · " + remaining_text(estimate, elapsed)
         self.elapsed_label.setText(f"Elapsed {elapsed:,.1f} s{remaining}")
 
 

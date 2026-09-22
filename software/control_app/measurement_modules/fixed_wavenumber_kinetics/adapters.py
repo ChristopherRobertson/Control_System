@@ -213,6 +213,7 @@ class InstalledDevices:
             else:
                 from control_app.devices.hf2li_service import HF2LIPreset
                 self.snapshot_preset = HF2LIPreset("fixed_point_restoration", {
+                    "include_reference_clock": True,
                     "demodulators": [{"index": i} for i in range(6)]})
                 self.before[name] = service.export_settings_snapshot(preset=self.snapshot_preset)
                 if self.before[name].get("read_errors"):
@@ -236,12 +237,16 @@ class InstalledDevices:
             "record_id": f"device-readbacks-{self.operation.run_id}",
             "sources": {}, "readbacks": deepcopy(self.before),
             "maximum_aggregate_rate_sps": 700000., "timing_demodulator_index": 2,
-            "pump_marker_bit": 16, "pump_marker_qualification": "installed Surelite Fixed Sync electrical DIO16; optical arrival unresolved",
+            "pump_marker_bit": 16, "pump_marker_edge": "falling",
+            "pump_marker_qualification": "installed Surelite Fixed Sync electrical DIO16 HIGH-to-LOW edge; optical arrival unresolved",
             "continuous_poll_lossless_qualified": False,
             "acquisition_response": {}, "supported": {},
             "overhead_estimates_s": {"configuration": 5., "upload_per_frame": .05,
                 "tune_per_position": 2., "restoration": 3., "saving": 1., "analysis": 1.}}
-        profiles = {}
+        from control_app.measurement_host.application_session import cached_hf2_choices
+        capabilities = cached_hf2_choices(hf, self.context.mode)
+        profile["hf2_choices"] = capabilities
+        profiles = {"sample": capabilities.get("sample", capabilities), "reference": capabilities.get("reference", {})}
         if probe_capabilities:
             progress({"stage": "configuration", "message": "Reading accepted HF2LI detector capabilities"})
             method = hf.discover_dual_phase_scan_capabilities if self.context.mode == "dual" else hf.discover_phase_scan_capabilities
@@ -263,7 +268,7 @@ class InstalledDevices:
             if cap:
                 profile["supported"][role] = {"rate_sps": list(cap["rates_sps"]),
                     "order": list(cap["orders"]),
-                    "timeconstant_s": list(cap.get("timeconstants_by_order", {}).get(current["order"], []))}
+                    "timeconstant_s": sorted({v for values in cap.get("timeconstants_by_order", {}).values() for v in values})}
             profile["sources"][role] = source
         profile["timing_rate_sps"] = float(node("demods/2/rate"))
         profile["clockbase_hz"] = hf.get_clockbase()
@@ -297,7 +302,6 @@ class InstalledDevices:
                 "differential": bool(node(f"sigins/{index}/diff")), "range_v": float(node(f"sigins/{index}/range"))}
         qcl_range = self._read_qcl1_range()
         profile["qcl_ranges"] = [qcl_range]
-        position = settings.get("positions", [{}])[0].get("wavenumber_cm1") if settings.get("positions") else None
         for selected in settings.get("positions", ()):
             if not qcl_range["min_cm1"] <= float(selected["wavenumber_cm1"]) <= qcl_range["max_cm1"]:
                 raise RuntimeError("Selected wavenumber lies outside installed MIRcat QCL 1 range")
@@ -306,10 +310,9 @@ class InstalledDevices:
         profile["mircat_readback"] = {**profile["mircat"], "pulse_limits": mircat.get_qcl_pulse_limits(1)}
         profile["settling_s"] = max(10*p["timeconstant_s"]*p["order"] for p in (profile[r] for r in ("sample", "reference") if r in profile))
         profile["settling_basis"] = "Conservative 10 × filter order × live time constant; estimated filter settling, not measured acquisition response"
-        # The SDK returns single precision cm^-1; report an operational check
-        # tolerance, never wavelength calibration accuracy.
-        profile["tune_tolerance_cm1"] = max(.001, abs(float(position or 2000.))*2e-6)
-        profile["tune_tolerance_basis"] = "Operational SDK setpoint/readback comparison; optical calibration not asserted"
+        # Tuned state is not an assertion of optical calibration accuracy.
+        profile["tune_tolerance_cm1"] = .05
+        profile["tune_tolerance_basis"] = "Operational 0.05 cm^-1 tune/readback tolerance, not SDK floating-point precision or optical calibration"
         profile["sources"].update(probe_recipe=source, mircat=source, timing=source, hf2li=source)
         profile["warnings"] = ["Optical time zero and acquisition response are uncalibrated unless optional records are supplied",
             "Pump sync observability is determined from retained DIO observations; fine timestamps do not establish optical resolution"]
@@ -336,10 +339,12 @@ class InstalledDevices:
         mircat = self.services["mircat"]
         actual = {"qcl": 1, "pulse_rate_hz": mircat.get_qcl_pulse_rate(1),
                   "pulse_width_ns": mircat.get_qcl_pulse_width(1)}
+        if "current_ma" in expected:
+            actual["current_ma"] = mircat.get_qcl_current(1)
         errors = mircat_pulse_errors(actual, self._external_probe_rate(), mircat.get_qcl_pulse_limits(1))
         if errors:
             raise RuntimeError("; ".join(errors))
-        for key in ("pulse_rate_hz", "pulse_width_ns"):
+        for key in ("pulse_rate_hz", "pulse_width_ns", *(("current_ma",) if "current_ma" in expected else ())):
             if not math.isclose(float(actual[key]), float(expected[key]), rel_tol=1e-6):
                 raise RuntimeError(f"MIRcat QCL 1 {key} differs from selected internal setting")
         actual["external_probe_rate_hz"] = self._external_probe_rate()
@@ -352,16 +357,17 @@ class InstalledDevices:
         from .planner import mircat_pulse_errors
         mircat = self.services["mircat"]
         supplied = self.resolved.get("mircat", {})
-        params = {"qcl": 1, "pulse_rate_hz": mircat.get_qcl_pulse_rate(1),
-            "pulse_width_ns": mircat.get_qcl_pulse_width(1)}
+        from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
+        params = {"qcl": 1, "pulse_rate_hz": MIRCAT_INTERNAL_RATE_HZ,
+            "pulse_width_ns": MIRCAT_INTERNAL_WIDTH_NS}
         sources = self.resolved.setdefault("value_sources", {})
-        if supplied.get("qcl", 1) == 1 and sources.get("mircat.pulse_width_ns") == "user_override":
-            params["pulse_width_ns"] = supplied["pulse_width_ns"]
-        else:
-            sources["mircat.pulse_width_ns"] = "connected QCL 1 readback"
-        if supplied.get("qcl", 1) != 1:
-            self.resolved["historical_mircat_selection"] = deepcopy(supplied)
-        sources["mircat.pulse_rate_hz"] = "connected QCL 1 readback"
+        if sources.get("mircat.current_ma") == "user_override":
+            low, high = mircat.get_qcl_current_limits(1)
+            if not low <= supplied["current_ma"] <= high:
+                raise RuntimeError("Requested MIRcat current exceeds installed QCL limits")
+            params["current_ma"] = supplied["current_ma"]
+        sources["mircat.pulse_width_ns"] = "provisional_internal_policy"
+        sources["mircat.pulse_rate_hz"] = "provisional_internal_policy"
         sources["mircat.qcl"] = "single installed QCL 1"
         self.resolved["mircat"] = params
         self.resolved["qcl_ranges"] = [self._read_qcl1_range()]
@@ -373,6 +379,7 @@ class InstalledDevices:
         hf_profile = self.resolved.get("hf2li", {})
         if not hf_profile.get("signal_inputs") or not hf_profile.get("pll"):
             raise RuntimeError("HF2LI input loading/ranges and PLL device settings are missing")
+        hf.configure_reference_clock(external=True)
         hf.configure_signal_inputs(hf_profile["signal_inputs"])
         hf.configure_pll(hf_profile["pll"])
         detector_profiles = [self.resolved["sample"]]
@@ -425,6 +432,8 @@ class InstalledDevices:
         self._qcl1_original_pulse = {"qcl": 1,
             "pulse_rate_hz": mircat.get_qcl_pulse_rate(1),
             "pulse_width_ns": mircat.get_qcl_pulse_width(1)}
+        if "current_ma" in params:
+            self._qcl1_original_pulse["current_ma"] = mircat.get_qcl_current(1)
         self.before["mircat_pulse"] = deepcopy(self._qcl1_original_pulse)
         self.before["mircat_trigger"] = mircat.get_wavelength_trigger_params()
         self.readbacks["mircat_pulse_command"] = mircat.set_qcl_pulse_params(**params)
@@ -489,8 +498,14 @@ class InstalledDevices:
         actual_pulse = self._verify_mircat_pulse(selected_pulse)
         mircat.start_emission()
         actual = mircat.get_actual_wavelength()
-        if (actual.get("units") != "cm^-1" or not actual.get("light_valid") or
-                abs(actual["value"] - wavenumber_cm1) > self.resolved["tune_tolerance_cm1"]):
+        value = float(actual["value"])
+        if actual.get("units") == "microns" and value > 0:
+            value = 10000. / value
+        elif actual.get("units") != "cm^-1":
+            raise RuntimeError(f"MIRcat returned unsupported wavelength units: {actual}")
+        actual = {**actual, "wavenumber_cm1": value}
+        if (not math.isfinite(value) or not actual.get("light_valid") or
+                abs(value - wavenumber_cm1) > self.resolved["tune_tolerance_cm1"]):
             raise RuntimeError(f"MIRcat actual wavenumber is not within the operational readback tolerance: {actual}")
         settling_end = time.monotonic() + float(self.resolved["settling_s"])
         while time.monotonic() < settling_end:
@@ -501,6 +516,7 @@ class InstalledDevices:
                 "settling_s": self.resolved["settling_s"], "mircat_internal_pulse": actual_pulse}
 
     def upload(self, program, check, progress):
+        self._cancel_check = check
         return self.services["t660_2"].preload_frame_table(
             list(program["frames"]), predivider=program["predivider"],
             input_frequency_hz=program["input_frequency_hz"], cancel_check=check,
@@ -528,17 +544,38 @@ class InstalledDevices:
         for role, index in roles.items():
             stream = data.get(f"/{hf.device_id}/demods/{index}/sample", {})
             if isinstance(stream, Mapping):
-                result[role] = {str(k): np.asarray(v).copy() for k, v in stream.items()}
+                # SDK streams also carry nested headers. Preserve that metadata
+                # as mappings instead of converting it into object arrays.
+                result[role] = deepcopy(dict(stream))
             else:
                 raise RuntimeError("Unexpected HF2LI native poll structure; no flattening or interpolation applied")
         return result
 
     def start_event(self, program):
+        self._terminal_wait_s = max(0., len(program["frames"])*program["frame_period_s"]-program["duration_s"]) + 2.
         self.services["t660_2"].start_frame_table()
 
     def finish_event(self):
         service = self.services["t660_2"]
-        return {"frames_status": service.get_frames_status(), "frame_shot_count": service.get_shot_count()}
+        deadline = time.monotonic() + getattr(self, "_terminal_wait_s", 2.)
+        status = service.get_frames_status()
+        while status != "DONE" and time.monotonic() < deadline:
+            self._cancel_check()
+            time.sleep(.01)
+            status = service.get_frames_status()
+        return {"frames_status": status, "frame_shot_count": service.get_shot_count()}
+
+    def timing_status(self):
+        """Read finite-engine evidence before cleanup overwrites it; never fire."""
+        service = self.services["t660_2"]
+        return {"frames_status": service.get_frames_status(),
+                "frame_shot_count": service.get_shot_count()}
+
+    def idle(self, duration_s, check):
+        deadline = time.monotonic() + duration_s
+        while time.monotonic() < deadline:
+            check()
+            time.sleep(min(.02, max(0., deadline-time.monotonic())))
 
     def stop_stream(self):
         if self.streaming:
@@ -586,7 +623,7 @@ class InstalledDevices:
                         "clock": {"frequency": f"{_physical_number(_query_value(before['queries'], 'synth_frequency')):.12g}Hz"},
                         "channels": {c: _absolute_channel_settings(before, c, enabled=False) for c in "ABCD"}}
                     if key == "t660_2":
-                        recipe["frames_engine"] = False
+                        recipe["frames_engine"] = "OFF"
                     # A finite table's terminal frame changes ACTIVE delays.
                     # Restore the user's readback values with all outputs OFF,
                     # so the next automatic run cannot inherit terminal zeros.
@@ -658,6 +695,8 @@ class InstalledDevices:
                 for expected in expected_pulses:
                     actual = {"pulse_rate_hz": mircat.get_qcl_pulse_rate(1),
                               "pulse_width_ns": mircat.get_qcl_pulse_width(1)}
+                    if "current_ma" in expected:
+                        actual["current_ma"] = mircat.get_qcl_current(1)
                     if any(not math.isclose(float(actual[key]), float(expected[key]), rel_tol=1e-6)
                            for key in actual):
                         raise RuntimeError("MIRcat QCL 1 internal pulse restoration mismatch")
@@ -679,12 +718,22 @@ class InstalledDevices:
                         "error": str(exc), "loss_boundary": "available device tail could not be certified retained"})
             attempt("HF2LI unsubscribe", self.stop_stream)
             if "hf2li" in self.before:
-                attempt("HF2LI restore settings", lambda: hf.reload_settings_snapshot(self.before["hf2li"]))
+                expected_hf = deepcopy(self.before["hf2li"])
+                # Installed HF2 external-reference center is a readback, not a
+                # writable setpoint. Keep it in the original evidence only.
+                observed_paths = {f"/{hf.device_id}/plls/0/freqcenter"}
+                if expected_hf["nodes"].get(f"/{hf.device_id}/plls/0/enable", {}).get("value"):
+                    observed_paths.add(f"/{hf.device_id}/oscs/0/freq")
+                expected_hf["nodes"] = {p: v for p, v in expected_hf["nodes"].items() if p not in observed_paths}
+                attempt("HF2LI restore settings", lambda: hf.reload_settings_snapshot(expected_hf))
                 def verify_hf():
                     after = hf.export_settings_snapshot(preset=self.snapshot_preset)
-                    result = hf.compare_settings_snapshots(self.before["hf2li"], after)
+                    observed = {p: v for p, v in after["nodes"].items() if p in observed_paths}
+                    after["nodes"] = {p: v for p, v in after["nodes"].items() if p not in observed_paths}
+                    result = hf.compare_settings_snapshots(expected_hf, after)
                     if not result["match"] or after.get("read_errors"):
                         raise RuntimeError(f"HF2LI restoration mismatch: {result}")
+                    result["external_reference_observations"] = observed
                     return result
                 attempt("HF2LI restoration readback", verify_hf)
         for name, service in reversed(list(self.services.items())):

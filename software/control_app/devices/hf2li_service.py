@@ -81,7 +81,8 @@ class HF2LIService:
         device_config = devices.get("hf2li")
         if not isinstance(device_config, dict):
             raise HF2LIConfigurationError("hf2li missing from hardware configuration")
-        return cls(device_config, command_log=command_log)
+        from control_app.measurement_host.application_session import shared_device
+        return shared_device("hf2li", lambda: cls(device_config, command_log=command_log), command_log=command_log)
 
     @property
     def device_id(self) -> str:
@@ -194,6 +195,14 @@ class HF2LIService:
         }
         self._log(f"applied_preset={preset.name}")
         return applied
+
+    def configure_reference_clock(self, *, external: bool) -> None:
+        """Select the timestamp reference clock and verify the source selection."""
+        path = f"/{self.device_id}/system/extclk"
+        self._set_node("setInt", path, int(external))
+        self.sync()
+        if int(self._require_server().getInt(path)) != int(external):
+            raise HF2LIError("HF2LI reference clock source readback differs from requested selection")
 
     def configure_signal_inputs(self, signal_inputs: dict[str, Any]) -> None:
         """Configure HF2LI Signal Input 1 and Signal Input 2 nodes."""
@@ -1015,6 +1024,8 @@ class HF2LIService:
         oscillator_indices = {0}
         optional_demod_nodes: dict[int, set[str]] = {}
         if preset is not None:
+            if preset.settings.get("include_reference_clock"):
+                yield (f"/{device}/system/extclk", "int")
             for settings in (preset.settings.get("signal_inputs") or {}).values():
                 if isinstance(settings, dict):
                     input_indices.add(int(settings.get("index", 0)))

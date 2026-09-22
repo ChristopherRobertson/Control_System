@@ -82,9 +82,10 @@ def test_compact_tabs_construct_without_devices_or_approval_state(app, tabs):
     assert not hasattr(first, "review") and not hasattr(first, "state_acceptance")
     assert not hasattr(first.settings_editor, "hardware")
     assert first.settings_editor.read_settings()["hardware"] is True
-    assert first.start_button.isEnabled(), first.validation.text()
+    assert not first.start_button.isEnabled()
+    assert "blank" in first.validation.text().lower()
     assert second.start_button.isEnabled(), second.validation.text()
-    assert first.adapter.validate_preliminary(None, first.plan) == ()
+    assert first.adapter.validate_preliminary(None, first.plan) == ("Acquire or load a blank to proceed",)
     assert not hasattr(first.settings_editor, "segments")
     assert not hasattr(first.settings_editor, "resolution")
     assert not hasattr(first, "refit_button")
@@ -114,6 +115,13 @@ def test_shown_compact_sample_without_preliminary_saves_loads_and_exports(app, t
     assert panel.plot.isVisible()
     panel.settings_editor.apply_settings(settings(mode))
     inject_backend(panel)
+    if mode == "single":
+        assert not panel.start_button.isEnabled()
+        panel.begin("measurement")
+        assert not panel.command_running()
+        panel.begin_control("blank")
+        wait_for(app, panel)
+        assert panel.start_button.isEnabled(), panel.validation.text()
     panel.begin("measurement")
     snapshot = panel.snapshot
     assert snapshot.operation.hardware is True
@@ -221,7 +229,7 @@ def test_laser_mode_defaults_pulse_editability_and_inclusive_duty_limit(app, tab
     from PySide6.QtWidgets import QGroupBox
     for handle in tabs[0]:
         panel, editor = handle.widget, handle.widget.settings_editor
-        assert {box.title() for box in editor.findChildren(QGroupBox)} == {"MIRcat Settings"}
+        assert {box.title() for box in editor.findChildren(QGroupBox)} == {"Run Label", "MIRcat Settings"}
         assert panel.advanced_group.title() == "HF2LI Settings"
         assert editor.repeats.value() == 1
         assert editor.laser_mode.currentData() == "pulsed"
@@ -252,17 +260,19 @@ def test_scan_labels_and_independent_sampling_rate_plan_roundtrip(app, tabs, tmp
     for panel in (single, dual):
         editor = panel.settings_editor
         labels = {label.text() for label in editor.findChildren(QLabel)}
-        assert {"Start", "End", "Number of Scans"} <= labels
+        assert {"Start", "Stop", "Number of Scans"} <= labels
         assert not {"From", "To", "Repeats per direction"} & labels
         form = editor.start.parentWidget().layout()
         assert form.labelForField(editor.upper).text() == "Start"
-        assert form.labelForField(editor.lower).text() == "End"
+        assert form.labelForField(editor.lower).text() == "Stop"
+        ordered_labels = [form.itemAt(row, form.ItemRole.LabelRole).widget().text() for row in range(form.rowCount())]
+        assert ordered_labels[-4:] == ["Repetition rate (Hz)", "Pulse width (ns)", "Current (mA)", "Number of Scans"]
         assert editor.start.value() == 2050.
         assert editor.end.value() == 1650.
         assert editor.scan_speed.value() == 40.
         rows = dict(panel.adapter.summarize_plan(panel.plan))
         assert rows["Range"] == "2050 → 1650 cm⁻¹"
-        assert rows["Speed / scans"] == "40 cm⁻¹/s / 1 scan"
+        assert rows["Sequence"] == "40 cm⁻¹/s / 1 scan"
         advanced_labels = {label.text() for label in editor.advanced_widget.findChildren(QLabel)}
         assert "Sampling rate (Sa/s)" in advanced_labels
         assert panel.band_lower.placeholderText() == "Lower cm⁻¹"
@@ -365,7 +375,7 @@ def test_actual_shell_keeps_entire_input_rectangles_visible_at_1100_by_780(app, 
             editor = panel.settings_editor
             controls = dict(editor.fields, plan_label=editor.plan_label, lower=editor.lower, upper=editor.upper,
                             laser_mode=editor.laser_mode, scan_speed=editor.scan_speed, repeats=editor.repeats,
-                            read_connected=editor.capability_button, load_dark=panel.load_dark_button)
+                            load_dark=panel.load_dark_button)
             for name, editor in controls.items():
                 bounds = QRect(editor.mapTo(viewport, QPoint()), editor.size())
                 assert viewport.rect().contains(bounds), (mode, name, bounds, viewport.rect())
@@ -442,9 +452,12 @@ def test_blank_is_reused_after_metadata_edit_and_saved_run_load(app, tabs):
     assert "automatic_dark" not in panel.result
     assert panel.result["spectra"][0].quantity == "sequential_blank_absorbance"
     panel.adapter.controls["blank"] = None
+    panel.refresh_readiness()
+    assert not panel.start_button.isEnabled()
     panel.load_run(blank["path"])
     wait_for(app, panel)
     assert panel.adapter.controls["blank"]["run_id"] == blank["run_id"]
+    assert panel.start_button.isEnabled(), panel.validation.text()
 
 
 def test_stop_uses_shared_worker_and_preserves_partial_run(app, tabs):
@@ -460,6 +473,9 @@ def test_stop_uses_shared_worker_and_preserves_partial_run(app, tabs):
                 time.sleep(.005)
                 check()
     panel.settings_editor.apply_settings(settings())
+    inject_backend(panel)
+    panel.begin_control("blank")
+    wait_for(app, panel)
     inject_backend(panel, SlowPreparation)
     panel.begin("measurement")
     assert entered.wait(5)
@@ -472,7 +488,7 @@ def test_stop_uses_shared_worker_and_preserves_partial_run(app, tabs):
     assert not panel.close_blockers()
     assert panel.context.ownership.snapshot()["state"] == "free"
     panel.new_run()
-    assert panel.start_button.isEnabled()
+    assert not panel.start_button.isEnabled()
 
 
 def test_capability_operation_contends_and_releases_without_complete_plan(app, tabs):
@@ -520,7 +536,7 @@ def test_slow_scan_plot_preserves_reversed_native_axes_missing_intervals_and_rat
     assert np.isnan(plot.figure.axes[0].lines[0].get_xdata()).any()
     np.testing.assert_array_equal(native.axis_cm1, original)
     plot.set_result({"spectrum": spectrum, "view": "absorbance"})
-    assert "no applicable calibration" in plot.figure.axes[0].texts[0].get_text()
+    assert "No matching reference data" in plot.figure.axes[0].texts[0].get_text()
     plot.close()
     plot.deleteLater()
 
@@ -565,3 +581,27 @@ def test_slow_scan_fits_match_sweep_identity_when_an_earlier_spectrum_has_no_fit
     assert panel.analysis_button.text() == "Selected windows"
     assert panel.peak_table.isHidden()
     assert panel.peak_table.rowCount() == 0
+
+
+@pytest.mark.parametrize("action", ["stop", "new_run"])
+def test_idle_prepared_session_cleanup_runs_in_background(app, tabs, action):
+    import threading
+    panel = tabs[0][0].widget
+    operation = panel.context.begin_operation(settings(), hardware=True, purpose="blank")
+    called = []
+    main_thread = threading.get_ident()
+    def cleanup():
+        called.append(threading.get_ident())
+        return {"safe_verified": True, "errors": []}
+    with panel.context.hardware_scope(operation):
+        panel.context.ownership.park(operation.ownership, cleanup=cleanup)
+    panel._update_controls()
+    assert panel.abort_button.isEnabled()
+    if action == "stop":
+        panel.request_abort("Stop prepared session")
+    else:
+        panel.new_run()
+    wait_for(app, panel)
+    assert called and called[0] != main_thread
+    assert not panel.context.ownership.has_parked_session()
+    assert panel.context.ownership.snapshot()["state"] == "free"
