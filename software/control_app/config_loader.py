@@ -14,6 +14,8 @@ from control_app.paths import (
     HARDWARE_CONFIGURATION_CANDIDATES,
     INSTRUMENT_ROOT,
     REPO_ROOT,
+    RESEARCH_ROOT,
+    research_output_path,
     resolve_compat_path,
 )
 
@@ -187,17 +189,17 @@ def build_config_inventory(
         warnings.append("opo_iris device is missing")
     elif iris.get("qualification_status") != "qualified":
         warnings.append(
-            "OPO iris is configured but remains unqualified until ATT-01 passes."
+            "OPO iris is configured but remains unqualified until its operating configuration is explicitly qualified."
         )
 
     wavemaster = devices.get("wavemaster")
     if not isinstance(wavemaster, dict):
         warnings.append("wavemaster device is missing")
     else:
-        required = wavemaster.get("phase_entry_required_fields") or []
+        required = wavemaster.get("connection_required_fields") or []
         if not isinstance(required, list):
             warnings.append(
-                "WaveMaster phase_entry_required_fields must be a list."
+                "WaveMaster connection_required_fields must be a list."
             )
         else:
             unresolved = [
@@ -207,7 +209,7 @@ def build_config_inventory(
             ]
             if unresolved:
                 warnings.append(
-                    "WM-01 entry BLOCKED by [VALUE_REQUIRED] WaveMaster fields: "
+                    "WaveMaster connection BLOCKED by [VALUE_REQUIRED] WaveMaster fields: "
                     + ", ".join(unresolved)
                 )
     if not signal_map:
@@ -234,12 +236,13 @@ def write_inventory_files(
     """Write the human-readable configuration inventory."""
 
     target = (
-        Path(output_dir)
+        research_output_path(output_dir)
         if output_dir is not None
-        else INSTRUMENT_ROOT / "schemas"
+        else RESEARCH_ROOT / "configuration_snapshots"
     )
     if not target.is_absolute():
-        target = REPO_ROOT / target
+        target = RESEARCH_ROOT / target
+    target = research_output_path(target)
     target.mkdir(parents=True, exist_ok=True)
 
     inventory_path = target / "config_inventory.txt"

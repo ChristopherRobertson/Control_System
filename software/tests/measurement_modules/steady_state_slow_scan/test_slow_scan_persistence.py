@@ -192,7 +192,7 @@ def test_sample_selection_is_standalone_and_keeps_ratio_distinct_from_absorbance
     assert selection.producer_instance_id == "steady_state_slow_scan:dual"
     assert selection.condition["spectral_quantities"] == ("reference_normalized_ratio",)
     assert selection.condition["instrument_bundle_promoted"] is False
-    assert selection.condition["campaign_phase_accepted"] is False
+    assert selection.condition["instrument_configuration_accepted"] is False
     assert selection.accepted_by == "Named spectroscopy reviewer"
     assert selection.windows[0].center_cm1 == run["fits"][0].peaks[0].center_cm1
 

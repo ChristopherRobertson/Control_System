@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from datetime import UTC, datetime
 from dataclasses import replace
 import json
@@ -1006,8 +1008,8 @@ class PhaseScanWidget(QWidget):
             try:
                 payload = self.plan.to_dict()
                 payload["saved_at_utc"] = datetime.now(UTC).isoformat()
-                Path(path).parent.mkdir(parents=True, exist_ok=True)
-                with Path(path).open("x", encoding="utf-8") as handle:
+                research_output_path(Path(path).parent).mkdir(parents=True, exist_ok=True)
+                with research_output_path(Path(path)).open("x", encoding="utf-8") as handle:
                     json.dump(payload, handle, indent=2, allow_nan=False)
                 self.save_status.setText(f"Plan saved: {path}")
             except (OSError, ValueError) as exc:

@@ -30,7 +30,7 @@ LEGACY_PICO_CONNECTOR_SECTION = "picoscope" + "_inputs"
 def main() -> int:
     try:
         inventory = load_config_inventory(write_files=True)
-        write_inventory_files(inventory, REPO_ROOT / "instrument" / "schemas")
+        # load_config_inventory writes its snapshot under the research root.
         config, _, _ = load_hardware_config()
         _validate_independent_mux_and_picoscope(config)
     except HardwareConfigError as exc:

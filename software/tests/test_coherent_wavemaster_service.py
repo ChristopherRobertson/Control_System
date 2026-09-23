@@ -42,18 +42,18 @@ class FakeWaveMasterSerial:
 
 
 class CoherentWaveMasterServiceTests(unittest.TestCase):
-    def test_disconnected_configuration_blocks_phase_entry(self) -> None:
+    def test_disconnected_configuration_blocks_connection(self) -> None:
         config = {
             "serial_number": "[VALUE_REQUIRED]",
             "preferred_port": "[VALUE_REQUIRED]",
-            "phase_entry_required_fields": ["serial_number", "preferred_port"],
+            "connection_required_fields": ["serial_number", "preferred_port"],
         }
         service = CoherentWaveMasterService(config)
         self.assertEqual(
-            service.phase_entry_gaps(), ["serial_number", "preferred_port"]
+            service.connection_gaps(), ["serial_number", "preferred_port"]
         )
-        with self.assertRaisesRegex(WaveMasterConfigurationError, "WM-01 entry"):
-            service.assert_phase_entry_ready()
+        with self.assertRaisesRegex(WaveMasterConfigurationError, "WaveMaster connection"):
+            service.assert_connection_ready()
 
     def test_identity_reply(self) -> None:
         identity = parse_identity_reply("Coherent Inc.,WaveMaster,W0339,A1.V2.3")
@@ -63,7 +63,7 @@ class CoherentWaveMasterServiceTests(unittest.TestCase):
     def test_connect_resolves_adapter_and_verifies_instrument_identity(self) -> None:
         fake = FakeWaveMasterSerial()
         config = {
-            "phase_entry_required_fields": [],
+            "connection_required_fields": [],
             "preferred_port": "COM5",
             "usb_vid_hex": "0403",
             "usb_pid_hex": "6001",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 import csv
 from bisect import bisect_left
 import math
@@ -16,9 +18,9 @@ def export_kaleidagraph_scan(
 ) -> Path:
     """Write validated ``wavenumber, sample, reference`` data for a sweep plot."""
 
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
+    path = research_output_path(output_path)
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
+    with research_output_path(path).open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["Wavenumber (cm^-1)", "Sample (V)", "Reference (V)"])
         for wavenumber, sample, reference in rows:

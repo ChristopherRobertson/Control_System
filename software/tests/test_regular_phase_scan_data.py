@@ -321,69 +321,44 @@ def test_hf2_discovery_source_is_not_an_operational_compatibility_gate():
     assert compatibility_conflicts(experiment_contract(original), experiment_contract(same_settings_new_source)) == []
 
 
-def test_loading_retained_phase_analysis_preserves_measured_arrays():
-    repo = Path(__file__).resolve().parents[2]
-    roots = list((repo / "evidence/experiments/runs/single_detector_ftir_20260906T203723_580408Z/full_phase_sample_10hz_realigned_03").rglob("paired_reconstruction.npz"))
-    if not roots:
-        pytest.skip("Retained local phase-scan evidence is not distributed with this checkout")
-    result = load_regular_run(roots[0])
-    assert np.asarray(result["absorbance"]).shape == np.asarray(result["delta_absorbance"]).shape
+def test_loading_split_native_analysis_preserves_arrays_without_source_runs(tmp_path):
+    values = np.array([[.1, np.nan], [.2, .3]])
+    axes = {"wavenumber_cm1": np.array([1999., 2000.]), "time_s": np.array([0., .001])}
+    directory = tmp_path / "analysis"
+    save_native(directory / "paired_reconstruction.npz", {**axes, "absorbance": values})
+    save_native(directory / "absorbance_and_change.npz", {**axes, "delta_absorbance": values-.1})
+    result = load_regular_run(tmp_path)
+    np.testing.assert_equal(result["absorbance"], values)
+    np.testing.assert_equal(result["delta_absorbance"], values-.1)
     assert result["pump_reference_bases"] == ["electrical_sync"]
-    original = load_native(roots[0].parent / "absorbance_and_change.npz")
-    np.testing.assert_equal(result["delta_absorbance"], original["delta_absorbance"])
 
 
-def test_import_retained_10hz_blank_uses_actual_cadence_and_full_signed_schedule():
-    repo = Path(__file__).resolve().parents[2]
-    roots = list((repo / "evidence/experiments/runs/single_detector_ftir_20260906T203723_580408Z/full_phase_blank_10hz_01").rglob("acquisition.npz"))
-    if not roots:
-        pytest.skip("Retained local phase-scan evidence is not distributed with this checkout")
-    requested = build_regular_phase_scan_plan()
-    background = load_background_sequence(roots[0], requested)
-    assert len(background.records) == 322
+def test_import_synthetic_blank_preserves_cadence_and_rejects_different_schedule(tmp_path):
+    runner = blank_runner(tmp_path)
+    requested = plan()
+    background = load_background_sequence(runner.background.path, requested)
+    assert len(background.records) == requested.total_scans
     assert background.settings["settings"]["pump_repetition_rate_hz"] == 10.
     assert background.settings["frame_period_s"] == .1
-    assert background.device_settings["fire_to_qswitch_us"] == 250.
-    assert background.device_settings["hf2li_resolution"]["actual"]["rate_sps"] == 28782.894736842107
-    assert background.records[1][0].phase_delay_us == -11000.
-    # Legacy nominal 0.3 s request remains intact on disk; the imported
-    # in-memory contract uses the recorded effective predivider/cadence.
-    saved = json.loads((roots[0].parent.parent / "run.json").read_text())
-    assert saved["plan"]["settings"]["rest_period_s"] == .3
-    assert background.settings["settings"]["rest_period_s"] == .1
-    with pytest.raises(ValueError, match="pump_repetition_rate_hz|frame_period_s"):
-        load_background_sequence(roots[0], build_regular_phase_scan_plan(RegularPhaseScanSettings(pump_repetition_rate_hz=5)))
-    current = deepcopy(background.device_settings)
-    current["capture_window"]["basis"] = requested.capture_window["basis"]
-    current["segments"] = [{k: v for k, v in segment.items() if k != "marker_interval_cm1"}
-                           for segment in current["segments"]]
-    assert compatibility_conflicts(stable_device_configuration(background.device_settings), stable_device_configuration(current)) == []
-    current["capture_window"]["duration_s"] *= 2
-    assert any("duration_s" in message for message in compatibility_conflicts(
-        stable_device_configuration(background.device_settings), stable_device_configuration(current)))
+    assert [event.phase_delay_us for event, _ in background.records] == [
+        requested.event_at(i).phase_delay_us for i in range(requested.total_scans)]
+    with pytest.raises(ValueError, match="pump_repetition_rate_hz|frame_period_s|rest_period_s"):
+        load_background_sequence(runner.background.path, replace(requested,
+            settings=replace(requested.settings, pump_repetition_rate_hz=5)))
 
 
-def test_replay_retained_322_scan_sequence_matches_saved_absolute_and_delta():
-    repo = Path(__file__).resolve().parents[2]
-    evidence = repo / "evidence/experiments/runs/single_detector_ftir_20260906T203723_580408Z"
-    sample_paths = list((evidence / "full_phase_sample_10hz_realigned_03").rglob("acquisition.npz"))
-    blank_paths = list((evidence / "full_phase_blank_10hz_01").rglob("acquisition.npz"))
-    if not sample_paths or not blank_paths:
-        pytest.skip("Retained local phase-scan evidence is not distributed with this checkout")
-    requested = build_regular_phase_scan_plan()
-    background = load_background_sequence(blank_paths[0], requested)
-    native = load_native(sample_paths[0])
-    records = [(PhaseScanEvent(**row["event"]), Spectrum.from_dict(row["spectrum"])) for row in native["records"]]
-    assert len(records) == 322
-    for _, spectrum in records:
-        # A read-only field-name adaptation mirrors current acquisition metadata;
-        # the measured CH1, marker coordinates and pump timestamps are untouched.
-        spectrum.metadata["acquisition_settings"] = background.settings
-    replay = reconstruct_sequence(records, background, requested)
-    saved = load_regular_run(sample_paths[0].parent.parent)
-    np.testing.assert_equal(replay["wavenumber_cm1"], saved["wavenumber_cm1"])
-    np.testing.assert_equal(replay["time_s"], saved["time_s"])
-    np.testing.assert_allclose(replay["absorbance"], saved["absorbance"], atol=1e-14, rtol=0, equal_nan=True)
-    np.testing.assert_allclose(replay["delta_absorbance"], saved["delta_absorbance"], atol=1e-14, rtol=0, equal_nan=True)
-    assert np.isfinite(replay["absorbance"]).sum() == 32738
-    assert np.isnan(replay["absorbance"]).sum() == 174
+def test_synthetic_native_roundtrip_matches_reconstructed_arrays(tmp_path):
+    runner = blank_runner(tmp_path)
+    requested = plan()
+    records = [(requested.event_at(i), synthetic_spectrum(requested.event_at(i)))
+               for i in range(requested.total_scans)]
+    for (_, spectrum), (_, blank) in zip(records, runner.background.records):
+        for key in ("acquisition_settings", "hf2li_detector_settings", "hf2li_device"):
+            spectrum.metadata[key] = deepcopy(blank.metadata[key])
+    replay = reconstruct_sequence(records, runner.background, requested)
+    path = tmp_path / "processed" / "reconstruction.npz"
+    save_native(path, replay)
+    saved = load_regular_run(tmp_path)
+    for field in ("wavenumber_cm1", "time_s", "absorbance", "delta_absorbance"):
+        np.testing.assert_equal(saved[field], replay[field])
+    assert saved["optical_pump_arrival_calibrated"] is False

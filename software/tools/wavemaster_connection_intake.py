@@ -1,4 +1,4 @@
-"""Read-only WaveMaster connection intake; never edits campaign configuration."""
+"""Read-only WaveMaster connection intake; never edits operating configuration."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Collect read-only WaveMaster/adapter identity observations needed "
-            "to resolve WM-01 entry placeholders."
+            "to resolve WaveMaster connection placeholders."
         )
     )
     parser.add_argument("--port", required=True, help="Observed COM port, e.g. COM6")
@@ -77,7 +77,7 @@ def main() -> int:
     pid = getattr(port_info, "pid", None)
     result = {
         "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-        "purpose": "PRE-WM-01_CONNECTION_INTAKE_ONLY",
+        "purpose": "PRE-WaveMaster connection_CONNECTION_INTAKE_ONLY",
         "phase_authorized": False,
         "observed_config_values": {
             "serial_number": identity.serial_number,
@@ -99,7 +99,7 @@ def main() -> int:
             "driver_version_observed",
         ],
         "note": (
-            "This query does not start or qualify WM-01 and does not edit "
+            "This query does not start or qualify WaveMaster connection and does not edit "
             "hardware_configuration.yaml. Review every observation before "
             "replacing a [VALUE_REQUIRED] field."
         ),

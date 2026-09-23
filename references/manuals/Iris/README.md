@@ -2,9 +2,9 @@
 
 The installed OPO output path contains a Thorlabs ELL15 motorized iris supplied
 as an ELL15K kit. It is a permanently retained beam-conditioning component for
-the shared 540 nm HRP-C-CO and MbCO configuration. ATT-01 qualifies its control,
-far-field placement, aperture, halo rejection, useful-core margin, and optical
-transfer before any downstream OPO-540 phase may use it.
+the 540 nm optical configuration. Its control, far-field placement, aperture,
+halo rejection, useful-core margin and optical transfer require installed
+qualification before scientific use.
 
 The iris is not a safety shutter, interlock, pulse picker, exposure limiter, or
 finite-event gate. The independent laser shutter and interlock chain retain
@@ -35,7 +35,7 @@ The service discovers the converter identity and then verifies device serial
 observed the native identity reply
 `0IN0F11500020202410212CEC000003E8` and position reply `0PO00002CEC`,
 corresponding to 11.500 mm. These observations establish implementation input,
-not ATT-01 campaign evidence. ATT-01 captures its own approved records.
+not optical qualification.
 
 ## Controlled aperture semantics
 
@@ -45,14 +45,14 @@ not ATT-01 campaign evidence. ATT-01 captures its own approved records.
 - Manufacturer unidirectional and homing repeatability: +/-0.10 mm.
 - Manufacturer backlash: 0.20 mm.
 - A target diameter is approached from a larger aperture for repeatability.
-- ATT-01 defines the accepted diameter, readback tolerance, centroid/profile
+- The qualified operating configuration defines the accepted diameter, readback tolerance, centroid/profile
   margin, and locked Z/X/Y mount. Encoder resolution is not treated as optical
   aperture accuracy.
 - A command/readback mismatch, USB loss, mount movement, upstream realignment,
   or centroid/profile departure invalidates the OPO-540 configuration and
   prevents emission until the applicable revalidation passes.
 
-The home sensor uses a 950 nm LED that can leak light. ATT-01 therefore includes
+The home sensor uses a 950 nm LED that can leak light. Its scientific use therefore requires
 a lasers-blocked, iris-powered background control at the retained optical and
 detector planes. The iris remains stationary during all accepted acquisitions.
 
@@ -67,7 +67,7 @@ detector planes. The iris remains stationary during all accepted acquisitions.
   diagnostics and must not share the COM port with the service.
 
 The service is query-only unless constructed with explicit motion authority.
-Motion authority is still subordinate to the active phase approval, physical
+Motion authority is still subordinate to the explicit operation approval, physical
 readiness, laser shutter, shot budget, and operator instructions.
 
 ## Manufacturer source register
@@ -78,5 +78,4 @@ readiness, laser shutter, shot budget, and operator instructions.
 | `Ellx_Iris_Communication_Protocol.pdf` | Native serial messages, identity/position formats and status codes | Issue 12 |
 | `setup.exe` | Optional Thorlabs ELLO software/driver installer | Product/file version 1.6.7.0 |
 
-Manufacturer values remain specifications until the installed tests assigned to
-ATT-01 accept them for the stated campaign use.
+Manufacturer values remain specifications until installed verification accepts them for the stated operating use.

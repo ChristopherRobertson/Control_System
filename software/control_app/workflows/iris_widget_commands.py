@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, TextIO
@@ -52,8 +54,8 @@ class IrisWidgetCommandHandler:
             )
 
         log_path = self._command_log_path()
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as command_log:
+        research_output_path(log_path.parent).mkdir(parents=True, exist_ok=True)
+        with research_output_path(log_path).open("a", encoding="utf-8") as command_log:
             command_log.write(
                 f"{datetime.now().isoformat(timespec='seconds')} ui_command "
                 f"{command.command} operator={self.operator}\n"

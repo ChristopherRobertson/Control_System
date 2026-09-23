@@ -95,24 +95,24 @@ class CoherentWaveMasterService:
             command_log=command_log,
         )
 
-    def phase_entry_gaps(self) -> list[str]:
-        fields = self.device_config.get("phase_entry_required_fields") or []
+    def connection_gaps(self) -> list[str]:
+        fields = self.device_config.get("connection_required_fields") or []
         if not isinstance(fields, list):
             raise WaveMasterConfigurationError(
-                "phase_entry_required_fields must be a list"
+                "connection_required_fields must be a list"
             )
         return unresolved_fields(self.device_config, [str(item) for item in fields])
 
-    def assert_phase_entry_ready(self) -> None:
-        gaps = self.phase_entry_gaps()
+    def assert_connection_ready(self) -> None:
+        gaps = self.connection_gaps()
         if gaps:
             raise WaveMasterConfigurationError(
-                "WM-01 entry is blocked by [VALUE_REQUIRED] fields: "
+                "WaveMaster connection is blocked by [VALUE_REQUIRED] fields: "
                 + ", ".join(gaps)
             )
 
     def connect(self) -> None:
-        self.assert_phase_entry_ready()
+        self.assert_connection_ready()
         if self._serial is not None:
             return
         try:
@@ -355,12 +355,12 @@ def main() -> int:
     parser.add_argument("--preflight", action="store_true")
     args = parser.parse_args()
     meter = CoherentWaveMasterService.from_config(config_path=args.config)
-    gaps = meter.phase_entry_gaps()
+    gaps = meter.connection_gaps()
     if args.preflight or gaps:
         print(
             json.dumps(
                 {
-                    "phase_id": "WM-01",
+                    "device": "wavemaster",
                     "ready": not gaps,
                     "value_required_fields": gaps,
                 },

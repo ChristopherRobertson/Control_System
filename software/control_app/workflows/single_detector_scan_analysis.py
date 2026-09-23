@@ -6,6 +6,8 @@ from independently calibrated wavelengths. Count alone does not assign markers.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 import csv
 import os
 from pathlib import Path
@@ -207,11 +209,11 @@ def _decode(record, summary):
 
 def analyze_single_detector_scan(directory, record, *, native_source=None):
     """Write CH1-only derived artifacts after the caller has preserved all native data."""
-    directory = Path(directory).resolve()
+    directory = research_output_path(directory).resolve()
     native_path = Path(native_source).resolve() if native_source is not None else directory / "hf2li_native.npz"
     if not native_path.is_file():
         raise FileNotFoundError("Preserve the complete hf2li_native.npz before offline analysis")
-    directory.mkdir(parents=True, exist_ok=True)
+    research_output_path(directory).mkdir(parents=True, exist_ok=True)
     output_names = ("ch1_spectrum.npz", "ch1_spectrum.csv", "single_detector_scan.png", "analysis.json")
     if any((directory / name).exists() for name in output_names):
         raise FileExistsError("Single-detector analysis artifacts already exist; preserve them")
@@ -236,7 +238,7 @@ def analyze_single_detector_scan(directory, record, *, native_source=None):
     if any(path.exists() for path in (spectrum_path, csv_path, plot_path, directory / "analysis.json")):
         raise FileExistsError("Single-detector analysis artifacts already exist; preserve them")
     save_native(spectrum_path, {"schema_version": "single-detector-spectrum/1.0", "spectrum": spectrum.to_dict()})
-    with csv_path.open("x", encoding="utf-8", newline="") as handle:
+    with research_output_path(csv_path).open("x", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["wavenumber_cm-1", "CH1_R_V", "time_from_sweep_active_s", "segment_id",
                          "positive_finite", "wavenumber_basis", "record_role", "detector_mode", "usable_for_ratio"])
@@ -261,7 +263,7 @@ def analyze_single_detector_scan(directory, record, *, native_source=None):
     axis.grid(alpha=.25)
     status = "USABLE_PROVISIONAL" if summary["usable_for_ratio"] and summary["provisional"] else "USABLE" if summary["usable_for_ratio"] else "UNUSABLE"
     figure.suptitle(f"{summary['record_role'].replace('_', ' ')} · HF2LI CH1 SIG IN +\n{status} · exploratory")
-    figure.savefig(plot_path, dpi=140)
+    figure.savefig(research_output_path(plot_path), dpi=140)
     summary.update(status=status, spectrum_path=str(spectrum_path), csv_path=str(csv_path), plot_path=str(plot_path))
     write_json(directory / "analysis.json", summary)
     return summary

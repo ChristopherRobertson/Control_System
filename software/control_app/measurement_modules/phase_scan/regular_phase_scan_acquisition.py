@@ -6,6 +6,8 @@ electrical pump reference; neither is an optical-arrival calibration.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from copy import deepcopy
 from dataclasses import asdict, replace
 import math
@@ -272,7 +274,7 @@ class RegularPhaseScanAcquirer(LivePhaseScanAcquirer):
                   "restoration_deferred": True, "interstage_verified": True,
                   "readback": self._interstage_readback}
         write_json(self.store.path / "experiment_session.json", record)
-        (self.store.path / "commands.txt").write_text(self.log.getvalue(), encoding="utf-8")
+        (research_output_path(self.store.path / "commands.txt")).write_text(self.log.getvalue(), encoding="utf-8")
         return {k: v for k, v in record.items() if k != "readback"}
 
     def resume_experiment(self, settings, store, cancel):

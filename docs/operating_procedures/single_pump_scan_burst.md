@@ -1,7 +1,9 @@
 # Single Scan Phase Delay
 
-The **Single Scan Phase Delay** and **DD Single Scan Phase Delay**
-tabs acquire an initial rapid sequence and later logarithmically spaced bursts
+This optional module provides **Single Scan Phase Delay** and
+**DD Single Scan Phase Delay** pages. It is not registered in the default
+application shell. Its programmatic entrypoints and native readers are available.
+When explicitly integrated with the measurement host, these pages acquire an initial rapid sequence and later logarithmically spaced bursts
 after one pump trigger. Each tab has independent settings, records and output.
 
 Set the spectral range, scan speed, early coverage and total observation time.
@@ -18,7 +20,7 @@ automatic values for a new acquisition. The visible overrides retain their
 individual values; saved source files and recorded runs remain unchanged.
 
 The installed laser has one QCL. Every connected operation uses QCL1, including
-plans loaded with a historical QCL selection. Historical files retain their
+plans loaded with a stored QCL selection. Saved files retain their
 original selection for provenance; it does not select another device.
 Probe repetition rate in hertz multiplied by pulse width in seconds must be
 at most 0.30. The planner checks requested and hardware-quantized values and
@@ -78,11 +80,9 @@ the recorded time window and do not establish a molecular mechanism.
 
 Plans and runs retain the version-1 module schema. Pointwise analysis version 2
 records whether normalization used a blank and the observed timing reference.
-Existing processed chunks retain their own recorded version. Legacy descriptive fields
+Existing processed chunks retain their own recorded version. Optional descriptive fields
 remain readable. Native NPZ chunks and the append-only JSONL journal are retained
 alongside derived arrays and summaries; no checksum-match requirement gates use.
-The prior procedure is preserved in
-[the documentation archive](../../.archive/docs/operating_procedures/single_pump_scan_burst.md).
 
 Development verification uses injected device transports and offscreen GUI
 renders. It does not constitute a physical instrument measurement.

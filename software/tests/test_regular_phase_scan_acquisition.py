@@ -240,15 +240,19 @@ def test_restore_retains_drifting_pll_center_but_checks_settings(tmp_path, monke
     assert observation["after"]["value"] == 1960521.700106419
 
 
-def test_regular_frames_reproduce_retained_successful_hardware_recipe():
-    directory = Path(__file__).resolve().parents[2]/"evidence/experiments/runs/single_detector_ftir_20260906T203723_580408Z"
-    path = directory/"full_phase_sample_10hz_01/Phase Scan/2026-09-06/20260906T234340_176401Z_run/acquisition_preflight.json"
-    if not path.is_file():
-        pytest.skip("Retained hardware evidence is not installed in this checkout")
-    observed = json.loads(path.read_text())["timing_recipe"]
+def test_regular_frames_preserve_electrical_interval_and_signed_scan_delay():
     plan = build_regular_phase_scan_plan()
-    assert [regular_event_timing(plan.event_at(i))[0] for i in range(plan.total_scans)] == observed["frame_tables"][0]
-    assert round(plan.frame_period_s*plan.settings.probe_repetition_rate_hz) == observed["frame_predivider"]
+    for i in range(plan.total_scans):
+        event = plan.event_at(i)
+        channels = regular_event_timing(event)[0]["channels"]
+        seconds = lambda name: float(channels[name]["delay"][:-1])
+        assert seconds("B") - seconds("A") == pytest.approx(250e-6)
+        assert channels["A"]["enabled"] == event.pump_enabled
+        assert channels["B"]["enabled"] == event.pump_enabled
+        assert not channels["D"]["enabled"]
+        if event.phase_index is not None:
+            assert seconds("C") - seconds("B") == pytest.approx(event.phase_delay_us * 1e-6)
+    assert round(plan.frame_period_s * plan.settings.probe_repetition_rate_hz) == 200000
 
 
 def test_tiny_span_rejected_before_connecting_any_instrument(tmp_path):

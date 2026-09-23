@@ -1,6 +1,8 @@
 """Finite phase acquisition, consolidated retention, and single-pass reconstruction."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event, Lock
@@ -248,10 +250,10 @@ class PhaseScanRunner:
 
 
 def save_reconstruction_csv(path, reconstruction):
-    path.parent.mkdir(parents=True, exist_ok=True)
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
     quality = reconstruction.get("completion_status", "UNKNOWN")
-    eligible = bool(reconstruction.get("publication_eligible", False))
-    with path.open("x", newline="", encoding="utf-8") as handle:
+    eligible = False  # Standing operator designation also applies to loaded records.
+    with research_output_path(path).open("x", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["wavenumber_cm-1", "time_after_pump_s", "absorbance", "standard_error",
                          "repetition_count", "run_quality_status", "publication_eligible",
@@ -266,10 +268,12 @@ def save_reconstruction_csv(path, reconstruction):
 
 
 def save_scan_csv(path, spectrum, values, *, background=False,
-                  run_quality_status="COMPLETE", publication_eligible=True, transmission_values=None):
-    path.parent.mkdir(parents=True, exist_ok=True)
+                  run_quality_status="COMPLETE", publication_eligible=False, transmission_values=None):
+    # Completion does not change the operator's functionality-test designation.
+    publication_eligible = False
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
     ages = np.full(len(values), np.nan) if spectrum.pump_time_s is None else np.asarray(spectrum.sample_time_s)-spectrum.pump_time_s
-    with path.open("x", newline="", encoding="utf-8") as handle:
+    with research_output_path(path).open("x", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         single_detector = spectrum.reference_r is None
         value_label = ("buffer_blank_CH1_R_V" if single_detector else "background_S0_R0") if background else "absorbance"

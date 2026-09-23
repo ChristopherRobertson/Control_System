@@ -6,6 +6,8 @@ Sample-derived acceptance is deliberately distinct from instrument promotion.
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -193,10 +195,10 @@ def load_sample_selection(path: str | Path) -> SampleSpectralSelection:
 
 def save_sample_selection(record: SampleSpectralSelection, path: str | Path) -> Path:
     validate_sample_selection(record)
-    destination = Path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination = research_output_path(path)
+    research_output_path(destination.parent).mkdir(parents=True, exist_ok=True)
     # Never silently replace a prior acceptance record.
-    with destination.open("x", encoding="utf-8") as stream:
+    with research_output_path(destination).open("x", encoding="utf-8") as stream:
         json.dump(record.to_dict(), stream, indent=2, allow_nan=False)
         stream.write("\n")
     return destination

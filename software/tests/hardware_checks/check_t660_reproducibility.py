@@ -5,7 +5,7 @@ Usage:
     python software/tests/hardware_checks/check_t660_reproducibility.py --operator "Name" --confirm-real-hardware
 
 The script opens the configured real T660-1 and T660-2 sessions. If either unit
-is unavailable, it writes evidence/experiments/runs/YYYYMMDD_t660_reproducibility/BLOCKED.md and
+is unavailable, it writes <research_root>/experiments/runs/YYYYMMDD_t660_reproducibility/BLOCKED.md and
 exits nonzero. It does not simulate T660 responses.
 """
 
@@ -23,6 +23,8 @@ from control_app.devices.t660_service import T660Service
 from control_app.manifest import new_manifest, write_manifest
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
 
+from control_app.paths import RUN_ROOT, LOG_ROOT
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -33,7 +35,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "evidence" / "experiments" / "runs" / f"{today_stamp()}_t660_reproducibility_{datetime.now(UTC):%H%M%S%fZ}"
+    run_dir = RUN_ROOT / f"{today_stamp()}_t660_reproducibility_{datetime.now(UTC):%H%M%S%fZ}"
     run_dir.mkdir(parents=True, exist_ok=False)
     command_log_path = run_dir / "command_log.txt"
     readback_path = run_dir / "t660_readback_before_after.json"

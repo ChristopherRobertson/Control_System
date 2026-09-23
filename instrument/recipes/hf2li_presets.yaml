@@ -1,6 +1,6 @@
 schema_version: "0.1"
-description: "Real HF2LI LabOne presets for calibration and characterization qualification. These presets do not create simulated data."
-source_reference: "docs/operating_procedures/ui_hardware_control_reference.md HF2LI LabOne Configuration"
+description: "HF2LI LabOne settings for device setup and acquisition. Candidate presets remain unqualified."
+source_reference: "docs/operating_procedures/ui_hardware_control_reference.md#hf2li-preset-selection"
 presets:
   dark_baseline:
     purpose: "Detector dark baseline with QCL emission off and pump blocked."
@@ -52,7 +52,7 @@ presets:
       duration_s: 60.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "evidence/experiments/runs/YYYYMMDD_hf2li_60s_record"
+      expected_output: "<research_root>/experiments/runs/YYYYMMDD_hf2li_60s_record"
 
   qcl_reference_baseline:
     purpose: "QCL-on reference baseline with pump blocked at the phase-approved probe condition."
@@ -177,7 +177,7 @@ presets:
       duration_s: 5.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "evidence/experiments/runs/YYYYMMDD_mircat_detector_alignment"
+      expected_output: "<research_root>/experiments/runs/YYYYMMDD_mircat_detector_alignment"
 
   detector_alignment_internal:
     purpose: "MIRcat internal-pulse detector alignment for LabOne Plotter visualization without T660 timing."
@@ -241,17 +241,16 @@ presets:
       duration_s: 5.0
       demodulators: [0, 3]
       fields: ["x", "y", "r"]
-      expected_output: "evidence/experiments/runs/YYYYMMDD_mircat_detector_alignment_internal"
+      expected_output: "<research_root>/experiments/runs/YYYYMMDD_mircat_detector_alignment_internal"
 
-  campaign_step_scan_candidate:
-    purpose: "Provisional engineering seed for separate HRP-C-CO and MbCO HF-01/AR-01 qualification; not evidence that their settings are equivalent and not approved for biological acquisition."
-    qualification_plan: "campaigns/instrument_readiness_001/phases/HF-01/planning_basis.md"
+  step_scan_candidate:
+    purpose: "Provisional engineering seed; sample-specific settings are not interchangeable and are not approved for biological acquisition."
     operator_checks:
-      - "Confirm the approved calibration or characterization phase ID before acquisition."
+      - "Record the functionality-test run ID and requested/readback settings before acquisition."
       - "Confirm MIRcat setpoint/actual wavelength and full configuration are saved for every point."
-      - "Do not use this candidate after HF-01/AR-01 without replacing it with the accepted configuration ID."
-      - "Qualify acquisition rate, time constant, filter order, settling/bias, noise/SNR, clipping, loss, and record envelope separately for HRP-C-CO and MbCO."
-      - "Retain separate HRP-C-CO and MbCO configuration IDs even if measured equivalence supports identical numeric settings."
+      - "Replace this candidate with an explicitly accepted configuration ID before scientific use."
+      - "Acquisition rate, time constant, filter order, settling/bias, noise/SNR, clipping, loss, and record envelope must be applicable to the selected sample and measurement."
+      - "Distinct sample/measurement configurations require separate identities even when their numeric settings match."
     signal_inputs:
       ch1:
         index: 0
@@ -298,12 +297,12 @@ presets:
       fields: ["x", "y", "r"]
       expected_output: "USER_INPUT_REQUIRED_APPROVED_PHASE_DIRECTORY"
 
-  campaign_sweep_qualification_candidate:
-    purpose: "Provisional full-DIO sweep settings for HF-01, MD-01, and MSW-01 qualification; not approved for SV-02 or biological acquisition."
+  sweep_qualification_candidate:
+    purpose: "Provisional full-DIO sweep settings; not approved for biological acquisition or scientific validation."
     operator_checks:
       - "Confirm the approved calibration phase and stable readback directory."
       - "Confirm MIRcat actual wavelength/readback and the complete DIO word are retained."
-      - "Replace this candidate with the accepted HF-01 configuration ID before downstream use."
+      - "Replace this candidate with an accepted detector configuration ID before scientific use."
     signal_inputs:
       ch1:
         index: 0
@@ -485,10 +484,10 @@ presets:
       expected_output: "EXPLORATORY_PHASE_SCAN_RUN_DIRECTORY"
 
   exploratory_phase_scan_poc:
-    purpose: "Disposable MbCO single-scan phase-delay proof of concept; not a campaign-qualified detector configuration and not eligible for publication."
+    purpose: "Dual-detector phase-scan seed settings; not a qualified detector configuration and not eligible for publication."
     operator_checks:
       - "Confirm sample and reference detector inputs are positive and unsaturated at the selected 750 mA MIRcat current."
-      - "Confirm the 10 cm-1 sweep is centered on the experimentally observed MbCO A1 maximum."
+      - "Confirm the 10 cm-1 sweep covers the selected measured spectral feature."
       - "Capture and inspect a pump-blocked background and test sweep before enabling photolysis."
       - "Retain the configured and read-back detector rates, time constants, input ranges, and overload status with the exploratory run."
       - "Verify both detector streams read back at 28782.894736842107 Sa/s; this installed HF2LI rounds a 20000 Sa/s request down to 14391.447368421053 Sa/s."

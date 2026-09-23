@@ -85,7 +85,7 @@ both detector roles/configurations, trajectory, cadence/triggering and calibrati
 ## Limits and validation
 
 The HF2LI rate menu reflects discovery with optical demodulators 0 and 3 and timing
-demodulator 2 enabled. The historical memory budget remains advisory; actual
+demodulator 2 enabled. The configured memory budget remains advisory; actual
 available memory, supported settings, timing-table capacity and reconstruction
 allocation limits are checked. The app does not split runs to bypass a limit.
 The response estimate accounts for both filters and both sample intervals; phase
@@ -93,19 +93,16 @@ spacing alone is not effective resolution. See the official
 [HF2LI specifications](https://docs.zhinst.com/hf2_user_manual/specifications.html)
 and [filter documentation](https://docs.zhinst.com/hf2_user_manual/signal_processing_basics.html).
 
-Implementation verification uses simulated instruments and retained records only.
-No new laser, pump or optical acquisition was used to validate this tab. Live
-three-stream throughput, physical path stability and simultaneous detector timing
-remain hardware-validation limitations. Creating or saving a plan changes no
-campaign readiness status and promotes no calibration bundle.
+Software verification uses simulated instruments. Physical three-stream throughput,
+path stability and simultaneous detector timing require hardware validation.
+Creating or saving a plan does not qualify an instrument or promote a bundle.
 
 ## Shared host and recovery
 
-The host registers this tab as `phase_scan:dual` and the original Phase Scan as
-`phase_scan:single`. Existing dual plans, native data, Q₀ review, promoted balance
-calibration selection and detector calculations retain their meaning. The old
-dual settings/HF2 menu values migrate independently to
-`measurements/phase_scan/dual/v1/`.
+The host registers `phase_scan:dual` and `phase_scan:single`. Dual settings and
+HF2LI choices use `measurements/phase_scan/dual/v1/`. Each mode owns its plans,
+native data, baseline review and detector calculations. Absolute absorbance
+requires an applicable explicitly selected balance calibration.
 
 Real capability checks and acquisitions use the same coupled-instrument
 ownership as manual controls and other measurements. A competing owner blocks

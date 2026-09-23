@@ -217,7 +217,7 @@ restoration/cleanup records and `result.json`. Completed sample runs also contai
 `processed/reconstruction.npz` and `processed/reconstruction.csv`, including
 absolute absorbance, delta absorbance and the unpumped baseline. Existing files
 are not overwritten. Saved current blanks are checked against their frozen
-configuration; retained legacy full sequences can be imported only when actual
+configuration; supported full-sequence records can be imported only when actual
 cadence, complete signed frame schedule, probe/HF2LI readbacks and safe shutdown
 are reconstructable from their saved records. Incomplete or unmatched records
 are rejected with the missing or conflicting evidence identified. No hash
@@ -237,10 +237,9 @@ sample has not been calibrated. Marker wavelengths are controller readbacks,
 not an independent absolute wavelength calibration. Sequential blank correction
 assumes repeatable sequence-dependent intensity behavior and cannot remove
 nonrepeatable inter-run drift. The surface alone does not establish photolysis
-kinetics. This implementation preserves the retained experiments' scientific
-disposition and does not promote a calibration bundle or complete a campaign
-phase. Scientific methods and claims remain in
-[EXPERIMENTS.md](../../EXPERIMENTS.md) and the applicable campaign records.
+kinetics. Saving or processing data does not promote a calibration bundle or
+establish instrument qualification. Store source observations, uncertainty
+analysis and bounded scientific claims with the records in System_Research.
 
 The 7–10× sample-rate-to-filter-bandwidth recommendation is an anti-aliasing
 guideline, not a hardware acceptance limit. Automatic selection prefers settings
@@ -260,7 +259,7 @@ Memory quantities use decimal MB (1 MB = 1,000,000 bytes). Preflight separates
 uncompressed samples/timestamps from estimated record storage. Record storage
 includes per-record metadata, with no percentage margin or buffer/copy multiplier
 in either planning or the exact DAQ preflight. It does not predict peak process
-RAM or compressed saved file size. The historical 536.9 MB application budget
+RAM or compressed saved file size. The 536.9 MB application memory advisory
 is an advisory threshold, not a start gate or a measured HF2LI hardware limit.
 Exceeding it displays a brief memory warning. Exact DAQ preflight checks current
 available host memory (or an explicit executor memory limit); cadence, supported
@@ -281,32 +280,19 @@ selected HF2LI summary; actual acquisition readbacks remain in the saved run and
 are displayed at completion, rather than being represented as current settings
 after an edit.
 
-Implementation verification used simulated devices and retained records only:
-588 tests passed, with three obsolete administrative-gate tests skipped. The
-retained 322-scan 10 Hz sample replay reproduced absolute and delta absorbance
-within 1e-14, including all 174 missing cells.
-
-The September 8 UTC blank attempt exposed two startup/restoration faults:
-MIRcat returned `LASER_NOT_TUNED` after non-emitting sweep setup, and T660 rejected
-a unitless signed frequency readback replayed as a command. Restoration now
-formats that frequency with explicit Hz units while retaining the original
-readback. Sweep capability checking remains non-emitting; that check is stopped,
-the start wavenumber is retuned, and the tested emission-on/manual-tune-cancel/
-sweep-arm order starts the actual continuous sequence. Settings are checked again
-before any measurement frames start. There is one emission interval per sequence.
-The correction passed 133 focused simulated tests, including the exact reported
-frequency readback and a laser simulation that rejects emission when untuned.
-It has not been retested on physical hardware. Restart the application and retry
-the buffer blank; saving a plan alone does not acquire a blank.
+Restoration commands include explicit frequency units. Sweep capability checking
+is non-emitting: the check stops, the start wavenumber is retuned, and emission,
+manual-tune cancellation and sweep arming occur in that order. Settings are
+checked again before measurement frames start. Each sequence has one emission
+interval. Saving a plan does not acquire a blank.
 
 ## Shared host and recovery
 
-The tab now participates in the shared measurement host. Its visible controls,
-timing, normalization, plan/run formats and **Phase Scan** output layout remain
-the same. Existing settings and cached HF2 choices migrate to the single-mode
-preference namespace; the dual mode has its own settings, runner, baseline,
-review and cancellation. The plan and destination are captured before dispatch,
-so subsequent changes apply to future operations.
+The shared measurement host registers `phase_scan:single` and `phase_scan:dual`.
+Each mode has independent settings, supported HF2LI choices, runner, baseline,
+review and cancellation. Preferences use the mode-specific namespace. The plan
+and destination are captured before dispatch; subsequent changes apply to future
+operations.
 
 Connected-device checks take exclusive ownership before real discovery or
 connection. If another tab or app task owns the instrument, use that owner's
@@ -335,6 +321,5 @@ live SDK call keeps hardware unavailable.
 The Windows lock is shared by app/task processes and checkouts under
 `%PROGRAMDATA%/ControlSystem/`. Access failures require correcting permissions;
 do not delete records or use a second lock to bypass an owner. Vendor apps are
-outside this coordinator and must release their sessions separately. Host tests
-used synthetic instruments, offscreen Qt and retained native replay without
-physical acquisition; live shutdown, restoration and recovery need commissioning.
+outside this coordinator and must release their sessions separately. Host tests use synthetic instruments, offscreen Qt and self-contained native
+records. They do not establish live shutdown, restoration or recovery behavior.

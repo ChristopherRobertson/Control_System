@@ -12,11 +12,11 @@ and cycle interval (s). The framed HF2LI override form is always visible: filter
 order, time constant, and sample rate. Dual mode provides independent sample and
 reference choices. Each field starts at Auto and follows connected readbacks;
 setting one override does not freeze the others. Sequencing and electrical timing
-details are computed automatically. Historical overrides remain recorded as
+details are computed automatically. Stored overrides remain recorded as
 metadata when an older plan is loaded. Optional sample,
 protein, temperature, and preparation annotations do not change the procedure.
 
-Acquisition uses the single installed laser, QCL 1. Historical QCL selection in a
+Acquisition uses the single installed laser, QCL 1. Stored QCL selection in a
 saved plan cannot redirect it. MIRcat repetition rate and optical pulse width are
 preserved from the device; their product (with width in seconds) must be at most
 0.30 and satisfy the device's own limits. The sparse external probe cadence and
@@ -90,9 +90,6 @@ and tests only. No physical measurement is performed by unattended tests.
 
 ## Verification
 
-Scoped verification of the visible-form/QCL 1 correction passed 142 experiment
-and shared-panel checks. Physical commissioning was not performed.
-
 The module tests cover both detector modes through the installed adapter with
 injected transports, default live-factory selection, automatic overrides,
 metadata-independent compatibility, uncalibrated raw reconstruction, device
@@ -103,9 +100,9 @@ compared with the established Phase Scan layout. The screenshots under
 `software/tests/measurement_modules/nanosecond_stroboscopy/artifacts/` display
 synthetic example data in the actual app; they are not physical measurements.
 The shared compact panel and
-its API are owned by the host task; this package does not duplicate that framework.
+its API are supplied by the measurement host; this package does not duplicate that framework.
 
-From the task worktree, with software dependencies available:
+From the repository root, with software dependencies available:
 
 ```powershell
 $env:PYTHONPATH = "$PWD/software"

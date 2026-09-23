@@ -15,7 +15,7 @@ and storage. Automatic choices use installed capabilities and current readbacks;
 supported overrides remain visible in a framed group. Acquisition uses the installed-device
 adapter. Test devices are injected by tests and are not an operator mode.
 Loaded plans and preferences retain removed engineering controls only as
-historical provenance; new runs resolve those settings automatically. Accessible
+source metadata; new runs resolve those settings automatically. Accessible
 overrides, their independent Auto choices and selected analysis bands remain.
 
 This instrument uses **QCL1 only**. **Repetition rate** sets the external T660
@@ -128,9 +128,8 @@ saved files remain untouched.
 
 The module tests cover timing compilation, device injection, record compatibility,
 normalization, native transient reconstruction, cancellation, incomplete recovery,
-cleanup/storage failure and tab isolation. The task completion report records
-the final test results. Development and test execution do not operate physical
-hardware or change campaign status. Maintained hardware sources are
+cleanup/storage failure and tab isolation. Development and test execution do not
+operate physical hardware or change instrument qualification. Maintained hardware sources are
 [instrument wiring](../../instrument/wiring_map.yaml), the
 [MIRcat process-trigger correspondence](../../references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md),
 and the T660 manuals under `references/manuals/T660/`.

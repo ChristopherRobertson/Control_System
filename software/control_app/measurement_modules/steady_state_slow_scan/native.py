@@ -5,6 +5,8 @@ an engineering reconstruction, never as an independently calibrated axis.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 import json
 from pathlib import Path
 from collections.abc import Mapping
@@ -13,8 +15,8 @@ import numpy as np
 
 def retain_chunk(directory, index, record):
     """Write every returned SDK value before interpretation, including failures."""
-    directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
+    directory = research_output_path(directory)
+    research_output_path(directory).mkdir(parents=True, exist_ok=True)
     arrays = {}
     def pack(value):
         if isinstance(value, np.ndarray):
@@ -31,9 +33,9 @@ def retain_chunk(directory, index, record):
         return value
     payload = pack(record)
     stem = f"chunk_{index:06d}"
-    with (directory / f"{stem}.npz").open("xb") as stream:
+    with (research_output_path(directory / f"{stem}.npz")).open("xb") as stream:
         np.savez(stream, **arrays)
-    with (directory / f"{stem}.json").open("x", encoding="utf-8") as stream:
+    with (research_output_path(directory / f"{stem}.json")).open("x", encoding="utf-8") as stream:
         json.dump(payload, stream, indent=2)
     return str(directory / f"{stem}.json")
 

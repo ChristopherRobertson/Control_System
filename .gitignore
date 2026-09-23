@@ -1,4 +1,4 @@
-# Local Python environments and caches
+# Local environments and generated caches
 .venv/
 __pycache__/
 *.py[cod]
@@ -7,29 +7,11 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
-
-# Local/editor files
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-
-# Local dependency caches and working scratch; retain experiment task briefs
 node_modules/
-/tmp/*
-!/tmp/experiment_task_prompts_20260909/
-
-# Archived legacy artifacts kept outside active app path
-archive/
-
-# Generated operational hardware artifacts
-evidence/experiments/runs/
-evidence/experiments/logs/
-
-# Campaign metadata and analyzed results are versionable. Canonical outputs
-# remain local until explicit promotion, and large raw acquisitions remain
-# local for campaign archival rather than Git history.
-campaigns/**/phases/**/timing_calibration.csv
-campaigns/**/phases/**/timing_offsets.yaml
-campaigns/**/phases/**/raw/**
-!campaigns/**/phases/**/raw/.gitkeep
+/tmp/
+# Installation-specific storage configuration
+instrument/storage.local.json

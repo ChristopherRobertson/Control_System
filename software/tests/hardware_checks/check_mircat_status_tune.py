@@ -24,6 +24,8 @@ from control_app.workflows.mircat_status_tune import (
     connection_owner_next_actions,
 )
 
+from control_app.paths import RUN_ROOT, LOG_ROOT
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -49,9 +51,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "evidence" / "experiments" / "runs" / f"{today_stamp()}_mircat_status_tune"
+    run_dir = RUN_ROOT / f"{today_stamp()}_mircat_status_tune"
     run_dir.mkdir(parents=True, exist_ok=True)
-    log_dir = REPO_ROOT / "evidence" / "experiments" / "logs"
+    log_dir = LOG_ROOT
     log_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = log_dir / f"{today_stamp()}_mircat_status_tune_command_log.txt"
     manifest_path = run_dir / "run_manifest.json"

@@ -164,16 +164,15 @@ def test_filter_response_is_physical_not_phase_spacing():
     assert response["spectral_broadening_cm1"] == pytest.approx(1.0986122885)
 
 
-def test_preview_profile_matches_retained_successful_readbacks():
-    root = Path(__file__).resolve().parents[2]
-    path = root / "evidence/experiments/runs/single_detector_ftir_20260906T203723_580408Z/full_phase_sample_deferred_read_01/Phase Scan/2026-09-06/20260906T232516_385204Z_run/acquisition_preflight.json"
-    if not path.exists():
-        pytest.skip("retained local acquisition record unavailable")
-    nodes = json.loads(path.read_text())["hf2li_settings_snapshot"]["nodes"]
+def test_preview_profile_is_local_unverified_and_preserves_operating_values():
     chosen = build_regular_phase_scan_plan().hf2_selection
-    for setting, node in (("order", "order"), ("timeconstant_s", "timeconstant"), ("rate_sps", "rate")):
-        assert chosen[setting] == nodes[f"/dev18500/demods/0/{node}"]["value"]
-    assert chosen["timing_rate_sps"] == nodes["/dev18500/demods/2/rate"]["value"]
+    assert chosen["order"] == 4
+    assert chosen["timeconstant_s"] == 4.999538607626059e-5
+    assert chosen["rate_sps"] == 28782.894736842107
+    assert chosen["timing_rate_sps"] == 230263.15789473685
+    caps = HF2Capabilities()
+    assert not caps.verified
+    assert (Path(__file__).resolve().parents[2] / caps.source.split("#")[0]).is_file()
 
 
 class ConfigurationOnlyHF2(HF2LIService):

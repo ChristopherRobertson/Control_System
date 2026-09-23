@@ -1,27 +1,30 @@
-# Runtime instrument authority
+# Runtime configuration
 
-This directory is the interface between promoted scientific results and the control
-application. The application consumes only versioned promoted bundles and current
-hardware/wiring configuration—not raw campaign evidence or prose reports.
+All acquisitions are **functionality tests**, with no runtime calibration or scientific claims until explicit operator release. Current priority is end-to-end app workflows. See [result status](../docs/result_status.md). MUX work is deferred; current experiments use direct detector and marker connections.
 
-`hardware_configuration.yaml`, `wiring_map.yaml`, schemas, and runtime recipes are
-canonical in this directory. `control_app.paths` resolves them for the GUI and also
-accepts contemporaneous path strings in retained manifests without recreating
-inactive directories.
+`hardware_configuration.yaml` identifies installed devices and validity limits.
+`wiring_map.yaml`, `wiring_table.xlsx` and `default_wiring_state.md` describe current
+connections. `recipes/` contains executable timing resources and explicitly marked
+engineering candidates. An unapproved candidate remains non-executable.
 
-[Default wiring](default_wiring_state.md) connects each detector signal through
-its own female-to-female BNC adapter and then a male-to-two-female BNC tee:
-sample feeds HF2LI Signal 1 In (+) and PicoScope CHA; reference feeds HF2LI
-Signal 2 In (+) and PicoScope CHB. Both receivers remain connected and the
-Arduino MUX remains bypassed. [wiring_table.xlsx](wiring_table.xlsx) mirrors
-these detector connections and the complete timing topology.
+See [Phase Scan preview settings](phase_scan_preview.md) for disconnected planning
+and [optical pump constraints](optical_pump_constraints.md) for installed OPO limits.
+Nominal electrical command values are distinct from measured optical corrections.
 
-T660-2 supplies the shared 10 MHz clock and the pump/process trains and frames.
-T660-1 supplies the HF2LI reference, MIRcat probe trigger, and T660-2 trigger input.
-Both channel D outputs are spare. HF2LI DIO1 is an unconnected optional acquisition
-window input. MIRcat DB9 pin 2 feeds HF2LI DIO21 and PicoScope EXT.
+Scientific calibration and fit results belong in System_Research. To select a new
+runtime parameter set, obtain explicit operator approval of the values, units,
+uncertainties, device/configuration identities, validity envelope and source IDs.
+Copy only the necessary machine-readable values into a uniquely identified directory
+under `promoted_bundles/`, with a `manifest.yaml` matching the bundle schema. Register
+that ID and path in `registry.yaml`. Set both statuses to `PROMOTED` only after
+approval, then explicitly select `CONTROL_SYSTEM_BUNDLE_ID` and restart. Record
+selection rationale and full scientific provenance with the research results.
 
-Promotion also requires accepted source-phase procedural writeups under
-`docs/phase_record_contract.md`. The writeups document the
-scientific reasoning and claim boundaries; promoted machine-readable bundles and
-their indexed source evidence remain the runtime/numerical authority.
+The loader rejects missing IDs and mismatched or unpromoted manifests. Measurement
+measurement adapters validate their required runtime fields. There are currently no
+promoted bundles. Existing recipe values remain active independently where their
+workflow permits raw acquisition; an empty registry does not grant calibrated claims.
+
+Storage configuration belongs in the ignored `storage.local.json` installation file:
+`{"research_root": "C:/absolute/path/to/System_Research"}`. The environment override
+and output layout are described in the [root README](../README.md).

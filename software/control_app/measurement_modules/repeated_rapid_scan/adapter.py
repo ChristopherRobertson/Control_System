@@ -1,6 +1,8 @@
 """Experiment-owned acquisition/data adapter for the compact host panel."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from copy import deepcopy
 from collections.abc import Mapping
 from dataclasses import asdict, fields, is_dataclass, replace
@@ -244,8 +246,8 @@ class RepeatedRapidScanAdapter:
             raise ValueError("Plan settings belong to another detector mode")
         settings = checked.to_dict()
         plan = self.make_plan(settings)
-        path = Path(path)
-        with path.open("x", encoding="utf-8") as stream:
+        path = research_output_path(path)
+        with research_output_path(path).open("x", encoding="utf-8") as stream:
             json.dump({"record_kind": "repeated_rapid_scan_plan", "schema_version": 1,
                        "experiment_id": "repeated_rapid_scan", "mode": self.context.mode,
                        "settings": settings, "plan": plan.to_dict(),
@@ -284,7 +286,7 @@ class RepeatedRapidScanAdapter:
         return result
 
     def export_run(self, path, result):
-        with Path(path).open("x", newline="", encoding="utf-8") as stream:
+        with research_output_path(Path(path)).open("x", newline="", encoding="utf-8") as stream:
             writer = csv.writer(stream)
             writer.writerow(["movie_id", "scan_index", "direction", "native_point", "time_s", "wavenumber_cm1",
                              "normalized_signal", "delta_absorbance", "absolute_absorbance", "variance_delta_absorbance", "valid", "exclusions"])

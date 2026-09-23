@@ -20,6 +20,8 @@ from control_app.config_loader import load_config_inventory
 from control_app.manifest import new_manifest, write_manifest
 from control_app.workflows.arduino_mux_diagnostic import ArduinoMuxDiagnostic
 
+from control_app.paths import RUN_ROOT, LOG_ROOT
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -42,9 +44,9 @@ def _configured_route(inventory, key: str) -> str | None:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "evidence" / "experiments" / "runs" / f"{today_stamp()}_arduino_mux_diagnostic"
+    run_dir = RUN_ROOT / f"{today_stamp()}_arduino_mux_diagnostic"
     run_dir.mkdir(parents=True, exist_ok=True)
-    log_dir = REPO_ROOT / "evidence" / "experiments" / "logs"
+    log_dir = LOG_ROOT
     log_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = log_dir / f"{today_stamp()}_arduino_mux_command_log.txt"
     manifest_path = run_dir / "run_manifest.json"

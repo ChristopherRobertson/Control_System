@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -104,8 +106,8 @@ class MircatDetectorAlignmentWorkflow:
 
         self._validate_request(request)
         self.uses_t660_timing = bool(request.use_t660_timing)
-        run_path = Path(run_dir)
-        run_path.mkdir(parents=True, exist_ok=True)
+        run_path = research_output_path(run_dir)
+        research_output_path(run_path).mkdir(parents=True, exist_ok=True)
         if command_log is not None and getattr(command_log, "name", None):
             self._remember_command_log(str(command_log.name))
 
@@ -357,8 +359,8 @@ class MircatDetectorAlignmentWorkflow:
     ) -> dict[str, Any]:
         """Stop T660 timing, close MIRcat emission, disarm, and deinitialize."""
 
-        run_path = Path(run_dir)
-        run_path.mkdir(parents=True, exist_ok=True)
+        run_path = research_output_path(run_dir)
+        research_output_path(run_path).mkdir(parents=True, exist_ok=True)
         if command_log is not None and getattr(command_log, "name", None):
             self._remember_command_log(str(command_log.name))
 
@@ -632,9 +634,9 @@ class MircatDetectorAlignmentWorkflow:
 
     @staticmethod
     def _write_json(path: str | Path, data: Any) -> Path:
-        target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        target = research_output_path(path)
+        research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+        research_output_path(target).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return target
 
 

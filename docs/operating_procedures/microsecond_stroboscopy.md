@@ -18,7 +18,7 @@ checks run as owned operations. Constructing or editing a tab performs no device
 I/O.
 
 Normal acquisition uses the installed device factories. There is no execution-mode
-selector or approval checkbox. Old plan temperature, condition, qualification and
+selector or approval checkbox. Saved plan temperature, condition, qualification and
 sample-selection fields remain readable metadata and do not select an acquisition
 procedure or gate raw measurements. Simulated acquisition requires explicit
 developer injection and is used by tests.
@@ -38,10 +38,10 @@ developer injection and is used by tests.
 **Save Plan**, **Load Plan**, **Load Run**, **Export** and **New Run** remain
 available. New Run clears the displayed result and retains reference candidates
 for compatibility checks on the next operation. Loading a native run does not
-require its historical condition metadata to match the current labels.
+require its saved condition metadata to match the current labels.
 Loading a plan or saved GUI preferences returns former overrides whose controls
 have been removed to automatic defaults and retains their original values as
-historical provenance. Visible overrides keep their independent Auto or explicit
+source metadata. Visible overrides keep their independent Auto or explicit
 selection. Loading native measurement evidence preserves its original settings.
 
 ## Acquisition and scientific limits
@@ -54,7 +54,7 @@ The compiler checks pulse ordering, quantization, duty, finite-frame capacity,
 capture bounds and transfer/storage capacity.
 
 The installed optical source is QCL1. Acquisition, tuning, pulse settings and
-restoration address QCL1 explicitly; historical device-selection metadata cannot
+restoration address QCL1 explicitly; stored device-selection metadata cannot
 route a new operation to another QCL. Wavenumbers must lie within its reported
 tuning range. **Repetition rate** is the emitted optical cadence set by the
 external T660 trigger. **Pulse width** sets the MIRcat SDK optical pulse width;
@@ -124,6 +124,5 @@ device operation and does not clear an instrument recovery fault.
 Software verification uses injected device transports and explicit simulators.
 It covers QCL1 routing, separate optical and trigger pulse settings, exact duty
 boundaries and upward readback rounding, saved-plan migration, native settings
-preservation, cancellation and cleanup. Both complete app tabs were rendered at
-1100 × 780 with all override rows visible. No physical laser or sample acquisition
-was performed for this UI overhaul.
+preservation, cancellation and cleanup. UI checks use both detector modes at 1100 × 780 with visible override rows.
+These checks do not perform physical laser or sample acquisition.

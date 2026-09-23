@@ -1,6 +1,8 @@
 """Slow-scan lifecycle, independent controls, processing and required retention."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -250,7 +252,7 @@ class SlowScanRunner:
             if operation.hardware:
                 self.context.ownership.assert_owner(operation.ownership)
             check()
-            operation.output_path.mkdir(parents=True, exist_ok=False)
+            research_output_path(operation.output_path).mkdir(parents=True, exist_ok=False)
             if kind != "capability" and plan.errors:
                 raise ValueError("; ".join(plan.errors))
             # Construction never opens a device. Discovery, configuration and

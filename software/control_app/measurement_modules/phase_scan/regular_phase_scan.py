@@ -1,6 +1,6 @@
 """Regular CH1 phase-scan planning and readback-based HF2LI selection.
 
-No constructor connects to hardware. The small retained profile is a preview,
+No constructor connects to hardware. The built-in profile is a preview,
 never a substitute for connected capabilities. Device discovery is an explicit
 configuration-only operation; no laser or timing output is started.
 """
@@ -14,7 +14,7 @@ from control_app.workflows.phase_scan import PhaseScanSettings, PhaseScanPlan, P
 
 HF2_SPECIFICATION = "https://docs.zhinst.com/hf2_user_manual/specifications.html"
 HF2_FILTER_DOCUMENTATION = "https://docs.zhinst.com/hf2_user_manual/signal_processing_basics.html"
-SOURCE_RUN = "single_detector_ftir_20260906T203723_580408Z/full_phase_sample_deferred_read_01"
+PREVIEW_PROFILE_SOURCE = "instrument/phase_scan_preview.md#single-detector-profile"
 SCHEMA_VERSION = "regular_single_detector_phase_scan_v1"
 
 
@@ -41,7 +41,7 @@ class HF2Capabilities:
     rates_sps: tuple[float, ...] = (28782.894736842107,)
     timing_rate_sps: float = 230263.15789473685
     enabled_streams: tuple[int, ...] = (0, 2)
-    source: str = SOURCE_RUN
+    source: str = PREVIEW_PROFILE_SOURCE
     verified: bool = False
     tuning_ranges: tuple = ((1, 1638.8068850219217, 2077.2745597378685),)
     timing_table_capacity: int = 8192

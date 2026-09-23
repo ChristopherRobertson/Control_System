@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
@@ -167,8 +169,8 @@ class PicoScopeSettingsTest:
             raise PicoScopeSettingsTestError("picoscope missing from hardware configuration")
         validate_capture_settings(settings, device_config)
 
-        run_path = Path(run_dir)
-        run_path.mkdir(parents=True, exist_ok=True)
+        run_path = research_output_path(run_dir)
+        research_output_path(run_path).mkdir(parents=True, exist_ok=True)
         settings_path = run_path / "picoscope_settings_request.json"
         summary_path = run_path / "picoscope_settings_apply_summary.json"
 
@@ -192,11 +194,11 @@ class PicoScopeSettingsTest:
             "sample_timing_validation": timing_validation,
             "status": "PASS",
         }
-        settings_path.write_text(
+        research_output_path(settings_path).write_text(
             json.dumps(settings, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        summary_path.write_text(
+        research_output_path(summary_path).write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )

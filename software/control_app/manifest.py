@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -124,7 +126,7 @@ def write_manifest(path: str | Path, data: dict[str, Any]) -> Path:
     """Validate and write a manifest JSON file."""
 
     manifest = validate_manifest(data)
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    target = research_output_path(path)
+    research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+    research_output_path(target).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return target

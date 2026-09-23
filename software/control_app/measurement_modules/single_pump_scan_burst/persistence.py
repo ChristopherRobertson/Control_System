@@ -7,6 +7,8 @@ neither is repaired into a successful observation.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
@@ -57,7 +59,7 @@ def write_json(path, data, *, replace=False):
     if path.exists() and not replace:
         raise FileExistsError(path)
     temporary = path.with_name(path.name + ".pending-" + uuid4().hex)
-    with temporary.open("x", encoding="utf-8", newline="\n") as stream:
+    with research_output_path(temporary).open("x", encoding="utf-8", newline="\n") as stream:
         json.dump(json_value(data), stream, indent=2, allow_nan=False)
         stream.write("\n")
         stream.flush()
@@ -73,15 +75,15 @@ def write_json(path, data, *, replace=False):
 
 class RunStore:
     def __init__(self, path, metadata, *, create=True):
-        self.path = Path(path)
+        self.path = research_output_path(path)
         self.metadata = json_value(metadata)
         self.metadata.setdefault("schema_version", SCHEMA_VERSION)
         self.metadata.setdefault("experiment_id", EXPERIMENT_ID)
         if create:
-            self.path.mkdir(parents=True, exist_ok=False)
-            (self.path / "chunks").mkdir()
-            (self.path / "records").mkdir()
-            (self.path / "checkpoints").mkdir()
+            research_output_path(self.path).mkdir(parents=True, exist_ok=False)
+            (research_output_path(self.path / "chunks")).mkdir()
+            (research_output_path(self.path / "records")).mkdir()
+            (research_output_path(self.path / "checkpoints")).mkdir()
             write_json(self.path / "metadata.json", self.metadata)
             self.sequence = 0
             self.append_event("created", {"created_utc": utc_now()})
@@ -96,7 +98,7 @@ class RunStore:
         event = {"sequence": self.sequence, "event_id": str(uuid4()), "utc": utc_now(),
                  "kind": str(kind), "payload": json_value(payload)}
         data = (json.dumps(event, allow_nan=False, separators=(",", ":")) + "\n").encode("utf-8")
-        with (self.path / "events.jsonl").open("ab") as stream:
+        with (research_output_path(self.path / "events.jsonl")).open("ab") as stream:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
@@ -116,7 +118,7 @@ class RunStore:
             arrays[str(key)] = array
         # Exclusive creation prevents silent reuse of a block ID. An interrupted
         # file remains an artifact and is never considered a committed chunk.
-        with destination.open("xb") as stream:
+        with research_output_path(destination).open("xb") as stream:
             np.savez(stream, **arrays)
             stream.flush()
             os.fsync(stream.fileno())

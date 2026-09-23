@@ -1,7 +1,0 @@
-{
-  "interlock": "OPERATOR_CONFIRMED_READY",
-  "laser_inhibition": "OPERATOR_CONFIRMED",
-  "mismatches": [],
-  "picoscope_ownership": "PASS",
-  "safe_idle": "PASS"
-}

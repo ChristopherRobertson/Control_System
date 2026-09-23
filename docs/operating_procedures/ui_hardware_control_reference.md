@@ -76,3 +76,20 @@ On normal completion, abort, exception, loss, or mismatch, close emission as
 required, stop both timing devices, preserve native and partial records, and
 verify safe-idle/readback restoration. Do not retry scans or merge deficient
 regions silently. Reserved routes remain disabled throughout.
+
+## HF2LI preset selection
+
+[HF2LI presets](../../instrument/recipes/hf2li_presets.yaml) specify input loading,
+PLL reference, demodulator assignment, filter settings and acquisition seeds.
+Preset names are stable software identifiers; a name alone does not establish
+scientific qualification. `regular_phase_scan_single_detector` supplies single
+Phase Scan settings. Dual Phase Scan combines its sample configuration with the
+reference-channel settings in `exploratory_phase_scan_poc`. Native single-detector
+records identify `exploratory_phase_scan_single_detector` where applicable.
+
+The current executor resolves supported filter/rate choices and verifies actual
+readbacks. Disconnected defaults are documented in
+[Phase Scan preview settings](../../instrument/phase_scan_preview.md).
+`step_scan_candidate` and `sweep_qualification_candidate` are engineering
+candidates; they are not approved biological or scientific-validation presets.
+Changing a preset does not select a calibration or authorize emission.

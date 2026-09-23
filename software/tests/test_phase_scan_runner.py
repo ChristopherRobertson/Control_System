@@ -17,6 +17,17 @@ def plan():
         scan_speed_cm1_s=1000, phase_delay_us=500))
 
 
+def test_completed_csv_is_still_a_functionality_test(tmp_path):
+    from control_app.workflows.phase_scan_runner import save_scan_csv
+    source = Spectrum(np.array([1900., 1901.]), np.ones(2), None,
+                      np.array([0., 1.]), None, {})
+    path = tmp_path / 'test_scan.csv'
+    save_scan_csv(path, source, np.ones(2), publication_eligible=True)
+    with path.open() as stream:
+        rows = list(csv.DictReader(stream))
+    assert all(row['publication_eligible'] == 'False' for row in rows)
+
+
 def spectrum(event, background=False):
     wn = np.array([2000., 1999., 1998.])
     age = (event.phase_delay_us or 0) * 1e-6 + np.array([0., .001, .002])

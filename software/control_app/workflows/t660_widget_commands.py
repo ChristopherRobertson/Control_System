@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TextIO
@@ -38,8 +40,8 @@ class T660WidgetCommandHandler:
         if command.device_key != "t660_1":
             return WorkflowResult(status="blocked", message=f"Unsupported device {command.device_key}")
         log_path = self._command_log_path()
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as command_log:
+        research_output_path(log_path.parent).mkdir(parents=True, exist_ok=True)
+        with research_output_path(log_path).open("a", encoding="utf-8") as command_log:
             command_log.write(
                 f"{datetime.now().isoformat(timespec='seconds')} ui_command "
                 f"{command.command} operator={self.operator}\n"
@@ -212,7 +214,7 @@ class T660WidgetCommandHandler:
 
     def _run_dir(self) -> Path:
         path = output_run_root() / f"{datetime.now().strftime('%Y%m%d')}_t6601_ui"
-        path.mkdir(parents=True, exist_ok=True)
+        research_output_path(path).mkdir(parents=True, exist_ok=True)
         return path
 
     def _command_log_path(self) -> Path:

@@ -1,6 +1,8 @@
 """Append-only native records; no hash or digest is an acceptance condition."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 import base64
 import csv
 from dataclasses import asdict, is_dataclass
@@ -61,7 +63,7 @@ def _decode(value):
 def write_json(path, payload):
     """Exclusive creation preserves previous records even for repeated exports."""
     text = json.dumps(_encode(payload), allow_nan=False, indent=2)
-    with Path(path).open("x", encoding="utf-8", newline="\n") as stream:
+    with research_output_path(Path(path)).open("x", encoding="utf-8", newline="\n") as stream:
         stream.write(text + "\n")
         stream.flush()
         os.fsync(stream.fileno())
@@ -163,8 +165,8 @@ class NativeStore:
     """One frozen host output path. Events are durable before the next pump."""
 
     def __init__(self, output_path, *, mode, settings, kind="measurement", operation=None):
-        self.path = Path(output_path)
-        self.path.mkdir(parents=True, exist_ok=False)
+        self.path = research_output_path(output_path)
+        research_output_path(self.path).mkdir(parents=True, exist_ok=False)
         self.manifest = _envelope(mode)
         self.manifest.update(kind=kind, settings=settings, status="interrupted",
                              operation=operation.to_dict() if hasattr(operation, "to_dict") else operation,
@@ -178,7 +180,7 @@ class NativeStore:
         if self.finished:
             raise RuntimeError("Cannot append to a finalized native run")
         text = json.dumps(_encode(event), allow_nan=False, separators=(",", ":"))
-        with self.events.open("a", encoding="utf-8", newline="\n") as stream:
+        with research_output_path(self.events).open("a", encoding="utf-8", newline="\n") as stream:
             stream.write(text + "\n")
             stream.flush()
             os.fsync(stream.fileno())
@@ -239,7 +241,7 @@ def export_csv(path, result):
     """Native values remain in the run; CSV is a coordinate-explicit derivative."""
     if "result" in result and "wavenumbers_cm1" not in result:
         result = result["result"] or {}
-    with Path(path).open("x", newline="", encoding="utf-8") as stream:
+    with research_output_path(Path(path)).open("x", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         writer.writerow(["wavenumber_cm1", "quantized_delay_ns", "optical_delay_ns", "delta_a", "standard_uncertainty", "accepted_events"])
         for i, wave in enumerate(result.get("wavenumbers_cm1", [])):

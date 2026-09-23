@@ -34,6 +34,8 @@ from control_app.workflows.mircat_detector_alignment import (
 )
 from control_app.workflows.mircat_status_tune import connection_owner_next_actions
 
+from control_app.paths import RUN_ROOT, LOG_ROOT
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -79,7 +81,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "evidence" / "experiments" / "runs" / f"{today_stamp()}_mircat_detector_alignment"
+    run_dir = RUN_ROOT / f"{today_stamp()}_mircat_detector_alignment"
     run_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = run_dir / "command_log.txt"
     manifest_path = run_dir / "run_manifest.json"

@@ -99,7 +99,9 @@ class OperationSnapshot:
         object.__setattr__(self, "output_path", Path(self.output_path))
 
     def to_dict(self) -> dict[str, Any]:
+        from control_app.result_policy import result_designation
         result = {name: getattr(self, name) for name in self.__dataclass_fields__}
+        result.update(result_designation())
         result["ownership"] = asdict(self.ownership) if is_dataclass(self.ownership) else self.ownership
         result["save_root"] = str(self.save_root)
         result["output_path"] = str(self.output_path)
@@ -340,11 +342,12 @@ class MeasurementContext:
         return deepcopy(self.__services["promoted_bundle_loader"](bundle_id))
 
     def save_root(self) -> Path:
+        from control_app.paths import research_output_path
         provider = self.__services.get("instance_save_root_provider")
         if provider is not None:
             self._require_mode()
-            return Path(provider(self.instance_id)).expanduser().resolve()
-        return Path(self.__services["save_root_provider"]()).expanduser().resolve()
+            return research_output_path(provider(self.instance_id))
+        return research_output_path(self.__services["save_root_provider"]())
 
     def new_plan(self, settings: Mapping[str, Any]) -> PlanSnapshot:
         self._require_mode()

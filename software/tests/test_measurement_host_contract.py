@@ -24,6 +24,19 @@ FEATURES = (
 )
 
 
+def test_operation_serialization_designates_tests_without_changing_settings(tmp_path):
+    from uuid import uuid4
+    from control_app.measurement_host.context import OperationSnapshot
+    operation = OperationSnapshot(1, 'steady_state_slow_scan:single', str(uuid4()),
+        str(uuid4()), '2026-09-23T00:00:00+00:00', False, {'delay_s': .00025},
+        {}, (), (), tmp_path, tmp_path / 'run', None)
+    record = operation.to_dict()
+    assert record['result_classification'] == 'FUNCTIONALITY_TEST'
+    assert record['publication_eligible'] is False
+    assert record['runtime_calibration_eligible'] is False
+    assert record['settings'] == {'delay_s': .00025}
+
+
 @pytest.fixture
 def qt_app():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

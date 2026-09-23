@@ -1,6 +1,8 @@
 """Read-only diagnostic products for the independent air scan; never a background."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 import csv
 from pathlib import Path
 import numpy as np
@@ -13,7 +15,7 @@ def analyze_air_scan(directory, record):
     from matplotlib.figure import Figure
     from matplotlib.backends.backend_agg import FigureCanvasAgg
 
-    directory = Path(directory)
+    directory = research_output_path(directory)
     profile = record.get('scan_profile', {'start_cm1': 2050., 'stop_cm1': 1650.,
                                           'scan_rate_cm1_s': 40., 'qcl_current_ma': 750., 'expected_markers': 81})
     timing = demodulator_samples(record, 2)
@@ -46,7 +48,7 @@ def analyze_air_scan(directory, record):
     axes = figure.subplots(3, 1)
     colours = ('#287bbc', '#d96d12')
     traces = []
-    with (directory/'detectors.csv').open('x', encoding='utf-8', newline='') as handle:
+    with (research_output_path(directory/'detectors.csv')).open('x', encoding='utf-8', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(['input', 'time_from_sweep_active_s', 'provisional_wavenumber_cm1', 'R_V',
                          'run_classification', 'publication_eligible'])
@@ -106,7 +108,7 @@ def analyze_air_scan(directory, record):
                    f"{profile['scan_rate_cm1_s']:g} cm⁻¹/s · {profile['qcl_current_ma']:g} mA\n"
                    f"{summary['detector_status']} · {len(markers)}/{profile['expected_markers']} markers · NOT FOR PUBLICATION", fontsize=12)
     summary['plot_path'] = str(directory/'air_scan.png')
-    figure.savefig(summary['plot_path'], dpi=130)
+    figure.savefig(research_output_path(summary['plot_path']), dpi=130)
     write_json(directory/'analysis.json', summary)
     aligned = interpolate_supported(traces[1][0], traces[1][2], traces[0][0],
                                     max_gap=1.75*float(np.median(np.diff(traces[1][0]))))

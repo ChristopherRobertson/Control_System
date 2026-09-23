@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from pathlib import Path
 from typing import Any, TextIO
 import json
@@ -37,8 +39,8 @@ class HF2LIRecordWorkflow:
     ) -> dict[str, Any]:
         """Apply preset, reload settings, acquire real data, and write a manifest."""
 
-        run_path = Path(run_dir)
-        run_path.mkdir(parents=True, exist_ok=True)
+        run_path = research_output_path(run_dir)
+        research_output_path(run_path).mkdir(parents=True, exist_ok=True)
         service = HF2LIService.from_config(config_path=self.config_path, command_log=command_log)
         raw_csv = run_path / "hf2li_raw_samples.csv"
         summary_csv = run_path / "hf2li_summary.csv"
@@ -52,13 +54,13 @@ class HF2LIRecordWorkflow:
             applied = service.apply_preset(preset)
             snapshot = service.export_settings_snapshot(snapshot_path, preset=preset)
             reload_result = service.reload_settings_snapshot(snapshot)
-            reload_result_path.write_text(
+            research_output_path(reload_result_path).write_text(
                 json.dumps(reload_result, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
             reload_snapshot = service.export_settings_snapshot(reload_snapshot_path, preset=preset)
             comparison = service.compare_settings_snapshots(snapshot, reload_snapshot)
-            comparison_path.write_text(
+            research_output_path(comparison_path).write_text(
                 json.dumps(comparison, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )

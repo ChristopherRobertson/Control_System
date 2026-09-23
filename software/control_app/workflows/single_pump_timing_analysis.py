@@ -1,6 +1,8 @@
 """Offline checks for one pumped CH1 timing rehearsal; no hardware or promotion."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 import csv
 import math
 from pathlib import Path
@@ -189,7 +191,7 @@ def _write_csv(path, decoded, summary):
     timing, sample, magnitude, timing_gaps, sample_gaps = decoded
     origin, clock = summary["plot_origin_tick"], summary["clockbase_hz"]
     start, stop = summary["sweep_active_ticks"]
-    with path.open("x", encoding="utf-8", newline="") as handle:
+    with research_output_path(path).open("x", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["stream", "timestamp_ticks", "time_from_origin_s", "time_basis", "CH1_x_V", "CH1_y_V", "CH1_R_V",
                          "DIO17", "DIO21", "DIO22", "inside_sweep", "native_gap_before"])
@@ -239,7 +241,7 @@ def _plot(path, decoded, summary):
     if summary["plot_time_basis"] != "electrical_sync_rising":
         axes[1].set_xlabel("Time from pre-process cutoff (ms; no unique sync rising edge)")
         axes[2].set_xlabel("Pre-process cutoff detail (µs; diagnostic origin)")
-    with path.open("xb") as handle:
+    with research_output_path(path).open("xb") as handle:
         figure.savefig(handle, format="png", dpi=150)
 
 

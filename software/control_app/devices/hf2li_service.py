@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from numbers import Integral
@@ -641,17 +643,17 @@ class HF2LIService:
         if not raw_rows:
             raise HF2LIError("HF2LI poll returned no sample rows")
 
-        raw_path = Path(raw_csv_path)
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        with raw_path.open("w", newline="", encoding="utf-8") as handle:
+        raw_path = research_output_path(raw_csv_path)
+        research_output_path(raw_path.parent).mkdir(parents=True, exist_ok=True)
+        with research_output_path(raw_path).open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=["path", "timestamp", "sample_index", "value"])
             writer.writeheader()
             writer.writerows(raw_rows)
 
         summary_rows = _summary_rows(raw_rows)
-        summary_path = Path(summary_csv_path)
-        summary_path.parent.mkdir(parents=True, exist_ok=True)
-        with summary_path.open("w", newline="", encoding="utf-8") as handle:
+        summary_path = research_output_path(summary_csv_path)
+        research_output_path(summary_path.parent).mkdir(parents=True, exist_ok=True)
+        with research_output_path(summary_path).open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(
                 handle,
                 fieldnames=[
@@ -1123,9 +1125,9 @@ class HF2LIService:
         return zi
 
     def _write_json(self, path: str | Path, data: Any) -> Path:
-        target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        target = research_output_path(path)
+        research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+        research_output_path(target).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return target
 
     def _log(self, message: str) -> None:

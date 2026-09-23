@@ -53,7 +53,7 @@ trigger. Its connected setting must exceed the external rate and remain within
 QCL 1's pulse-rate, width and duty limits. External-rate overrides do
 not overwrite the internal rate. Both are recorded and checked before emission.
 The installed instrument has one QCL. Current operations always use QCL 1 and
-its connected tuning range; historical QCL metadata cannot route a new run to
+its connected tuning range; stored QCL metadata cannot route a new run to
 another laser channel. Repetition rate multiplied by pulse width in seconds
 must not exceed 0.30. The internal pulse duty also remains at or below 30%,
 and tighter vendor limits still apply.
@@ -64,7 +64,7 @@ and **Filter order**. Dual mode provides independent sample and reference
 columns. A blank value means Automatic. Changing one override does not freeze
 other automatic choices. **Restore automatic settings** clears instrument
 overrides. Loading older GUI preferences or plans resets removed engineering
-controls to current defaults or Automatic; their former values remain historical
+controls to current defaults or Automatic; their stored values remain descriptive
 provenance and cannot silently steer a new run. Native runs and analysis records
 remain unchanged.
 
@@ -132,15 +132,5 @@ normalization, missing/invalid streams, cancellation, cleanup-failure precedence
 tab isolation and the common compact panel. UI inspection uses retained test
 data and loaded fonts; no physical measurement is performed for screenshots.
 
-The module suite passed all **185 tests**, including QCL 1 routing, independent
-MIRcat rates and duty boundaries, old-settings migration, T660 reference-topology
-restoration, failed-readback preservation and offline activation without
-hardware-access attempts. Shared host, service and existing
-Phase Scan regression coverage passed **277 tests**, with **6 skipped**. Both
-tabs were rendered in the actual application shell at 1100 by 780 pixels, with
-every override field visible, no outer vertical scrolling, no horizontal
-settings scrolling and no clipped plot labels.
-
-No lasers were fired and no physical acquisition was performed during this
-overhaul. Injected-device verification establishes the implemented connected
-software path, not measured optical timing, detector response or sample kinetics.
+Injected-device checks establish software behavior only. They do not establish
+optical timing, detector response, physical safe state or sample kinetics.

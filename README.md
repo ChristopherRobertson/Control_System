@@ -1,209 +1,94 @@
-# IR spectroscope control system and thesis campaigns
+# IR spectroscope control system
 
-This repository is a single, structured workspace for instrument-control software,
-campaign procedure development, acquisition evidence, runtime configuration, and
-the scientific references needed to connect them. The boundaries are physical, but
-Git versions them together so the control system can consume promoted results
-without copying data between repositories.
+All acquisitions are **functionality tests**, with no runtime calibration or scientific claims until explicit operator release. Current priority is end-to-end app workflows. See [result status](docs/result_status.md). MUX work is deferred; current experiments use direct detector and marker connections.
 
-## Repository map
+This repository contains the custom instrument application, device services,
+operational recipes, selected operating parameters, tests, and software documentation.
+Scientific data and analysis belong in the configured external System_Research directory.
 
-| Directory | Responsibility |
-| --- | --- |
-| `software/` | GUI application, device services, tests, tools, dependencies, and packaging |
-| `instrument/` | Installed hardware/wiring authority, runtime recipes, schemas, and explicitly promoted bundles |
-| `campaigns/` | Unified phase registry plus self-contained phase packages containing plans, readbacks, raw data, analysis, reports, and promotion work |
-| `evidence/` | Generic GUI/operational experiment runs and cross-campaign catalogs that do not belong to a registered campaign phase |
-| `references/` | Manufacturer manuals, SDKs/drivers, certificates, and their registry |
-| `theory/` | Versioned model/notebook derivatives and validation fixtures |
-| `docs/` | Repository architecture, operating procedures, and the phase-record contract |
-| `.archive/` | Inactive source documents retained intact under their original relative paths |
-
-`campaigns/master_sequence.md` is the authoritative human instruction set.
-`campaigns/phase_registry.yaml` is its machine-readable ordering, status, and
-hard-dependency companion. Calibration and characterization remain useful
-scientific domains, but they are phases in one instrument-readiness graph.
-
-Completed evidence is stored directly in the matching canonical phase package under
-`campaigns/<campaign>/phases/<phase-id>/`, beside the plan and phase metadata. The
-relocation did not create new acquisitions, change measurement values, or change
-phase status.
-`campaigns/registries/evidence_locations.yaml` is the stable lookup authority. The
-archived historical record at
-`.archive/campaigns/migration/self_contained_phase_packages_20260827.md` documents
-the phase-package relocation and preservation audit. Archived migration and
-experiment-overview documents are historical only; current campaign authority
-remains in the master sequence, phase registry, campaign requirements, methods,
-and phase packages.
-
-## Control application
-
-For the existing local environment:
+## Start the application
 
 ```powershell
 .venv\Scripts\python.exe -m pip install -e software
 .\run_gui.ps1
 ```
 
-After the editable install, the original module command also works from the
-repository root:
+Install `software/requirements-ui.txt` if Qt is not installed. The normal launcher
+connects installed devices; use `--offline` with the module entrypoint for a UI-only
+session without hardware startup.
 
 ```powershell
-.venv\Scripts\python.exe -m control_app.ui.app
+.venv\Scripts\python.exe -m control_app.ui.app --offline
 ```
 
-The GUI reads `instrument/hardware_configuration.yaml`,
-`instrument/wiring_map.yaml`, and `instrument/recipes/`; it writes ordinary runs and
-logs below `evidence/experiments/`. Instrument calibration values may come only from a
-bundle explicitly marked `PROMOTED` in both the promoted-bundle registry and its
-manifest. A plan, recipe, directory, or registry row never authorizes hardware or
-changes scientific status.
+Single and Dual detector modes provide six measurement pages each: Slow Scan,
+Fixed Wavenumber, Nanosecond Stroboscopy, Microsecond Stroboscopy, Rapid Scan
+Phase Delay, and Phase Scan. MIRcat, T660-1, Nd:YAG, OPO Iris, and Plotter follow.
+All 17 pages stay instantiated; 11 are visible in each detector mode. Switching
+modes preserves settings, ownership, active work, and each page's destination.
+See [operating documentation](docs/README.md) for individual workflows.
 
-The desktop is composed by the small `software/control_app/measurement_host/`
-host. The top-level detector selector starts on **Single**; select **Dual** to
-show the matching dual-detector pages. Each mode shows these six methods in order:
+## Repository contents
 
-| Single | Dual |
+| Location | Purpose |
 | --- | --- |
-| [Slow Scan](docs/operating_procedures/steady_state_slow_scan.md) | DD Slow Scan |
-| [Fixed Wavenumber](docs/operating_procedures/fixed_wavenumber_kinetics.md) | DD Fixed Wavenumber |
-| [Nanosecond Stroboscopy](docs/operating_procedures/nanosecond_stroboscopy.md) | DD Nanosecond Stroboscopy |
-| [Microsecond Stroboscopy](docs/operating_procedures/microsecond_stroboscopy.md) | DD Microsecond Stroboscopy |
-| [Rapid Scan Phase Delay](docs/operating_procedures/repeated_rapid_scan.md) | DD Rapid Scan Phase Delay |
-| [Phase Scan](docs/operating_procedures/phase_scan_tab.md) | [DD Phase Scan](docs/operating_procedures/dual_detector_phase_scan_tab.md) |
+| `software/control_app/` | Custom UI, measurement modules, drivers and acquisition services |
+| `software/tests/` | Software regressions and small synthetic fixtures |
+| `software/tools/` | Standalone operational utilities |
+| `instrument/` | Hardware configuration, wiring, recipes, schemas and selected runtime bundles |
+| `references/` | Manufacturer manuals, certificates and required SDK files |
+| `docs/operating_procedures/` | Current operator instructions |
 
-These six methods are followed by MIRcat, T660-1, Nd:YAG, OPO Iris and Plotter. Both Phase
-Scan pages retain their scientific workflows, native files, timing and review
-controls. Additional measurements register their own pair through
-`software/control_app/measurement_modules/<experiment_id>/registration.py`.
-The established Phase Scan implementation lives in `measurement_modules/phase_scan/`;
-its former workflow and widget imports remain compatibility aliases. The redundant
-Single Scan Phase Delay pair is no longer registered; its saved-data processing
-code remains available for existing records.
-Discovery sorts descriptors by display order and stable ID, isolates optional
-import/construction failures, and retains the device-tab order. The horizontal
-tab bar's native scroll arrows keep every visible tab reachable. Offline analysis,
-simulation and plan editing can continue while another tab owns the instrument.
+## Research output
 
-This checkout includes all six measurement packages, each with single- and
-dual-detector tabs. All **17 tabs remain instantiated**, with **11 visible in
-each mode**: six methods including Phase Scan, and five device pages. Switching
-modes preserves each page's settings and active work; hidden pages still participate
-in ownership, emergency stop and close checks. Restart an already-running UI
-after updating the checkout so it discovers the installed packages. Hidden
-measurement pages do not change the existing Phase Scan pages' layout size.
-The twelve new pages use compact scientific inputs and calculated settings with
-independent overrides displayed in a framed group. Their operator workflow uses installed devices,
-is temperature-naive, and has no procedural review or approval controls. Actual
-device faults, incompatible data, ownership, cancellation, restoration and native
-preservation remain enforced. Simulated transports remain available to tests;
-raw measurements do not require a promoted calibration merely to be acquired.
+This installation uses `C:\Users\Chris\Documents\UC Davis\PhD_Work\System_Research`.
+`control_app.paths` resolves storage once at application startup, in this order:
 
-The [version 1 module API](software/control_app/measurement_host/README.md)
-specifies the descriptor, two lifecycle handles, scoped context, frozen operation
-inputs, independent preference/output namespaces, reusable scientific-adapter
-presentation and standalone sample-selection interchange. This task owns the
-host, discovery package, shared shell, state machine, service boundaries and
-existing regressions. Each of the six feature tasks owns only its named package,
-its tests and its operating procedure. Features must not import sibling features
-or edit a central import list. This is a measurement host, not a user-authored
-workflow language or scheduler.
+1. `CONTROL_SYSTEM_RESEARCH_ROOT` environment variable.
+2. `research_root` in the ignored `instrument/storage.local.json` installation file.
+3. `<user home>/Documents/System_Research` on other installations.
 
-All real backend connections and commands require exclusive ownership of the
-coupled spectrometer. On Windows the default OS lock and durable ownership
-records live under `%PROGRAMDATA%/ControlSystem/`; all app/task processes and
-checkouts use that same location. Access failures block hardware rather than
-falling back to a different lock. In-memory tokens prevent late callbacks from
-releasing another operation. Manual alignment/emission sessions retain ownership
-until explicit cleanup; an acquisition retains it through restoration and native
-preservation. Loss of a process or lock never proves physical safe idle. Faults
-retain their owner/history records and require explicit evidenced recovery using
-**Review instrument recovery…** after physical restoration and data preservation
-have been verified. The procedure does not restart an experiment. External vendor
-software does not participate in this lock; release its device sessions before
-using the application.
+The root must be absolute and outside this repository. Restart the application
+after changing it. Scientific destinations must remain inside this root; invalid
+paths and write failures are reported without falling back into the software tree.
+New measurement folders default to `experiments/runs/YYYY-MM-DD/<tab title>/`.
+Custom per-page destinations must also be under the research root. Invalid saved
+destinations remain visibly flagged until corrected. Each operation freezes its
+own destination. Nd:YAG device output uses the dated root without a tab-name folder.
 
-New measurement output defaults to
-`evidence/experiments/runs/YYYY-MM-DD/<exact current tab title>/`, using the local
-calendar date and the displayed title, including the `DD ` prefix in Dual mode.
-For example, a new DD Slow Scan run is saved below
-`evidence/experiments/runs/YYYY-MM-DD/DD Slow Scan/<run_uuid>/`. A custom save
-destination belongs to the selected page and detector mode; it does not change
-another page's destination. Each operation freezes its root before starting, so
-changing pages, dates or save destinations cannot redirect active work. Phase
-Scan keeps its existing native run-directory names and schemas beneath its page
-root. Nd:YAG never becomes a folder name; its device page and standalone device
-output use the plain dated root `evidence/experiments/runs/YYYY-MM-DD/` by default.
-These defaults apply to new output only; historical files are not moved or renamed.
+`CONTROL_SYSTEM_RUN_ROOT` and `CONTROL_SYSTEM_LOG_ROOT` remain supported as
+subdirectory overrides within the research root. Command logs and device readbacks
+live in `experiments/logs/` because they can contain measurement values. Ordinary
+UI shutdown diagnostics use `%LOCALAPPDATA%/ControlSystem/logs/`. Ownership and
+recovery coordination use the shared `%PROGRAMDATA%/ControlSystem/` location.
 
-The Phase Scan adapter migrates only the old regular/dual settings and HF2 choice
-keys into `measurements/phase_scan/<mode>/v1/`, preserving the old values. Stable
-experiment IDs, preference namespaces and native record schemas are unchanged.
-Selected instrument
-calibration is loaded only through promoted-bundle access. Accepted sample
-spectral selections are independent versioned data with producer, condition,
-source and uncertainty; they do not require the Slow Scan package to be installed.
+Native measurement records, analysis exports, calibration fits, scientific figures,
+notebooks and reports belong in System_Research. Input files may be opened anywhere;
+export destinations are checked. Scientific records retain their native schemas and
+values. Corrections and derived analyses must preserve their source records.
 
-For parallel feature development, use the checkpoint branch
-`measurement-host-v1` (also `codex/shared-measurement-host` and the integrated
-commit on `main`) as
-the baseline for all six worktrees. The starting checkout was clean at `5b89bcb`,
-the merge containing the current working Phase Scan code and fixes; the shared
-foundation is a descendant of that merge. Do not branch features from the older
-pre-Phase-Scan history. For example:
+## Operating parameters
+
+The UI reads `instrument/hardware_configuration.yaml`, `instrument/wiring_map.yaml`,
+and `instrument/recipes/`. Device identities, timing values, electrical limits,
+validity conditions and unqualified states are operational constraints.
+Only explicitly selected bundles marked `PROMOTED` in both the runtime registry
+and manifest are loaded. The registry currently contains no promoted bundles.
+See [runtime configuration](instrument/README.md) for the selection procedure.
+
+Real device commands require exclusive ownership of the coupled instrument.
+Restoration and native-data preservation must complete before ownership is released.
+A lost process does not establish safe idle. Use **Review instrument recovery…**
+after physical restoration and preservation have been verified. External vendor
+software does not participate in this lock.
+
+## Verification
 
 ```powershell
-git worktree add -b codex/steady-state-slow-scan ../Control_System_slow_scan measurement-host-v1
 $env:QT_QPA_PLATFORM = 'offscreen'
 .venv\Scripts\python.exe -m pytest software/tests -q
 ```
 
-Each worktree needs its own editable installation/environment, or must launch
-from its `software/` directory with an explicitly selected Python runtime.
-`run_gui.ps1` already launches from that directory. Once feature packages pass
-their tests, integrate their package/test/procedure commits onto this foundation
-and rerun the suite; discovery requires no shell integration changes. Two
-retained local fixture directories used by existing replay tests are ignored by
-Git (`single_detector_ftir_20260906T203723_580408Z` and
-`exploratory_air_checkout_20260902T224505_935642Z`, under
-`evidence/experiments/runs/`). Preserve their originals; a separate checkout may
-use local read-only fixture copies or links for those optional replay tests.
-
-Foundation validation uses simulated instruments, synthetic registrations, Qt
-offscreen interaction, Windows subprocess contention/crash tests and retained
-native replay only. Live SDK shutdown/recovery behavior, sustained simultaneous
-detector throughput and physical safe-state readbacks require commissioning on
-the installed instrument. Code tests do not qualify scientific measurements,
-change campaign status or promote calibration.
-The completed foundation passed **755 tests**, **24 subtests**, and both read-only
-UI boundary/close checks. The three skipped tests are the pre-existing obsolete
-administrative-gate cases; the two warnings come from existing diagnostic plots
-with no labeled artists. The retained 322-scan replay still checks absolute and
-delta absorbance within `1e-14`, including the same 174 unsupported cells.
-
-The integrated compact-page overhaul on 2026-09-10 passed **1,642 tests** and
-**24 subtests**, with the same three obsolete administrative-gate skips and two
-existing plotting warnings. Guarded offscreen checks registered all nineteen
-tabs and rendered all twelve new pages at 1100 × 780 without outer scrolling,
-verification checkboxes, explanatory paragraphs or hardware access. Both
-established Phase Scan pages retained their prior geometry and acquisition code.
-
-The [default wiring diagram](instrument/default_wiring_state.md) shows the
-detector split connections: each signal passes through a female-to-female BNC
-adapter and a male-to-two-female BNC tee. Sample feeds HF2LI Signal 1 In (+)
-and PicoScope CHA; reference feeds HF2LI Signal 2 In (+) and PicoScope CHB.
-T660-1 supplies the probe/reference train and clocks T660-2's event input.
-T660-2 executes FIRE, Q-switch, and MIRcat Process Trigger trains/frames and
-supplies the separate 10 MHz clock distribution. Sweep Active on MIRcat DB9
-pin 2 feeds HF2LI DIO21 and PicoScope EXT. Both T660 D outputs and HF2LI DIO1
-are unwired.
-
-The repository boundary and authority rules are in `docs/README.md`, and the
-shared acquisition/evidence rules are in `docs/phase_record_contract.md`.
-
-Every phase also requires a separate thesis-quality `procedural_writeup.md` before
-documentation closeout. The governing standard and reusable template are
-`docs/phase_record_contract.md` and
-`campaigns/templates/phase_record/procedural_writeup.template.md`. The writeup
-explains WHY, HOW, WHAT, and the defensible implications/caveats/claims; it does not
-replace machine-readable evidence or the formal `final_report.md` decision record.
+Tests use an isolated temporary research root with simulated or mocked devices.
+Native-format checks use self-contained synthetic records. Software tests do not
+establish physical safe state, optical validity or real-device performance.

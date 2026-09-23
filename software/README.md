@@ -1,45 +1,49 @@
-# Control-system software
+# Spectroscope application
 
-The importable application is `software/control_app/`; tests, utilities,
-dependencies, and packaging live beside it. From the repository root, install the
-package once with `.venv\Scripts\python.exe -m pip install -e software`, then launch
-with `.\run_gui.ps1` or `.venv\Scripts\python.exe -m control_app.ui.app`.
+Install from the repository root with `.venv\Scripts\python.exe -m pip install -e software`.
+Launch with `run_gui.ps1`, or `python -m control_app.ui.app` after installation.
+Normal startup connects configured devices. For software inspection use
+`python -m control_app.ui.app --offline`.
 
-The desktop includes six measurement modules with single/dual pages, including
-Phase Scan, plus MIRcat, T660-1, Nd:YAG, OPO Iris and Plotter: seventeen tabs.
-Phase Scan's established implementation lives in `measurement_modules/phase_scan/`.
-The old workflow/widget import paths remain aliases for existing callers. The
-redundant Single Scan Phase Delay pair is no longer registered.
-Device command routing, exclusive ownership and shutdown are shared; each
-experiment owns its acquisition plan, data and saved settings.
-The desktop opens one application device session in a background startup worker.
-Tabs use its shared settings snapshot and do not discover hardware on activation.
-Device writes and acquisition checks use live readbacks over the retained
-connections; experiment ownership still protects blank/sample sequences. Only
-application shutdown deinitializes and disconnects the pooled transports, after
-the existing safe-state procedure. CLI workflows retain their original lifecycle.
-Use **Instruments → Refresh connected settings** to refresh external changes or
-retry an unavailable startup device. Missing readbacks remain explicit failures.
-**Instruments → Recheck supported device choices** explicitly repeats capability
-enumeration when needed, without reconnecting healthy devices.
-HF2LI supported choices are enumerated once and retained in
-`%LOCALAPPDATA%/ControlSystem/device_capabilities_v1.json`; current operating
-settings are always read from hardware at startup. An absent or unusable optional
-capability record triggers discovery, and acquisition still verifies the selected
-settings. The first enumeration can take longer; it does not block Qt navigation.
-The default Save Location is `evidence/experiments/runs/YYYY-MM-DD`, using the
-local date. An explicitly chosen custom destination remains available on restart.
+## Components
 
-Independent measurement packages add their own single/dual tab pairs through
-`measurement_modules/<experiment_id>/registration.py`; no central import edit is
-needed. See the [repository architecture and parallel-development instructions](../README.md#control-application)
-and the [frozen host API](control_app/measurement_host/README.md). The horizontal
-tab bar's native scroll arrows keep every installed tab accessible for offline work while
-hardware is owned. Hardware ownership is enforced at backend device entry points
-and retained through safe restoration and data preservation.
+| Location under `control_app/` | Responsibility |
+| --- | --- |
+| `ui/` | Application shell and device-control pages |
+| `measurement_host/` | Module discovery, scoped settings, output, ownership and shared UI |
+| `measurement_modules/` | Experiment planners, acquisition adapters, processing and native storage |
+| `devices/` | Instrument protocols and communication services |
+| `workflows/` | Operational orchestration and public workflow interfaces |
+| `paths.py` | Runtime resources and scientific output containment |
 
-Scientific phase ordering, evidence status, and acceptance decisions do not belong
-in the application. The application may load an explicitly promoted bundle from
-`instrument/promoted_bundles/` and writes ordinary run packages under
-`evidence/experiments/runs/`. A campaign imports such a run only through its approved
-phase procedure and stable evidence identifiers.
+The host supplies independent single/dual settings, baselines, results and
+cancellation to six experiment modules. See the
+[module API](control_app/measurement_host/README.md) and
+[operating procedures](../docs/README.md). Drivers and UI construction must not
+connect hardware implicitly during tests. Real operations require exclusive
+ownership until cleanup and native-data preservation finish.
+
+## Resources and output
+
+Runtime recipes, device identities and selected parameters live in
+[`instrument/`](../instrument/README.md). Disconnected Phase Scan planning uses
+[self-contained preview settings](../instrument/phase_scan_preview.md); connected
+capabilities and actual readbacks govern acquisition. Electrical command delays
+do not establish optical arrival times.
+
+`control_app.paths` owns the external research-root setting. Use
+`CONTROL_SYSTEM_RESEARCH_ROOT` or `instrument/storage.local.json`; see the
+[root README](../README.md). Scientific writers validate destinations under that
+root, create required folders, and report failures. Raw capture, command/readback
+logs, analysis and plot exports are scientific output. Input selection is
+independent of output routing. Shutdown diagnostics and ownership state use
+application storage. Scientific evidence is not a startup dependency.
+
+## Verification
+
+From the repository root, run `python -m pytest software/tests -q`, with
+`QT_QPA_PLATFORM=offscreen` for unattended Qt checks. Tests use synthetic records,
+injected transports and isolated temporary research storage. They require no
+experimental dataset. Native-format tests preserve supported field meanings,
+array values and missing-data masks. Passing tests does not establish physical
+safe state, optical timing or detector response.

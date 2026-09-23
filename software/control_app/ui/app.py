@@ -10,7 +10,7 @@ import traceback
 from datetime import UTC, datetime
 
 from control_app.config_loader import load_config_inventory
-from control_app.paths import output_log_root
+from control_app.paths import DIAGNOSTIC_ROOT
 from control_app.ui.main_window import ControlSystemMainWindow
 from control_app.workflows.state_machine import WorkflowStateMachine
 
@@ -28,17 +28,18 @@ def main() -> int:
         ) from exc
 
     app = QApplication(sys.argv)
+    offline = "--offline" in sys.argv
     inventory = load_config_inventory(write_files=False)
     handler = WorkflowStateMachine(
         operator="UI",
         inventory=inventory,
-        hardware_access=True,
+        hardware_access=not offline,
         bundle_id=os.environ.get("CONTROL_SYSTEM_BUNDLE_ID"),
     )
     window = ControlSystemMainWindow(
         command_handler=handler,
         persist_settings=True,
-        connect_devices_on_startup=True,
+        connect_devices_on_startup=not offline,
     )
     window.resize(1100, 780)
     if "--mircat-scan" in sys.argv:
@@ -116,7 +117,7 @@ def _log_emergency_stop_error(reason: str) -> None:
     """Record emergency-stop hook failures without raising during process exit."""
 
     try:
-        log_path = output_log_root() / f"{datetime.now().strftime('%Y%m%d')}_ui_shutdown_errors.txt"
+        log_path = DIAGNOSTIC_ROOT / f"{datetime.now().strftime('%Y%m%d')}_ui_shutdown_errors.txt"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(

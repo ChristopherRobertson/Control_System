@@ -15,6 +15,9 @@ if str(SOFTWARE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOFTWARE_ROOT))
 
 
+from control_app.paths import research_output_path
+
+
 def today_stamp() -> str:
     """Return the local YYYYMMDD date stamp for run folders."""
 
@@ -30,7 +33,7 @@ def utc_now() -> str:
 def write_json(path: str | Path, data: Any) -> Path:
     """Write pretty JSON and return the path."""
 
-    target = Path(path)
+    target = research_output_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return target
@@ -46,7 +49,7 @@ def write_blocked(
 ) -> Path:
     """Write a BLOCKED.md file with concrete next actions."""
 
-    target = Path(path)
+    target = research_output_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         f"# {title}",

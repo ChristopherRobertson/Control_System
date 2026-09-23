@@ -7,6 +7,8 @@ checksum or previously recorded hash is ever a loading or acceptance gate.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
 from datetime import datetime, timezone
@@ -76,10 +78,10 @@ def _validate_envelope(data, kind, expected_mode=None, expected_condition_id=Non
 
 
 def _write_json_exclusive(path, payload):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = research_output_path(path)
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
     # Prior native/rejected/analysis/acceptance records cannot be silently replaced.
-    with path.open("x", encoding="utf-8") as stream:
+    with research_output_path(path).open("x", encoding="utf-8") as stream:
         json.dump(payload, stream, indent=2, allow_nan=False)
         stream.write("\n")
         stream.flush()
@@ -168,8 +170,8 @@ def _decode(value, arrays):
 
 
 def save_run(output_dir, run_mapping, sweeps=None):
-    output = Path(output_dir)
-    output.mkdir(parents=True, exist_ok=True)
+    output = research_output_path(output_dir)
+    research_output_path(output).mkdir(parents=True, exist_ok=True)
     metadata_path = output / "run.json"
     array_path = output / "native.npz"
     if metadata_path.exists() or array_path.exists():
@@ -189,7 +191,7 @@ def save_run(output_dir, run_mapping, sweeps=None):
     # Serialize all metadata before opening a native file; failures retain raw chunks
     # already written by acquisition and do not leave a falsely complete manifest.
     json.dumps(payload, allow_nan=False)
-    with array_path.open("xb") as stream:
+    with research_output_path(array_path).open("xb") as stream:
         np.savez(stream, **arrays)
         stream.flush()
     return _write_json_exclusive(metadata_path, payload)
@@ -299,13 +301,13 @@ def export_run(path, run):
     This is a new analysis revision, never a replacement for original native,
     preliminary, interrupted or rejected records. load_run reads the export too.
     """
-    path = Path(path)
+    path = research_output_path(path)
     if path.suffix.lower() != ".json":
         path = path.with_suffix(".json")
     sidecar = path.with_suffix(".npz")
     if path.exists() or sidecar.exists():
         raise FileExistsError("Export already exists; use a new analysis record name")
-    path.parent.mkdir(parents=True, exist_ok=True)
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
     mode = _mode(run)
     arrays = {}
     payload = {"schema_version": SCHEMA_VERSION, "experiment_id": EXPERIMENT_ID,
@@ -314,7 +316,7 @@ def export_run(path, run):
         "created_utc": datetime.now(timezone.utc).isoformat(), "analysis_version": ANALYSIS_VERSION,
         "native_file": sidecar.name, "run": _encode({**run, "analysis_path": str(path)}, arrays)}
     json.dumps(payload, allow_nan=False)
-    with sidecar.open("xb") as stream:
+    with research_output_path(sidecar).open("xb") as stream:
         np.savez(stream, **arrays)
     return _write_json_exclusive(path, payload)
 
@@ -414,7 +416,7 @@ def export_selection(run, path, *, windows, accepted_by="", acceptance=None):
         "acceptance_scope": "Operator selected spectral windows; no physical sample-state qualification",
         "acceptance_provenance": {"action": "operator_export", "operator_metadata": metadata},
         "physical_sample_state_accepted": False, "instrument_bundle_promoted": False,
-        "campaign_phase_accepted": False, "axis_calibrated": axis_calibrated,
+        "instrument_configuration_accepted": False, "axis_calibrated": axis_calibrated,
         "source_status": run.get("status", "unspecified"), "quality_flags": quality_flags,
         "limitations": limitations, "support_summary": support,
         "fit_models": [_plain(fit.settings) for fit in fits],

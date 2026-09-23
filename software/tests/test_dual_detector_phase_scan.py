@@ -1,4 +1,4 @@
-"""Dual HF2 settings are checked with configuration-only fakes and retained records."""
+"""Dual HF2 settings are checked with configuration-only fakes and self-contained profiles."""
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -7,7 +7,7 @@ import pytest
 
 from control_app.workflows.dual_detector_phase_scan import (
     DualDetectorPhaseScanSettings, DualHF2Capabilities, ENABLED_STREAMS,
-    SOURCE_RECORD, build_dual_detector_phase_scan_plan, detector_assignments,
+    PREVIEW_PROFILE_SOURCE, build_dual_detector_phase_scan_plan, detector_assignments,
     select_dual_hf2_settings,
 )
 from control_app.workflows.regular_phase_scan import HF2Capabilities, build_regular_phase_scan_plan
@@ -30,24 +30,17 @@ def test_dual_plan_reuses_signed_regular_geometry_and_preserves_fire_timing():
     assert dual.capacity["estimated_retained_bytes"] > single.capacity["estimated_retained_bytes"]
 
 
-def test_assignments_match_maintained_wiring_and_retained_actual_nodes():
+def test_assignments_resolve_local_resources_and_keep_preview_unverified():
     root = Path(__file__).resolve().parents[2]
-    path = root / SOURCE_RECORD
-    if not path.exists():
-        pytest.skip("Retained optional local readback is unavailable")
-    nodes = json.loads(path.read_text())["nodes"]
-    selection = build_dual_detector_phase_scan_plan().hf2_selection
     roles = detector_assignments()
-    assert roles["sample"]["input"] == 0
-    assert roles["reference"]["input"] == 1
-    assert roles["reference"]["demodulator"] == 3
-    for role in ("sample", "reference"):
-        channel = selection[role]
-        base = f"/dev18500/demods/{channel['demodulator']}"
-        for key, node in (("adcselect", "adcselect"), ("rate_sps", "rate"),
-                          ("timeconstant_s", "timeconstant"), ("order", "order")):
-            assert channel[key] == nodes[f"{base}/{node}"]["value"]
+    selection = build_dual_detector_phase_scan_plan().hf2_selection
+    assert (roles["sample"]["input"], roles["sample"]["demodulator"]) == (0, 0)
+    assert (roles["reference"]["input"], roles["reference"]["demodulator"]) == (1, 3)
+    for role in roles.values():
+        for source in role["provenance"]:
+            assert (root / source.split("#")[0]).is_file()
     assert not selection["capability_verified"]
+    assert DualHF2Capabilities().source == PREVIEW_PROFILE_SOURCE
 
 
 def test_supported_values_and_overrides_remain_detector_specific():

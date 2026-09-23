@@ -1,6 +1,8 @@
 """Experiment-specific data adapter for the shared compact measurement panel."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from collections import deque
 from copy import deepcopy
 from dataclasses import fields
@@ -298,7 +300,7 @@ class BurstScientificAdapter:
             raise ValueError("A retained native run is required for quantitative export")
         retained = load_run(root, expected_mode=self.context.mode)
         processed = any(Path(name).name.startswith("processed-") for name in retained["chunks"])
-        with Path(path).open("x", encoding="utf-8", newline="") as stream:
+        with research_output_path(Path(path)).open("x", encoding="utf-8", newline="") as stream:
             output = csv.writer(stream)
             output.writerow(("time_s", "wavenumber_cm1", "sample", "reference", "Q_or_transmission", "delta_absorbance",
                              "absolute_absorbance_if_applicable", "variance", "valid", "quality_flags", "scan_index", "direction"))

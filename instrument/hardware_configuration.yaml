@@ -55,7 +55,7 @@ devices:
       source_device: t660_2
       frequency_hz: 10000000
   arduino_mux:
-    display_name: Arduino MUX Controller
+    display_name: Arduino MUX Controller (future work)
     role: mux_controller
     enabled: false
     status: inactive_bypassed
@@ -102,9 +102,9 @@ devices:
     model_number: 1918-R
     serial_number: '15879'
     firmware_readback: v1.0.2 04/06/12
-    qualification_status: OM-01_qualified_bounded_not_canonically_promoted
+    qualification_status: qualified_bounded_not_promoted
     interface: newport_usb_dll
-    usb_address_observed_OM-01: 2
+    usb_address_observed: 2
     usb_product_id_hex: CEC7
     driver_dll: C:/Program Files/Newport/Newport USB Driver/Bin/usbdll.dll
     driver_dll_version: 5.0.8
@@ -113,21 +113,21 @@ devices:
     qualified_range_code: 0
     analog_filter_hz: 0.5
     digital_filter: 'off'
-    qualification_bundle: CAL-system_recalibration_001-OM01-v1
+    qualification_source_id: power_reference_15879_161791
     manufacturer_documents:
     - references/manuals/Power_Meter/1918-R_Power_Meter_Users_Manual_RevA.pdf
     - references/manuals/Power_Meter/1918-R_Power_Meter_Datasheet.pdf
     operational_constraints:
-    - The OM-01 result is bounded average-power metrology and is not a pulse-energy distribution or peak-power
+    - The working-reference result is bounded average-power metrology and is not a pulse-energy distribution or peak-power
       measurement.
-    - The OM-01 OPO observation is mixed-spectrum pre-iris evidence and is not post-iris 540 nm dose.
+    - Pre-iris OPO power is a mixed-spectrum indication, not post-iris 540 nm dose.
   optical_power_sensor:
     display_name: Newport 919P-010-16 Thermopile Sensor
     role: average_optical_power_sensor
     manufacturer: Newport
     model_number: 919P-010-16
     serial_number: '161791'
-    qualification_status: OM-01_qualified_bounded_not_canonically_promoted
+    qualification_status: qualified_bounded_not_promoted
     sensor_type: broadband thermopile
     active_diameter_mm: 16.0
     active_area_cm2: 2.01
@@ -139,14 +139,13 @@ devices:
     certificate_id: 3161791-001
     certificate_calibration_date: '2025-01-12'
     certificate_recommended_recalibration: 2026-07
-    qualification_bundle: CAL-system_recalibration_001-OM01-v1
+    qualification_source_id: power_reference_15879_161791
     manufacturer_documents:
     - references/manuals/Power_Meter/919-P_Sensor_Datasheet.pdf
     - references/certificates/Power_Meter/919-P_Sensor_Certificate_of_Calibration.pdf
     operational_constraints:
-    - The certificate date is not extended by campaign use.
-    - OM-01 qualified binary visible-footprint containment only; quantitative beam geometry remains downstream
-      work.
+    - The certificate date is not extended by instrument use.
+    - The working reference supports binary visible-footprint containment only; quantitative beam geometry is not established.
   ndyag_355_power_sensor:
     display_name: Newport 919P-050-18HP High-Power Thermopile Sensor
     role: terminal_direct_355_nm_average_power_sensor
@@ -155,10 +154,10 @@ devices:
     serial_number: USER_INPUT_REQUIRED
     installed_readout: optical_power_meter
     installation_status: operator_reported_installed
-    qualification_status: unqualified_pending_supplemental_PB-01
+    qualification_status: unqualified
     manufacturer_documents:
     - references/manuals/Power_Meter/919-P_Sensor_Datasheet.pdf
-    phase_entry_required_fields:
+    connection_required_fields:
     - serial_number
     - calibration_basis
     - accepted_355_nm_single_pulse_energy_density_limit
@@ -168,7 +167,7 @@ devices:
     spectral_range_um:
       minimum: 0.24
       maximum: 2.2
-    measurement_mode: average optical power through compatible Newport meter; exact PB-01 meter settings
+    measurement_mode: average optical power through compatible Newport meter; exact installed meter settings
       pending
     calibration_basis: USER_INPUT_REQUIRED
     maximum_average_power_w: 50.0
@@ -177,12 +176,12 @@ devices:
     maximum_energy_j: 200.0
     manufacturer_sub_100ns_energy_density_limit_at_1064nm_j_per_cm2: 4.0
     manufacturer_355nm_derating_statement: Derate 60% at 355 nm; accepted numerical interpretation remains
-      pending PB-01 review.
+      pending safety review.
     accepted_355_nm_single_pulse_energy_density_limit: USER_INPUT_REQUIRED
     operational_constraints:
-    - This detector is reserved for supplemental post-promotion PB-01 direct-355 thesis characterization
+    - This detector is reserved for direct-355 characterization
       and is outside every completion, promotion, biological-entry, and OPO-540 gate.
-    - PB-01 emission is prohibited until every phase-entry field is observed from the installed device
+    - Emission is prohibited until every required configuration field is observed from the installed device
       or applicable documentation and the worst-case load margin is accepted.
     - For Gaussian beams multiply power and energy density by 2 and for hot spots by 3 when comparing
       incident loading with the datasheet threshold, as instructed by the manufacturer datasheet.
@@ -197,7 +196,7 @@ devices:
     manufacture_year: 2024
     firmware_field_hex: '10'
     hardware_field_hex: '21'
-    qualification_status: connected_unqualified_pending_ATT-01
+    qualification_status: connected_unqualified
     interface: usb_serial
     preferred_port: COM5
     usb_vid_hex: '0403'
@@ -231,8 +230,8 @@ devices:
       gate.
     - No scientific acquisition is permitted while the iris is homing or moving.
     - Target diameters are approached from a larger aperture for repeatability.
-    - The 950 nm home-sensor leakage is controlled and measured in ATT-01.
-    - The Z/X/Y mount and accepted 540 nm diameter are ATT-01 outputs and remain unqualified until promotion.
+    - The 950 nm home-sensor leakage requires a measured bound before scientific use.
+    - The Z/X/Y mount and accepted 540 nm diameter remain unqualified until explicit promotion.
   wavemaster:
     display_name: Coherent WaveMaster Wavelength Meter
     role: visible_near_ir_wavelength_working_reference
@@ -244,7 +243,7 @@ devices:
     serial_number: W0339
     instrument_identity_response: '*IDN$ Coherent Inc,WaveMaster,W0339,A1.1V1.6'
     firmware_revision: A1.1V1.6
-    qualification_status: electronic_checks_passed_optical_qualification_failed_WM-01_deferred_pending_replacement_spectrometer
+    qualification_status: electronic_checks_passed_optical_qualification_failed_deferred_pending_replacement_spectrometer
     interface: rs232_via_usb_adapter
     preferred_port: COM8
     usb_vid_hex: '0403'
@@ -283,13 +282,12 @@ devices:
       units_raw: UNI$ A
       period_raw: PRD$ 0
       value_raw: VAL$ 29397,NO SIGNAL
-      evidence_record: references/manuals/WaveMaster/connection_intake_20260820.json
     manufacturer_documents:
     - references/manuals/WaveMaster/WaveMaster_Manual.pdf
     - references/manuals/WaveMaster/Coherent_WaveMaster_33-2650_Datasheet.pdf
     - references/manuals/WaveMaster/WaveMaster_USB_driver_install.pdf
     software_service: software/control_app/devices/coherent_wavemaster_service.py
-    phase_entry_required_fields:
+    connection_required_fields:
     - serial_number
     - instrument_identity_response
     - firmware_revision
@@ -302,7 +300,7 @@ devices:
     - driver_provider
     - driver_version_observed
     operational_constraints:
-    - WM-01 cannot start while any phase_entry_required_fields value is [VALUE_REQUIRED].
+    - Connection cannot start while any connection_required_fields value is [VALUE_REQUIRED].
     - The instrument identifies wavelength but does not apportion optical power among spectral components.
     - The qualified range does not include the 355 nm OPO drive.
     - Quantitative qualification uses explicit air/vacuum units, pulse mode, autocalibration state, input
@@ -513,7 +511,7 @@ picoscope_connectors:
 arduino_mux_control:
   enabled: false
   status: inactive_bypassed
-  disabled_reason: Arduino MUX controls are disabled in the UI and workflow.
+  disabled_reason: Deferred future work. Disabled in the UI and workflow; not required for current experiments.
   source_document: instrument/wiring_table.xlsx
   enable_pins:
     dmb1: D2

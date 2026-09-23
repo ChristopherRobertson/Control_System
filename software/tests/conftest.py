@@ -4,6 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import os
+import tempfile
+
+_TEST_RESEARCH = tempfile.TemporaryDirectory(prefix="control-system-tests-")
+os.environ["CONTROL_SYSTEM_RESEARCH_ROOT"] = _TEST_RESEARCH.name
+os.environ.pop("CONTROL_SYSTEM_RUN_ROOT", None)
+os.environ.pop("CONTROL_SYSTEM_LOG_ROOT", None)
+tempfile.tempdir = _TEST_RESEARCH.name
+
+
+def pytest_configure(config):
+    config.option.basetemp = str(Path(_TEST_RESEARCH.name) / "pytest")
+
 
 import pytest
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
@@ -44,10 +46,10 @@ class ArduinoMuxDiagnostic:
     ) -> dict[str, Any]:
         """Run the real Arduino MUX diagnostic and write evidence files."""
 
-        run_path = Path(run_dir)
-        run_path.mkdir(parents=True, exist_ok=True)
-        calibration_dir = Path("calibration")
-        calibration_dir.mkdir(parents=True, exist_ok=True)
+        run_path = research_output_path(run_dir)
+        research_output_path(run_path).mkdir(parents=True, exist_ok=True)
+        calibration_dir = research_output_path("calibration")
+        research_output_path(calibration_dir).mkdir(parents=True, exist_ok=True)
 
         device_config = self.inventory.devices.get("arduino_mux")
         if not isinstance(device_config, dict):
@@ -107,7 +109,7 @@ class ArduinoMuxDiagnostic:
         }
 
         status_path = calibration_dir / "arduino_mux_status.json"
-        status_path.write_text(
+        research_output_path(status_path).write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
@@ -205,7 +207,7 @@ class ArduinoMuxDiagnostic:
         route_readback = summary.get("route_readback")
         if isinstance(route_readback, dict) and isinstance(route_readback.get("latched_routes"), dict):
             latched = route_readback["latched_routes"]
-        with route_log.open("a", newline="", encoding="utf-8") as handle:
+        with research_output_path(route_log).open("a", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(
                 handle,
                 fieldnames=[

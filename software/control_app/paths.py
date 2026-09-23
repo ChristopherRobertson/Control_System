@@ -1,13 +1,9 @@
-"""Canonical repository paths and compatibility resolution.
-
-Importing this module is read-only.  The application uses the physical unified
-layout while still accepting older repo-relative path strings found in historic
-run manifests and operator scripts.
-"""
+"""Runtime resources, configurable research storage, and input path resolution."""
 
 from __future__ import annotations
 
 import os
+import json
 from datetime import date
 from pathlib import Path
 
@@ -16,10 +12,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 SOFTWARE_ROOT = PACKAGE_ROOT.parent
 REPO_ROOT = SOFTWARE_ROOT.parent
 INSTRUMENT_ROOT = REPO_ROOT / "instrument"
-CAMPAIGNS_ROOT = REPO_ROOT / "campaigns"
-EVIDENCE_ROOT = REPO_ROOT / "evidence"
 REFERENCES_ROOT = REPO_ROOT / "references"
-THEORY_ROOT = REPO_ROOT / "theory"
 
 
 def _configured_root(variable: str, fallback: Path) -> Path:
@@ -35,12 +28,62 @@ def _configured_root(variable: str, fallback: Path) -> Path:
 RECIPE_ROOT = _configured_root(
     "CONTROL_SYSTEM_RECIPE_ROOT", INSTRUMENT_ROOT / "recipes"
 )
-RUN_ROOT = _configured_root(
-    "CONTROL_SYSTEM_RUN_ROOT", EVIDENCE_ROOT / "experiments" / "runs"
-)
-LOG_ROOT = _configured_root(
-    "CONTROL_SYSTEM_LOG_ROOT", EVIDENCE_ROOT / "experiments" / "logs"
-)
+def _research_root() -> Path:
+    config_path = INSTRUMENT_ROOT / "storage.local.json"
+    config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+    value = os.environ.get("CONTROL_SYSTEM_RESEARCH_ROOT") or config.get("research_root")
+    path = Path(value).expanduser() if value else Path.home() / "Documents" / "System_Research"
+    if not path.is_absolute():
+        raise ValueError("research_root must be an absolute path")
+    path = path.resolve()
+    if path == REPO_ROOT or REPO_ROOT in path.parents:
+        raise ValueError("research_root must be outside the control software repository")
+    return path
+
+
+RESEARCH_ROOT = _research_root()
+
+
+def research_output_path(value: str | Path, *, resolve: bool = True) -> Path:
+    """Validate a scientific destination, resolving links and parent traversal.
+
+    Relative paths are relative to the research root. No directories are created
+    and no fallback is used. Input files may be read from any location.
+    """
+    if not str(value).strip():
+        raise ValueError("Research output needs a non-empty path")
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = RESEARCH_ROOT / path
+    path = path.resolve() if resolve else Path(os.path.abspath(path))
+    if path != RESEARCH_ROOT and RESEARCH_ROOT not in path.parents:
+        raise ValueError(f"Research output must be under {RESEARCH_ROOT}; received {path}")
+    if path == REPO_ROOT or REPO_ROOT in path.parents:
+        raise ValueError(f"Research output cannot be stored inside the software repository: {path}")
+    return path
+
+
+def _research_subroot(variable: str, relative: str) -> Path:
+    return research_output_path(os.environ.get(variable) or RESEARCH_ROOT / relative)
+
+
+def resolve_save_preference(value: str | Path) -> Path:
+    """Interpret stored instrument-output locations under configured storage."""
+    path = Path(value).expanduser()
+    absolute = Path(os.path.abspath(path))
+    for prefix, destination in (
+        (REPO_ROOT / "evidence" / "experiments", RESEARCH_ROOT / "experiments"),
+        (REPO_ROOT / "runs", RESEARCH_ROOT / "experiments" / "runs"),
+    ):
+        if absolute.is_relative_to(prefix):
+            return research_output_path(destination / absolute.relative_to(prefix))
+    return research_output_path(path)
+
+
+RUN_ROOT = _research_subroot("CONTROL_SYSTEM_RUN_ROOT", "experiments/runs")
+# Command/readback logs can contain measurements and remain with scientific data.
+LOG_ROOT = _research_subroot("CONTROL_SYSTEM_LOG_ROOT", "experiments/logs")
+DIAGNOSTIC_ROOT = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local/state") / "ControlSystem" / "logs"
 PROMOTED_BUNDLE_ROOT = _configured_root(
     "CONTROL_SYSTEM_BUNDLE_ROOT", INSTRUMENT_ROOT / "promoted_bundles"
 )
@@ -85,7 +128,7 @@ def set_save_location(value: str | Path, *, create: bool = False) -> Path:
     global _selected_save_location
     if not str(value).strip():
         raise ValueError("Choose a non-empty save location")
-    path = Path(value).expanduser()
+    path = research_output_path(value, resolve=create)
     if create:
         path = path.resolve()
         path.mkdir(parents=True, exist_ok=True)
@@ -141,11 +184,11 @@ def recipe_path(relative: str | Path) -> Path:
 
 
 def run_path(relative: str | Path) -> Path:
-    return (output_run_root() / relative).resolve()
+    return research_output_path(output_run_root() / relative)
 
 
 def log_path(relative: str | Path) -> Path:
-    return (output_log_root() / relative).resolve()
+    return research_output_path(output_log_root() / relative)
 
 
 def resolve_compat_path(value: str | Path) -> Path:
@@ -167,28 +210,8 @@ def resolve_compat_path(value: str | Path) -> Path:
         return (LOG_ROOT.joinpath(*parts[1:])).resolve()
     if parts and parts[0] == "config":
         return (INSTRUMENT_ROOT / "schemas").joinpath(*parts[1:]).resolve()
-    if len(parts) >= 3 and parts[:3] == (
-        "calibration",
-        "system_recalibration_001",
-        "readbacks",
-    ):
-        return (
-            EVIDENCE_ROOT
-            / "calibration"
-            / "system_recalibration_001"
-            / "phases"
-        ).joinpath(*parts[3:]).resolve()
-    if len(parts) >= 3 and parts[:3] == (
-        "characterization",
-        "system_characterization_001",
-        "readbacks",
-    ):
-        return (
-            EVIDENCE_ROOT
-            / "characterization"
-            / "system_characterization_001"
-            / "phases"
-        ).joinpath(*parts[3:]).resolve()
+    if len(parts) >= 2 and parts[:2] == ("evidence", "experiments"):
+        return (RESEARCH_ROOT / "experiments").joinpath(*parts[2:]).resolve()
     if len(parts) >= 2 and parts[:2] == ("vendor", "picosdk"):
         return (REFERENCES_ROOT / "sdk" / "picosdk").joinpath(*parts[2:]).resolve()
     return (REPO_ROOT / path).resolve()

@@ -43,7 +43,7 @@ def test_requested_example_distinguishes_baseline_and_zero_delay_pump():
     assert plan.event_at(221).pump_enabled and plan.event_at(221).phase_delay_us == 0
 
 
-def test_exploratory_current_and_fast_hf2li_preset_leave_campaign_candidate_unchanged():
+def test_exploratory_current_and_fast_hf2li_preset_leave_sweep_candidate_unchanged():
     import yaml
     from control_app.workflows.phase_scan_data import HF2_PRESET, QCL_CURRENT_MA
 
@@ -65,10 +65,10 @@ def test_exploratory_current_and_fast_hf2li_preset_leave_campaign_candidate_unch
     assert all(item["timeconstant_s"] == pytest.approx(50e-6) for item in detectors.values())
     previous = presets["exploratory_phase_scan_poc"]
     assert previous["acquisition"]["demodulators"] == [0, 3]
-    campaign = presets["campaign_sweep_qualification_candidate"]
-    campaign_detectors = {item["index"]: item for item in campaign["demodulators"] if item["index"] in {0, 3}}
-    assert all(item["rate_sps"] == pytest.approx(2_000) for item in campaign_detectors.values())
-    assert all(item["timeconstant_s"] == pytest.approx(1e-3) for item in campaign_detectors.values())
+    candidate = presets["sweep_qualification_candidate"]
+    candidate_detectors = {item["index"]: item for item in candidate["demodulators"] if item["index"] in {0, 3}}
+    assert all(item["rate_sps"] == pytest.approx(2_000) for item in candidate_detectors.values())
+    assert all(item["timeconstant_s"] == pytest.approx(1e-3) for item in candidate_detectors.values())
 
 
 def test_repetitions_repeat_nominal_set_after_one_run_baseline():

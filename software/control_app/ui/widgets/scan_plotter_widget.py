@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 import csv
 import json
 import math
@@ -240,18 +242,21 @@ if PYSIDE6_AVAILABLE:
             filename = self.filename.text().strip() or "scan_kaleidagraph.csv"
             if not filename.lower().endswith(".csv"):
                 filename += ".csv"
-            path = Path(self.destination.text()) / filename
-            if self.diagnostic_metadata:
-                self._export_diagnostic_csv(path)
-            else:
-                export_kaleidagraph_scan(self.canvas.rows, output_path=path)
-            detail = ' · PROVISIONAL AXIS · NOT FOR PUBLICATION' if self.diagnostic_metadata else ''
-            self.status.setText(f"Exported {len(self.canvas.rows)} points to {path}{detail}")
+            try:
+                path = research_output_path(Path(self.destination.text()) / filename)
+                if self.diagnostic_metadata:
+                    self._export_diagnostic_csv(path)
+                else:
+                    export_kaleidagraph_scan(self.canvas.rows, output_path=path)
+                detail = ' · PROVISIONAL AXIS · NOT FOR PUBLICATION' if self.diagnostic_metadata else ''
+                self.status.setText(f"Exported {len(self.canvas.rows)} points to {path}{detail}")
+            except (OSError, ValueError) as exc:
+                self.status.setText(f"Export failed: {exc}")
 
         def _export_diagnostic_csv(self, path: Path) -> None:
             metadata = json.dumps(self.diagnostic_metadata, allow_nan=False)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open('w', newline='', encoding='utf-8') as handle:
+            research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
+            with research_output_path(path).open('w', newline='', encoding='utf-8') as handle:
                 writer = csv.writer(handle)
                 writer.writerow(DIAGNOSTIC_COLUMNS)
                 for index, row in enumerate(self.canvas.rows):

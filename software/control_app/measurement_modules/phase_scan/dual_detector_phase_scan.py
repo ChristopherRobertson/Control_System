@@ -1,6 +1,6 @@
 """Dual-detector planning using the maintained regular sequence and HF2 filters.
 
-Retained readbacks provide an offline preview only. A connected configuration
+Built-in settings provide an offline preview only. A connected configuration
 check probes both optical demodulators with the DIO carrier enabled; no data or
 hardware output is acquired during discovery.
 """
@@ -18,13 +18,12 @@ from control_app.workflows.regular_phase_scan import (
 
 SCHEMA_VERSION = "dual_detector_phase_scan_v1"
 ENABLED_STREAMS = (0, 2, 3)
-SOURCE_RECORD = ("evidence/experiments/runs/exploratory_air_checkout_20260902T224505_935642Z/"
-                 "slow_scan_once/restore_fast_hf2li_snapshot.json")
+PREVIEW_PROFILE_SOURCE = "instrument/phase_scan_preview.md#dual-detector-profile"
 ASSIGNMENT_SOURCES = (
     "instrument/wiring_map.yaml#detector_signal_paths",
-    "instrument/default_wiring_state.md#detector-signal-paths",
+    "instrument/default_wiring_state.md#detector-connections",
     "instrument/recipes/hf2li_presets.yaml#detector_alignment",
-    SOURCE_RECORD,
+    PREVIEW_PROFILE_SOURCE,
 )
 
 
@@ -40,7 +39,7 @@ def detector_assignments():
 
 
 def _preview_detector():
-    return HF2Capabilities(enabled_streams=ENABLED_STREAMS, source=SOURCE_RECORD)
+    return HF2Capabilities(enabled_streams=ENABLED_STREAMS, source=PREVIEW_PROFILE_SOURCE)
 
 
 @dataclass(frozen=True)
@@ -55,7 +54,7 @@ class DualHF2Capabilities:
     device_id: str = "dev18500"
     timing_rate_sps: float = 230263.15789473685
     enabled_streams: tuple[int, ...] = ENABLED_STREAMS
-    source: str = SOURCE_RECORD
+    source: str = PREVIEW_PROFILE_SOURCE
     verified: bool = False
     tuning_ranges: tuple = ((1, 1638.8068850219217, 2077.2745597378685),)
     timing_table_capacity: int = 8192

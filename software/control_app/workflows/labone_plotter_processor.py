@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from bisect import bisect_left
 from dataclasses import dataclass
 from pathlib import Path
@@ -93,8 +95,8 @@ def process_labone_plotter_file(
     if not targets:
         raise LabOnePlotterProcessingError("At least one output path is required")
     for target in targets:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text, encoding="utf-8")
+        research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+        research_output_path(target).write_text(text, encoding="utf-8")
 
     return ProcessedPlotterSummary(
         input_path=source,
@@ -118,7 +120,8 @@ def default_output_paths(
 ) -> tuple[Path, ...]:
     """Return the default KaleidaGraph-friendly output paths for an input export."""
 
-    source = Path(input_path)
+    from control_app.paths import output_run_root
+    source = output_run_root() / Path(input_path).name
     suffix = (
         f"_kaleidagraph_{_number_token(start_wavenumber_cm)}"
         f"_to_{_number_token(end_wavenumber_cm)}"

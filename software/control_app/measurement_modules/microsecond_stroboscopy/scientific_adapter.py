@@ -5,6 +5,8 @@ scientific values, never digests, run UUIDs, or discovery timestamps.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 import json
@@ -344,7 +346,7 @@ class MicrosecondScientificAdapter:
         if not points:
             raise ValueError("No processed native points are available for export")
         keys = sorted({key for point in points for key in point})
-        with Path(path).open("x", newline="", encoding="utf-8") as stream:
+        with research_output_path(Path(path)).open("x", newline="", encoding="utf-8") as stream:
             writer = csv.DictWriter(stream, fieldnames=keys)
             writer.writeheader()
             for point in points:

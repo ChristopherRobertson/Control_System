@@ -5,6 +5,8 @@ IR emission and timing outputs are stopped on completion, failure and Stop.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -314,10 +316,10 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
             raise ValueError('Pump timing rehearsal requires the 2 MHz/150 ns clock and a sweep envelope below 250 ms')
         profile.update(pump_events=1, acquisition_mode='native_streaming_single_pump_timing_rehearsal')
     pump_event = PhaseScanEvent(0, 1, 0, True, 0.) if pump_rehearsal else None
-    root = Path(root)
-    root.mkdir(parents=True, exist_ok=True)
+    root = research_output_path(root)
+    research_output_path(root).mkdir(parents=True, exist_ok=True)
     out = root / ('mircat_sweep_' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ'))
-    out.mkdir()
+    research_output_path(out).mkdir()
     write_json(out / 'operation.json', {
         **profile, **({'authorization': 'User explicitly authorized one pump event and one MIRcat timing scan',
                        'record_kind': record_kind, 'requested_pump_events': 1, 'picoscope_used': False,
@@ -350,7 +352,7 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
     stable_hf = None
     raw = None
     qcl_configured = False
-    log = (out / 'commands.txt').open('x', encoding='utf-8', buffering=1)
+    log = (research_output_path(out / 'commands.txt')).open('x', encoding='utf-8', buffering=1)
 
     def stage(msg):
         # Progress/logging failures must never bypass instrument cleanup.
@@ -979,7 +981,7 @@ def run_air_scan(root, *, cancel, progress, laser_authorized=False, pump_blocked
             save_artifact('HF2LI native', lambda: save_native(out/'hf2li_native.npz', record))
             if raw is not None:
                 def save_channel(channel):
-                    with (out/f'picoscope_ch_{channel}_adc.npy').open('xb') as handle:
+                    with (research_output_path(out/f'picoscope_ch_{channel}_adc.npy')).open('xb') as handle:
                         np.save(handle, raw[f'ch_{channel}_adc'], allow_pickle=False)
                 for channel in ('a','b'):
                     save_artifact(f'Pico {channel}', lambda c=channel: save_channel(c))

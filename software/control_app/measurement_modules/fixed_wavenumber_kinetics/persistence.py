@@ -6,6 +6,8 @@ No hash value is an operational requirement.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
@@ -44,8 +46,8 @@ def json_data(value: Any) -> Any:
 
 
 def _write_json(path: Path, record: Mapping[str, Any], *, exclusive: bool = True) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x" if exclusive else "w", encoding="utf-8") as stream:
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
+    with research_output_path(path).open("x" if exclusive else "w", encoding="utf-8") as stream:
         json.dump(json_data(record), stream, indent=2, allow_nan=False)
         stream.flush()
         os.fsync(stream.fileno())
@@ -54,8 +56,8 @@ def _write_json(path: Path, record: Mapping[str, Any], *, exclusive: bool = True
 
 def write_json(path: str | Path, record: Mapping[str, Any]) -> Path:
     """Save an explicitly selected plan destination using atomic replacement."""
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target = research_output_path(path)
+    research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + "." + uuid4().hex + ".pending")
     _write_json(temporary, record)
     os.replace(temporary, target)
@@ -74,8 +76,8 @@ class NativeChunkWriter:
     def __init__(self, run_directory: str | Path):
         self.run_directory = Path(run_directory)
         self.directory = self.run_directory / "native"
-        self.directory.mkdir(parents=True, exist_ok=True)
-        self._journal = (self.directory / "chunks.jsonl").open("a", encoding="utf-8")
+        research_output_path(self.directory).mkdir(parents=True, exist_ok=True)
+        self._journal = (research_output_path(self.directory / "chunks.jsonl")).open("a", encoding="utf-8")
         self._closed = False
 
     def append(self, chunk: Mapping[str, Any], **metadata: Any) -> dict[str, Any]:
@@ -106,7 +108,7 @@ class NativeChunkWriter:
         pending = final.with_suffix(".pending")
         envelope = {"schema_version": SCHEMA_VERSION, "chunk": packed,
                     "metadata": json_data(metadata)}
-        with pending.open("xb") as output:
+        with research_output_path(pending).open("xb") as output:
             np.savez(output, __metadata__=np.asarray(json.dumps(envelope, allow_nan=False)), **arrays)
             output.flush()
             os.fsync(output.fileno())
@@ -315,9 +317,9 @@ def export_stroboscopic_handoff(record: Mapping[str, Any], path: str | Path,
 
 def export_analysis_csv(record: Mapping[str, Any], path: str | Path) -> Path:
     import csv
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", newline="", encoding="utf-8") as stream:
+    target = research_output_path(path)
+    research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+    with research_output_path(target).open("w", newline="", encoding="utf-8") as stream:
         fields = ["event_index", "position_cm1", "time_s", "sample", "reference", "ratio", "delta_absorbance", "absolute_absorbance"]
         label_fields = ["normalization_kind", "ratio_label", "delta_absorbance_label"]
         writer = csv.writer(stream)
@@ -336,9 +338,9 @@ def export_analysis_csv(record: Mapping[str, Any], path: str | Path) -> Path:
 def export_trial_mean_csv(record: Mapping[str, Any], path: str | Path) -> Path:
     """One mean trace per wavenumber; original trials remain in the native run."""
     import csv
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", newline="", encoding="utf-8") as stream:
+    target = research_output_path(path)
+    research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+    with research_output_path(target).open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         writer.writerow(["position_cm1", "time_s", "mean_delta_absorbance", "standard_error",
             "trial_count", "quality_notes", "method"])
@@ -353,11 +355,11 @@ def export_trial_mean_csv(record: Mapping[str, Any], path: str | Path) -> Path:
 def export_detector_csv(record: Mapping[str, Any], path: str | Path) -> Path:
     """Export the detector traces displayed by Fixed Wavenumber, without ratios."""
     import csv
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target = research_output_path(path)
+    research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
     analysis = record.get("analysis", {})
     traces = analysis.get("aggregates") or analysis.get("events", ())
-    with target.open("w", newline="", encoding="utf-8") as stream:
+    with research_output_path(target).open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         writer.writerow(["position_cm1", "time_s", "sample_magnitude_v", "reference_magnitude_v", "trial_count", "run_status"])
         for trace in traces:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -291,9 +293,9 @@ class WorkflowStateMachine:
     def export_event_log(self, path: str | Path) -> Path:
         """Write state-machine events as JSON."""
 
-        target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(
+        target = research_output_path(path)
+        research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+        research_output_path(target).write_text(
             json.dumps([event.to_dict() for event in self.events], indent=2, sort_keys=True)
             + "\n",
             encoding="utf-8",
@@ -544,8 +546,8 @@ class WorkflowStateMachine:
         def preserve(previous):
             record.update(previous_ownership=previous, verified_utc=datetime.now(UTC).isoformat(),
                           safe_shutdown_actions=self._last_recovery_shutdown)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with target.open("x", encoding="utf-8") as stream:
+            research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+            with research_output_path(target).open("x", encoding="utf-8") as stream:
                 json.dump(record, stream, indent=2, sort_keys=True)
                 stream.write("\n")
                 stream.flush()
@@ -621,12 +623,12 @@ class WorkflowStateMachine:
         return target
 
     def _artifact_path(self, filename: str) -> Path:
-        self.run_dir.mkdir(parents=True, exist_ok=True)
+        research_output_path(self.run_dir).mkdir(parents=True, exist_ok=True)
         return self.run_dir / filename
 
     def _write_readback(self, filename: str, data: Any) -> Path:
         path = self._artifact_path(filename)
-        path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        research_output_path(path).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         self._remember_readback(path)
         return path
 
@@ -839,7 +841,7 @@ class WorkflowStateMachine:
         recipe = self._require_recipe()
         timing_recipe = command.parameters.get("timing_recipe") or recipe.get("timing_recipe")
         if not timing_recipe:
-            raise WorkflowStateMachineError("active campaign recipe does not define timing_recipe")
+            raise WorkflowStateMachineError("active measurement recipe does not define timing_recipe")
         manager = TimingRecipeManager(self.inventory)
         validation = manager.validate_recipe(resolve_compat_path(str(timing_recipe)))
         self.recipe_validation["timing_recipe"] = validation
@@ -954,7 +956,7 @@ class WorkflowStateMachine:
         return self._complete(
             command.command,
             "ACQUIRING_POINT",
-            "Acquire-point collected real HF2LI detector data for the selected campaign point.",
+            "Acquire-point collected real HF2LI detector data for the selected measurement point.",
             data,
         )
 
@@ -998,12 +1000,12 @@ class WorkflowStateMachine:
         return self._complete(
             command.command,
             "ACQUIRING_SCAN",
-            "Acquire-scan collected real HF2LI detector data for every selected campaign scan point.",
+            "Acquire-scan collected real HF2LI detector data for every selected measurement scan point.",
             data,
         )
 
     def _abort_to_safe(self, command: WorkflowCommand) -> WorkflowResult:
-        reason = str(command.parameters.get("reason") or "campaign workflow abort")
+        reason = str(command.parameters.get("reason") or "measurement workflow abort")
         self.abort_state = {
             "aborted": True,
             "reason": reason,
@@ -1433,8 +1435,8 @@ class WorkflowStateMachine:
             return
         if recipe_path_value is None or not str(recipe_path_value).strip():
             raise WorkflowStateMachineError(
-                "No campaign recipe was supplied. Legacy sample defaults are archived; "
-                "provide an explicitly approved campaign recipe path."
+                "No measurement recipe was supplied; "
+                "provide an explicitly approved measurement recipe path."
             )
         recipe_path = Path(str(recipe_path_value))
         if not recipe_path.is_absolute():

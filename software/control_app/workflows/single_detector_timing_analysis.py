@@ -5,6 +5,8 @@ are produced. The caller must preserve the complete native record first.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 import csv
 from pathlib import Path
 
@@ -162,7 +164,7 @@ def _write_waveforms(path, decoded, summary):
     timing, sample, timing_gaps, sample_gaps, magnitude = decoded
     start, stop = summary["sweep_active_ticks"]
     clock = summary["clockbase_hz"]
-    with path.open("x", encoding="utf-8", newline="") as handle:
+    with research_output_path(path).open("x", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["stream", "timestamp_ticks", "time_from_sweep_active_s", "CH1_x_V", "CH1_y_V", "CH1_R_V",
                          "DIO21", "DIO22", "DIO17", "inside_sweep", "native_gap_before"])
@@ -209,7 +211,7 @@ def _plot(path, decoded, summary):
         axis.axvline(duration * 1e3, color="gray", linestyle=":", linewidth=.7)
         axis.grid(alpha=.2)
     figure.suptitle(f"Pump-off single-detector timing rehearsal · {summary['status']}\nObserved time only · no wavelength or process-trigger latency assignment")
-    with path.open("xb") as handle:
+    with research_output_path(path).open("xb") as handle:
         figure.savefig(handle, format="png", dpi=140)
 
 

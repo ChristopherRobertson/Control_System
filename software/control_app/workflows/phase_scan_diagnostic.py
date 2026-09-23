@@ -1,6 +1,8 @@
 """Finite, laser-inhibited T660/HF2LI format diagnostic, never optical data."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from pathlib import Path
 from threading import Event
 
@@ -51,7 +53,7 @@ def capture_inhibited_diagnostic(root: Path, *, cancel: Event | None = None,
             if not enabled.get("ok") or enabled.get("response") != expected:
                 raise RuntimeError(f"T660 channel {name} state did not verify as {expected}")
 
-    with (store.path / "commands.txt").open("x", encoding="utf-8") as log:
+    with (research_output_path(store.path / "commands.txt")).open("x", encoding="utf-8") as log:
         try:
             progress("Checking MIRcat interlock; no arm or emission commands will be sent.")
             qcl = MircatService.from_config(command_log=log)

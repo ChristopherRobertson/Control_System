@@ -249,7 +249,7 @@ def build_plan(settings: Settings | dict[str, Any], capabilities: Mapping[str, A
               "aggregate_rate_hz": aggregate_rate,
               "acquisition_s": acquisition_s, "reset_s": reset_s, "preparation_s": preparation_s,
               "tune_settle_s": tune_s, "timing_upload_s": upload_s, "restoration_s": restoration_s,
-              "processing_s": processing_s, "campaign_total_s": total_s, "total_s": measurement_s, "forward_simulation": None,
+              "processing_s": processing_s, "experiment_total_s": total_s, "total_s": measurement_s, "forward_simulation": None,
               "estimate_basis": "Each retained event includes min(0.2 s, period/4) pre-capture, all finite hardware frames, then one full period plus the slowest active detector's 8 × order × time constant filter tail. Includes blank/preliminary captures, tuning, upload, restoration and analysis. No software reset wait. Before live readback, duration is a lower bound excluding the unresolved filter tail; native capture/sample/storage quantities remain unresolved."}
     # Pending readback messages inform the preview; they are not Start gates.
     readiness = tuple(f"Read {name} automatically during connected preparation" for name in resolution.unresolved)

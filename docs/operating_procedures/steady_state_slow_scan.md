@@ -76,7 +76,7 @@ is exclusive through the host until cleanup and preservation finish.
 
 ## Quantities and interpretation
 
-HF2LI is the spectral recorder. Individual scans remain separate. Historical
+HF2LI is the spectral recorder. Individual scans remain separate. Stored
 records retain their original directions and repeats.
 New runs use DC-coupled HF2LI signal inputs and oscillator index 1 at zero frequency
 with harmonic 1, phase 0 and sinc filtering disabled. Oscillator index 0 remains
@@ -119,17 +119,17 @@ Each operation freezes its output root and saves under
 `run.json`, `native.npz` and incremental `native_chunks/` preserve native values,
 readbacks, individual sweeps, analysis and restoration records. Reanalysis and
 exports create separate records. Existing version-1 plans and runs remain
-readable, including their optional legacy annotations and saved fit results.
-Historical resolution, linewidth, segment and fit settings are preserved as
+readable, including their optional metadata annotations and saved fit results.
+Stored resolution, linewidth, segment and fit settings are preserved as
 metadata; they do not select a new acquisition's range, speed or peak model.
 
 Selection exports use the host's standalone version-1 `SampleSpectralSelection`
-format. Its legacy accepted disposition records the operator's export action;
+format. Its `accepted` disposition records the operator's export action;
 it does not certify physical sample state, instrument readiness or temperature.
 The record identifies raw/relative/calibrated quantities, uncertainty limitations,
 quality flags and the retained source. Missing actual sample identities are marked
 as unavailable; run-local identifiers do not invent material identity. An export
-neither promotes an instrument bundle nor accepts a campaign phase.
+does not promote an instrument bundle.
 
 Hardware-free verification is available with:
 

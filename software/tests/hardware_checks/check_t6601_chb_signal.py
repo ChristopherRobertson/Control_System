@@ -20,6 +20,8 @@ from control_app.config_loader import load_config_inventory
 from control_app.manifest import new_manifest, write_manifest
 from control_app.workflows.timing_recipe_manager import TimingRecipeManager
 
+from control_app.paths import RUN_ROOT, LOG_ROOT
+
 
 SIGNAL_RECIPE = {
     "name": "t6601_chb_signal_verification_2mhz",
@@ -95,7 +97,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    run_dir = REPO_ROOT / "evidence" / "experiments" / "runs" / f"{today_stamp()}_t6601_chb_signal_verification"
+    run_dir = RUN_ROOT / f"{today_stamp()}_t6601_chb_signal_verification"
     run_dir.mkdir(parents=True, exist_ok=True)
     command_log_path = run_dir / "command_log.txt"
     manifest_path = run_dir / "run_manifest.json"

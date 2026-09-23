@@ -5,6 +5,8 @@ never an optical path balance B. Missing support remains missing throughout.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -470,8 +472,8 @@ class DualScanStore(RegularScanStore):
             raise ValueError("Dual-detector scanning has preliminary and pumped runs; no separate blank step")
         self.kind = kind
         self.id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S_%fZ")+"_"+kind
-        self.path = Path(root)/"Dual-Detector Phase Scan"/datetime.now(UTC).strftime("%Y-%m-%d")/self.id
-        self.path.mkdir(parents=True, exist_ok=False)
+        self.path = research_output_path(root)/"Dual-Detector Phase Scan"/datetime.now(UTC).strftime("%Y-%m-%d")/self.id
+        research_output_path(self.path).mkdir(parents=True, exist_ok=False)
         self.compress_raw, self.record_count = True, 0
         write_json(self.path/"run.json", {
             "schema_version": SCHEMA_VERSION, "detector_mode": DUAL_DETECTOR_MODE,
@@ -485,7 +487,7 @@ class DualScanStore(RegularScanStore):
         save_native(path, {"schema_version": SCHEMA_VERSION, "detector_mode": DUAL_DETECTOR_MODE,
             "records": [{"event": asdict(e), **payload} for e, payload in records], "native": native})
         self.record_count = len(records)
-        with (self.path/"scan_index.jsonl").open("x", encoding="utf-8") as handle:
+        with (research_output_path(self.path/"scan_index.jsonl")).open("x", encoding="utf-8") as handle:
             for index, (event, _) in enumerate(records):
                 handle.write(json.dumps({"event": asdict(event), "path": "raw/acquisition.npz", "record_index": index})+"\n")
         return path
@@ -527,12 +529,12 @@ def load_dual_run(path):
 
 def save_dual_reconstruction_csv(path, result):
     validate_reconstruction(result)
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = research_output_path(path)
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
     quantities = ["sample_reference_ratio", "delta_absorbance"]
     if "absorbance" in result:
         quantities.append("absorbance")
-    with path.open("x", newline="", encoding="utf-8") as handle:
+    with research_output_path(path).open("x", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["wavenumber_cm-1", "time_from_electrical_pump_sync_s", *quantities,
                          "unpumped_baseline_sample_reference_ratio",
@@ -556,10 +558,10 @@ def save_dual_reconstruction_csv(path, result):
 
 def save_dual_spectrum_csv(path, spectrum, calibration=None):
     values = baseline_values(spectrum, calibration)
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = research_output_path(path)
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
     names = ["sample_reference_ratio"] + (["absorbance"] if calibration is not None else [])
-    with path.open("x", newline="", encoding="utf-8") as handle:
+    with research_output_path(path).open("x", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["wavenumber_cm-1", "effective_sample_time_s", "sample_r", "reference_r", *names, "invalid_reasons"])
         for i, wn in enumerate(spectrum.wavenumber_cm1):

@@ -6,6 +6,8 @@ The manifest is committed last, and interrupted writes remain as partial files.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import fields, is_dataclass
 from datetime import datetime, timezone
 import json
@@ -109,12 +111,12 @@ def save_run(root: str | Path, mode: str | None = None, run_id: str | None = Non
     mode = mode or payload.get("mode") or (getattr(movies[0], "mode", None) if movies else None)
     if mode not in ("single", "dual"):
         raise ValueError("Run mode must be single or dual")
-    target = Path(root).expanduser().resolve()
+    target = research_output_path(root).expanduser().resolve()
     if run_id is not None:
         target = target / EXPERIMENT_ID / mode / _identifier(run_id, "run_id")
     else:
         run_id = str(payload.get("run_id") or target.name or uuid4().hex)
-    target.mkdir(parents=True, exist_ok=True)
+    research_output_path(target).mkdir(parents=True, exist_ok=True)
     if (target/"run.json").exists() or (target/"native.npz").exists():
         raise FileExistsError(f"A preserved run already exists at {target}")
     payload.setdefault("run_id", run_id)
@@ -134,11 +136,11 @@ def save_run(root: str | Path, mode: str | None = None, run_id: str | None = Non
     token = uuid4().hex
     partial_native = target/f"native.{token}.partial.npz"
     partial_manifest = target/f"run.{token}.partial.json"
-    with partial_native.open("xb") as handle:
+    with research_output_path(partial_native).open("xb") as handle:
         np.savez(handle, **arrays)
         handle.flush()
         os.fsync(handle.fileno())
-    with partial_manifest.open("x", encoding="utf-8", newline="\n") as handle:
+    with research_output_path(partial_manifest).open("x", encoding="utf-8", newline="\n") as handle:
         json.dump(manifest, handle, indent=2, allow_nan=False)
         handle.write("\n")
         handle.flush()

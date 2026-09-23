@@ -5,7 +5,7 @@
   "status": "COMPILER_CONTRACT_NOT_AN_OPERATING_RECIPE",
   "mircat": {
     "qcl": 1,
-    "pulse_controls": "Visible repetition rate and pulse width specify the external T660 clock and electrical TTL pulse. MIRcat optical parameters are separate backend settings.",
+    "pulse_controls": "Visible repetition rate specifies the external T660 clock; pulse width specifies MIRcat optical pulse duration. The T660 electrical TTL width is a separate backend setting.",
     "internal_rate": "Provisional MIRcat internal pair: 2100000 Hz and 142 ns; internal rate must exceed external cadence.",
     "maximum_duty_fraction": 0.3,
     "duty_equation": "Both external cadence and internal MIRcat rate times actual MIRcat pulse_width_ns * 1e-9 <= min(0.30, connected_vendor_duty_fraction)",

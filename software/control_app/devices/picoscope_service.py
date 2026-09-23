@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from ctypes import (
     POINTER,
     byref,
@@ -232,7 +234,7 @@ class PicoScopeService:
 
         Values are recorded in engineering units here and converted to the
         microvolt integer units required by the PicoSDK.  This method does not
-        make a programmed value the measurement authority; HF-01 separately
+        make a programmed value the measurement authority; independent detector verification separately
         measures the connected voltage on a PicoScope input.
         """
 
@@ -444,9 +446,9 @@ class PicoScopeService:
 
         data = self.capture_block_data(after_arm=after_arm)
 
-        raw_path = Path(raw_csv_path)
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        with raw_path.open("w", newline="", encoding="utf-8") as handle:
+        raw_path = research_output_path(raw_csv_path)
+        research_output_path(raw_path.parent).mkdir(parents=True, exist_ok=True)
+        with research_output_path(raw_path).open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow(["sample_index", "ch_a_adc", "ch_b_adc"])
             for index, (value_a, value_b) in enumerate(zip(data["ch_a_adc"], data["ch_b_adc"])):
@@ -565,9 +567,9 @@ class PicoScopeService:
             0,
         )
         self._check(status, "ps5000aGetTimebase2 rapid")
-        raw_path = Path(raw_csv_path)
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        with raw_path.open("w", newline="", encoding="utf-8") as handle:
+        raw_path = research_output_path(raw_csv_path)
+        research_output_path(raw_path.parent).mkdir(parents=True, exist_ok=True)
+        with research_output_path(raw_path).open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow(
                 ["segment_index", "sample_index", "time_from_trigger_ns", "ch_a_adc", "ch_b_adc"]

@@ -25,10 +25,10 @@
     "Q": "S/R; reference-normalized signal",
     "delta_absorbance": "-log10(Q/Q0) only on valid compatible support",
     "absolute_absorbance": "-log10(Q/B) only with applicable measured path/background B",
-    "promotion": "sample-state acceptance never promotes an instrument bundle or campaign phase"
+    "promotion": "sample-state acceptance never promotes an instrument bundle"
   },
   "authorities": [
-    "EXPERIMENTS.md sections 7, 9.1, 10.1, 11.2, 14-17",
+    "docs/operating_procedures/steady_state_slow_scan.md",
     "instrument/default_wiring_state.md",
     "references/manuals/MIRcat/daylight_db9_process_trigger_correspondence.md",
     "software/control_app/measurement_host/README.md"

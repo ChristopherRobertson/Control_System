@@ -1,9 +1,8 @@
 # MIRcat Detector Alignment Workflow
 
-This document covers the UI-controlled detector-alignment workflow. It is a UI,
-timing, and hardware-operation artifact retained for instrument setup. Its
-outputs are operational records unless an approved campaign phase explicitly
-imports them.
+This procedure uses the MIRcat device page for detector alignment. Its
+command logs and readbacks are scientific output under the research root.
+Calibrated claims require an applicable qualified operating configuration.
 
 ## Purpose
 
@@ -129,7 +128,7 @@ a UI alignment run is active.
 UI alignment starts write a timestamped operational directory:
 
 ```text
-evidence/experiments/runs/YYYYMMDD_HHMMSS_mircat_detector_alignment_ui/
+<research_root>/experiments/runs/YYYYMMDD_HHMMSS_mircat_detector_alignment_ui/
 ```
 
 Expected artifacts include:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from datetime import UTC, datetime
 from copy import deepcopy
 from pathlib import Path
@@ -71,6 +73,7 @@ class TimingRecipeManager:
     ) -> dict[str, Any]:
         """Apply a recipe, force requested EOD, read back, compare, and write JSON."""
 
+        output_path = research_output_path(output_path)
         recipe_data = self.load_recipe(recipe) if not isinstance(recipe, dict) else dict(recipe)
         resolved = self._resolve_recipe(recipe_data)
         readback: dict[str, Any] = {
@@ -129,9 +132,9 @@ class TimingRecipeManager:
                         cleanup_errors.append(f"{service.name} {command}: {cleanup_exc}")
             readback["cleanup_errors"] = cleanup_errors
             try:
-                target = Path(output_path)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(json.dumps(readback, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                target = research_output_path(output_path)
+                research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+                research_output_path(target).write_text(json.dumps(readback, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             except OSError as save_exc:
                 exc.add_note(f"Could not save failure readback: {save_exc}")
             raise
@@ -139,9 +142,9 @@ class TimingRecipeManager:
             for service in services.values():
                 service.close()
 
-        target = Path(output_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(readback, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        target = research_output_path(output_path)
+        research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+        research_output_path(target).write_text(json.dumps(readback, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         if readback["mismatches"]:
             raise TimingRecipeError(f"readback mismatch: {readback['mismatches']}")
         return readback
@@ -156,7 +159,7 @@ class TimingRecipeManager:
                     or set(unit["channels"]) != set("ABCD")
                     or any(channel.get("enabled") is not False for channel in unit["channels"].values())):
                 raise TimingRecipeError("Concurrent safe idle requires all triggers, frames and channels OFF")
-        target = Path(output_path)
+        target = research_output_path(output_path)
         logs = {unit: StringIO() for unit in resolved}
         def apply(unit):
             manager = TimingRecipeManager(self.inventory, command_log=logs[unit])
@@ -177,8 +180,8 @@ class TimingRecipeManager:
         result = {"recipe_name": "safe_idle", "resolved_settings": resolved,
                   "devices": {unit: data["devices"][unit] for unit, data in results.items()},
                   "matches_recipe": not errors, "errors": errors, "unit_results": results}
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+        research_output_path(target).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         if errors:
             raise TimingRecipeError(f"Safe idle failed: {errors}")
         return result

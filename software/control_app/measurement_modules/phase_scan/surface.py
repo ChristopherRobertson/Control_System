@@ -1,6 +1,8 @@
 """Interactive measured phase-scan views; no smoothing or extrapolation."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from pathlib import Path
 import numpy as np
 
@@ -282,8 +284,7 @@ if QWidget is not None:
                 notices.append("Time uses electrical pump sync; optical arrival is not calibrated.")
             if result.get("provisional"):
                 notices.append("Wavenumber calibration is provisional.")
-            if not result.get("publication_eligible", False):
-                notices.append("Exploratory data; publication eligibility is not established.")
+            notices.append("Functionality test only; no scientific claims or runtime calibration.")
             self.status.setText(" ".join(notices))
             self._redraw()
 
@@ -431,9 +432,9 @@ if QWidget is not None:
             if provider is None:
                 from control_app.paths import get_save_location
                 provider = get_save_location
-            root = Path(provider()).expanduser().resolve()
+            root = research_output_path(provider()).expanduser().resolve()
             if create:
-                root.mkdir(parents=True, exist_ok=True)
+                research_output_path(root).mkdir(parents=True, exist_ok=True)
             return root
 
         def _choose_load(self):
@@ -446,22 +447,22 @@ if QWidget is not None:
 
         def _choose_export(self):
             try:
-                root = self._dialog_root()
+                root = self._dialog_root(create=True)
                 path, _ = QFileDialog.getSaveFileName(self, "Export quantitative phase-scan data", str(root / "phase_scan.csv"), "CSV (*.csv)")
                 if path:
-                    Path(path).parent.mkdir(parents=True, exist_ok=True)
+                    research_output_path(Path(path).parent).mkdir(parents=True, exist_ok=True)
                     export_quantitative_csv(path, self.result)
             except Exception as exc:
                 QMessageBox.warning(self, "Export phase scan", str(exc))
 
         def _choose_image(self):
             try:
-                root = self._dialog_root()
+                root = self._dialog_root(create=True)
                 path, _ = QFileDialog.getSaveFileName(self, "Save phase-scan plot image", str(root / "phase_scan.png"), "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)")
                 if path:
                     if Path(path).exists():
                         raise FileExistsError("Choose a new filename to preserve existing images")
-                    Path(path).parent.mkdir(parents=True, exist_ok=True)
-                    self.figure.savefig(path, dpi=180)
+                    research_output_path(Path(path).parent).mkdir(parents=True, exist_ok=True)
+                    self.figure.savefig(research_output_path(path), dpi=180)
             except Exception as exc:
                 QMessageBox.warning(self, "Save phase-scan image", str(exc))

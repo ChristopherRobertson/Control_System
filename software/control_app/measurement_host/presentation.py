@@ -25,6 +25,8 @@ Qt and Matplotlib are optional: pure helpers remain importable without either.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from copy import deepcopy
 from dataclasses import dataclass
 import math
@@ -448,11 +450,11 @@ if QWidget is not None:
             self.reset_view()
 
         def save_image(self, path: Path):
-            path = Path(path).expanduser().resolve()
+            path = research_output_path(path).expanduser().resolve()
             if path.exists():
                 raise FileExistsError("Choose a new filename to preserve existing images")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            self.figure.savefig(path, dpi=180)
+            research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
+            self.figure.savefig(research_output_path(path), dpi=180)
 
         def _image_save_root(self):
             provider = self._image_root_provider
@@ -469,7 +471,8 @@ if QWidget is not None:
 
         def _choose_image(self):
             try:
-                root = self._image_save_root()
+                root = research_output_path(self._image_save_root())
+                root.mkdir(parents=True, exist_ok=True)
                 path, _ = QFileDialog.getSaveFileName(self, "Save plot image", str(root / "measurement.png"), "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)")
                 if path:
                     self.save_image(Path(path))
@@ -857,9 +860,9 @@ if QWidget is not None:
             if self.plan is None:
                 raise ValueError("A valid plan is required")
             settings, plan = deepcopy(self.adapter.read_settings()), deepcopy(self.plan)
-            path = Path(path).expanduser().resolve()
+            path = research_output_path(path).expanduser().resolve()
             def save(_worker):
-                path.parent.mkdir(parents=True, exist_ok=True)
+                research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
                 return self.adapter.save_plan(path, settings, plan)
             self._launch(save, "save_plan", path)
 
@@ -873,15 +876,16 @@ if QWidget is not None:
             if self.result is None:
                 raise ValueError("Load or acquire a native result before export")
             result = deepcopy(self.result)
-            path = Path(path).expanduser().resolve()
+            path = research_output_path(path).expanduser().resolve()
             def export(_worker):
-                path.parent.mkdir(parents=True, exist_ok=True)
+                research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
                 return self.adapter.export_run(path, result)
             self._launch(export, "export_run", path)
 
         def _prepare_save_folder(self, action):
             try:
-                root = Path(self.save_root_provider()).expanduser().resolve()
+                root = research_output_path(self.save_root_provider())
+                root.mkdir(parents=True, exist_ok=True)
             except (OSError, ValueError) as exc:
                 self.status.setText(f"Cannot prepare the {action} folder.")
                 self.status.setToolTip(str(exc))

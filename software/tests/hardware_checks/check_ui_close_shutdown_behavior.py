@@ -20,8 +20,10 @@ from control_app.ui.main_window import ControlSystemMainWindow
 def main() -> int:
     app = QApplication.instance() or QApplication([])
     previous_root, previous_selection = paths.RUN_ROOT, paths._selected_save_location
+    previous_research = paths.RESEARCH_ROOT
     try:
         with TemporaryDirectory(prefix="control-close-check-") as folder:
+            paths.RESEARCH_ROOT = Path(folder)
             paths.RUN_ROOT = Path(folder) / "runs"
             for outcome in ("exception", "failed", "complete"):
                 handler = blocked_handler("Shutdown regression; no hardware")
@@ -53,6 +55,7 @@ def main() -> int:
                     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     finally:
         paths.RUN_ROOT, paths._selected_save_location = previous_root, previous_selection
+        paths.RESEARCH_ROOT = previous_research
     print("PASS asynchronous UI close is exception-safe and retains failed shutdowns")
     return 0
 

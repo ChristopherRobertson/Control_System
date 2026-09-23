@@ -1,12 +1,14 @@
-# Runtime instrument-bundle instructions
+# Runtime resource instructions
 
-The control application may load only bundles explicitly marked `PROMOTED` in both
-the bundle registry and manifest. Creating a directory or manifest does not promote
-it. Bundles contain machine-readable runtime values, validity envelopes, versions,
-and source IDs; raw campaign evidence and prose decisions stay outside this tree.
+Preserve device identities, numeric values, units, wiring, timing, safety limits
+and validity conditions. Runtime resources must be sufficient to interpret and
+load the selected operating settings without scientific evidence files.
 
-Do not add hash-matching operational gates. Promotion still requires the existing
-explicit user authorization phrases and scientific closeout gates. Those gates
-include an accepted `procedural_writeup.md` under
-`docs/phase_record_contract.md` for every source phase
-material to the proposed runtime value, uncertainty, or validity envelope.
+Distinguish disconnected preview settings, nominal command values, connected
+readbacks and explicitly selected calibration corrections. Do not elevate their
+status or silently replace values. Loading a bundle requires `PROMOTED` in both
+its registry entry and manifest. Creating resources does not authorize hardware.
+
+Keep research evidence and full analysis under the external research root. Explain
+operational meaning and limitations in the adjacent documentation, and keep paths
+consistent with the loader and application. Use hardware-free verification only.

@@ -7,7 +7,7 @@ from dataclasses import replace
 from functools import partial
 from typing import Any
 from pathlib import Path
-from control_app.paths import default_save_location, default_tab_save_location, get_save_location, set_save_location
+from control_app.paths import default_save_location, default_tab_save_location, get_save_location, set_save_location, resolve_save_preference
 
 from control_app.ui.contracts import WorkflowCommandHandler, WorkflowResult, blocked_handler
 from control_app.ui.widgets.mircat_widget import MircatWidget
@@ -104,7 +104,7 @@ class ControlSystemMainWindow(QMainWindow):
         if not PYSIDE6_AVAILABLE:
             raise RuntimeError("PySide6 is required to instantiate ControlSystemMainWindow")
         super().__init__()
-        self.setWindowTitle("IR Spectroscope Control System")
+        self.setWindowTitle("IR Spectroscope Control System — Functionality tests (uncalibrated)")
         handler = command_handler or blocked_handler("No workflow command handler is attached.")
         self.command_handler: Any = handler
         self.preferences = QSettings("ControlSystem", "IRSpectroscope") if persist_settings else None
@@ -113,9 +113,12 @@ class ControlSystemMainWindow(QMainWindow):
         self._save_location_failures = {}
         saved_locations = self.preferences.value("tab_save_locations/v1", {}) if self.preferences else {}
         if isinstance(saved_locations, dict):
-            self._tab_save_overrides = {key: Path(value).expanduser().resolve()
-                                        for key, value in saved_locations.items()
-                                        if isinstance(key, str) and isinstance(value, str) and value.strip()}
+            for key, value in saved_locations.items():
+                if isinstance(key, str) and isinstance(value, str) and value.strip():
+                    try:
+                        self._tab_save_overrides[key] = resolve_save_preference(value)
+                    except ValueError as exc:
+                        self._save_location_failures[key] = (value, f"Choose a research destination: {exc}")
         self._switching_detector_mode = False
         self._published_save_roots = {}
         self._published_global_save_root = None

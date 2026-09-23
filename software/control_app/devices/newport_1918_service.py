@@ -144,7 +144,7 @@ class Newport1918:
         return response.raw[: bytes_read.value].decode("ascii", errors="replace").strip()
 
     def identity_snapshot(self) -> dict[str, object]:
-        """Return the bounded read-only identity/configuration snapshot for OM-01."""
+        """Return the bounded read-only identity/configuration snapshot for the power meter."""
         commands = {
             "idn": "*IDN?",
             "usb_address": "ADDR?",

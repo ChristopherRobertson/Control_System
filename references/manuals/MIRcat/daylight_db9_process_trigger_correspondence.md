@@ -58,9 +58,9 @@ The technical information below is preserved as supplied by the operator.
   D disconnected and unused, plus DB9 pin 5 disconnected and pins 6/8
   unused/unwired. These standing conditions are not re-asked unless the
   operator explicitly reports a change; see `instrument/default_wiring_state.md`.
-- The room interlock remains authoritative; this campaign does not use DB9 pin
+- The room interlock remains authoritative; this instrument does not use DB9 pin
   6 and does not disconnect or replace the MIRcat interlock BNC.
 - External Process Trigger must be qualified in the manufacturer GUI before SDK
-  automation, using the campaign's bounded MC-01 procedure.
+  automation, using an explicitly approved bounded operating procedure.
 - Normal sweep control uses `StartSweepScan()`; Advanced Sweep Scan is not
   required.

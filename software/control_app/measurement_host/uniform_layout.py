@@ -50,6 +50,8 @@ def effective_hf2_values(panel, plan):
 def standardize_experiment_page(panel, experiment, mode):
     phase = experiment == "phase_scan"
     splitter = panel.findChild(QSplitter)
+    if splitter is None:
+        return  # Optional measurement modules own their custom layout.
     left = splitter.widget(0)
     left.setFixedWidth(390)
     groups = panel.findChildren(QGroupBox)

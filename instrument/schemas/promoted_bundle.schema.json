@@ -12,9 +12,9 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["phase_id", "result_id"],
+        "required": ["result_id"],
         "properties": {
-          "phase_id": {"type": "string"},
+          "source_record_id": {"type": "string"},
           "result_id": {"type": "string"},
           "relative_path": {"type": "string"},
           "role": {"type": "string"}

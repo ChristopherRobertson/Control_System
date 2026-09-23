@@ -130,8 +130,8 @@ context cannot select another detector mode. It offers:
 Preferences always use `measurements/<experiment_id>/<mode>/v1/<relative_key>`.
 Absolute paths, traversal segments, empty keys and backslashes are rejected;
 the namespace cannot be reassigned. The module never receives a global mutable
-QSettings/session object. The legacy adapter privately migrates only its known
-Phase Scan keys and retains old values for older software.
+QSettings/session object. The Phase Scan adapter imports supported preference keys into its scoped
+namespace without changing source values.
 
 The exact operation signature is:
 
@@ -159,23 +159,23 @@ mutable SDK/runner objects are rejected. Scientific arrays should be represented
 by explicit selected values or native-file references, not live analysis objects.
 
 In the desktop application, each measurement page defaults to
-`evidence/experiments/runs/YYYY-MM-DD/<exact current tab title>/`, using the local
+`<research_root>/experiments/runs/YYYY-MM-DD/<exact current tab title>/`, using the local
 calendar date. Titles are preserved exactly, including spaces and the `DD ` prefix.
 The instance provider resolves either that default or the custom destination
 chosen for that page and detector mode. Choosing a custom destination does not
 retarget another page. `begin_operation` freezes this `save_root` and produces
 `output_path = <save_root>/<run_uuid>/`; for example, the default Dual Slow Scan
-destination is `evidence/experiments/runs/YYYY-MM-DD/DD Slow Scan/<run_uuid>/`.
+destination is `<research_root>/experiments/runs/YYYY-MM-DD/DD Slow Scan/<run_uuid>/`.
 
 Begin does not create folders. The native saver creates them and preserves
 partial, rejected, diagnostic and restoration records. Later settings, baseline
 selections, date rollover, mode switches or save-location changes cannot retarget
-an active operation. Legacy Phase Scan retains its established native run-directory
+an active operation. Phase Scan uses its native run-directory
 names and formats under the matching Phase Scan or DD Phase Scan page root.
-Historical files and their paths are never moved or renamed by this change.
+Native input files and their paths are not moved or renamed by output selection.
 Nd:YAG is a device-page label and never a folder name; that page and standalone
 device output default to the plain dated root
-`evidence/experiments/runs/YYYY-MM-DD/`.
+`<research_root>/experiments/runs/YYYY-MM-DD/`.
 
 For compatibility, an embedding that supplies only the original zero-argument
 `save_root_provider` retains the version 1 output layout
@@ -261,7 +261,7 @@ concise derived-setting rows and the primary plot occupy the right. Independentl
 overridable calculated settings stay displayed in the framed Advanced overrides
 group, with each field independently set to Automatic or an explicit value.
 The panel has no review object, acknowledgement state or procedural checkbox.
-The earlier `ScientificAdapter` and `GuidedMeasurementPanel` remain compatibility
+`ScientificAdapter` and `GuidedMeasurementPanel` provide compatibility
 APIs for existing integrations; new measurement pages do not use their review flow.
 
 Adapters retain `read_settings`, `apply_settings`, `make_plan`, `validate_plan`,
@@ -403,6 +403,6 @@ The contract fixtures install all six temporary package pairs simultaneously,
 isolate optional failures, reject malformed factories and duplicate tabs, forbid
 construction-time ownership, verify preference/plan/output/baseline/cancellation
 separation, and exercise explicit device checks and standalone data exchange.
-Ownership/process and existing Phase Scan suites provide the backend and legacy
+Ownership/process and existing Phase Scan suites provide the backend and native-format
 regression checks. They use simulated instruments; passing them does not claim
 live hardware commissioning.

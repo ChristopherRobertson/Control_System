@@ -5,6 +5,8 @@ No checksums are required to load or process a record.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 import json
@@ -33,8 +35,9 @@ def utc_now() -> str:
 
 def write_json(path: Path, payload: Any) -> None:
     """Create a new JSON artifact. Existing records are never replaced."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8") as handle:
+    path = research_output_path(path)
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
+    with research_output_path(path).open("x", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, allow_nan=False)
         handle.write("\n")
         handle.flush()
@@ -65,12 +68,12 @@ def save_native(path: Path, payload: Any, *, compressed: bool = True) -> None:
 
     tree = encode(payload)
     arrays["record_json"] = np.asarray(json.dumps(tree, allow_nan=False))
-    path.parent.mkdir(parents=True, exist_ok=True)
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
     if path.exists():
         raise FileExistsError(path)
     temporary = path.with_name(path.name + f".{uuid4().hex}.partial")
     # A failed/incomplete write is retained for diagnosis, not indexed as complete.
-    with temporary.open("xb") as handle:
+    with research_output_path(temporary).open("xb") as handle:
         writer = np.savez_compressed if compressed else np.savez
         writer(handle, **arrays)
         handle.flush()
@@ -126,8 +129,8 @@ class ScanStore:
             raise ValueError("Unknown Phase Scan record type")
         self.kind = kind
         self.id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S_%fZ") + "_" + kind
-        self.path = Path(root) / "Phase Scan" / datetime.now(UTC).strftime("%Y-%m-%d") / self.id
-        self.path.mkdir(parents=True, exist_ok=False)
+        self.path = research_output_path(root) / "Phase Scan" / datetime.now(UTC).strftime("%Y-%m-%d") / self.id
+        research_output_path(self.path).mkdir(parents=True, exist_ok=False)
         self.record_count = 0
         self.compress_raw = bool(compress_raw)
         write_json(self.path / "run.json", {
@@ -160,7 +163,7 @@ class ScanStore:
         save_native(path, payload, compressed=self.compress_raw)
         self.record_count = len(records)
         saved = utc_now()
-        with (self.path / "scan_index.jsonl").open("x", encoding="utf-8") as handle:
+        with (research_output_path(self.path / "scan_index.jsonl")).open("x", encoding="utf-8") as handle:
             for index, (event, _) in enumerate(records):
                 handle.write(json.dumps({"event": asdict(event),
                                          "path": path.relative_to(self.path).as_posix(),
@@ -176,7 +179,7 @@ class ScanStore:
         path = self.path / "raw" / f"scan_{event.scan_index:07d}.npz"
         save_native(path, {"schema_version": SCHEMA_VERSION, **payload, "event": asdict(event)},
                     compressed=self.compress_raw)
-        with (self.path / "scan_index.jsonl").open("a", encoding="utf-8") as handle:
+        with (research_output_path(self.path / "scan_index.jsonl")).open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({"event": asdict(event), "path": path.relative_to(self.path).as_posix(),
                                      "bytes": path.stat().st_size, "saved_utc": utc_now()}) + "\n")
             handle.flush()

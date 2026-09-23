@@ -1,6 +1,8 @@
 """Typed, hardware-free planning with separate structural and readiness checks."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import asdict, dataclass, field, replace
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 import json
@@ -480,7 +482,7 @@ def resolve_calibration_from_bundle(manifest: Mapping[str, Any]) -> CalibrationE
     """Read the experiment section of a bundle accepted by the host loader.
 
     ``MeasurementContext.promoted_bundle`` checks the canonical registry first.
-    This conversion does not perform promotion and accepts neither raw campaign
+    This conversion does not perform promotion and accepts neither raw research
     evidence nor a sample spectral-selection record as instrument calibration.
     """
     if manifest.get("status") != "PROMOTED" or not manifest.get("bundle_id"):
@@ -495,9 +497,9 @@ def resolve_calibration_from_bundle(manifest: Mapping[str, Any]) -> CalibrationE
 
 
 def save_plan(plan: RepeatedRapidScanPlan, path: str | Path) -> Path:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(plan.to_dict(), indent=2, allow_nan=False), encoding="utf-8")
+    target = research_output_path(path)
+    research_output_path(target.parent).mkdir(parents=True, exist_ok=True)
+    research_output_path(target).write_text(json.dumps(plan.to_dict(), indent=2, allow_nan=False), encoding="utf-8")
     return target
 
 

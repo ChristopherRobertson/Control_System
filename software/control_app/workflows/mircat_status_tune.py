@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,14 +64,14 @@ class MircatStatusTune:
     ) -> dict[str, Any]:
         """Execute the real safe tune workflow and write operational files."""
 
-        run_path = Path(run_dir)
-        run_path.mkdir(parents=True, exist_ok=True)
+        run_path = research_output_path(run_dir)
+        research_output_path(run_path).mkdir(parents=True, exist_ok=True)
         request_path = run_path / "mircat_tune_request.json"
         state_path = run_path / "mircat_state_readback.json"
         actual_path = run_path / "mircat_actual_wavelength_record.json"
         summary_path = run_path / "mircat_status_tune_summary.json"
 
-        request_path.write_text(
+        research_output_path(request_path).write_text(
             json.dumps(request.to_dict(), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
@@ -141,11 +143,11 @@ class MircatStatusTune:
             if final_state.get("armed"):
                 raise MircatStatusTuneError("MIRcat remained armed after cleanup")
 
-            actual_path.write_text(
+            research_output_path(actual_path).write_text(
                 json.dumps(actual_record, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
-            state_path.write_text(
+            research_output_path(state_path).write_text(
                 json.dumps(
                     {"initial_state": initial_state, "final_state": final_state},
                     indent=2,
@@ -164,7 +166,7 @@ class MircatStatusTune:
                 "state_readback": str(state_path),
                 "cleanup_errors": cleanup_errors,
             }
-            summary_path.write_text(
+            research_output_path(summary_path).write_text(
                 json.dumps(summary, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )

@@ -1,6 +1,8 @@
 """Derived CSV/figure inspection of preserved inhibited captures; no absorbance."""
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 import csv
 import json
 from pathlib import Path
@@ -13,10 +15,10 @@ from control_app.workflows.phase_scan_data import load_native, write_json
 
 def inspect_diagnostic(run_path: Path) -> Path:
     destination = run_path / "processed" / datetime.now(UTC).strftime("format_review_%H%M%S_%fZ")
-    destination.mkdir(parents=True, exist_ok=False)
+    research_output_path(destination).mkdir(parents=True, exist_ok=False)
     summaries = []
     latest = {}
-    with (destination / "samples.csv").open("x", encoding="utf-8", newline="") as handle:
+    with (research_output_path(destination / "samples.csv")).open("x", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["record", "demodulator_api_index", "timestamp_ticks", "time_in_record_s",
                          "x_v", "y_v", "r_v", "dio_word", "trigger_word", "auxin0_v", "auxin1_v"])
@@ -109,5 +111,5 @@ def inspect_diagnostic(run_path: Path) -> Path:
         for ax in axes:
             ax.grid(alpha=.2)
         figure.suptitle("Real inhibited diagnostic · latest record\nNo optical background or absorbance measurement", fontsize=13)
-        figure.savefig(destination / "diagnostic_preview.png", dpi=150)
+        figure.savefig(research_output_path(destination / "diagnostic_preview.png"), dpi=150)
     return destination

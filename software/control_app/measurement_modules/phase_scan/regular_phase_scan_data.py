@@ -6,6 +6,8 @@ smoothed spectrum.  No digest is used to accept a blank or load a run.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import asdict, dataclass
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -181,8 +183,8 @@ class RegularScanStore:
     def __init__(self, root, kind, plan):
         self.kind = kind
         self.id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S_%fZ") + "_" + kind
-        self.path = Path(root) / "Phase Scan" / datetime.now(UTC).strftime("%Y-%m-%d") / self.id
-        self.path.mkdir(parents=True, exist_ok=False)
+        self.path = research_output_path(root) / "Phase Scan" / datetime.now(UTC).strftime("%Y-%m-%d") / self.id
+        research_output_path(self.path).mkdir(parents=True, exist_ok=False)
         self.compress_raw = True
         self.record_count = 0
         write_json(self.path / "run.json", {
@@ -199,7 +201,7 @@ class RegularScanStore:
                           "records": [{"event": asdict(e), **payload} for e, payload in records],
                           "native": native})
         self.record_count = len(records)
-        with (self.path / "scan_index.jsonl").open("x", encoding="utf-8") as handle:
+        with (research_output_path(self.path / "scan_index.jsonl")).open("x", encoding="utf-8") as handle:
             for index, (event, _) in enumerate(records):
                 handle.write(json.dumps({"event": asdict(event), "path": "raw/acquisition.npz",
                                          "record_index": index}) + "\n")
@@ -401,15 +403,15 @@ def load_regular_run(path):
 def save_regular_reconstruction_csv(path, result):
     """Export the quantitative grid; missing cells remain literal NaN."""
     validate_reconstruction(result)
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = research_output_path(path)
+    research_output_path(path.parent).mkdir(parents=True, exist_ok=True)
     shape = np.asarray(result["absorbance"]).shape
     missing = np.full(shape, np.nan)
     delta = result.get("delta_absorbance", missing)
     uncertainty = result.get("standard_error", missing)
     counts = result.get("repetition_count", missing)
     baseline = result.get("baseline_absorbance", np.full(shape[1], np.nan))
-    with path.open("x", newline="", encoding="utf-8") as handle:
+    with research_output_path(path).open("x", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["wavenumber_cm-1", "time_from_electrical_pump_sync_s", "absorbance",
                          "delta_absorbance", "unpumped_baseline_absorbance", "standard_error",

@@ -8,13 +8,21 @@ from tempfile import TemporaryDirectory
 import _common  # noqa: F401 - adds the repository root to sys.path for script execution
 
 from control_app.workflows.labone_plotter_processor import process_labone_plotter_file
+from control_app import paths
 
 
 def main() -> int:
     with TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
-        _check_auto_uses_index_for_equal_lengths(temp_path)
-        _check_time_alignment_handles_unequal_lengths(temp_path)
+        previous = paths.RESEARCH_ROOT, paths.RUN_ROOT, paths._selected_save_location
+        try:
+            paths.RESEARCH_ROOT = temp_path
+            paths.RUN_ROOT = temp_path / "runs"
+            paths._selected_save_location = None
+            _check_auto_uses_index_for_equal_lengths(temp_path)
+            _check_time_alignment_handles_unequal_lengths(temp_path)
+        finally:
+            paths.RESEARCH_ROOT, paths.RUN_ROOT, paths._selected_save_location = previous
     print("LabOne Plotter processor checks passed")
     return 0
 

@@ -8,7 +8,7 @@ automatic. The retained plan contains both requested and resolved settings.
 
 Connected discovery reads QCL1's spectral range and pulse parameters/current.
 The installed laser contains exactly one QCL; all operations use QCL1 even when
-historical requested settings name another channel. HF2LI rates and filter settings are selected from
+stored requested settings name another channel. HF2LI rates and filter settings are selected from
 supported values within aggregate throughput. Provisional offline requests are
 labeled as such and resolved again against connected capabilities. The maintained
 2 MHz external trigger and 2.1 MHz/142 ns internal MIRcat configuration supply

@@ -5,6 +5,8 @@ prepared before its event sequence and drained into bounded host array storage.
 Native blocks remain in memory until the runner consolidates the run on disk.
 """
 from __future__ import annotations
+
+from control_app.paths import research_output_path
 from copy import deepcopy
 from dataclasses import asdict
 from io import StringIO
@@ -816,7 +818,7 @@ class LivePhaseScanAcquirer:
                 errors.append(str(exc))
         if self.store is not None:
             if self.log is not None:
-                (self.store.path / "commands.txt").write_text(self.log.getvalue(), encoding="utf-8")
+                (research_output_path(self.store.path / "commands.txt")).write_text(self.log.getvalue(), encoding="utf-8")
             write_json(self.store.path / "cleanup.json", {"safe_state_verified": not errors, "errors": errors})
         if errors:
             raise RuntimeError("; ".join(errors))

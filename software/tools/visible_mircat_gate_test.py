@@ -12,7 +12,10 @@ import serial
 T660_PORT = "COM7"
 T660_BAUD = 38400
 MIRCAT_DLL = r"C:\Program Files\National Instruments\LabVIEW 2025\user.lib\MIRcatSDKx64-1\MIRcatSDK.dll"
-ARTIFACT_DIR = r"C:\users\chris\documents\github\control_system\artifacts"
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from control_app.paths import output_run_root
+ARTIFACT_DIR = str(output_run_root() / "mircat_gate_test")
 
 WAVENUMBER_CM1 = 1858.0
 QCL = 1

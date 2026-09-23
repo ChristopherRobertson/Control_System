@@ -11,7 +11,7 @@ def phase_scan_qualification_from_bundle(bundle: PromotedBundle) -> dict:
     """Consume the runtime.phase_scan mapping returned by load_promoted_bundle.
 
     The registry/manifest loader remains the promotion authority. This function
-    only reads its runtime values; it never loads campaign records or promotes
+    only reads its runtime values; it never loads research records or promotes
     a bundle. The full calibration trajectory remains in the returned mapping
     for range, direction, and timing-reference validation by the planner.
     """

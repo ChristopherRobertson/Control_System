@@ -30,14 +30,7 @@ clock feedback loop. T660-1 TRIG IN is unconnected.
 | T660-2 C | MIRcat process DB9 pin 4 | Process Trigger |
 | T660-2 D | SPARE, disconnected | Disabled |
 
-Trains repeat pulses within an accepted event; frames provide successive channel
-timing configurations. The finite Phase Scan workflow uses a 2 MHz trigger input,
-a 600,000 predivider and a 300 ms frame cadence, with zero additional train pulses.
-These values belong to that measurement method. Other experiment types must
-define their own input rate, divider, pulse/train settings, finite frame count,
-receiver coverage and termination behavior. Nd:YAG alignment uses a 10 Hz
-T660-1 C input and divider 1. Standalone detector alignment enables T660-1 A/B
-and leaves the pump/process outputs and T660-1 C disabled.
+Trains repeat pulses within an accepted event; frames provide successive channel timing configurations. Each workflow resolves its input rate, divider, finite count and receiver coverage from its settings and readbacks. Current regular Phase Scan defaults use a 2 MHz input, divider 200000 and 0.1 s frame (10 Hz). These are electrical test settings, not calibration. Nd:YAG alignment uses a separate 10 Hz input and divider 1. Standalone detector alignment leaves pump/process outputs disabled.
 
 ## Observed timing signals
 
@@ -56,8 +49,8 @@ MIRcat DB9 pin 2 is split directly to both receivers. In the configured sweep
 mode its high interval marks sweep activity; its meaning in a stationary tuning
 mode follows the MIRcat mode. Use the DB9 ground reference (pin 7), and retain
 high-impedance receiving inputs. Do not add a 50 ohm load to this marker branch.
-The routing is corroborated by the P0 DIO mapping side experiment; loading,
-thresholds and edge transfer through both branches still need MS-02.1 and MD-01 qualification.
+The DIO bit identities are confirmed. Loading, thresholds and edge transfer
+through both branches still require installed route-transfer qualification.
 
 Sweep Active can delimit the observed acquisition interval. Electrical markers
 alone do not prove optical pulse arrival, an optical time zero, or complete sample
@@ -83,7 +76,7 @@ male-to-two-female BNC tee. Sample and reference remain separate signals.
 | Detector 2, reference | Signal 2 In (+) | CHB |
 
 Both receivers stay connected, including when the PicoScope is not recording.
-The detector branches bypass the inactive Arduino MUX. The HF2LI is the primary
+The detector branches bypass the Arduino MUX. MUX rewiring is deferred future work and is not a dependency of current experiments. The HF2LI is the primary
 sample/reference spectral recorder; the PicoScope provides waveform and timing
 diagnostics. Its analog channels carry the two detector signals and its EXT input
 receives MIRcat Sweep Active.
@@ -91,8 +84,8 @@ receives MIRcat Sweep Active.
 Adapter/tee identities, branch cable identities and lengths, receiver coupling and
 termination, and unmeasured electrical transfer values remain explicit prospective
 configuration inputs. Do not infer equal amplitudes, an equal electrical split,
-or equal branch delay. [MS-02.1](../campaigns/instrument_readiness_001/phases/MS-02.1/plan.md)
-qualifies the installed loading, attenuation, reflections, bandwidth and skew.
+or equal branch delay. Installed loading, attenuation, reflections, bandwidth
+and skew require measured qualification.
 
 Temporary sample-plane timing/IRF wiring uses PicoScope CHA for the sample IR
 detector and CHB for the pump detector under a separate configuration record.
@@ -115,5 +108,5 @@ test that explicitly requires isolation.
 
 [hardware_configuration.yaml](hardware_configuration.yaml),
 [wiring_map.yaml](wiring_map.yaml) and [wiring_table.xlsx](wiring_table.xlsx)
-record this topology. Campaign phases qualify its electrical and optical behavior;
+record this topology. Electrical and optical behavior requires measured qualification;
 configuration metadata alone does not confer readiness or promote a calibration.

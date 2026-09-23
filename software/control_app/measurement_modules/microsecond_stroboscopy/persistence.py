@@ -6,6 +6,8 @@ are durable. No hash or digest controls loading or scientific acceptance.
 """
 from __future__ import annotations
 
+from control_app.paths import research_output_path
+
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 import json
@@ -62,7 +64,7 @@ def _decode(value, arrays):
 
 
 def _json_write(path, value):
-    with Path(path).open("x", encoding="utf-8") as stream:
+    with research_output_path(Path(path)).open("x", encoding="utf-8") as stream:
         json.dump(value, stream, indent=2, allow_nan=False)
         stream.write("\n")
         stream.flush()
@@ -71,8 +73,8 @@ def _json_write(path, value):
 
 def preflight_storage(path: str | Path) -> Path:
     """Test the frozen destination before configuring or pumping anything."""
-    path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
+    path = research_output_path(path)
+    research_output_path(path).mkdir(parents=True, exist_ok=True)
     probe = path / f".write-check-{uuid4()}"
     _json_write(probe, {"checked_utc": datetime.now(timezone.utc).isoformat()})
     probe.unlink()
@@ -126,7 +128,7 @@ def save_run(path: str | Path, record: dict) -> Path:
                 references[key] = prior_name
                 continue
         native = path / f"native-{uuid4()}.npy"
-        with native.open("xb") as stream:
+        with research_output_path(native).open("xb") as stream:
             np.save(stream, array, allow_pickle=False)
             stream.flush()
             os.fsync(stream.fileno())
