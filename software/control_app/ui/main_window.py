@@ -7,7 +7,7 @@ from dataclasses import replace
 from functools import partial
 from typing import Any
 from pathlib import Path
-from control_app.paths import default_save_location, default_tab_save_location, get_save_location, set_save_location, resolve_save_preference
+from control_app.paths import default_save_location, default_tab_save_location, get_save_location, set_save_location, resolve_save_preference, current_save_destination
 
 from control_app.ui.contracts import WorkflowCommandHandler, WorkflowResult, blocked_handler
 from control_app.ui.widgets.mircat_widget import MircatWidget
@@ -431,7 +431,11 @@ class ControlSystemMainWindow(QMainWindow):
         title = self._tab_titles_by_instance.get(instance_id)
         if title is None:
             title = tab_title(*instance_id.rsplit(":", 1))
-        return self._tab_save_overrides.get(instance_id, default_tab_save_location(title))
+        return self._tab_save_root(instance_id, title)
+
+    def _tab_save_root(self, key, title):
+        return current_save_destination(
+            self._tab_save_overrides.get(key, self._default_save_root(title)))
 
     def _current_save_identity(self):
         widget = self.tabs.currentWidget()
@@ -449,7 +453,7 @@ class ControlSystemMainWindow(QMainWindow):
         if self.tabs.currentWidget() is None:
             return
         key, title = self._current_save_identity()
-        destination = self._tab_save_overrides.get(key, self._default_save_root(title))
+        destination = self._tab_save_root(key, title)
         self._displayed_save_key = key
         self._displayed_save_title = title
         self._last_applied_save_location = destination
@@ -484,7 +488,7 @@ class ControlSystemMainWindow(QMainWindow):
                     self._published_save_roots[handle.instance_id] = root
             except Exception as exc:
                 self.measurement_lifecycle.report_error(handle.instance_id, f"Output location update failed: {exc}")
-        plot_root = self._tab_save_overrides.get("device:Plotter", default_tab_save_location("Plotter"))
+        plot_root = self._tab_save_root("device:Plotter", "Plotter")
         if not busy and self._published_save_roots.get("device:Plotter") != plot_root:
             self.scan_plotter_widget.destination.setText(str(plot_root))
             self._published_save_roots["device:Plotter"] = plot_root
@@ -711,7 +715,7 @@ class ControlSystemMainWindow(QMainWindow):
         self.browse_save_location.setEnabled(not busy)
         if not self.save_location.isModified():
             key, title = self._current_save_identity()
-            expected = self._tab_save_overrides.get(key, self._default_save_root(title))
+            expected = self._tab_save_root(key, title)
             if expected != self._last_applied_save_location:
                 self._display_save_destination()
             else:
@@ -733,7 +737,7 @@ class ControlSystemMainWindow(QMainWindow):
             if (text == str(self._last_applied_save_location)
                     and key not in self._tab_save_overrides):
                 text = str(automatic)
-            selected = set_save_location(text, create=False)
+            selected = set_save_location(current_save_destination(text), create=False)
             if selected == automatic.resolve():
                 self._tab_save_overrides.pop(key, None)
             else:

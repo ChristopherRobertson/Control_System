@@ -719,7 +719,7 @@ def test_us_qcl1_only_despite_reported_channels_and_historical_channel_hints(tmp
     assert record["readbacks"]["mircat_qcl"]==1
 
 
-@pytest.mark.parametrize("rate,width",[(500_000.,150.),(1_000_000.,200.)])
+@pytest.mark.parametrize("rate,width",[(500_000.,150.),(1_000_000.,200.),(2_000_000.,142.)])
 def test_us_external_probe_parameters_reach_timing_and_optical_width_reaches_sdk(tmp_path,monkeypatch,rate,width):
     monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
     context,_,bus,_=setup(tmp_path,installed=True)
@@ -728,13 +728,13 @@ def test_us_external_probe_parameters_reach_timing_and_optical_width_reaches_sdk
     assert record["disposition"]=="complete" and bus.laser.emission_starts==1
     for written in bus.laser.pulse_writes:
         assert written["qcl"]==1
-    assert bus.laser.pulse_writes[0]["pulse_rate_hz"]==2_100_000.
+    assert bus.laser.pulse_writes[0]["pulse_rate_hz"]==rate*1.05
     assert bus.laser.pulse_writes[-1]["pulse_rate_hz"]==1_100_000.
     assert bus.laser.pulse_writes[0]["pulse_width_ns"]==142.
     assert bus.laser.pulse_writes[-1]["pulse_width_ns"]==100.
     actual=record["readbacks"]["mircat_pulse_parameters"]
     assert actual["external_probe_rate_hz"]==rate and actual["probe_trigger_width_ns"]==100.
-    assert actual["pulse_rate_hz"]==2_100_000. and actual["pulse_width_ns"]==142.
+    assert actual["pulse_rate_hz"]==rate*1.05 and actual["pulse_width_ns"]==142.
     assert record["readbacks"]["probe_reference_only"]["queries"]["synth_frequency"]["response"]==f"{rate:g}Hz"
     probe_channels=record["readbacks"]["probe_reference_only"]["channels"]
     assert _seconds_value(probe_channels["B"]["width_edge"]["response"])==pytest.approx(100.e-9)
@@ -749,7 +749,7 @@ def test_us_explicit_internal_rate_and_visible_optical_width_restore_originals(t
     bus.internal_rate_hz=1_100_000.;bus.internal_width_ns=100.
     record=execute(context,_external_probe_settings(500_000.,150.),"preliminary",hardware=True)
     assert record["disposition"]=="complete"
-    assert bus.laser.pulse_writes[0]["pulse_rate_hz"]==2_100_000.
+    assert bus.laser.pulse_writes[0]["pulse_rate_hz"]==525_000.
     assert bus.laser.pulse_writes[0]["pulse_width_ns"]==142.
     assert bus.laser.pulse_writes[-1]["pulse_rate_hz"]==1_100_000.
     assert bus.laser.pulse_writes[-1]["pulse_width_ns"]==100.
@@ -808,9 +808,14 @@ def test_us_actual_internal_readback_above_duty_ceiling_cannot_hide_in_match_tol
 def test_us_internal_rate_requires_headroom_above_external_trigger(tmp_path,monkeypatch,internal_rate):
     monkeypatch.setattr(InstalledAcquirer,"wait",lambda self,*args:self.check())
     context,_,bus,_=setup(tmp_path,installed=True)
-    bus.internal_rate_hz=internal_rate
-    with pytest.raises(AcquisitionFailure,match="strictly greater than the external"):
-        execute(context,_external_probe_settings(2_100_000.,100.),"preliminary",hardware=True)
+    original = Laser.set_qcl_pulse_params
+    def missing_headroom(self, **kwargs):
+        original(self, **kwargs)
+        if len(self.pulse_writes) == 1:
+            self.rate = internal_rate
+    monkeypatch.setattr(Laser, "set_qcl_pulse_params", missing_headroom)
+    with pytest.raises(AcquisitionFailure, match="internal pulse rate"):
+        execute(context,_external_probe_settings(1_000_000.,100.),"preliminary",hardware=True)
     assert bus.laser.emission_starts==0
 
 

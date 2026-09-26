@@ -414,14 +414,14 @@ class InstalledAcquirer:
             raise AcquisitionIntegrityError("Installed QCL 1 does not cover requested wavenumber")
         timing = self.settings["timing"]
         rate = float(str(self.probe_recipe["clock"]["frequency"]).lower().removesuffix("hz"))
-        from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
-        width = MIRCAT_INTERNAL_WIDTH_NS
+        from control_app.measurement_host.laser_settings import mircat_acceptance_rate_hz, mircat_automatic_width_ns
+        width = mircat_automatic_width_ns(mircat_acceptance_rate_hz(rate))
         trigger_width=timing["probe_width_ns"]
         limits = laser.get_qcl_pulse_limits(selected)
         self._verify_probe_limits(rate,width,limits)
         # Internal pulse parameters are a separate device constraint. The T660
         # carrier controls external timing and must retain internal rate headroom.
-        internal_rate=MIRCAT_INTERNAL_RATE_HZ
+        internal_rate=mircat_acceptance_rate_hz(rate)
         internal_width=width
         self._verify_probe_limits(internal_rate,internal_width,limits,"MIRcat internal pulse")
         if internal_rate<=rate:

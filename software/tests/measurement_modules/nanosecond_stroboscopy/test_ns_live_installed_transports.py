@@ -286,15 +286,17 @@ def test_ns_real_installed_adapter_connected_blank_sample_and_raw_run(tmp_path, 
         assert np.all(run_record["result"]["coverage"]>0)
 
 
-def test_ns_phase_laser_requests_reach_installed_adapter_and_restore(tmp_path, monkeypatch):
+@pytest.mark.parametrize("rate,width", [(2_000_000.,142.), (3_000_000.,100.)])
+def test_ns_phase_laser_requests_reach_installed_adapter_and_restore(tmp_path, monkeypatch, rate, width):
     monkeypatch.setattr(MemoryMircat, "get_qcl_current_limits", lambda self, qcl: (0., 500.))
     bench = Bench()
     ctx, owner = live_context(tmp_path, bench)
     settings = replace(Settings(mode="dual"), wavenumbers_cm1=(1942.,), delays_ns=(0.,),
-        repetitions=1, cycle_interval_s=.1, laser_settings={"qcl_current_ma": 400., "probe_pulse_width_ns": 120.})
+        repetitions=1, cycle_interval_s=.1, laser_settings={"qcl_current_ma": 400., "probe_pulse_width_ns": 120., "probe_repetition_rate_hz": rate})
     result = Runner(ctx).run(ctx.begin_operation(settings.to_dict(), hardware=True), build_plan(settings), kind="preliminary")
     assert result["status"] == "completed", result["error"]
-    assert result["readbacks"]["requested_mircat_pulse"]["pulse_width_ns"] == 142.
+    assert result["readbacks"]["requested_mircat_pulse"]["pulse_width_ns"] == width
+    assert result["readbacks"]["requested_mircat_pulse"]["pulse_rate_hz"] == rate
     assert result["readbacks"]["requested_mircat_pulse"]["current_ma"] == 400.
     assert bench.optical_pulse_width_ns == 100.
     assert bench.optical_current_ma == 300.
@@ -482,7 +484,7 @@ def test_ns_live_actual_optical_duty_is_inclusive_and_keeps_vendor_limits(tmp_pa
     assert all(index==1 for _,index in bench.qcl_calls)
     if completed:
         pulse=result["readbacks"]["mircat_pulse"]
-        assert pulse["configured_duty_cycle_fraction"]==pytest.approx(.2982)
+        assert pulse["configured_duty_cycle_fraction"]==pytest.approx(.284)
         assert pulse["external_probe_rate_hz"]!=pulse["internal_rate_hz"]
         assert pulse["external_probe_duty_cycle_fraction"]<pulse["configured_duty_cycle_fraction"]
     else:

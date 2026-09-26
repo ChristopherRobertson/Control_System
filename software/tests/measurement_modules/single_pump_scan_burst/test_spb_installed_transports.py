@@ -517,32 +517,35 @@ def test_stale_saved_qcl_never_redirects_installed_reads_writes_or_restoration(t
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])
-def test_visible_repetition_and_pulse_width_reach_external_clock_and_qcl1(transports, mode):
-    runner = make_runner(transports, mode, probe_rate_hz=1e6, probe_pulse_width_s=120e-9, probe_current_ma=440.)
+@pytest.mark.parametrize("rate", [1e6, 2e6])
+def test_visible_repetition_and_pulse_width_reach_external_clock_and_qcl1(transports, mode, rate):
+    runner = make_runner(transports, mode, probe_rate_hz=rate, probe_pulse_width_s=120e-9, probe_current_ma=440.)
     result = runner.prepare("preliminary")
     assert result["complete"], result
     writes = [values for name, values in transports.sdk.calls if name == "SetQCLParams"]
-    assert writes[0] == [1, 2.1e6, 120., 440.]
+    assert writes[0] == [1, rate * 1.05, 120., 440.]
     assert writes[-1] == [1, 2.1e6, 142., 420.]
     from control_app.devices.t660_service import _seconds_value
     recipe = runner.adapter.recipe
-    assert recipe["frame_input_frequency_hz"] == 1e6
+    assert recipe["frame_input_frequency_hz"] == rate
     assert _seconds_value(recipe["probe_clock_recipe"]["channels"]["B"]["width"]) == pytest.approx(120e-9)
-    assert runner.settings.mircat_internal_pulse_rate_hz == 2.1e6
+    assert runner.settings.mircat_internal_pulse_rate_hz == rate * 1.05
     assert_only_qcl1_calls(transports.sdk)
     modes = [values[:2] for name, values in transports.sdk.calls if name == "SetWlTrigParams"]
     assert [2, 2] in modes  # Real external pulse and external process modes.
 
 
-def test_exact_internal_thirty_percent_from_ns_readback_is_accepted(transports):
+def test_original_thirty_percent_pulse_pair_is_restored_after_derived_rate(transports):
     transports.sdk.qcls[1] = [2e6, 150., 420.]
     result = make_runner(transports, "single", probe_rate_hz=1e6).prepare("preliminary")
     assert result["complete"], result
     assert result["actual_settings"]["probe_pulse_width_s"] == 150 / 1e9
-    assert [1, 2e6, 150., 420.] in [values for name, values in transports.sdk.calls if name == "SetQCLParams"]
+    writes = [values for name, values in transports.sdk.calls if name == "SetQCLParams"]
+    assert writes[0] == [1, 1.05e6, 150., 420.]
+    assert writes[-1] == [1, 2e6, 150., 420.]
 
 
-@pytest.mark.parametrize("width_ns", [150.00001, 151.])
+@pytest.mark.parametrize("width_ns", [285.715, 286.])
 def test_internal_duty_just_above_thirty_percent_is_rejected_before_emission(transports, width_ns):
     transports.sdk.qcls[1] = [2e6, 150., 420.]
     result = make_runner(transports, "single", allow_invalid=True, probe_rate_hz=1e6,
@@ -554,8 +557,8 @@ def test_internal_duty_just_above_thirty_percent_is_rejected_before_emission(tra
 
 def test_sdk_width_readback_over_thirty_percent_is_not_hidden_by_numeric_tolerance(transports):
     transports.sdk.qcls[1] = [2e6, 150., 420.]
-    transports.sdk.overshoot_next_width_ns = .00002
-    result = make_runner(transports, "single", probe_rate_hz=1e6).prepare("preliminary")
+    transports.sdk.overshoot_next_width_ns = .01
+    result = make_runner(transports, "single", probe_rate_hz=1e6, probe_pulse_width_s=285.71e-9).prepare("preliminary")
     assert not result["complete"] and "duty" in result["error"].lower(), result
     assert "TurnEmissionOn" not in [name for name, values in transports.sdk.calls]
     assert transports.sdk.qcls[1] == [2e6, 150., 420.]
@@ -566,14 +569,14 @@ def test_actual_qcl1_vendor_constraints_remain_effective(transports, constraint)
     overrides = {"probe_rate_hz": 1e6, "probe_pulse_width_s": 100e-9}
     transports.sdk.qcls[1] = [2.1e6, 100., 420.]
     if constraint == "internal_rate":
-        transports.sdk.pulse_limits[0] = 2e6
+        transports.sdk.pulse_limits[0] = 1e6
     elif constraint == "width":
         transports.sdk.pulse_limits[1] = 110.
         overrides["probe_pulse_width_s"] = 120e-9
     elif constraint == "current":
         overrides["probe_current_ma"] = 1501.
     else:
-        transports.sdk.pulse_limits[2] = 25.
+        transports.sdk.pulse_limits[2] = 10.
         overrides["probe_pulse_width_s"] = 130e-9
     result = make_runner(transports, "single", **overrides).prepare("preliminary")
     assert not result["complete"], result
@@ -676,7 +679,7 @@ def test_live_qcl1_changes_after_programming_are_retained_and_caught_before_emis
         elif changed_field == "current":
             transports.sdk.qcls[1][2] = 441.
         elif changed_field == "limits":
-            transports.sdk.pulse_limits[2] = 20.
+            transports.sdk.pulse_limits[2] = 10.
         else:
             transports.sdk.current_limits[1] = 430
     transports.sdk.after_dispatch = mutate
@@ -690,7 +693,7 @@ def test_live_qcl1_changes_after_programming_are_retained_and_caught_before_emis
     record = records[-1]
     assert record["actual"]["qcl"] == 1 and record["external_rate_hz"] == 1e6
     if changed_field == "limits":
-        assert record["pulse_limits"]["max_duty_cycle"] == 20.
+        assert record["pulse_limits"]["max_duty_cycle"] == 10.
         assert "duty" in result["error"].lower()
     elif changed_field == "current_limits":
         assert record["current_limits_ma"][1] == 430.
@@ -711,16 +714,16 @@ def test_tuning_width_drift_over_thirty_percent_is_not_hidden_by_match_tolerance
     def mutate(name, values):
         nonlocal changed
         if name == "TuneToWW" and not changed:
-            transports.sdk.qcls[1][1] = 150.00002
+            transports.sdk.qcls[1][1] = 285.72
             changed = True
     transports.sdk.after_dispatch = mutate
-    result = make_runner(transports, mode, probe_rate_hz=1e6).prepare("preliminary")
+    result = make_runner(transports, mode, probe_rate_hz=1e6, probe_pulse_width_s=285.71e-9).prepare("preliminary")
     assert not result["complete"] and "duty" in result["error"].lower(), result
     _assert_no_emission_or_finite_start(transports)
     record = next(event["payload"] for event in load_run(result["output_path"])["events"]
                   if event["kind"] == "qcl_pre_emission_readback")
-    assert record["actual"]["pulse_width_ns"] > 150.
-    assert record["actual"]["pulse_rate_hz"] == 2e6
+    assert record["actual"]["pulse_width_ns"] > 285.71
+    assert record["actual"]["pulse_rate_hz"] == 1.05e6
 
 
 @pytest.mark.parametrize("mode", ["single", "dual"])

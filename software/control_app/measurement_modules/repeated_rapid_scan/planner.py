@@ -190,8 +190,10 @@ def resolve_intent_settings(intent: AcquisitionIntent | Mapping[str, Any], *, mo
     data = base.to_dict()
     data.update(live)
     data.update(manual)
-    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
-    data.update(mircat_pulse_rate_hz=MIRCAT_INTERNAL_RATE_HZ, mircat_pulse_width_ns=MIRCAT_INTERNAL_WIDTH_NS)
+    from control_app.measurement_host.laser_settings import MIRCAT_AUTO_REPETITION_RATE_HZ
+    data["probe_frequency_hz"] = manual.get("probe_frequency_hz") if manual.get("probe_frequency_hz") is not None else MIRCAT_AUTO_REPETITION_RATE_HZ
+    from control_app.measurement_host.laser_settings import mircat_acceptance_rate_hz, mircat_automatic_width_ns
+    data.update(mircat_pulse_rate_hz=mircat_acceptance_rate_hz(data["probe_frequency_hz"]), mircat_pulse_width_ns=mircat_automatic_width_ns(mircat_acceptance_rate_hz(data["probe_frequency_hz"])))
     from control_app.measurement_host.laser_settings import validate_laser_settings
     lasers = validate_laser_settings(base.laser_settings)
     if "fire_to_qswitch_us" in lasers:
@@ -285,8 +287,8 @@ def build_plan(settings: RepeatedRapidScanSettings | Mapping[str, Any], capabili
     from control_app.measurement_host.laser_settings import validate_laser_settings
     from dataclasses import replace
     lasers = validate_laser_settings(settings.laser_settings)
-    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
-    laser_overrides = {"mircat_pulse_rate_hz": MIRCAT_INTERNAL_RATE_HZ, "mircat_pulse_width_ns": MIRCAT_INTERNAL_WIDTH_NS}
+    from control_app.measurement_host.laser_settings import mircat_acceptance_rate_hz, mircat_automatic_width_ns
+    laser_overrides = {"mircat_pulse_rate_hz": mircat_acceptance_rate_hz(settings.probe_frequency_hz), "mircat_pulse_width_ns": mircat_automatic_width_ns(mircat_acceptance_rate_hz(settings.probe_frequency_hz))}
     if "fire_to_qswitch_us" in lasers:
         laser_overrides["fire_to_qswitch_s"] = lasers["fire_to_qswitch_us"] * 1e-6
     if "qcl_current_ma" in lasers:

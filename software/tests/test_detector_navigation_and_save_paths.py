@@ -247,6 +247,39 @@ def test_custom_destinations_are_per_tab_and_survive_restart(shell, tmp_path):
         restarted.deleteLater()
 
 
+def test_restored_dated_destination_uses_today_and_rolls_after_midnight(shell):
+    window, coordinator, preferences, _ = shell
+    stale = paths.RUN_ROOT / "2026-09-01" / "Slow Scan"
+    preferences.setValue("tab_save_locations/v1", {"steady_state_slow_scan:single": str(stale)})
+    restarted = main_window.ControlSystemMainWindow(window.command_handler, persist_settings=True)
+    try:
+        today = paths.RUN_ROOT / "2026-09-14" / "Slow Scan"
+        assert Path(restarted.save_location.text()) == today
+        item = handle(restarted, "steady_state_slow_scan:single")
+        operation = item.widget.context.begin_operation({})
+        assert operation.save_root == today
+        LocalDate.current = date(2026, 9, 15)
+        restarted._update_save_enabled()
+        tomorrow = paths.RUN_ROOT / "2026-09-15" / "Slow Scan"
+        assert Path(restarted.save_location.text()) == tomorrow
+        assert item.widget.context.begin_operation({}).save_root == tomorrow
+        assert operation.output_path.parent == today
+        assert not stale.exists() and not tomorrow.exists()
+    finally:
+        restarted._save_timer.stop()
+        restarted.deleteLater()
+
+
+def test_manually_selected_past_date_rolls_and_preserves_custom_suffix(shell, tmp_path):
+    window = shell[0]
+    selected = tmp_path / "custom" / "2026-09-01" / "trial group"
+    window.save_location.setText(str(selected))
+    window._apply_save_location()
+    expected = tmp_path / "custom" / "2026-09-14" / "trial group"
+    assert Path(window.save_location.text()) == expected
+    assert not expected.exists()
+
+
 def test_manual_token_pins_legacy_destination_even_without_a_running_widget(shell):
     window, coordinator, _, published = shell
     window.tabs.setCurrentWidget(window.mircat_widget)

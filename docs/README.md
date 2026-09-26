@@ -18,6 +18,30 @@ describes extensible single/dual measurement pages.
 - [MIRcat detector alignment](operating_procedures/mircat_detector_alignment_workflow.md)
 - [Segmented sweep](operating_procedures/mircat_sweep_scan_workflow.md)
 
+## MIRcat repetition rate across experiment tabs
+
+Each single/dual tab owns its MIRcat **Repetition Rate** request. **Auto is
+2 MHz**, independent of the T660 setting left by another experiment. For
+externally triggered continuous-probe experiments, T660 uses that rate and
+MIRcat's internal acceptance rate is 5% higher (2 MHz → 2.1 MHz). Existing optical
+width, duty, trigger-acceptance, timing-grid and connected-device limits still
+apply; an invalid combination is rejected rather than silently reducing the rate.
+Internal optical duty uses the **internal** rate: `rate_hz * width_ns / 1e9 <= 0.30`.
+Automatically selected widths keep the 142 ns default where valid and shorten to
+whole nanoseconds rounded down when a higher internal rate requires it. Thus
+2.1 MHz uses 142 ns (29.82%); 3.15 MHz uses 95 ns (29.925%). Explicit widths in
+Slow Scan and Single Pump Scan Burst are validated rather than silently clipped.
+Stricter device limits and actual SDK readbacks are still checked before emission.
+Prior device settings are preserved for restoration, not selected as Auto values.
+
+Slow Scan uses internally generated optical pulses at the selected rate and
+sets its electrical reference/frame clock from the same field; its external
+laser-trigger output remains OFF. CW mode uses the field only for electrical
+timing. Nanosecond Stroboscopy preserves its separated probe-event schedule;
+its field sets the internal MIRcat rate (Auto: 2 MHz), which must exceed the
+actual sparse trigger cadence. These are operational settings for functionality
+tests, not optical timing qualification.
+
 Scientific output, including readbacks and analysis, uses the central research-root
 setting. Browse selects a subdirectory of that root for the current page. Native
 records remain immutable inputs; derived results identify their source. A write

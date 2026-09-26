@@ -149,10 +149,10 @@ def test_old_condition_metadata_cannot_change_numeric_planning():
     assert compile_plan(hrp).blocks == compile_plan(mb).blocks
     resolved = resolve_settings(hrp, promoted_values={"record_id": "promoted-test-record", "values": {"probe_rate_hz": 123456}})
     assert resolved.probe_rate_hz == 2000000.
-    assert "automatic external carrier" in resolved.settings_sources["probe_rate_hz"]
+    assert "automatic 2 MHz" in resolved.settings_sources["probe_rate_hz"]
     assert hrp.probe_rate_hz is None
     assert resolve_settings(replace(hrp, probe_rate_hz=123456), installed_readbacks={"values": {"probe_rate_hz": 42}}).probe_rate_hz == 123456
-    assert resolve_settings(hrp, installed_readbacks={"values": {"probe_rate_hz": 123}}).probe_rate_hz == 123
+    assert resolve_settings(hrp, installed_readbacks={"values": {"probe_rate_hz": 123}}).probe_rate_hz == 2000000.
 
 
 def test_host_pending_upload_preserves_every_compiled_frame_and_acknowledges_progress():
@@ -335,9 +335,9 @@ def test_cached_qcl_one_values_preserve_independent_override_without_channel_rou
     second = compile_plan(request, cap)
     first = compile_plan(replace(request, scan_start_cm1=1820., scan_stop_cm1=1870.), cap)
     assert second.valid and first.valid
-    assert (second.settings.qcl, second.settings.probe_current_ma, second.settings.probe_rate_hz) == (1, 900., 1999999.98)
-    assert (first.settings.qcl, first.settings.probe_current_ma, first.settings.probe_rate_hz) == (1, 900., 1999999.98)
-    assert first.settings.mircat_internal_pulse_rate_hz == second.settings.mircat_internal_pulse_rate_hz == 2000000.
+    assert (second.settings.qcl, second.settings.probe_current_ma, second.settings.probe_rate_hz) == (1, 900., 2000000.)
+    assert (first.settings.qcl, first.settings.probe_current_ma, first.settings.probe_rate_hz) == (1, 900., 2000000.)
+    assert first.settings.mircat_internal_pulse_rate_hz == second.settings.mircat_internal_pulse_rate_hz == 2100000.
     assert second.settings.probe_pulse_width_s == first.settings.probe_pulse_width_s == 80e-9
     assert second.requested_settings.probe_current_ma is None
 
@@ -364,34 +364,34 @@ def test_saved_qcl_metadata_is_normalized_without_becoming_an_operating_route(le
 @pytest.mark.parametrize("cap_limit", [.3, .5, 1.0])
 def test_thirty_percent_duty_boundary_cannot_be_widened_by_capability(cap_limit):
     cap = Capabilities(probe_duty_max=cap_limit)
-    boundary = compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=2000000., probe_pulse_width_s=150e-9), cap)
+    boundary = compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=2000000., probe_pulse_width_s=285.71e-9), cap)
     assert boundary.valid, boundary.errors
-    excessive = compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=2000000., probe_pulse_width_s=150.001e-9), cap)
+    excessive = compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=2000000., probe_pulse_width_s=285.72e-9), cap)
     assert not excessive.valid and any("duty limit" in error for error in excessive.errors)
 
 
 def test_stricter_device_duty_limit_is_preserved():
     cap = Capabilities(probe_duty_max=.2)
-    assert compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=2000000., probe_pulse_width_s=100e-9), cap).valid
-    rejected = compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=2000000., probe_pulse_width_s=101e-9), cap)
+    assert compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=2000000., probe_pulse_width_s=190.47e-9), cap).valid
+    rejected = compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=2000000., probe_pulse_width_s=190.48e-9), cap)
     assert not rejected.valid and any("20% duty limit" in error for error in rejected.errors)
 
 
-def test_legacy_nanosecond_cache_preserves_exact_internal_thirty_percent_boundary():
+def test_legacy_nanosecond_cache_preserves_width_with_derived_internal_rate():
     cap = Capabilities(operating_values={"qcl": 1, "qcl_parameters": [
         {"qcl": 1, "pulse_rate_hz": 2000000., "pulse_width_ns": 150., "current_ma": 900.}]})
     boundary = compile_plan(Settings(probe_rate_hz=1000000.), cap)
     assert boundary.valid, boundary.errors
     assert boundary.settings.probe_pulse_width_s == 150e-9
-    assert boundary.estimates["mircat_internal_duty_fraction"] == .30
+    assert boundary.estimates["mircat_internal_duty_fraction"] == pytest.approx(.1575)
     above = replace(cap, operating_values={"qcl": 1, "qcl_parameters": [
-        {"qcl": 1, "pulse_rate_hz": 2000000., "pulse_width_ns": 150.000001, "current_ma": 900.}]})
+        {"qcl": 1, "pulse_rate_hz": 2000000., "pulse_width_ns": 300., "current_ma": 900.}]})
     rejected = compile_plan(Settings(probe_rate_hz=1000000.), above)
     assert not rejected.valid and any("internal rate" in error and "duty" in error for error in rejected.errors)
 
 
 def test_quantization_cannot_round_a_below_limit_request_above_duty_ceiling():
-    plan = compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=2000000.001, probe_pulse_width_s=149.9999999e-9))
+    plan = compile_plan(Settings(probe_rate_hz=2000000., probe_pulse_width_s=142.85714e-9))
     assert not plan.valid
     assert any("Quantized" in error and "duty" in error for error in plan.errors)
     assert not any("Requested" in error and "duty" in error for error in plan.errors)
@@ -420,28 +420,29 @@ def test_direct_probe_recipe_cannot_emit_above_thirty_percent_duty():
         probe_clock_recipe(Settings(), {"probe_rate_hz": 2000000., "probe_pulse_width_s": 151e-9})
 
 
-def test_preserved_internal_acceptance_rate_is_independent_of_external_override():
+def test_internal_acceptance_rate_tracks_external_override_with_five_percent_headroom():
     cap = Capabilities(operating_values={"qcl": 1, "probe_rate_hz": 2000000.,
         "mircat_internal_pulse_rate_hz": 2100000., "probe_pulse_width_s": 142e-9})
     plan = compile_plan(Settings(probe_rate_hz=1000000., mircat_internal_pulse_rate_hz=999.), cap)
     assert plan.valid, plan.errors
-    assert plan.settings.mircat_internal_pulse_rate_hz == 2100000.
+    assert plan.settings.mircat_internal_pulse_rate_hz == 1050000.
     assert plan.settings.probe_rate_hz == 1000000.
     assert plan.settings.probe_pulse_width_s == 142e-9
     assert plan.requested_settings.mircat_internal_pulse_rate_hz == 999.
-    assert plan.estimates["mircat_internal_duty_fraction"] == pytest.approx(.2982)
+    assert plan.estimates["mircat_internal_duty_fraction"] == pytest.approx(.1491)
     assert plan.estimates["external_probe_duty_fraction"] == pytest.approx(.142)
 
 
-def test_auto_external_carrier_is_on_grid_below_live_internal_rate_without_invented_margin():
+def test_auto_external_carrier_is_two_mhz_with_internal_headroom():
     cap = Capabilities(operating_values={"qcl": 1, "probe_rate_hz": 2000000.,
         "mircat_internal_pulse_rate_hz": 2000000., "probe_pulse_width_s": 142e-9})
     plan = compile_plan(Settings(), cap)
     assert plan.valid, plan.errors
-    assert plan.settings.probe_rate_hz == 1999999.98
-    assert plan.selected_values["probe_rate_hz"]["selected"] < 2000000.
+    assert plan.settings.probe_rate_hz == 2000000.
+    assert plan.selected_values["probe_rate_hz"]["selected"] == 2000000.
+    assert plan.settings.mircat_internal_pulse_rate_hz == 2100000.
     rejected = compile_plan(Settings(probe_rate_hz=2000000.), cap)
-    assert not rejected.valid and any("below the preserved MIRcat internal" in error for error in rejected.errors)
+    assert rejected.valid, rejected.errors
 
 
 def test_external_thirty_percent_does_not_override_stricter_internal_duty_requirement():
@@ -451,7 +452,7 @@ def test_external_thirty_percent_does_not_override_stricter_internal_duty_requir
 
 
 @pytest.mark.parametrize("limits,match", [
-    ({"mircat_internal_rate_max_hz": 2000000.}, "internal rate exceeds"),
+    ({"mircat_internal_rate_max_hz": 1000000.}, "internal rate exceeds"),
     ({"mircat_internal_width_max_s": 140e-9}, "optical pulse width exceeds"),
 ])
 def test_vendor_internal_limits_remain_applicable_when_external_rate_is_lower(limits, match):

@@ -357,9 +357,9 @@ class InstalledDevices:
         from .planner import mircat_pulse_errors
         mircat = self.services["mircat"]
         supplied = self.resolved.get("mircat", {})
-        from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
-        params = {"qcl": 1, "pulse_rate_hz": MIRCAT_INTERNAL_RATE_HZ,
-            "pulse_width_ns": MIRCAT_INTERNAL_WIDTH_NS}
+        from control_app.measurement_host.laser_settings import mircat_acceptance_rate_hz, mircat_automatic_width_ns
+        params = {"qcl": 1, "pulse_rate_hz": mircat_acceptance_rate_hz(self._external_probe_rate()),
+            "pulse_width_ns": mircat_automatic_width_ns(mircat_acceptance_rate_hz(self._external_probe_rate()))}
         sources = self.resolved.setdefault("value_sources", {})
         if sources.get("mircat.current_ma") == "user_override":
             low, high = mircat.get_qcl_current_limits(1)
@@ -367,7 +367,7 @@ class InstalledDevices:
                 raise RuntimeError("Requested MIRcat current exceeds installed QCL limits")
             params["current_ma"] = supplied["current_ma"]
         sources["mircat.pulse_width_ns"] = "provisional_internal_policy"
-        sources["mircat.pulse_rate_hz"] = "provisional_internal_policy"
+        sources["mircat.pulse_rate_hz"] = "5_percent_above_selected_T660_rate"
         sources["mircat.qcl"] = "single installed QCL 1"
         self.resolved["mircat"] = params
         self.resolved["qcl_ranges"] = [self._read_qcl1_range()]

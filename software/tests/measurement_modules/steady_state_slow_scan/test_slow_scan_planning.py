@@ -154,7 +154,7 @@ def test_plan_keeps_native_actual_values_and_detaches_input():
     raw["t660_frame_capacity"]=1
     inputs.scientific_profile["probe_rate_hz"]=1.
     assert plan.actual["t660_frame_capacity"]==8192
-    assert plan.inputs.scientific_profile["probe_rate_hz"]==100000.
+    assert plan.inputs.scientific_profile["probe_rate_hz"]==2000000.
     assert plan.estimates["wall_clock_is_lower_bound"]
     assert plan.estimates["wall_clock_s"] == pytest.approx(plan.estimates["sample_acquisition_s"]+plan.estimates["dark_s"])
 

@@ -187,16 +187,22 @@ def standardize_experiment_page(panel, experiment, mode):
     bar = QWidget()
     actions = QHBoxLayout(bar)
     actions.setContentsMargins(0, 4, 0, 0)
+    slow_scan = experiment == "steady_state_slow_scan"
+    # Both labels start the same unpumped sample scan on Slow Scan pages.
+    if slow_scan:
+        panel.sample_acquisition_button = QPushButton("Acquire Sample (Pump Off)")
+        panel.sample_acquisition_button.clicked.connect(panel.start_button.click)
+        panel.sample_acquisition_button.setEnabled(panel.start_button.isEnabled())
     slots = [("Acquire Blank", ("background_button",) if phase else ("blank_button", "acquire_blank_button")),
              ("Load Blank", ("load_background_button",) if phase else ("load_blank_button",)),
-             ("Acquire Sample (Pump Off)", ("test_button",) if phase else ("preliminary_button",)),
+             ("Acquire Sample (Pump Off)", ("sample_acquisition_button",) if slow_scan else ("test_button",) if phase else ("preliminary_button",)),
              ("Load Sample (Unpumped)", ("load_preliminary_button",)),
              ("Start Acquisition", ("start_button",)), ("Abort Acquisition", ("abort_button",)),
              ("New Run", ("new_run_button",))]
     panel.standard_actions = []
     for index, (title, names) in enumerate(slots):
         button = next((getattr(panel, name) for name in names if getattr(panel, name, None) is not None), None)
-        unsupported = (index < 2 and mode == "dual") or (index == 2 and experiment == "steady_state_slow_scan")
+        unsupported = index < 2 and mode == "dual"
         if button is None or unsupported:
             if button is not None:
                 button.hide()

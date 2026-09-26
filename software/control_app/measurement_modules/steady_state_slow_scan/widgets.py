@@ -147,7 +147,7 @@ class SlowScanSettingsWidget(QWidget):
     def _laser_mode_changed(self, *_):
         pulsed = self.laser_mode.currentData() == "pulsed"
         self.fields["current_ma"].setPlaceholderText("1000" if pulsed else "750")
-        for name in ("repetition_rate_hz", "pulse_width_s"):
+        for name in ("pulse_width_s",):
             self.fields[name].setEnabled(pulsed)
         if not self._applying:
             self.fields["current_ma"].setText("1000" if pulsed else "750")
@@ -162,7 +162,7 @@ class SlowScanSettingsWidget(QWidget):
         scales = {key: scale for key, _label, scale in self.AUTO_FIELDS}
         for key, editor in self.fields.items():
             text = editor.text().strip()
-            if values["laser_mode"] == "cw" and key in ("repetition_rate_hz", "pulse_width_s"):
+            if values["laser_mode"] == "cw" and key == "pulse_width_s":
                 try:
                     values[key] = None if not text or text.casefold() == "auto" else float(text) * scales[key]
                 except ValueError:
@@ -433,6 +433,8 @@ class SlowScanPanel(CompactMeasurementPanel):
 
     def _update_controls(self):
         super()._update_controls()
+        if hasattr(self, "sample_acquisition_button"):
+            self.sample_acquisition_button.setEnabled(self.start_button.isEnabled())
         if not self._busy and self.context.ownership.has_parked_session():
             self.abort_button.setEnabled(True)
 
@@ -454,6 +456,11 @@ class SlowScanPanel(CompactMeasurementPanel):
         self.begin_operation(kind, self.adapter.run_control, requires_valid_plan=kind != "capability")
 
     def _operation_finished(self, kind, outcome):
+        self._completion_label = {"completed": "Completed", "cancelled": "Stopped"}.get(outcome.state, "Failed")
+        if kind == "blank" and outcome.state == "failed":
+            self.status.setText(f"Blank failed: {outcome.error}")
+            if self.adapter.controls["blank"] is None:
+                self.status.setText(self.status.text() + "\nNo completed blank is available; sample acquisition remains disabled.")
         if kind == "close_prepared_new_run" and outcome.state == "completed":
             super().new_run()
         if outcome.state == "completed":
@@ -498,6 +505,7 @@ class SlowScanPanel(CompactMeasurementPanel):
     def _busy_update(self, busy):
         if busy:
             self._clock_start = time.monotonic()
+            self._completion_label = "Finished"
         self._tick()
         self._update_local_controls()
 
@@ -507,7 +515,7 @@ class SlowScanPanel(CompactMeasurementPanel):
         elapsed = time.monotonic() - self._clock_start
         estimate = self.adapter.estimated_seconds(self.plan)
         if not self.command_running():
-            self.elapsed.setText(f"Finished in {elapsed:.1f} s, including cleanup and saving.")
+            self.elapsed.setText(f"{self._completion_label} in {elapsed:.1f} s, including cleanup and saving.")
             self._clock_start = None
             return
         from control_app.measurement_host.experiment_summary import remaining_text

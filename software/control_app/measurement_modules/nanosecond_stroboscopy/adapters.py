@@ -385,9 +385,8 @@ class InstalledAdapter:
             self.readbacks["wavelength"] = {**actual, "wavenumber_cm1": value, "qcl": index}
             limits = qcl.get_qcl_pulse_limits(index)
             requests = self.settings.get("laser_settings", {})
-            from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
-            pulse = {"pulse_rate_hz": MIRCAT_INTERNAL_RATE_HZ,
-                     "pulse_width_ns": MIRCAT_INTERNAL_WIDTH_NS,
+            pulse = {"pulse_rate_hz": self.plan.resolved_settings.mircat_pulse_rate_hz,
+                     "pulse_width_ns": self.plan.resolved_settings.mircat_pulse_width_ns,
                      "current_ma": requests.get("qcl_current_ma", float(qcl.get_qcl_current(1)))}
             low, high = qcl.get_qcl_current_limits(1)
             if not low <= pulse["current_ma"] <= high:

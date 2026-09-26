@@ -15,6 +15,8 @@ from typing import Any, Mapping
 
 from .settings import PlannerInputs, QCLWindow, SlowScanSettings, SpectralSegment
 
+from control_app.measurement_host.laser_settings import MIRCAT_AUTO_REPETITION_RATE_HZ
+
 
 def _positive(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
@@ -149,7 +151,7 @@ def build_plan(settings, inputs=None):
     names = ("time_constant_s", "filter_order", "reference_time_constant_s", "reference_filter_order", "repetition_rate_hz", "pulse_width_s",
              "requested_sample_rate_hz", "requested_reference_sample_rate_hz")
     for name in names:
-        if settings.laser_mode == "cw" and name in ("repetition_rate_hz", "pulse_width_s"):
+        if settings.laser_mode == "cw" and name == "pulse_width_s":
             continue
         if getattr(settings, name) is not None and not _positive(getattr(settings, name)): errors.append(f"{name} must be Auto or finite and positive")
     if settings.current_ma is not None and (not isinstance(settings.current_ma, (int, float)) or isinstance(settings.current_ma, bool)
@@ -249,7 +251,7 @@ def build_plan(settings, inputs=None):
         return value
     pulse_params = deepcopy(profile.get("qcl_pulse_params", {}).get("1", {}))
     pulse_limits = inputs.actual_readbacks.get("qcl_pulse_limits", {}).get("1", {})
-    probe_rate = profile.get("probe_rate_hz")
+    probe_rate = settings.repetition_rate_hz if settings.repetition_rate_hz is not None else MIRCAT_AUTO_REPETITION_RATE_HZ
     if not _positive(probe_rate):
         readiness.append("Connect T660-1 to resolve the independent scan timing clock")
     selected["laser_mode"] = settings.laser_mode
@@ -261,7 +263,7 @@ def build_plan(settings, inputs=None):
     optical_width = (choose("pulse_width_s", pulse_params.get("pulse_width_ns", 0.) * 1e-9)
                      if settings.laser_mode == "pulsed" else pulse_params.get("pulse_width_ns", 150.) * 1e-9)
     selected["pulse_width_s"] = optical_width
-    optical_rate = (choose("repetition_rate_hz", pulse_params.get("pulse_rate_hz"))
+    optical_rate = (choose("repetition_rate_hz", MIRCAT_AUTO_REPETITION_RATE_HZ)
                     if settings.laser_mode == "pulsed" else pulse_params.get("pulse_rate_hz", 2_000_000.))
     selected["repetition_rate_hz"] = optical_rate
     if optical_width is not None:
@@ -406,13 +408,13 @@ def resolve_runtime_inputs(configuration, readbacks, settings=None):
     def node(suffix, default=None):
         return nodes.get(f"/{device}/{suffix}", {}).get("value", default)
     sample_caps, reference_caps = caps.get("sample", caps), caps.get("reference", {})
-    t1 = readbacks.get("t660_1", {})
     profile = {"hf2li": {"sigins": {}, "pll": {}}, "hf2li_capabilities": {"sample": sample_caps, "reference": reference_caps},
         "qcl_pulse_params": deepcopy(readbacks.get("qcl_pulse_params", {})), "marker_channel_by_qcl": {},
         "process_pulse_width_s": .010,
         "marker_width_s": (readbacks.get("marker_width_us") or 0)*1e-6,
         "requested_scan_speed_cm1_s": readbacks.get("sweep", {}).get("scan_rate_cm1_s"),
-        "probe_rate_hz": _numeric_readback(t1.get("queries", {}).get("synth_frequency")),
+        "probe_rate_hz": settings.repetition_rate_hz if settings is not None and settings.repetition_rate_hz is not None else MIRCAT_AUTO_REPETITION_RATE_HZ,
+        "probe_rate_basis": "Tab MIRcat repetition rate; Auto is 2 MHz; prior DDS rate is restoration state only",
         "probe_width_s": readbacks.get("probe_width_s"),
         "runtime_warnings": ["Controller ranges/settings are installed readbacks, not instrument calibration"]}
     for role, index in (("sample", 0), ("reference", 3), ("timing", 2)):
@@ -422,7 +424,7 @@ def resolve_runtime_inputs(configuration, readbacks, settings=None):
     for index in (0, 1):
         profile["hf2li"]["sigins"][f"ch{index+1}"] = {"index": index, "ac": False, "differential": False,
             "impedance_50ohm": bool(node(f"sigins/{index}/imp50", False)), "range_v": node(f"sigins/{index}/range")}
-    # Maintained wiring DIO0 uses PLL ADC selection 4; use live pulse frequency.
+    # Maintained wiring DIO0 uses PLL ADC selection 4 and this tab's timing rate.
     profile["hf2li"]["pll"] = {"index": 0, "enable": True, "adcselect": 4, "freqcenter_hz": profile["probe_rate_hz"],
         "harmonic": 1, "order": int(node("plls/0/order", 1)), "adcthreshold": int(node("plls/0/adcthreshold", 0))}
     windows = []

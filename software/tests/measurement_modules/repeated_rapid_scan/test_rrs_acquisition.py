@@ -565,7 +565,7 @@ class InstalledTransport:
             def put(values, pointers=args):
                 for pointer, value in zip(pointers, values): pointer._obj.value = value
             if key == 'TuneToWW' and self.fault in ('changed_width', 'changed_rate', 'changed_current'):
-                self.pulse[{'changed_rate': 0, 'changed_width': 1, 'changed_current': 2}[self.fault]] *= .9
+                self.pulse[{'changed_rate': 0, 'changed_width': 1, 'changed_current': 2}[self.fault]] *= .99
             elif key == 'TuneToWW' and self.fault == 'changed_external_rate':
                 self.units['COM3']['TRIG:FREQ:SYN'] = '4000000'
             elif key in ('Initialize', 'DeInitialize', 'TuneToWW', 'CancelManualTuneMode'): pass
@@ -906,12 +906,12 @@ def test_rrs_installed_failed_disarm_retains_fault_ownership_and_native_record(t
 
 
 @pytest.mark.parametrize('mode', ['single', 'dual'])
-def test_rrs_installed_qcl1_ignores_legacy_selector_and_accepts_exact_internal_duty_boundary(tmp_path, monkeypatch, mode):
+def test_rrs_installed_qcl1_ignores_legacy_selector_and_applies_internal_headroom(tmp_path, monkeypatch, mode):
     worker = Worker()
     ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, mode, worker,
         configuration_changes={'repeated_rapid_scan': {'qcl': 2, 'mircat_pulse': {'qcl': 2}}})
     initial = installed_plan(mode).settings
-    value = replace(initial, manual_overrides={**initial.manual_overrides, 'mircat_pulse_rate_hz': 2500000., 'mircat_pulse_width_ns': 120., 'probe_pulse_width_s': 700e-9})
+    value = replace(initial, manual_overrides={**initial.manual_overrides, 'mircat_pulse_rate_hz': 2500000., 'mircat_pulse_width_ns': 120., 'probe_pulse_width_s': 700e-9, 'probe_frequency_hz': 1000000.})
     plan = build_plan(value)
     operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
     with ctx.hardware_scope(operation):
@@ -922,9 +922,9 @@ def test_rrs_installed_qcl1_ignores_legacy_selector_and_accepts_exact_internal_d
     assert result['readbacks']['installed_qcl'] == 1
     assert transport.qcl_calls and all(index == 1 for _, index in transport.qcl_calls)
     assert {'TuneToWW','StartSweepScan','GetWlTrigChanParams','SetQCLParams'} <= {call for call,_ in transport.qcl_calls}
-    assert transport.pulse_writes[0] == (2100000., 142., 600.)
+    assert transport.pulse_writes[0] == (1050000., 142., 600.)
     assert transport.pulse_writes[-1] == (2500000., 100., 600.)
-    assert result['readbacks']['actual_mircat_internal_pulse_validation']['internal_duty_fraction'] == pytest.approx(.2982)
+    assert result['readbacks']['actual_mircat_internal_pulse_validation']['internal_duty_fraction'] == pytest.approx(.1491)
     assert result['readbacks']['actual_mircat_internal_pulse_validation']['emitted_optical_duty_fraction'] == pytest.approx(.142)
     assert result['raw_movies'][0]['readbacks']['pre_emission_optical_pulse_validation']['emitted_optical_duty_fraction'] == pytest.approx(.142)
     assert result['raw_movies'][0]['readbacks']['pre_emission_clock']['channels']['B']['width_edge']['response'] == '7e-07s'
@@ -932,13 +932,13 @@ def test_rrs_installed_qcl1_ignores_legacy_selector_and_accepts_exact_internal_d
     assert result['restoration']['safe_verified'] and coordinator.snapshot()['state'] == 'free'
 
 
-@pytest.mark.parametrize('width, vendor_limit', [(120.001, 29.), (100., 20.)])
+@pytest.mark.parametrize('width, vendor_limit', [(120.001, 14.), (100., 10.)])
 def test_rrs_installed_effective_config_pulse_pair_respects_global_and_lower_vendor_duty(tmp_path, monkeypatch, width, vendor_limit):
     worker = Worker()
     ctx, transport, coordinator = installed_context(tmp_path, monkeypatch, 'single', worker,
         configuration_changes={'repeated_rapid_scan': {'qcl': 2, 'mircat_pulse': {'qcl': 2, 'pulse_rate_hz': 2500000., 'pulse_width_ns': width}}})
     transport.vendor_duty_percent = vendor_limit
-    transport.pulse[1] = 60. if vendor_limit == 20. else 100.
+    transport.pulse[1] = 40. if vendor_limit == 10. else 50.
     plan = installed_plan('single')
     operation = ctx.begin_operation(plan.settings.to_dict(), hardware=True)
     with ctx.hardware_scope(operation):
@@ -1000,7 +1000,7 @@ def test_rrs_valid_optical_duty_keeps_separate_internal_external_rate_constraint
         acquirer = InstalledDevicesAcquirer(ctx, operation, plan)
         try:
             acquirer.prepare(worker)
-            assert transport.pulse_writes[0][:2] == (2100000., 142.)
+            assert transport.pulse_writes[0][:2] == (1050000., 142.)
         finally:
             restored = acquirer.restore(worker)
             ctx.ownership.release(operation.ownership, safe_verified=restored['safe_verified'], preservation_verified=True)

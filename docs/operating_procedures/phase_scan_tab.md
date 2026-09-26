@@ -14,9 +14,11 @@ Use **HF2LI CH1 SIG IN +** for both buffer and sample. Keep the detector, cell
 geometry, optical alignment and any diagnostic tee loading consistent between
 them. Configuration checks cannot detect a physical optical-path change. See
 [default wiring](../../instrument/default_wiring_state.md) for the fixed wiring.
-The fixed probe recipe uses 2 MHz external triggering with 150 ns TTL pulses;
-MIRcat internal acceptance settings are 2.1 MHz and 142 ns. These settings are
-displayed for reference and are not normal editable experiment controls.
+The MIRcat **Repetition Rate** field selects the T660 external trigger rate;
+Auto resolves to 2 MHz. Internal MIRcat acceptance runs 5% faster: 2.1 MHz for
+a 2 MHz request. TTL width remains 150 ns and internal pulse width 142 ns.
+The pump divider is calculated from the selected rate. Unsupported duty,
+reference frequency or non-integer pump-divider combinations are rejected.
 
 ## App-only acquisition
 
@@ -96,7 +98,7 @@ measurements even when its completed scan count is zero.
 ## Parameters and combination limits
 
 The editable pump rate is positive and no greater than 10 Hz. Its period must
-be exactly representable by the T660's integer predivider of the 2 MHz source
+be exactly representable by the T660's integer predivider of the selected source
 clock; 10, 5, 2 and 1 Hz are examples. The app rejects an unrepresentable cadence
 instead of rounding it. Start and stop are each limited to 1650–2050 cm⁻¹, must
 differ, and must fit inside one installed MIRcat QCL's tuning range for an

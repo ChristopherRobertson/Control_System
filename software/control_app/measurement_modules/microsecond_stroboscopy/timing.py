@@ -163,6 +163,10 @@ def compile_timing(settings: StroboscopySettings, delays_us: Iterable[float] | N
     optical_width_s = Decimal(str(t.mircat_pulse_width_ns)) * Decimal("1e-9")
     requested_duty = optical_width_s * Decimal(str(t.probe_rate_hz))
     commanded_duty = optical_width_s * Decimal(str(frequency))
+    from control_app.measurement_host.laser_settings import mircat_acceptance_rate_hz
+    internal_duty = optical_width_s * Decimal(str(mircat_acceptance_rate_hz(frequency)))
+    if internal_duty > duty_limit:
+        raise ValueError(f"MIRcat internal rate with 5% trigger headroom exceeds duty-cycle bound {duty_limit}")
     if requested_duty > duty_limit:
         raise ValueError(f"Requested MIRcat optical pulse width × repetition rate exceeds QCL1 duty-cycle bound {duty_limit} (30% maximum)")
     if commanded_duty > duty_limit:

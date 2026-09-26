@@ -119,6 +119,26 @@ def get_save_location() -> Path:
     return _selected_save_location or default_save_location()
 
 
+def current_save_destination(value: str | Path) -> Path:
+    """Roll a selected output folder's date forward without touching saved inputs.
+
+    The first complete ISO calendar-date component below the research root is
+    the output day. Undated custom destinations retain their chosen layout.
+    Callers use this only for new work, never an existing operation snapshot.
+    """
+    path = research_output_path(value, resolve=False)
+    parts = list(path.relative_to(RESEARCH_ROOT).parts)
+    for index, component in enumerate(parts):
+        try:
+            parsed = date.fromisoformat(component)
+        except ValueError:
+            continue
+        if parsed.isoformat() == component:
+            parts[index] = date.today().isoformat()
+            return RESEARCH_ROOT.joinpath(*parts)
+    return path
+
+
 def set_save_location(value: str | Path, *, create: bool = False) -> Path:
     """Select an output folder without creating it by default.
 

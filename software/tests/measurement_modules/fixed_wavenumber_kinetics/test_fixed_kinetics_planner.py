@@ -217,11 +217,13 @@ def test_legacy_temperature_and_fresh_state_metadata_never_limit_event_count():
     assert p.settings.fresh_state_record_ids == ("declared-fresh-state",)
 
 
-def test_probe_frequency_must_equal_actual_frame_input_carrier():
+def test_auto_probe_frequency_replaces_stale_recipe_and_frame_input_together():
     s, evidence = profile_case()
     evidence["operating_profile"]["probe_recipe"]["clock"]["frequency"] = "2kHz"
     p = build_plan(s, evidence=evidence)
-    assert any("frame-input frequency" in v for v in p.validation_errors)
+    assert not any("frame-input frequency" in v for v in p.validation_errors)
+    assert p.resolved["probe_recipe"]["clock"]["frequency"] == "2000000Hz"
+    assert p.resolved["timing"]["input_frequency_hz"] == 2_000_000.
 
 
 def test_diagnostic_thresholds_are_editable_and_estimates_include_prearm_capture():
@@ -315,7 +317,7 @@ def test_probe_and_pump_overrides_change_only_explicit_fields_and_required_carri
     p = build_plan(s, live_readbacks=live)
     assert p.operational_ready, p.readiness_items
     assert p.resolved["mircat"]["pulse_width_ns"] == 142.
-    assert p.resolved["mircat"]["pulse_rate_hz"] == 2_100_000.
+    assert p.resolved["mircat"]["pulse_rate_hz"] == 2100.
     assert p.resolved["probe_recipe"]["clock"]["frequency"] == "2000Hz"
     assert all(ch["width"] == "50ns" for ch in p.resolved["probe_recipe"]["channels"].values())
     assert p.resolved["timing"]["q_switch_width_s"] == .0002
@@ -335,7 +337,7 @@ def test_no_pump_ignores_unrelated_pump_input_clock_and_runtime_stream_qualifica
     assert p.total_pump_events == 0
 
 
-def test_external_probe_override_preserves_independent_internal_rate_and_provenance():
+def test_external_probe_override_derives_internal_headroom_and_provenance():
     s, evidence = profile_case()
     live = deepcopy(evidence["operating_profile"])
     live["mircat"]["pulse_rate_hz"] = 2_300_000.
@@ -345,7 +347,7 @@ def test_external_probe_override_preserves_independent_internal_rate_and_provena
     assert p.operational_ready, p.validation_errors
     assert p.resolved["mircat"]["pulse_rate_hz"] == 2_100_000.
     assert p.resolved["timing"]["input_frequency_hz"] == 2_000_000.
-    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "provisional_internal_policy"
+    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "5_percent_above_selected_T660_rate"
     assert p.resolved["value_sources"]["probe_rate_hz"] == "user_override"
 
 
@@ -372,12 +374,14 @@ def test_mircat_sdk_limits_use_internal_duty_percentage_and_no_invented_margin()
     assert mircat_pulse_errors(params, 1_900_000.) == ()
 
 
-def test_planner_reports_equal_internal_rate_and_sdk_limit_as_invalid_operating_values():
+def test_planner_checks_derived_internal_duty_and_sdk_limits():
     s, evidence = profile_case()
     live = deepcopy(evidence["operating_profile"])
     live["mircat"]["pulse_rate_hz"] = 1000.
     equal = build_plan(replace(s, probe_rate_hz=2_100_000.), live_readbacks=live)
-    assert not equal.ready and any("strictly greater" in error for error in equal.validation_errors)
+    assert equal.resolved["mircat"]["pulse_rate_hz"] == 2_205_000.
+    assert equal.resolved["mircat"]["pulse_width_ns"] == 136.
+    assert not any("duty" in error for error in equal.validation_errors)
     live["mircat"]["pulse_rate_hz"] = 3000.
     live["mircat_readback"] = {"pulse_limits": {"max_pulse_width_ns": 19.}}
     limited = build_plan(s, live_readbacks=live)
@@ -398,7 +402,7 @@ def test_stale_qcl2_route_becomes_qcl1_without_relabeling_pulse_or_limit_data(so
     assert p.resolved["mircat"] == {"qcl": 1, "pulse_rate_hz": 2_100_000., "pulse_width_ns": 142.}
     assert not p.resolved["mircat_readback"].get("pulse_limits")
     assert p.resolved["qcl_ranges"] == []
-    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "provisional_internal_policy"
+    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "5_percent_above_selected_T660_rate"
     assert p.evidence_records["historical_qcl_routing"][source]["mircat"] == old["mircat"]
     assert old["mircat"]["qcl"] == 2
 
@@ -416,7 +420,7 @@ def test_live_qcl1_overrides_saved_qcl2_without_inheriting_its_pulse_limits_or_r
     assert p.resolved["mircat"] == {"qcl": 1, "pulse_rate_hz": 2_100_000., "pulse_width_ns": 142.}
     assert p.resolved["qcl_ranges"] == live["qcl_ranges"]
     assert not p.resolved["mircat_readback"].get("pulse_limits")
-    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "provisional_internal_policy"
+    assert p.resolved["value_sources"]["mircat.pulse_rate_hz"] == "5_percent_above_selected_T660_rate"
     assert p.actual["installed_readbacks"] == live
     partial = deepcopy(live)
     partial["mircat"].pop("pulse_width_ns")

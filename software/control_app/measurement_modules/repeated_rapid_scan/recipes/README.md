@@ -11,14 +11,15 @@ review flags, descriptive temperature records nor preparation acknowledgements
 are prerequisites for recording native/relative data.
 
 Only MIRcat **QCL1** is addressed. **Repetition rate** sets the emitted T660
-external-trigger cadence (`probe_frequency_hz`) for MIRcat mode 2. **Pulse
-width** sets `mircat_pulse_width_ns` through the MIRcat SDK; it is distinct from
-the T660 TTL width. Both external cadence and automatic internal MIRcat rate
-must satisfy `rate_hz * actual_mircat_width_ns * 1e-9 <= 0.30`, together with
-stricter installed vendor limits. Internal rate must exceed external cadence.
-A missing MIRcat pulse member is resolved from the actual QCL1 readback before
-a change is applied; no counterpart is invented. Saved overrides receive the
-same pair validation. Device readbacks and the applied pair remain in the run.
+external-trigger cadence (`probe_frequency_hz`) for MIRcat mode 2. Auto selects
+2 MHz independently of prior device readbacks. Internal MIRcat acceptance is
+set 5% higher (2.1 MHz at 2 MHz), with an automatic optical width capped at 142 ns and shortened as needed for 30% internal duty.
+The visible pulse-width control sets the T660 TTL width independently. Both
+external cadence and internal MIRcat rate must satisfy
+`rate_hz * actual_mircat_width_ns * 1e-9 <= 0.30`, together with stricter installed
+vendor limits. Device readbacks, the applied pair and restoration of the original
+parameters remain in the run. Invalid combinations are rejected without reducing
+the requested rate.
 Saved UI settings migrate removed engineering controls into
 `historical_ui_settings`; only currently visible overrides and analysis windows
 are reused. Native run loading does not perform this settings migration.

@@ -56,6 +56,11 @@ Custom per-page destinations must also be under the research root. Invalid saved
 destinations remain visibly flagged until corrected. Each operation freezes its
 own destination. Nd:YAG device output uses the dated root without a tab-name folder.
 
+Dated save-folder preferences always use today's local date, including after
+restart and midnight rollover. Browsing to a past dated output folder selects
+the corresponding folder for today. Undated custom folders retain their layout;
+active operations keep their frozen destination and existing data are not moved.
+
 `CONTROL_SYSTEM_RUN_ROOT` and `CONTROL_SYSTEM_LOG_ROOT` remain supported as
 subdirectory overrides within the research root. Command logs and device readbacks
 live in `experiments/logs/` because they can contain measurement values. Ordinary

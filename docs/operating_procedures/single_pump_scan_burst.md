@@ -28,9 +28,9 @@ honors any stricter connected vendor limit.
 
 **Repetition rate** sets the external T660 probe trigger. **Pulse width** sets
 the MIRcat pulse duration and the corresponding T660 trigger width. The MIRcat
-internal pulse rate is preserved independently from its connected readback; it
-must exceed the external trigger rate, and its rate-times-width product must
-also satisfy the duty limit. A width can therefore be invalid even when the
+internal pulse rate is set 5% above that trigger rate (2 MHz to 2.1 MHz). Auto
+selects 2 MHz externally; previous rates are retained for restoration. The internal
+rate-times-width product must also satisfy the duty limit. A width can therefore be invalid even when the
 external trigger duty is exactly 30%. Both rates and the applied width are
 recorded and verified before emission.
 After each timing recipe is applied, the application reads and retains the

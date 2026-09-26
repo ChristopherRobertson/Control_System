@@ -6,7 +6,7 @@ configuration-only operation; no laser or timing output is started.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from fractions import Fraction
 import math
 
@@ -288,7 +288,7 @@ class RegularPhaseScanPlan(PhaseScanPlan):
             "settings": asdict(self.settings), "detector_input": "HF2LI CH1 SIG IN +",
             "derived": {"scan_duration_s": self.scan_duration_s, "total_scans": self.total_scans,
                 "total_pump_events": self.total_pump_events, "nominal_duration_s": self.nominal_duration_s,
-                "frame_period_s": self.frame_period_s, "frame_predivider": round(2e6*self.frame_period_s),
+                "frame_period_s": self.frame_period_s, "frame_predivider": round(self.settings.probe_repetition_rate_hz*self.frame_period_s),
                 "phase_first_us": self.first_phase_delay_us, "phase_last_us": self.last_phase_delay_us,
                 "phase_count_per_repetition": self.phases_per_repetition},
             "sequence": {"order": "one_unpumped_baseline_then_signed_phase_steps",
@@ -310,6 +310,7 @@ def build_regular_phase_scan_plan(settings=None, capabilities=None, overrides=No
     settings = settings or RegularPhaseScanSettings()
     if not isinstance(settings, RegularPhaseScanSettings):
         raise PhaseScanPlanError("Regular Phase Scan requires RegularPhaseScanSettings")
+    from control_app.measurement_host.laser_settings import mircat_acceptance_rate_hz
     bounds = {"pump_repetition_rate_hz": (0, 10), "pump_wavelength_nm": (1, 10000),
               "fire_to_qswitch_us": (1, 1_000_000), "qcl_current_ma": (1, 10_000), "start_wavenumber_cm1": (1650, 2050),
               "stop_wavenumber_cm1": (1650, 2050), "scan_speed_cm1_s": (1, 10000), "phase_delay_us": (1, 1000)}
@@ -324,7 +325,7 @@ def build_regular_phase_scan_plan(settings=None, capabilities=None, overrides=No
                 or value < 0 or (name.endswith("post_pump_ms") and value == 0)):
             raise PhaseScanPlanError(f"{name} must be finite and {'nonnegative' if name.endswith('pre_pump_ms') else 'positive'}")
     fixed = RegularPhaseScanSettings()
-    for name in ("probe_repetition_rate_hz", "probe_pulse_width_ns", "mircat_internal_repetition_rate_hz",
+    for name in ("probe_pulse_width_ns",
                  "mircat_internal_pulse_width_ns", "repetitions", "pump_reference"):
         if getattr(settings, name) != getattr(fixed, name):
             raise PhaseScanPlanError(f"{name} is fixed by the regular phase-scan instrument recipe")
@@ -336,9 +337,19 @@ def build_regular_phase_scan_plan(settings=None, capabilities=None, overrides=No
     caps = HF2Capabilities.from_dict(capabilities) if capabilities is not None else HF2Capabilities()
     if not any(min(start, stop) >= float(r[1]) and max(start, stop) <= float(r[2]) for r in caps.tuning_ranges):
         raise PhaseScanPlanError("Requested trajectory is not covered by a single installed MIRcat QCL; continuous phase scanning cannot switch QCLs")
-    divider = Fraction(2000000) / Fraction(str(settings.pump_repetition_rate_hz))
+    rate = settings.probe_repetition_rate_hz
+    if not _positive_finite(rate) or rate > 2_000_000.:
+        raise PhaseScanPlanError("MIRcat repetition rate must be positive and at most 2 MHz for the HF2LI DIO reference")
+    if Fraction(str(rate)) / Fraction("0.02") % 1:
+        raise PhaseScanPlanError("MIRcat repetition rate must lie on the T660 0.02 Hz DDS grid")
+    settings = replace(settings, mircat_internal_repetition_rate_hz=mircat_acceptance_rate_hz(rate))
+    if rate >= settings.mircat_internal_repetition_rate_hz:
+        raise PhaseScanPlanError("MIRcat internal rate must exceed the requested trigger rate")
+    if rate * settings.probe_pulse_width_ns * 1e-9 > .30 + 1e-12:
+        raise PhaseScanPlanError("Requested probe duty exceeds 30%")
+    divider = Fraction(str(rate)) / Fraction(str(settings.pump_repetition_rate_hz))
     if divider.denominator != 1 or not 1 <= divider <= 2**32-1:
-        raise PhaseScanPlanError("Pump cadence is not exactly supported by the 2 MHz T660 clock and 32-bit integer predivider; choose a representable rate (for example 10, 5, 2 or 1 Hz)")
+        raise PhaseScanPlanError("Pump cadence is not exactly supported by the requested MIRcat repetition rate and 32-bit integer predivider")
     scan_s = abs(Fraction(str(start))-Fraction(str(stop))) / Fraction(str(speed))
     spacing_s = Fraction(str(settings.phase_delay_us))/1000000
     before, after = settings.pre_pump_ms, settings.post_pump_ms

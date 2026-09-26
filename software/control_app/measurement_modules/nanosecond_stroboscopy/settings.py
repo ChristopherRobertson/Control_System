@@ -357,9 +357,11 @@ def resolve_settings(settings: Settings | Mapping[str, Any], capabilities: Mappi
             errors.append(f"Live/selected {name} is not a finite numeric value")
     if values["pump_command_width_ns"] is None:
         values["pump_command_width_ns"] = values["fire_command_width_ns"]
-    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
-    values.update(mircat_pulse_rate_hz=MIRCAT_INTERNAL_RATE_HZ, mircat_pulse_width_ns=MIRCAT_INTERNAL_WIDTH_NS)
+    from control_app.measurement_host.laser_settings import MIRCAT_AUTO_REPETITION_RATE_HZ, mircat_automatic_width_ns
+    internal_rate = lasers.get("probe_repetition_rate_hz", MIRCAT_AUTO_REPETITION_RATE_HZ)
+    values.update(mircat_pulse_rate_hz=internal_rate, mircat_pulse_width_ns=mircat_automatic_width_ns(internal_rate))
     sources["mircat_pulse_rate_hz"] = sources["mircat_pulse_width_ns"] = "Provisional internal MIRcat policy"
+    sources["mircat_pulse_rate_hz"] = "Tab MIRcat repetition rate; Auto is 2 MHz"
     if s.execution_mode == "simulation":
         values.update(irf_sigma_ns=s.irf_sigma_ns if s.irf_sigma_ns is not None else 12.0,
                       timing_jitter_ns=s.timing_jitter_ns if s.timing_jitter_ns is not None else 3.0,

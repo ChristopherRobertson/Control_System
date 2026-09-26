@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields, replace
 from copy import deepcopy
-from math import ceil, floor, isfinite, log10
+from math import ceil, isfinite, log10
 from typing import Any, Mapping
 
 EXPERIMENT_ID = "single_pump_scan_burst"
@@ -226,7 +226,9 @@ def resolve_settings(settings: Settings, *, capabilities: Capabilities | None = 
                      installed_readbacks: Mapping[str, Any] | None = None) -> Settings:
     """Resolve each automatic field independently, without qualification gates.
 
-    Live operating readbacks take precedence over module configuration defaults.
+    Detector readbacks take precedence over module configuration defaults.
+    The probe carrier instead uses the tab request or the 2 MHz Auto default;
+    its internal acceptance rate is derived with 5% headroom.
     Explicit non-None user values remain overrides except legacy QCL routing:
     the installed single-channel MIRcat always resolves to QCL 1. Evidence and sample
     metadata are preserved but never consulted to choose numerical settings.
@@ -279,24 +281,18 @@ def resolve_settings(settings: Settings, *, capabilities: Capabilities | None = 
     # Standing installed pulse topology; each value may be replaced independently
     # by its live readback or explicit override. A missing laser current is kept
     # as None so the service preserves the device's existing current.
-    # The internal acceptance clock is not the external optical-opportunity
-    # rate. Connected readback always wins over historical saved rate metadata.
-    if live.get("mircat_internal_pulse_rate_hz") is not None:
-        values["mircat_internal_pulse_rate_hz"] = live["mircat_internal_pulse_rate_hz"]
-        values["settings_sources"]["mircat_internal_pulse_rate_hz"] = "preserved QCL 1 internal acceptance-rate readback"
-    internal_rate = choose("mircat_internal_pulse_rate_hz", 2_100_000.0, "installed 2.1 MHz MIRcat acceptance-clock configuration")
-    choose("probe_pulse_width_s", 142e-9, "installed 142 ns MIRcat optical pulse configuration")
-    external_target = live.get("probe_rate_hz", configured.get("probe_rate_hz", 2_000_000.0))
-    quantum = cap.synthesizer_quantum_hz
-    if _positive(internal_rate) and _positive(external_target) and _positive(quantum):
-        external_target = min(external_target, (ceil(internal_rate / quantum) - 1) * quantum)
-        if _positive(values["probe_pulse_width_s"]) and _positive(cap.probe_duty_max):
-            external_target = min(external_target, floor(min(PROBE_DUTY_CEILING, cap.probe_duty_max) / values["probe_pulse_width_s"] / quantum) * quantum)
-        if _positive(cap.probe_rate_max_hz):
-            external_target = min(external_target, floor(cap.probe_rate_max_hz / quantum) * quantum)
+    # The internal acceptance clock is distinct from the external opportunity
+    # rate and is derived from the selected carrier, never stale readbacks.
+    from control_app.measurement_host.laser_settings import MIRCAT_AUTO_REPETITION_RATE_HZ
     if values["probe_rate_hz"] is None:
-        values["probe_rate_hz"] = external_target
-        values["settings_sources"]["probe_rate_hz"] = "automatic external carrier within preserved internal acceptance clock and duty limits"
+        values["probe_rate_hz"] = MIRCAT_AUTO_REPETITION_RATE_HZ
+        values["settings_sources"]["probe_rate_hz"] = "automatic 2 MHz; duty and acceptance limits validated without reducing the request"
+    from control_app.measurement_host.laser_settings import mircat_acceptance_rate_hz, mircat_automatic_width_ns
+    if _positive(values["probe_rate_hz"]):
+        values["mircat_internal_pulse_rate_hz"] = mircat_acceptance_rate_hz(values["probe_rate_hz"])
+        values["settings_sources"]["mircat_internal_pulse_rate_hz"] = "5% above selected T660 rate"
+    fallback_width = mircat_automatic_width_ns(values["mircat_internal_pulse_rate_hz"]) / 1e9 if _positive(values["probe_rate_hz"]) else 142e-9
+    choose("probe_pulse_width_s", fallback_width, "automatic MIRcat width bounded by 30% internal duty")
     choose("probe_current_ma", None, "preserve existing QCL current")
     choose("sample_input_range_v", 1.0, "installed HF2LI 1 V input range")
     choose("reference_input_range_v", 1.0, "installed HF2LI 1 V input range")

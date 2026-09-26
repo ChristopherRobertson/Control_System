@@ -164,7 +164,7 @@ class SettingsWidget(QWidget):
         overrides = dict(getattr(self._base, "manual_overrides", {}) or {})
         for key, control in self.override_inputs.items():
             text = (control.text() if isinstance(control, HF2LIValueInput) else control.currentText()).strip()
-            if not text or text.lower() == "automatic":
+            if not text or text.lower() in ("auto", "automatic"):
                 overrides.pop(key, None)
                 continue
             try:

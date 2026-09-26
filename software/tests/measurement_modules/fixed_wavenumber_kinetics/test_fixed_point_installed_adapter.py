@@ -504,13 +504,12 @@ def test_fixed_point_distinct_mircat_internal_and_external_rates_persist_across_
         original_init(service)
         service.pulses = persistent_pulses
     monkeypatch.setattr(Mircat, "__init__", persistent_init)
-    original_read = Timing.read_active_settings
-    def two_mhz_read(service):
-        state = original_read(service)
-        state["queries"]["synth_frequency"]["response"] = "2000000Hz"
-        state["queries"]["predivider"]["response"] = str(divider)
-        return state
-    monkeypatch.setattr(Timing, "read_active_settings", two_mhz_read)
+    original_timing_init = Timing.__init__
+    def previous_clock(service, state, name):
+        original_timing_init(service, state, name)
+        service.synth_frequency_hz = 2000000.
+        service.predivider = divider
+    monkeypatch.setattr(Timing, "__init__", previous_clock)
     fixture = build_connected_fixture(tmp_path, mode)
     for _ in range(2):
         operation = fixture.context.begin_operation(settings=fixture.settings.to_dict(), hardware=True)
@@ -520,8 +519,8 @@ def test_fixed_point_distinct_mircat_internal_and_external_rates_persist_across_
         assert result["plan"]["resolved"]["mircat"]["pulse_rate_hz"] == 2100000.
         assert result["plan"]["resolved"]["probe_recipe"]["clock"]["frequency"] == "2000000Hz"
         pulse = result["events"][0]["tuning"]["mircat_internal_pulse"]
-        assert result["plan"]["resolved"]["probe_recipe"]["predivider"] == divider
-        assert pulse["pulse_rate_hz"] == 2100000. and pulse["external_probe_rate_hz"] == 2000000./max(1, divider)
+        assert result["plan"]["resolved"]["probe_recipe"]["predivider"] == 1
+        assert pulse["pulse_rate_hz"] == 2100000. and pulse["external_probe_rate_hz"] == 2000000.
         assert persistent_pulses[1] == {"pulse_rate_hz": 2300000., "pulse_width_ns": 100.}
         assert result["restoration"]["safe_verified"] and result["preservation_verified"]
 
@@ -686,10 +685,10 @@ def test_fixed_point_changed_repetition_and_width_reach_qcl1_devices(tmp_path, m
     services = fixture.state["services"]
     assert result["status"] == "complete", result.get("error", result.get("cleanup_error"))
     pulse = result["events"][0]["tuning"]["mircat_internal_pulse"]
-    assert pulse == {"qcl": 1, "pulse_rate_hz": 2100000., "pulse_width_ns": 142., "external_probe_rate_hz": 80000.}
+    assert pulse == {"qcl": 1, "pulse_rate_hz": 84000., "pulse_width_ns": 142., "external_probe_rate_hz": 80000.}
     assert services["t660_1"].recipes[0]["clock"]["frequency"] == "80000Hz"
     assert services["hf2li"].configured_pll["freqcenter_hz"] == 80000.
-    assert services["mircat"].pulse_writes[0] == {"qcl": 1, "pulse_rate_hz": 2100000., "pulse_width_ns": 142.}
+    assert services["mircat"].pulse_writes[0] == {"qcl": 1, "pulse_rate_hz": 84000., "pulse_width_ns": 142.}
     assert services["mircat"].pulse_writes[-1] == {"qcl": 1, "pulse_rate_hz": 2300000., "pulse_width_ns": 100.}
     assert services["t660_1"].synth_frequency_hz == 100000.
     assert result["restoration"]["safe_verified"]

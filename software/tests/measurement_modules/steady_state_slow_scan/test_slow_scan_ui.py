@@ -70,6 +70,76 @@ def tabs(app, tmp_path):
     app.processEvents()
 
 
+@pytest.mark.parametrize("mode", ["single", "dual"])
+@pytest.mark.parametrize("action_index", [2, 4])
+def test_standard_actions_acquire_blank_then_sample(app, tabs, mode, action_index):
+    from control_app.measurement_host.uniform_layout import standardize_experiment_page
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+
+    panel = tabs[0][0 if mode == "single" else 1].widget
+    standardize_experiment_page(panel, "steady_state_slow_scan", mode)
+    panel.settings_editor.apply_settings(settings(mode))
+    inject_backend(panel)
+    blank_button, _, sample_button, _, start_button, _, new_button = panel.standard_actions
+    assert start_button is panel.start_button
+    assert sample_button.isEnabled() == start_button.isEnabled()
+    if mode == "single":
+        assert not sample_button.isEnabled()
+        blank_button.click()
+        wait_for(app, panel)
+        blank = panel.adapter.controls["blank"]
+        assert blank is not None, panel.status.text()
+        assert load_run(blank["path"])["status"] == "completed"
+    else:
+        assert not blank_button.isEnabled()
+    assert sample_button.isEnabled(), panel.validation.text()
+    assert start_button.isEnabled()
+    panel.standard_actions[action_index].click()
+    assert not sample_button.isEnabled()
+    assert not start_button.isEnabled()
+    wait_for(app, panel)
+    assert panel.result is not None, panel.status.text()
+    assert panel.result["kind"] == "measurement"
+    assert load_run(panel.result["path"])["status"] == "completed"
+    assert sample_button.isEnabled()
+    assert start_button.isEnabled()
+    new_button.click()
+    assert panel.adapter.controls["blank"] is None
+    assert sample_button.isEnabled() == (mode == "dual")
+
+    assert start_button.isEnabled() == (mode == "dual")
+
+
+def test_failed_blank_is_saved_but_does_not_enable_sample(app, tabs):
+    from control_app.measurement_host.uniform_layout import standardize_experiment_page
+    from control_app.measurement_modules.steady_state_slow_scan.runner import SyntheticSlowScanBackend
+    from control_app.measurement_modules.steady_state_slow_scan.persistence import load_run
+
+    class ReferenceTimeout(SyntheticSlowScanBackend):
+        def acquire_dark(self, plan, check, report):
+            raise TimeoutError("HF2LI reference lock timeout")
+
+    panel = tabs[0][0].widget
+    standardize_experiment_page(panel, "steady_state_slow_scan", "single")
+    panel.settings_editor.apply_settings(settings())
+    inject_backend(panel, ReferenceTimeout)
+    panel.standard_actions[0].click()
+    wait_for(app, panel)
+    record = load_run(panel.adapter.runner.last_result["path"])
+    assert record["status"] == "failed"
+    assert not record["sweeps"]
+    assert record["restoration"]["safe_verified"]
+    assert panel.adapter.controls["blank"] is None
+    assert not panel.standard_actions[2].isEnabled()
+    assert not panel.standard_actions[4].isEnabled()
+    assert panel.standard_actions[0].isEnabled()
+    assert "Blank failed" in panel.status.text()
+    assert "reference lock timeout" in panel.status.text()
+    assert "sample acquisition remains disabled" in panel.status.text()
+    assert panel.elapsed.text().startswith("Failed in ")
+    assert panel.context.ownership.snapshot()["state"] == "free"
+
+
 def test_compact_tabs_construct_without_devices_or_approval_state(app, tabs):
     from PySide6.QtWidgets import QCheckBox
     from control_app.measurement_host.presentation import CompactMeasurementPanel
@@ -242,7 +312,7 @@ def test_laser_mode_defaults_pulse_editability_and_inclusive_duty_limit(app, tab
             editor.read_settings()
         editor.laser_mode.setCurrentIndex(1)
         assert editor.fields["current_ma"].text() == "750"
-        assert not editor.fields["repetition_rate_hz"].isEnabled()
+        assert editor.fields["repetition_rate_hz"].isEnabled()
         assert not editor.fields["pulse_width_s"].isEnabled()
         saved = editor.read_settings()
         editor.apply_settings(saved)

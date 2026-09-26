@@ -1,6 +1,33 @@
 """Validation for optional laser requests, independent of UI and timer recipes."""
 import math
 
+MIRCAT_AUTO_REPETITION_RATE_HZ = 2_000_000.0
+
+
+def mircat_acceptance_rate_hz(trigger_rate_hz):
+    """Retain 5% internal acceptance headroom for externally triggered pulses."""
+    if (isinstance(trigger_rate_hz, bool) or not isinstance(trigger_rate_hz, (int, float))
+            or not math.isfinite(trigger_rate_hz) or trigger_rate_hz <= 0):
+        raise ValueError("MIRcat trigger repetition rate must be positive and finite")
+    return trigger_rate_hz * 1.05
+
+
+def mircat_automatic_width_ns(internal_rate_hz):
+    """Keep the existing 142 ns default, shortened to meet 30% internal duty.
+
+    Whole nanoseconds round down and are exactly representable by the SDK's
+    float32 width. Connected device limits/readbacks still require validation.
+    """
+    from decimal import Decimal, ROUND_FLOOR
+    if (isinstance(internal_rate_hz, bool) or not isinstance(internal_rate_hz, (int, float))
+            or not math.isfinite(internal_rate_hz) or internal_rate_hz <= 0):
+        raise ValueError("MIRcat internal repetition rate must be positive and finite")
+    maximum = (Decimal("300000000") / Decimal(str(internal_rate_hz))).to_integral_value(rounding=ROUND_FLOOR)
+    width = min(MIRCAT_INTERNAL_WIDTH_NS, float(maximum))
+    if width < MIRCAT_LIMITS["width"][0]:
+        raise ValueError("MIRcat internal rate cannot satisfy 30% duty at the minimum pulse width")
+    return width
+
 
 def validate_laser_settings(values):
     limits = {"pump_repetition_rate_hz": 10., "fire_to_qswitch_us": 1e6,

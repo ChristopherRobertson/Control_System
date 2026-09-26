@@ -505,20 +505,19 @@ def build_plan(settings: Settings | Mapping[str, Any], configuration: Mapping[st
     mircat = deepcopy(dict(resolved.get("mircat", {})))
     mircat["qcl"] = 1
     timing_values = deepcopy(dict(resolved.get("timing", {})))
-    if s.probe_rate_hz is not None:
-        # External trigger carrier updates its timing/reference recipients. The
-        # MIRcat internal pulse setting remains an independent device value.
-        probe.setdefault("clock", {})["frequency"] = f"{s.probe_rate_hz:.12g}Hz"
-        probe["predivider"] = 1
-        timing_values["input_frequency_hz"] = s.probe_rate_hz
-        resolved.setdefault("hf2li", {}).setdefault("pll", {})["freqcenter_hz"] = s.probe_rate_hz
-        sources["probe_rate_hz"] = "user_override"
-    else:
-        sources["probe_rate_hz"] = source_for("probe_recipe.clock.frequency")
+    from control_app.measurement_host.laser_settings import MIRCAT_AUTO_REPETITION_RATE_HZ
+    probe_rate = s.probe_rate_hz if s.probe_rate_hz is not None else MIRCAT_AUTO_REPETITION_RATE_HZ
+    # Program the external carrier and reference from this tab's request.
+    probe.setdefault("clock", {})["frequency"] = f"{probe_rate:.12g}Hz"
+    probe["predivider"] = 1
+    timing_values["input_frequency_hz"] = probe_rate
+    resolved.setdefault("hf2li", {}).setdefault("pll", {})["freqcenter_hz"] = probe_rate
+    sources["probe_rate_hz"] = "user_override" if s.probe_rate_hz is not None else "automatic_2_MHz"
     sources["mircat.qcl"] = "installed_topology_QCL1"
-    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_RATE_HZ, MIRCAT_INTERNAL_WIDTH_NS
-    mircat.update(pulse_rate_hz=MIRCAT_INTERNAL_RATE_HZ, pulse_width_ns=MIRCAT_INTERNAL_WIDTH_NS)
+    from control_app.measurement_host.laser_settings import mircat_acceptance_rate_hz, mircat_automatic_width_ns
+    mircat.update(pulse_rate_hz=mircat_acceptance_rate_hz(probe_rate), pulse_width_ns=mircat_automatic_width_ns(mircat_acceptance_rate_hz(probe_rate)))
     sources["mircat.pulse_rate_hz"] = sources["mircat.pulse_width_ns"] = "provisional_internal_policy"
+    sources["mircat.pulse_rate_hz"] = "5_percent_above_selected_T660_rate"
     if s.probe_width_ns is not None:
         for channel in probe.get("channels", {}).values():
             channel["width"] = f"{s.probe_width_ns:.12g}ns"

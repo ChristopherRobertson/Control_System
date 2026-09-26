@@ -242,8 +242,9 @@ def resolve_settings(settings: StroboscopySettings | Mapping[str, Any],
         for name in names:
             value = actual.get(f"{section}.{name}", timing_readbacks.get(name) if section == "timing" else None)
             automatic(section, name, value if value is not None else getattr(defaults, name))
-    from control_app.measurement_host.laser_settings import MIRCAT_INTERNAL_WIDTH_NS
-    data["timing"]["mircat_pulse_width_ns"] = MIRCAT_INTERNAL_WIDTH_NS
+    from control_app.measurement_host.laser_settings import mircat_automatic_width_ns, mircat_acceptance_rate_hz, MIRCAT_AUTO_REPETITION_RATE_HZ
+    automatic("timing", "probe_rate_hz", MIRCAT_AUTO_REPETITION_RATE_HZ)
+    data["timing"]["mircat_pulse_width_ns"] = mircat_automatic_width_ns(mircat_acceptance_rate_hz(data["timing"]["probe_rate_hz"]))
     if "fire_to_qswitch_us" in lasers:
         data["timing"]["fire_to_q_us"] = lasers["fire_to_qswitch_us"]
     gaps = [b-a for a,b in zip(sorted(set(settings.delays_us)), sorted(set(settings.delays_us))[1:]) if b>a]
@@ -480,6 +481,9 @@ def build_plan(settings: StroboscopySettings | Mapping[str, Any],
         first_program = next(iter(programs.values()))
         values["timing.probe_rate_hz"] = {"requested": t.probe_rate_hz, "selected": first_program.input_frequency_hz,
             "actual": cap.get("actual_values", {}).get("timing.probe_rate_hz"), "basis": "T660 0.02 Hz DDS quantization"}
+        from control_app.measurement_host.laser_settings import mircat_acceptance_rate_hz
+        values["mircat_internal_rate_hz"] = {"selected": mircat_acceptance_rate_hz(first_program.input_frequency_hz),
+            "actual": None, "basis": "5% above selected T660 trigger rate"}
         values["timing.event_interval_s"] = {"requested": t.event_interval_s, "selected": first_program.frame_period_s,
             "actual": None, "basis": "integer predivider rounded upward; no optical cadence inferred"}
         blocks = _make_blocks(s, programs, kind=kind)

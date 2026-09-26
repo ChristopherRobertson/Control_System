@@ -145,11 +145,11 @@ def test_ns_optical_live_values_preserve_vendor_limits_and_distinguish_external_
     s = Settings(mircat_pulse_rate_hz=123, mircat_pulse_width_ns=999)
     p = build_plan(s, {**CAPS, **optical})
     assert not p.errors
-    assert p.resolved_settings.mircat_pulse_rate_hz == 2100000
+    assert p.resolved_settings.mircat_pulse_rate_hz == 2000000
     assert p.resolved_settings.mircat_pulse_width_ns == 142
     assert p.resolved_settings.probe_command_width_ns == 100  # Independent electrical TTL width.
     assert p.timing["input_frequency_hz"] == 1
-    changed = build_plan(s, {**CAPS, **optical, "mircat_max_pulse_rate_hz": 2000000})
+    changed = build_plan(s, {**CAPS, **optical, "mircat_max_pulse_rate_hz": 1900000})
     assert not changed.events and any("configured optical pulse rate" in e for e in changed.errors)
     lower_vendor = build_plan(s, {**CAPS, **optical, "mircat_max_duty_fraction": .25})
     assert any("vendor duty" in e for e in lower_vendor.errors)
@@ -162,7 +162,7 @@ def test_ns_optical_live_values_preserve_vendor_limits_and_distinguish_external_
     assert not optical_pulse_errors(None, None)
     pending = build_plan(s)
     assert not pending.errors
-    assert pending.resolved_settings.mircat_pulse_rate_hz == 2100000
+    assert pending.resolved_settings.mircat_pulse_rate_hz == 2000000
     assert pending.resolved_settings.mircat_pulse_width_ns == 142
 
 

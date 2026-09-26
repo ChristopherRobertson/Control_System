@@ -14,22 +14,33 @@ have independent settings, controls and results.
    **MIRcat Settings** offers **Pulsed** (default) or **Continuous Wave**.
    Selecting a mode resets **Current** to **1000 mA** for Pulsed or **750 mA** for CW.
    The current remains editable and is checked against that mode's connected QCL limits.
-   Repetition rate and **Pulse width** are editable only in Pulsed mode, defaulting
-   to **2 MHz** and **150 ns**. These program the MIRcat's internal pulse generator;
-   the independent T660 clock schedules scan Process Triggers. Repetition rate in Hz
+   **Repetition rate** defaults to **2 MHz**; Auto also selects **2 MHz**.
+   **Pulse width** is editable only in Pulsed mode and defaults to **150 ns**.
+   In Pulsed mode these program the MIRcat's internal pulse generator;
+   the independent T660 clock schedules scan Process Triggers. Slow Scan explicitly
+   programs T660-1 to this tab's selected **Repetition rate** for the HF2LI DIO0 reference on A and the frame
+   input on C, in both Pulsed and CW modes. It does not inherit the Nd:YAG
+   workflow's 10 Hz synthesizer setting. The previous synthesizer setting is
+   retained for restoration; T660-1 B stays OFF. Repetition rate in Hz
    multiplied by pulse width in seconds must not exceed the smaller of 0.30
    and the connected controller's
    duty limit. The defaults give exactly **30%**. CW has no pulse duty limit;
-   dormant pulse settings are retained but do not determine CW output.
+   the repetition-rate field still selects the electrical reference/frame clock.
+   Dormant optical pulse settings are retained but do not determine CW output.
    Connected frequency and pulse-width limits also apply in Pulsed mode.
    **Sampling rate (Sa/s)** in **HF2LI Settings**
    accepts a supported detector sampling rate or **Auto**. Dual mode has independent
    sample and reference sampling-rate controls.
-2. In single mode, load the background when a blank is wanted and acquire
-   **Blank**. Then load the sample and acquire **Sample**. Detector dark data
-   are acquired automatically
-   when no compatible dark is available. A blank is optional for raw sample data;
-   in dual mode sample and reference are recorded together.
+2. In single mode, place the blank in the beam and click **Acquire Blank**, or
+   use **Load Blank** to select a completed native blank. After the blank finishes
+   and is retained, **Start Acquisition** becomes available. Replace the
+   blank with the sample and click it to record the sample spectra.
+   **Acquire Sample (Pump Off)** is an equivalent action; both buttons start the
+   same unpumped scan and share readiness and busy state. In dual mode, either
+   button records sample and reference together without a separate blank. Detector dark data
+   are acquired automatically when no compatible dark is available. The single
+   tab requires a completed blank before sample acquisition; incompatible blank
+   normalization can still leave a raw sample result.
 3. Inspect each recorded scan. Select raw signals,
    reference-normalized ratio or available absorbance. Numeric coordinates
    select actual observations. Acquisition does not assume a peak model or fit
@@ -44,6 +55,18 @@ specified operating rule below: proportional to current below 500 mA, linear
 between the listed higher-current points, with a 1 mV floor and a 2 V cap.
 Both detector inputs use this rule. It is an operating rule, not an instrument
 calibration.
+
+If blank acquisition reports **HF2LI reference lock timeout**, it failed to
+establish the timing-reference lock. This can occur during automatic dark
+preparation, before any blank sweep is recorded. Cleanup and saving a failed-run
+record do not make that record a completed blank. The elapsed status reports
+**Failed**, and sample acquisition remains disabled unless a completed blank is
+already retained. Inspect the saved error and health readbacks when diagnosing
+the T660-1 A to HF2LI DIO0 reference path; the timeout alone does not identify
+the cause. Do not treat a failed record as a usable blank or bypass the lock check.
+The native `reference_lock_waits` readbacks retain the expected reference rate,
+started T660-1 settings, oscillator-frequency observations and lock status (or
+diagnostic read errors). The lock wait remains bounded at 10 seconds.
 
 | Current (mA) | Requested range (V) |
 | --- | --- |
@@ -68,7 +91,7 @@ required for ordinary raw or relative spectra. Applicable optional calibrations
 can improve the reported physical quantities; missing calibration remains visible
 as a limitation of the result.
 
-**Stop** stops only this tab's operation. Native observations and partial results
+**Abort Acquisition** stops only this tab's operation. Native observations and partial results
 are preserved while the software attempts restoration and verifies outputs OFF.
 A normal stop is reported as **Acquisition stopped**; actual device, cleanup and
 storage errors remain visible. Physical instrument access, including discovery,

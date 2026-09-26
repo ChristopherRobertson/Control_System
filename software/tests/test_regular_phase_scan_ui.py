@@ -629,3 +629,19 @@ def test_failed_device_check_retains_editable_choices_and_retry_recovers(qt_app,
     finally:
         wait_for(qt_app, lambda: not widget.command_running())
         widget.deleteLater()
+
+
+def test_mircat_rate_control_supports_explicit_rate_and_auto(qt_app):
+    from control_app.ui.widgets.phase_scan_widget import PhaseScanWidget
+    widget = PhaseScanWidget(runner=RegularPhaseScanRunner(lambda: None, capabilities=capabilities()))
+    try:
+        control = widget.inputs["probe_repetition_rate_hz"]
+        control.setValue(1_000_000.)
+        assert widget.settings().probe_repetition_rate_hz == 1_000_000.
+        assert widget.plan.settings.mircat_internal_repetition_rate_hz == 1_050_000.
+        control.setValue(0.)
+        assert "Auto" in control.text()
+        assert widget.settings().probe_repetition_rate_hz == 2_000_000.
+        assert widget.plan.settings.mircat_internal_repetition_rate_hz == 2_100_000.
+    finally:
+        widget.close()

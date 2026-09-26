@@ -206,8 +206,7 @@ class ConnectedBurstAdapter:
             trajectory.setdefault("marker_interval_cm1", interval)
             trajectory.setdefault("marker_width_us", max(1, min(65535, int(interval / speed * 1e6 / 4))))
         width = selected.get("probe_pulse_width_s", self.settings.probe_pulse_width_s)
-        internal_rate = field(field(self.plan.capabilities, "operating_values", {}), "mircat_internal_pulse_rate_hz",
-                              field(self.settings, "mircat_internal_pulse_rate_hz"))
+        internal_rate = self.settings.mircat_internal_pulse_rate_hz
         self.recipe["qcl_pulse_parameters"] = {"qcl": 1,
             "pulse_rate_hz": internal_rate, "pulse_width_ns": None if width is None else width * 1e9,
             "current_ma": self.settings.probe_current_ma}

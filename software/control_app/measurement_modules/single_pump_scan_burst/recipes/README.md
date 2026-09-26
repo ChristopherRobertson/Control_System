@@ -10,10 +10,10 @@ Connected discovery reads QCL1's spectral range and pulse parameters/current.
 The installed laser contains exactly one QCL; all operations use QCL1 even when
 stored requested settings name another channel. HF2LI rates and filter settings are selected from
 supported values within aggregate throughput. Provisional offline requests are
-labeled as such and resolved again against connected capabilities. The maintained
-2 MHz external trigger and 2.1 MHz/142 ns internal MIRcat configuration supply
-fallbacks. Connected operation preserves the independent MIRcat internal rate;
-the visible repetition override sets the external T660 rate and the visible
+labeled as such and resolved again against connected capabilities. Auto selects a
+2 MHz external trigger regardless of prior readbacks. The internal MIRcat rate
+is 5% higher (2.1 MHz at 2 MHz); 142 ns is the offline optical-width default.
+The visible repetition override sets the external T660 rate and the visible
 pulse-width override sets the MIRcat pulse width and T660 trigger width. The
 internal rate must exceed the external rate, and both rate-times-width products
 must satisfy the duty limit. The nominal 179830 ns Fire-to-Q-switch delay is a

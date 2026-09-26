@@ -664,13 +664,37 @@ class InstalledSlowScanBackend:
 
     def _wait_reference_lock(self, check, timeout_s=10.):
         """Reference-only preparation; hardware frames still schedule all edges."""
-        deadline = monotonic() + timeout_s
+        rate = self.plan.selected["probe_rate_hz"]
+        if not math.isfinite(rate) or rate <= 0:
+            raise ValueError("A positive reference frequency is required for the lock wait")
+        check()
+        diagnostics = {"expected_reference_hz": rate, "timeout_s": timeout_s,
+                       "observations": [], "state": "waiting"}
+        self.readbacks.setdefault("reference_lock_waits", []).append(diagnostics)
+        try:
+            diagnostics["t660_1_started"] = self.units["t660_1"].read_active_settings()
+        except Exception as exc:
+            diagnostics["t660_1_read_error"] = str(exc)
+        started = monotonic()
+        deadline = started + timeout_s
         while True:
             check()
-            if self._health(allow_reference_unlock=True)["reference_locked"]:
+            health = self._health(allow_reference_unlock=True)
+            observation = {"elapsed_s": monotonic() - started, "reference_locked": health["reference_locked"]}
+            try:
+                observation["oscillator_hz"] = self.hf.get_oscillator_frequency(0)
+            except Exception as exc:
+                observation["read_error"] = str(exc)
+            diagnostics["observations"].append(observation)
+            if health["reference_locked"]:
+                diagnostics["state"] = "locked"
                 return
             if monotonic() >= deadline:
-                raise TimeoutError("HF2LI reference lock timeout")
+                diagnostics["state"] = "timeout"
+                observed = observation.get("oscillator_hz")
+                frequency_text = f"{observed:g} Hz" if observed is not None else "unavailable"
+                raise TimeoutError(f"HF2LI reference lock timeout after {timeout_s:g} s: "
+                    f"expected {rate:g} Hz on DIO0; oscillator readback {frequency_text}, PLL unlocked")
             self._wait(min(.025, deadline - monotonic()), check)
 
     def _health(self, *, allow_reference_unlock=False):

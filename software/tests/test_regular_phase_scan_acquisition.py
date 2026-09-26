@@ -78,6 +78,8 @@ class RegularHF(FakeHF):
         for path, entry in snapshot["nodes"].items():
             self._set_node("setDouble", path, entry["value"])
     compare_settings_snapshots = HF2LIService.compare_settings_snapshots
+    def get_oscillator_frequency(self, index):
+        return self.plan.settings.probe_repetition_rate_hz
     def create_daq_module(self):
         module = RegularModule(self)
         self.modules.append(module)
@@ -114,8 +116,13 @@ class RegularTimer(BlockTimer):
                 for edge, key in ((rise, "delay"), (rise+1, "width")):
                     value = self.absolute[edge]-self.absolute.get(self.references[edge], 0.)
                     self.channels[channel][key] = f"{value:.12f}s"
+    def configure_continuous_clock(self, **kwargs):
+        recipe = super().configure_continuous_clock(**kwargs)
+        recipe["clock"]["frequency"] = f"{kwargs['frequency_hz']:.12g}Hz"
+        self.apply_recipe(recipe)
+        return recipe
     def preload_frame_table(self, frames, **kwargs):
-        assert kwargs["predivider"] == round(self.world.hf.plan.frame_period_s*2e6)
+        assert kwargs["predivider"] == round(self.world.hf.plan.frame_period_s*self.world.hf.plan.settings.probe_repetition_rate_hz)
         self.frames = frames
         self.world.trace.append("frame_table_preload")
         return {"physical_frame_count": max(2, len(frames)), "acquisition_frame_count": len(frames)}
@@ -432,8 +439,9 @@ def test_regular_memory_preflight_uses_available_ram_not_advisory_budget(tmp_pat
     adapter.close()
 
 
-def test_user_cadence_and_scan_speed_drive_one_whole_sequence(tmp_path):
-    settings = RegularPhaseScanSettings(pump_repetition_rate_hz=5., scan_speed_cm1_s=5000., phase_delay_us=1000.)
+@pytest.mark.parametrize("probe_rate", [1_000_000., 2_000_000.])
+def test_user_cadence_and_scan_speed_drive_one_whole_sequence(tmp_path, probe_rate):
+    settings = RegularPhaseScanSettings(probe_repetition_rate_hz=probe_rate, pump_repetition_rate_hz=5., scan_speed_cm1_s=5000., phase_delay_us=1000.)
     rig, adapter, events = regular_fixture(tmp_path, settings=settings)
     blocks = adapter.prepare_blocks(adapter.plan, events, rig.cancel)
     raw, records = adapter.capture_block(blocks[0], rig.cancel)
@@ -441,7 +449,8 @@ def test_user_cadence_and_scan_speed_drive_one_whole_sequence(tmp_path):
     assert rig.laser.sweep["scan_rate_cm1_s"] == 5000.
     assert adapter.preparation_readback["effective_pump_repetition_rate_hz"] == 5.
     preflight = json.loads((tmp_path/"acquisition_preflight.json").read_text())
-    assert preflight["timing_recipe"]["frame_predivider"] == 400000
+    assert preflight["timing_recipe"]["frame_predivider"] == round(probe_rate / 5.)
+    assert adapter.plan.settings.mircat_internal_repetition_rate_hz == probe_rate * 1.05
     assert raw["labone"]["read_call_count"] == 3
     adapter.close()
 

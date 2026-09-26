@@ -291,6 +291,9 @@ class PhaseScanWidget(QWidget):
                 spin.setObjectName(key)
                 spin.setDecimals(decimals)
                 spin.setRange(low, high)
+                if key == "probe_repetition_rate_hz":
+                    spin.setMinimum(0)
+                    spin.setSpecialValueText("Auto (2 MHz)")
                 spin.setSingleStep(step)
                 spin.setSuffix(suffix)
                 spin.setValue(getattr(defaults, key))
@@ -473,8 +476,10 @@ class PhaseScanWidget(QWidget):
         self.latest_scan_received.connect(self.set_latest_scan)
 
     def settings(self):
+        from control_app.measurement_host.laser_settings import MIRCAT_AUTO_REPETITION_RATE_HZ
         return self.settings_type(**{
-            key: widget.text() if isinstance(widget, QLineEdit) else widget.value()
+            key: (widget.text() if isinstance(widget, QLineEdit) else
+                  MIRCAT_AUTO_REPETITION_RATE_HZ if key == "probe_repetition_rate_hz" and widget.value() == 0 else widget.value())
             for key, widget in self.inputs.items()
         })
 

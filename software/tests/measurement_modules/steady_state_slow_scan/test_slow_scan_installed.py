@@ -617,6 +617,39 @@ def test_reference_lock_wait_is_bounded_cancellable_and_retains_observations(tmp
     context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True, detail="Reference wait retained")
 
 
+@pytest.mark.parametrize("laser_mode", ["pulsed", "cw"])
+def test_slow_scan_replaces_ndyag_clock_and_restores_it(tmp_path, monkeypatch, laser_mode):
+    context, _, operation, backend, draft, _, services = configured(tmp_path, monkeypatch, live=True)
+    original = backend._create
+    def create(name):
+        device = original(name)
+        if name == "t660_1":
+            device.frequency_hz = 10.
+        return device
+    monkeypatch.setattr(backend, "_create", create)
+    with context.hardware_scope(operation):
+        plan = backend.resolve_plan(replace(draft.settings, laser_mode=laser_mode,
+            current_ma=750. if laser_mode == "cw" else 1000.), lambda: None)
+        assert plan.actual["t660_1"]["queries"]["synth_frequency"]["response"] == "10Hz"
+        assert plan.selected["probe_rate_hz"] == 2_000_000.
+        assert plan.selected["hf2li"]["pll"]["freqcenter_hz"] == 2_000_000.
+        compiled = compile_timing(plan)
+        backend.prepare(plan, compiled, lambda: None, lambda *args: None)
+        assert services["t660_1"].frequency_hz == 2_000_000.
+        assert not services["t660_1"].channels["B"]
+        services["hf2li"].nodes["/devTEST/oscs/0/freq"] = {"type": "double", "value": 2_000_000.}
+        backend.acquire_dark(plan, lambda: None, lambda *args: None)
+        diagnostic = backend.readbacks["reference_lock_waits"][-1]
+        assert diagnostic["state"] == "locked"
+        assert diagnostic["observations"][-1]["oscillator_hz"] == 2_000_000.
+        assert diagnostic["t660_1_started"]["queries"]["synth_frequency"]["response"] == "2000000Hz"
+        restored = backend.restore()
+        assert services["t660_1"].frequency_hz == 10.
+    assert restored["safe_verified"], restored["errors"]
+    context.ownership.release(operation.ownership, safe_verified=True, preservation_verified=True,
+                              detail="Slow Scan owns its clock; prior Nd:YAG clock restored")
+
+
 def test_runtime_auto_probe_width_uses_absolute_edges_in_rise_fall_mode(tmp_path, monkeypatch):
     context, _, operation, backend, draft, _, services = configured(tmp_path, monkeypatch, live=True)
     original = backend._create
@@ -630,7 +663,7 @@ def test_runtime_auto_probe_width_uses_absolute_edges_in_rise_fall_mode(tmp_path
     monkeypatch.setattr(backend, "_create", create)
     with context.hardware_scope(operation):
         plan = backend.resolve_plan(draft.settings, lambda: None)
-        assert plan.selected["probe_width_s"] == pytest.approx(1e-6)
+        assert plan.selected["probe_width_s"] == pytest.approx(.25e-6)
         assert plan.actual["t660_1"]["channels"]["B"]["width_edge"]["response"] == "4e-06s"
         restored = backend.restore()
     assert restored["safe_verified"], restored["errors"]

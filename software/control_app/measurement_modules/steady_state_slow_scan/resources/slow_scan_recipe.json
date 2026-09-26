@@ -10,7 +10,7 @@
   "standing_exclusions": ["t660_1.D", "t660_2.D", "hf2li.DIO1", "mircat.DB9.5", "mircat.DB9.6", "mircat.DB9.8"],
   "timing": {
     "laser_pulses": "MIRcat internal pulse generator in Pulsed mode; continuous emission in CW mode",
-    "probe_clock": "t660_1.A supplies the timing reference; B remains OFF",
+    "probe_clock": "t660_1.A follows this tab's MIRcat Repetition Rate (Auto: 2 MHz) in Pulsed and CW modes; B remains OFF; prior DDS rate is restoration state only",
     "frame_clock": "t660_1.C to t660_2.TRIG_IN",
     "process": "t660_2.C active-low to mircat.DB9.4; finite frame schedule",
     "upload": "T660Service.preload_frame_table with acknowledged pending fields and cancellation",

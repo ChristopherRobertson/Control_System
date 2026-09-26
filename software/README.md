@@ -23,6 +23,12 @@ cancellation to six experiment modules. See the
 connect hardware implicitly during tests. Real operations require exclusive
 ownership until cleanup and native-data preservation finish.
 
+Experiment MIRcat repetition rates are local to each tab. Auto selects 2 MHz;
+externally triggered modes select a 5% higher internal acceptance rate using
+`measurement_host.laser_settings.mircat_acceptance_rate_hz`. Planners and device
+adapters must use the same selection and validate limits without substituting
+prior T660 readbacks. See the [rate policy and mode exceptions](../docs/README.md#mircat-repetition-rate-across-experiment-tabs).
+
 ## Resources and output
 
 Runtime recipes, device identities and selected parameters live in
@@ -47,3 +53,7 @@ injected transports and isolated temporary research storage. They require no
 experimental dataset. Native-format tests preserve supported field meanings,
 array values and missing-data masks. Passing tests does not establish physical
 safe state, optical timing or detector response.
+
+Automatic MIRcat optical widths are bounded by 30% duty at the internal rate
+(including external-trigger acceptance headroom), with the existing 142 ns default
+shortened when necessary. See [the rate and width policy](../docs/README.md#mircat-repetition-rate-across-experiment-tabs).
